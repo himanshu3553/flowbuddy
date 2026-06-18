@@ -1,0 +1,40 @@
+# Local dev infra (matches prod services). Brings up Postgres + Redis so the
+# app can run locally exactly like on Render. App services are added as they land.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sync
+      POSTGRES_PASSWORD: sync
+      POSTGRES_DB: sync
+    ports:
+      - "5432:5432"
+    volumes:
+      - sync_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sync"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # Local S3-compatible object storage (stands in for Cloudflare R2 in dev).
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - sync_minio:/data
+
+volumes:
+  sync_pg:
+  sync_minio:

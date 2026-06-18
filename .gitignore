@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.turbo/
+out/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+# spike has its own runs/ output
+spike/runs/
+# prisma generated client (regenerated on install/build)
+**/.prisma/

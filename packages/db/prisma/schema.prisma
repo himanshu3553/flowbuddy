@@ -1,0 +1,141 @@
+// Sync data model (Phase 1a). Postgres via Prisma.
+// Auth.js tables (User/Account/Session/VerificationToken) + app tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth.js (NextAuth) core ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String? // credentials provider (email + password)
+  createdAt     DateTime  @default(now())
+
+  accounts        Account[]
+  sessions        Session[]
+  ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  recSessions     RecSession[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- App ----------
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // -> portal subdomain
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  owner    User         @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  tokens   ApiToken[]
+  sessions RecSession[]
+  articles Article[]
+}
+
+model ApiToken {
+  id          String   @id @default(cuid())
+  workspaceId String
+  hashedToken String   @unique
+  label       String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model RecSession {
+  id          String   @id @default(cuid())
+  workspaceId String
+  createdById String
+  status      String   @default("uploaded") // uploaded | processing | done | error
+  appBaseUrl  String?
+  manifest    Json // raw capture manifest (events, markers, meta)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id])
+  articles  Article[]
+}
+
+model Article {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  sessionId     String?
+  title         String
+  intent        String?
+  tags          String[]
+  routes        String[]
+  preconditions String[]
+  source        String   @default("recording_auto") // recording_auto | prompt_grounded | manual | import
+  type          String   @default("workflow_backed") // workflow_backed | static
+  status        String   @default("draft") // draft | published
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session   RecSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  steps     Step[]
+}
+
+model Step {
+  id              String   @id @default(cuid())
+  articleId       String
+  orderIndex      Int
+  instruction     String
+  rationale       String?
+  screenshotKey   String? // R2 object key
+  selector        String?
+  route           String?
+  expectedOutcome String?
+  uncertain       Boolean  @default(false)
+  highlight       Json? // { x, y, w, h } as fractions (0..1) of the screenshot — element to highlight
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}

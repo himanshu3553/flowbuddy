@@ -1,0 +1,49 @@
+# Render Blueprint — the ONLY Render-specific file (app code stays host-agnostic).
+# SKELETON: infra is declared now; app services are uncommented as each milestone
+# lands (api=M2, worker=M3, web=M4, portal=M5). Full wiring at M6.
+
+databases:
+  - name: sync-db
+    plan: free
+    databaseName: sync
+    user: sync
+
+services:
+  - type: keyvalue
+    name: sync-redis
+    plan: free
+    ipAllowList: [] # only reachable from Render services
+
+  # --- App services (each built from its package Dockerfile) ---
+  #
+  # - type: web
+  #   name: sync-api
+  #   runtime: docker
+  #   dockerfilePath: ./packages/api/Dockerfile
+  #   envVars:
+  #     - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
+  #     - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
+  #     - { key: R2_ACCOUNT_ID, sync: false }
+  #     - { key: R2_ACCESS_KEY_ID, sync: false }
+  #     - { key: R2_SECRET_ACCESS_KEY, sync: false }
+  #     - { key: R2_BUCKET, sync: false }
+  #     - { key: R2_ENDPOINT, sync: false }
+  #
+  # - type: worker
+  #   name: sync-worker
+  #   runtime: docker
+  #   dockerfilePath: ./packages/api/Dockerfile
+  #   dockerCommand: node dist/worker.js
+  #   envVars: [ DATABASE_URL, REDIS_URL, R2_*, OPENAI_API_KEY, TRANSCRIBE_MODEL, SYNTH_MODEL ]
+  #
+  # - type: web
+  #   name: sync-web      # Next.js Studio
+  #   runtime: docker
+  #   dockerfilePath: ./packages/web/Dockerfile
+  #   envVars: [ DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL ]
+  #
+  # - type: web
+  #   name: sync-portal   # Next.js public help site
+  #   runtime: docker
+  #   dockerfilePath: ./packages/portal/Dockerfile
+  #   envVars: [ DATABASE_URL ]

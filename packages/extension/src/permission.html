@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grant microphone — Sync Spike</title>
+<style>
+  body { font: 15px/1.6 -apple-system, system-ui, sans-serif; max-width: 560px; margin: 60px auto; padding: 0 20px; }
+  h1 { font-size: 18px; }
+  #status { padding: 12px 14px; border-radius: 8px; background: #f4f4f5; margin: 16px 0; }
+  #status.ok { background: #e7f6ec; color: #176c33; }
+  #status.bad { background: #fdecec; color: #a11; }
+  button { padding: 9px 16px; border: 0; border-radius: 8px; background: #4a7; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  ol { color: #555; }
+  code { background: #8882; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>Grant microphone access</h1>
+  <p>This lets the recorder capture your narration. Click <b>Allow</b> on the Chrome prompt.</p>
+  <div id="status">Requesting microphone…</div>
+  <button id="retry">Retry</button>
+  <h3>If it keeps failing on macOS</h3>
+  <ol>
+    <li>Open <b>System Settings → Privacy &amp; Security → Microphone</b>.</li>
+    <li>Enable <b>Google Chrome</b>.</li>
+    <li>Fully <b>quit and reopen Chrome</b>, then click <b>Retry</b>.</li>
+    <li>Still blocked? Visit <code>chrome://settings/content/microphone</code> and remove this extension from the “Not allowed” list.</li>
+  </ol>
+  <script type="module" src="permission.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "@sync/extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sync recorder: capture a narrated product session and upload it to the Sync API.",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,52 @@
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.55 -apple-system, system-ui, sans-serif;
+  margin: 0;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+main { max-width: 460px; margin: 64px auto; padding: 0 20px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: #777; margin: 0 0 24px; }
+label { display: block; font-size: 13px; color: #555; margin: 12px 0 4px; }
+input {
+  width: 100%; padding: 9px 11px; border: 1px solid #ccc; border-radius: 8px; font: inherit;
+}
+button {
+  margin-top: 16px; padding: 10px 16px; border: 0; border-radius: 8px;
+  background: #4a7; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+}
+button.secondary { background: #eee; color: #333; }
+button:disabled { opacity: .5; cursor: default; }
+a { color: #2a6; }
+.error { color: #c33; font-size: 13px; margin-top: 10px; }
+.card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px 24px; margin-top: 16px; }
+code { background: #f0f0f0; padding: 2px 6px; border-radius: 5px; word-break: break-all; font-size: 13px; }
+.muted { color: #888; font-size: 13px; }
+
+textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; font: inherit; resize: vertical; }
+
+/* lists (dashboard) */
+ul.list { list-style: none; padding: 0; margin: 0; }
+ul.list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #eee; }
+ul.list li:first-child { border-top: 0; }
+.grow { flex: 1; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #e8e8ea; color: #444; text-transform: capitalize; }
+.pill-published, .pill-done { background: #def3e4; color: #176c33; }
+.pill-processing, .pill-uploaded { background: #fdf2d6; color: #8a6d1b; }
+.pill-error { background: #fdecec; color: #a11; }
+.pill-draft { background: #e8e8ea; color: #555; }
+
+/* editor */
+.step-card { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+.step-main label { margin-top: 8px; }
+.outcome { color: #2a8; font-size: 13px; margin: 6px 0 2px; }
+.selector code { font-size: 11px; color: #999; word-break: break-all; }
+.badge { background: #f80; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+.thumb img { width: 100%; border: 1px solid #ddd; border-radius: 8px; }
+.shot-frame { position: relative; display: block; }
+.shot-frame img { display: block; }
+.hl { position: absolute; border: 3px solid #ff3b30; border-radius: 4px; box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.25); pointer-events: none; }
+button.mini { margin: 0 0 0 6px; padding: 3px 9px; background: #eee; color: #333; }
+button.mini.danger { background: #fdecec; color: #c33; }
+@media (max-width: 700px) { .step-card { grid-template-columns: 1fr; } }
