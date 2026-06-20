@@ -57,7 +57,7 @@ app.post('/v1/sessions', async (req, reply) => {
   }
   const m = parsed.data;
 
-  await prisma.recSession.create({
+  await prisma.knowledgeSource.create({
     data: {
       id: sessionId,
       workspaceId: ws.workspaceId,
@@ -77,7 +77,7 @@ app.get('/v1/sessions/:id', async (req, reply) => {
   const ws = await authWorkspace(req.headers.authorization);
   if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
   const { id } = req.params as { id: string };
-  const s = await prisma.recSession.findFirst({ where: { id, workspaceId: ws.workspaceId } });
+  const s = await prisma.knowledgeSource.findFirst({ where: { id, workspaceId: ws.workspaceId } });
   if (!s) return reply.code(404).send({ error: 'not found' });
   return { id: s.id, status: s.status, error: s.error };
 });

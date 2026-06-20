@@ -24,7 +24,7 @@ model User {
   accounts        Account[]
   sessions        Session[]
   ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
-  recSessions     RecSession[]
+  recSessions     KnowledgeSource[]
 }
 
 model Account {
@@ -74,7 +74,7 @@ model Workspace {
 
   owner    User         @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens   ApiToken[]
-  sessions RecSession[]
+  sessions KnowledgeSource[]
   articles Article[]
 }
 
@@ -88,19 +88,45 @@ model ApiToken {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
-model RecSession {
+model KnowledgeSource {
+  // The per-recording source record (architecture: "KnowledgeSource"). Module 1 output.
+  // Table kept as "RecSession" via @@map so existing data is preserved.
   id          String   @id @default(cuid())
   workspaceId String
   createdById String
+  kind        String   @default("workflow") // workflow | narration | video
   status      String   @default("uploaded") // uploaded | processing | done | error
   appBaseUrl  String?
   manifest    Json // raw capture manifest (events, markers, meta)
+  transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval
   error       String?
   createdAt   DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy User      @relation(fields: [createdById], references: [id])
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User            @relation(fields: [createdById], references: [id])
   articles  Article[]
+  items     KnowledgeItem[]
+
+  @@map("RecSession")
+}
+
+model KnowledgeItem {
+  // Module 2: the normalized, indexed unit of knowledge. One per step (workflow) or topic (narration).
+  id          String   @id @default(cuid())
+  sourceId    String
+  workspaceId String
+  kind         String // step | topic
+  orderIndex   Int
+  text         String // searchable content (keyword/LLM index now; embeddings later)
+  data         Json // step: { event, narration } ; topic: { spanText, startMs, endMs }
+  segmentIndex Int? // workflow this item belongs to (Path 2 — persisted segmentation, promoted toward Option C)
+  segmentTitle String?
+  createdAt    DateTime @default(now())
+
+  source KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([sourceId])
 }
 
 model Article {
@@ -120,7 +146,7 @@ model Article {
   updatedAt     DateTime @updatedAt
 
   workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  session   RecSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  session   KnowledgeSource? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   steps     Step[]
 }
 

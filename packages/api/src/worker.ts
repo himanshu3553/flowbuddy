@@ -3,7 +3,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
 import type { CapturedEvent, SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
-import { synthesizeSession } from '@sync/synthesis';
+import { buildKB, createArticlesFromItems, type KbStepItem } from '@sync/synthesis';
 import { config } from './config';
 import { connection } from './queue';
 import { s3, sessionKey } from './storage';
@@ -43,12 +43,12 @@ const worker = new Worker(
     const sessionId = job.data.sessionId as string;
     console.log(`[worker] processing session ${sessionId}`);
 
-    const rec = await prisma.recSession.findUnique({ where: { id: sessionId } });
+    const rec = await prisma.knowledgeSource.findUnique({ where: { id: sessionId } });
     if (!rec) {
-      console.warn(`[worker] session ${sessionId} not found — skipping`);
+      console.warn(`[worker] source ${sessionId} not found — skipping`);
       return;
     }
-    await prisma.recSession.update({ where: { id: sessionId }, data: { status: 'processing' } });
+    await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'processing' } });
 
     try {
       const manifest = rec.manifest as unknown as SessionManifest;
@@ -65,15 +65,68 @@ const worker = new Worker(
         }
       };
 
-      const articles = await synthesizeSession({
+      // ── Module 2: capture → Knowledge Base (transcribe + normalized step items) ──
+      const { transcript, items } = await buildKB({
         manifest,
         getArtifact,
         apiKey: config.openaiApiKey,
         transcribeModel: config.transcribeModel,
+      });
+      await prisma.knowledgeSource.update({
+        where: { id: sessionId },
+        data: { transcript: transcript as object },
+      });
+      await prisma.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
+      if (items.length > 0) {
+        await prisma.knowledgeItem.createMany({
+          data: items.map((it) => ({
+            sourceId: sessionId,
+            workspaceId: rec.workspaceId,
+            kind: it.kind,
+            orderIndex: it.orderIndex,
+            text: it.text,
+            data: { event: it.event, narration: it.narration } as object,
+          })),
+        });
+      }
+      console.log(`[worker] KB built: transcript(${transcript.segments.length} seg) + ${items.length} items`);
+
+      // ── Module 3.1: KB → articles (read items back from the DB; segment-at-creation, Option B) ──
+      const dbItems = await prisma.knowledgeItem.findMany({
+        where: { sourceId: sessionId, kind: 'step' },
+        orderBy: { orderIndex: 'asc' },
+      });
+      const stepItems: KbStepItem[] = dbItems.map((i) => {
+        const d = i.data as unknown as { event: CapturedEvent; narration: string | null };
+        return { orderIndex: i.orderIndex, kind: 'step', text: i.text, event: d.event, narration: d.narration ?? null };
+      });
+
+      const { articles, segments } = await createArticlesFromItems({
+        items: stepItems,
+        markers: manifest.markers || [],
+        getArtifact,
+        apiKey: config.openaiApiKey,
         synthModel: config.synthModel,
       });
 
-      // Idempotent: replace any prior articles for this session.
+      // Tag each KB item with the workflow segment it belongs to (Path 2 — persisted grouping for the KB UI).
+      const eventToItemId = new Map(
+        dbItems.map((i) => [(i.data as unknown as { event: CapturedEvent }).event.id, i.id]),
+      );
+      for (let si = 0; si < segments.length; si++) {
+        const seg = segments[si]!;
+        const itemIds = seg.eventIds
+          .map((eid) => eventToItemId.get(eid))
+          .filter((x): x is string => Boolean(x));
+        if (itemIds.length > 0) {
+          await prisma.knowledgeItem.updateMany({
+            where: { id: { in: itemIds } },
+            data: { segmentIndex: si, segmentTitle: seg.title },
+          });
+        }
+      }
+
+      // Idempotent: replace any prior articles for this source.
       await prisma.article.deleteMany({ where: { sessionId } });
       for (let i = 0; i < articles.length; i++) {
         const a = articles[i]!;
@@ -107,11 +160,11 @@ const worker = new Worker(
         });
       }
 
-      await prisma.recSession.update({ where: { id: sessionId }, data: { status: 'done', error: null } });
-      console.log(`[worker] done ${sessionId}: ${articles.length} article(s)`);
+      await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'done', error: null } });
+      console.log(`[worker] done ${sessionId}: ${articles.length} article(s) from ${stepItems.length} items`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await prisma.recSession.update({ where: { id: sessionId }, data: { status: 'error', error: msg } });
+      await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'error', error: msg } });
       console.error(`[worker] failed ${sessionId}: ${msg}`);
       throw e;
     }

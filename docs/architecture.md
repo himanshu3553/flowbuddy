@@ -70,6 +70,8 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
   data         Json                            // kind-specific payload:
   //   step  -> { action, elementLabel, selector, route, screenshotKey, highlight, expectedOutcome, narration }
   //   topic -> { spanText, startMs, endMs }
+  segmentIndex Int?    // workflow this item belongs to (persisted segmentation — promoted toward C)
+  segmentTitle String?
   // embedding  vector   // FUTURE (pgvector)
   source       KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 }
@@ -131,16 +133,18 @@ Module 2 — KNOWLEDGE BASE  (extract → normalize → index)        ◄── 
 
 ## Decisions
 
-### Segmentation placement — LOCKED: Option B (2026-06-21)
-**Segmentation** (splitting one recording into distinct workflows) runs at **article creation (Module 3.1)** — *not* in the KB. The KB stores **flat, ordered `KnowledgeItem`s**; the boundary signals (markers, route changes, narration) live **inline in the items**, just not pre-grouped.
+### Segmentation placement — Option B, promoted toward C (2026-06-21)
+**Segmentation** (splitting one recording into distinct workflows) runs at **article creation (Module 3.1)**. The KB stores ordered `KnowledgeItem`s.
+
+> **Promoted toward C (2026-06-21):** triggered by the KB-browser UI need, the segmentation computed at article creation is now **persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`) — so the Studio KB view groups items **by workflow**, and the grouping is reusable (M7 / copilot). Segmentation **logic still runs at article creation** (Module 3); only its **output** is stored in the KB. (Full Option A — first-class Workflow entities — remains a future step if needed.)
 
 Three options were considered. **All three remain valid future promotion paths** — choosing B (flat items) makes promotion purely **additive** (items never change; we layer structure on top):
 
 | | What the KB stores | Promote to this if… |
 |---|---|---|
-| **B (chosen)** | flat ordered items | — (current) |
-| **C (future)** | items + where-to-split **hints** | we start **re-generating articles often** (e.g., new brand voice) and want stable/inspectable splits |
-| **A (future)** | first-class **Workflow** objects, as a *derived/cached retrieval layer* (not the authoritative article structure) | the **copilot** needs to retrieve whole workflows, or we need cross-recording **dedupe/supersession** |
+| **B** | flat ordered items; segmentation runs at article creation | ✅ current (logic placement) |
+| **C** | + persisted segmentation **output** on items (`segmentIndex`/`segmentTitle`) → KB groups by workflow | ✅ **adopted 2026-06-21** (for the KB browser). Further C step if needed: also store boundary *hints* for stable/inspectable re-gen |
+| **A (future)** | first-class **Workflow** objects, as a *derived/cached retrieval layer* (not the authoritative article structure) | if the **copilot** needs whole workflows, or for cross-recording **dedupe/supersession** |
 
 The **marker hotkey** ("new workflow") is the main segmentation-quality lever, independent of B/C/A.
 

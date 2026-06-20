@@ -17,3 +17,8 @@ const bucket = process.env.R2_BUCKET || 'sync-artifacts';
 export function signedUrl(key: string, expiresIn = 3600): Promise<string> {
   return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
 }
+
+/** Object key for a session artifact (mirrors the api's `workspaces/<ws>/sessions/<id>/<rel>` layout). */
+export function sessionObjectKey(workspaceId: string, sessionId: string, rel: string): string {
+  return `workspaces/${workspaceId}/sessions/${sessionId}/${rel}`;
+}

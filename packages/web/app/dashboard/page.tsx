@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   const { workspace } = ctx;
 
   const [sessions, articles] = await Promise.all([
-    prisma.recSession.findMany({
+    prisma.knowledgeSource.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -45,7 +45,8 @@ export default async function DashboardPage() {
       </div>
 
       <div className="card">
-        <h2 style={{ fontSize: 15, margin: '0 0 10px' }}>Recordings</h2>
+        <h2 style={{ fontSize: 15, margin: '0 0 2px' }}>Recordings &amp; Knowledge Base</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Click a recording to see the knowledge extracted from it (transcript + items).</p>
         {sessions.length === 0 ? (
           <p className="muted">No recordings yet. Record one with the extension.</p>
         ) : (
@@ -53,8 +54,8 @@ export default async function DashboardPage() {
             {sessions.map((s) => (
               <li key={s.id}>
                 <span className={`pill pill-${s.status}`}>{s.status}</span>
-                <span className="grow">{s.appBaseUrl || '(unknown app)'}</span>
-                <span className="muted">{s._count.articles} article(s)</span>
+                <Link className="grow" href={`/dashboard/kb/${s.id}`}>{s.appBaseUrl || '(unknown app)'}</Link>
+                <span className="muted">{s.kind} · {s._count.articles} article(s)</span>
               </li>
             ))}
           </ul>
