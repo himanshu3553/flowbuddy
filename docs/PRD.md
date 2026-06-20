@@ -68,7 +68,7 @@ Large enterprise docs teams, dedicated CX orgs with existing tooling, non-SaaS p
 
 A SaaS builder installs a **Chrome extension** and records themselves using their own product — clicking through real workflows while narrating *what* they're doing and *why*. One session can cover many workflows ("here's how to reset a password… now here's how to upgrade a plan…").
 
-Sync captures that session in **multiple synchronized layers** (screen, voice, DOM, interaction events, routes) and **synthesizes them into a structured knowledge base** — clean, step-by-step articles, each with screenshots, generated automatically.
+Sync captures that session in **multiple synchronized layers** (screen, voice, DOM, interaction events, routes) and **synthesizes them into a structured knowledge base** — clean, step-by-step articles, each with screenshots, generated automatically. Captures can also be **narration-only** (just explaining, e.g. a refund policy) for content that has no clickable workflow. All captures feed an **explicit Knowledge Base**, from which articles are created — automatically or by prompt (see [`architecture.md`](architecture.md)).
 
 That knowledge base then powers everything downstream:
 
@@ -102,6 +102,7 @@ Sync ships as **four distinct surfaces** over one shared structured knowledge ba
 **Who:** the builder (Founder Fiona). **Purpose:** effortless multi-layer capture.
 
 - Start/stop/pause recording of the active tab; mic capture for narration.
+- **Capture modes (Module 1):** **workflow** (interactions + DOM + screenshots + audio) and **narration-only** (audio ± a context screenshot — for conceptual content like policies/FAQs with no clickable workflow). Video is a future mode. See [`architecture.md`](architecture.md).
 - **Capture model (locked 2026-06-18): event/DOM-primary.** The semantic backbone is per-interaction capture — event + DOM snapshot + hi-res screenshot — plus a **post-action snapshot** (after DOM settles / network idle) for the step's `expected_outcome`, **continuous audio** for narration, and an **optional low-fps/low-res context video** as a visual safety net for non-event moments. Events are ground truth; video is a secondary aid, never the source of truth. (See [data model](#6-core-architecture--data-model).)
 - Visual recording indicator + a "marker/chapter" hotkey so the user can signal "new workflow starts here."
 - Local redaction controls — mask a field before recording; pause for sensitive screens.
@@ -145,25 +146,24 @@ Sync ships as **four distinct surfaces** over one shared structured knowledge ba
 
 ## 6. Core architecture & data model
 
-### 6.1 Pipeline (conceptual)
+### 6.1 Pipeline — the three modules
+
+> 📐 **Canonical architecture:** [`architecture.md`](architecture.md). Sync is **three modules**, with capture *modality* and article-creation *mode* **orthogonal**, connected through an explicit **Knowledge Base**.
 
 ```
-Chrome Extension (multi-layer capture)
-        │  session bundle: frames + audio + DOM + events + routes (one timeline)
+Module 1 — CAPTURE  (kind: workflow | narration-only | video[future])
+        │  raw artifacts (screenshots / DOM / events / audio) + raw source record
         ▼
-Ingestion & processing
-        │  transcription, segmentation, screenshot extraction, redaction
+Module 2 — KNOWLEDGE BASE  (extract → normalize → index)   ← explicit, persisted, indexed substrate
+        │  KnowledgeSource + KnowledgeItem[] + transcript + index (keyword/LLM now → vectors later)
+        ├──► Module 3.1 Auto    (a source's items → Article[])
+        └──► Module 3.2 Prompt  (query index → Article, or decline → coverage gap)
         ▼
-Multimodal synthesis (transcript = why  +  events = what  +  screenshots = visual)
-        ▼
-Structured Knowledge Base  ◄── human review/edit in Studio
-        │
+   Article / Step (draft)  ◄── human review/edit in Studio
         ├──► Help Portal (render)
-        ├──► In-App Copilot (RAG, context-boosted)      [Phase 2]
-        └──► Self-Validation engine (replay + diff)      [Phase 3]
-                     │
-                     └──► drift alerts + suggested fixes ──► Studio
-Analytics / feedback loop spans portal + copilot ──► "record this next"
+        ├──► In-App Copilot (RAG over the KB)               [Phase 2]
+        └──► Self-Validation engine (replay + diff)          [Phase 3]
+Analytics / feedback loop ──► coverage gaps ("record this next")
 ```
 
 ### 6.2 The structured content model (most important early decision)
@@ -198,16 +198,13 @@ Step {
 
 The captured **selectors + routes + expected_outcome** are exactly what the [self-validation engine](#phase-3--moat-self-validation--drift-detection) replays later. Design this in Phase 1.
 
-**Authoring model (record-first; all AI content grounded in recordings).** Two AI entry points, both drawing *only* from the recorded-session corpus, plus a human-only lane:
+**Authoring model (record-first; all AI content grounded in recordings).** Articles are generated from the **Knowledge Base** (Module 2 — see [`architecture.md`](architecture.md)), never from the model's general knowledge. Two AI entry points, plus a human lane:
 
-1. **Auto-synthesis (push).** After a recording, Sync auto-segments the session into draft articles.
-2. **Prompt-to-article (pull).** The user types a topic ("write an article on how password reset works"); the AI retrieves the relevant span(s) across all recordings and synthesizes an article from that captured data — it can stitch fragments from multiple sessions. If no recording covers the topic, it **declines and raises a coverage gap** ("record this") — it never invents steps.
+1. **Auto (push).** After a capture, Sync builds the KB and auto-creates draft articles from it — *workflow* captures → `workflow-backed` step articles; *narration-only* captures → `static` explainer articles (e.g. "What is the refund policy?").
+2. **Prompt-to-article (pull).** The user types a topic; the AI retrieves relevant knowledge from the KB (across captures) and synthesizes one article. If nothing covers it, it **declines and raises a coverage gap** ("record this") — never invents content.
+3. **Manual static (human).** Hand-write a `static` article for content with no recording at all.
 
-Both produce **`workflow-backed`** articles (steps + selectors + screenshots → self-validatable).
-
-3. **Manual static (human-only).** For content with genuinely no workflow (pricing, refund policy, conceptual FAQs), a human can hand-write a **`static`** article. The AI does *not* generate these (that would break grounded authorship). Static articles render in the portal and feed the copilot but are **not** self-validated.
-
-The `source` and `type` fields make this explicit so the freshness dashboard only ever claims "current" for content it can actually verify.
+**`type` = shape / self-validatability** (`workflow-backed` vs `static`); **`source` = origin** (`recording_auto` | `prompt_grounded` | `manual`) — independent axes. AI may produce `static` articles **when grounded in a narration recording** (narration *is* a recording, so this preserves grounded authorship). The `source`/`type` fields keep the freshness dashboard honest about what it can actually verify.
 
 ---
 

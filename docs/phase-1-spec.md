@@ -6,6 +6,7 @@
 - **Last updated:** 2026-06-18
 - **Scope:** Phase 1 only. Copilot (Phase 2) and self-validation (Phase 3) are out of scope but the data captured here must not preclude them.
 - **Build approach (decided 2026-06-18):** port the validated [spike](SPIKE.md) (verdict: GO) into a fresh **monorepo** and ship a **thin slice first** — see [`phase-1a-plan.md`](phase-1a-plan.md). Stack: Node/TS · Next.js · Postgres · Redis/BullMQ · Auth.js (self-hosted). Deploy: Render (Dockerized) + Cloudflare R2.
+- **Architecture (frozen 2026-06-19):** Phase 1 follows the **3-module model** — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). Capture now includes a **narration-only** mode (1.2); articles are generated from an explicit **KB** (`KnowledgeSource` + `KnowledgeItem` + transcript + keyword/LLM index) via **auto** or **prompt**.
 
 ---
 
@@ -94,6 +95,10 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 - AC: Start/stop/pause controls; persistent recording indicator; mic level shown; recording survives in-app (same-tab) navigations.
 - AC: Audio is captured continuously for the whole session.
 
+**US-EXT-1b — Narration-only capture (Module 1.2).** As a founder I want to record audio-only (no clicking) so that I can create conceptual articles (policies, FAQs, "what is X").
+- AC: an audio-only mode that uploads even with **zero interaction events** (just audio ± an optional context screenshot); the source is marked `kind = narration`.
+- AC: the narration path produces a `static` (explainer) article, grounded in the transcript — never general knowledge.
+
 **US-EXT-2 — Capture interactions as ground truth.** As the system I need to capture each meaningful interaction with full semantic context so that synthesis is accurate and steps are self-validatable later.
 - AC: For each interaction event, capture: event type, target element (role, accessible name, text, tag, css_path, xpath, bbox, iframe path), route, DOM snapshot, hi-res screenshot. (See [capture contract](#6-the-capture-contract-session-bundle).)
 - AC: Capture a **post-action snapshot** (screenshot + DOM + route) after the DOM settles (mutation quiet) or network idle, capped by a timeout.
@@ -133,8 +138,8 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 ### 5.4 Prompt-to-article
 
 **US-PTA-1 — Author by topic, grounded in recordings.** As a founder I want to type a topic and get an article assembled only from my recordings so that I can fill specific gaps fast.
-- AC: A searchable index exists over the **recorded-session corpus** (embeddings over transcript chunks + event/route metadata; screenshot captions optional).
-- AC: On prompt, retrieve top relevant spans (possibly across multiple sessions), then synthesize an article via the same synthesis path; `source = prompt_grounded`, `type = workflow-backed`.
+- AC: A searchable index exists over the **Knowledge Base** (`KnowledgeItem.text`) — **keyword/LLM retrieval first, pgvector embeddings later** (decided 2026-06-19).
+- AC: On prompt, retrieve the relevant `KnowledgeItem`s (across captures), then synthesize an article via the same synthesis path; `source = prompt_grounded` (`type` = `workflow-backed` for workflow items, `static` for narration/topic items).
 - AC: If retrieval confidence is below threshold, **decline** and create a **coverage-gap** entry ("record this"); never fabricate steps.
 - AC: The article cites which session(s)/spans it drew from.
 
@@ -216,11 +221,12 @@ Event {
 
 ## 7. Content & storage model
 
-Authoritative model is in the [PRD §6.2](PRD.md). Phase 1 storage notes:
+Authoritative model is in the [PRD §6.2](PRD.md) and the 3-module architecture in [`architecture.md`](architecture.md). Phase 1 storage notes:
 
-- **Article / Step** stored as structured records (not markdown blobs). `source ∈ {recording_auto, prompt_grounded, manual, import}`, `type ∈ {workflow-backed, static}`.
+- **Knowledge Base layer (Module 2):** captures are normalized into **`KnowledgeSource` + `KnowledgeItem`** (with a **persisted transcript** + a keyword/LLM index). Articles are generated *from* the KB, not directly from raw captures.
+- **Article / Step** stored as structured records (not markdown blobs). `source ∈ {recording_auto, prompt_grounded, manual, import}`, `type ∈ {workflow-backed, static}` (independent axes — see architecture.md).
 - **Binary artifacts** (screenshots, audio, video, DOM snapshots) in object storage, referenced by id; per-workspace isolation.
-- **Corpus index** for prompt-to-article: embeddings + metadata over session spans; reused for portal hybrid search.
+- **Index** for prompt-to-article + portal search: keyword/LLM over `KnowledgeItem.text` now → pgvector embeddings later.
 - **Versioning:** keep article version history at publish (lightweight in v1).
 
 ---
@@ -252,6 +258,8 @@ A B2B sales gate — must work in v1.
 ---
 
 ## 10. Build sequence (milestones)
+
+> **Authoritative, current build sequence (M0–M9) lives in [`phase-1a-plan.md`](phase-1a-plan.md) §9–§10.** The list below is the original Phase-1 conceptual breakdown (kept for context).
 
 - **M0 — Foundations:** workspace, auth, multi-seat (owner/editor), object storage, signed uploads.
 - **M1 — Capture & upload:** extension emits the full [session bundle](#6-the-capture-contract-session-bundle) with client-side redaction; verify capture quality on real apps *before* building synthesis.
