@@ -1,12 +1,11 @@
 import { Worker } from 'bullmq';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
-import type { CapturedEvent, SessionManifest } from '@sync/shared';
+import type { SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
-import { buildKB, segmentItems, type KbStepItem } from '@sync/synthesis';
+import { buildKB, segmentItems, decodeStepData, type KbStepItem } from '@sync/synthesis';
 import { config } from './config';
 import { connection } from './queue';
-import { s3, sessionKey } from './storage';
+import { sessionArtifactReader } from './storage';
 
 const worker = new Worker(
   SYNTHESIS_QUEUE,
@@ -23,18 +22,7 @@ const worker = new Worker(
 
     try {
       const manifest = rec.manifest as unknown as SessionManifest;
-
-      const getArtifact = async (relPath: string): Promise<Buffer | null> => {
-        try {
-          const obj = await s3.send(
-            new GetObjectCommand({ Bucket: config.r2.bucket, Key: sessionKey(rec.workspaceId, sessionId, relPath) }),
-          );
-          const bytes = await (obj.Body as any).transformToByteArray();
-          return Buffer.from(bytes);
-        } catch {
-          return null;
-        }
-      };
+      const getArtifact = sessionArtifactReader(rec.workspaceId, sessionId);
 
       // ── Module 2: capture → Knowledge Base (transcribe + normalized step items) ──
       const { transcript, items } = await buildKB({
@@ -69,10 +57,12 @@ const worker = new Worker(
         where: { sourceId: sessionId, kind: 'step' },
         orderBy: { orderIndex: 'asc' },
       });
-      const stepItems: KbStepItem[] = dbItems.map((i) => {
-        const d = i.data as unknown as { event: CapturedEvent; narration: string | null };
-        return { orderIndex: i.orderIndex, kind: 'step', text: i.text, event: d.event, narration: d.narration ?? null };
-      });
+      const stepItems: KbStepItem[] = dbItems.map((i) => ({
+        orderIndex: i.orderIndex,
+        kind: 'step',
+        text: i.text,
+        ...decodeStepData(i.data),
+      }));
 
       const segments = await segmentItems({
         items: stepItems,
@@ -83,9 +73,7 @@ const worker = new Worker(
 
       // Tag each KB item with the workflow candidate it belongs to (these titles become the
       // candidates the Studio "Auto Generate Articles" picker lists).
-      const eventToItemId = new Map(
-        dbItems.map((i) => [(i.data as unknown as { event: CapturedEvent }).event.id, i.id]),
-      );
+      const eventToItemId = new Map(dbItems.map((i) => [decodeStepData(i.data).event.id, i.id]));
       // Reset tags first so re-processing is idempotent.
       await prisma.knowledgeItem.updateMany({
         where: { sourceId: sessionId },

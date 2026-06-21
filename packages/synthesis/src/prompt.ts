@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import type { CapturedEvent, FileRef } from '@sync/shared';
 import { eventLabel } from './segment';
-import type { SynthArticle, SynthStep } from './synthesize';
+import { enrichStepFromEvent, type SynthArticle, type SynthStep, type RawArticleStep } from './synthesize';
 
 /** A candidate KB step item for prompt-to-article retrieval — carries its sourceId so screenshots
  *  (which live under each recording's path) can be resolved across recordings. */
@@ -139,26 +139,9 @@ export async function promptToArticle(input: {
   }
 
   // Enrich each step with ground-truth selector/route/expectedOutcome from the referenced event.
-  const steps: SynthStep[] = a.steps.map((s: any) => {
-    const it = s.screenshotRef ? eventsById.get(s.screenshotRef) : undefined;
-    const ev = it?.event;
-    const step: SynthStep = {
-      instruction: s.instruction,
-      rationale: s.rationale || undefined,
-      screenshotEventId: s.screenshotRef || undefined,
-      expectedOutcome: s.expectedOutcome || undefined,
-      uncertain: Boolean(s.uncertain),
-    };
-    if (ev) {
-      step.selector = ev.target?.cssPath || ev.target?.xpath;
-      step.route = ev.route?.path;
-      if (!step.expectedOutcome) {
-        const postRoute = ev.postAction?.route?.path;
-        if (postRoute && postRoute !== ev.route?.path) step.expectedOutcome = `The app navigates to ${postRoute}.`;
-      }
-    }
-    return step;
-  });
+  const steps: SynthStep[] = (a.steps as RawArticleStep[]).map((s) =>
+    enrichStepFromEvent(s, s.screenshotRef ? eventsById.get(s.screenshotRef)?.event : undefined),
+  );
 
   return {
     covered: true,

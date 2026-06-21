@@ -2,10 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@sync/db';
-import type { CapturedEvent, SessionManifest } from '@sync/shared';
-import { promptToArticle, type PromptItem, type PromptArtifactReader } from '@sync/synthesis';
+import type { Bbox, SessionManifest } from '@sync/shared';
+import { promptToArticle, decodeStepData, type PromptItem, type PromptArtifactReader } from '@sync/synthesis';
 import { getCurrentWorkspace } from '@/lib/session';
 import { artifactReader, sessionObjectKey } from '@/lib/storage';
+import { highlightFromBbox } from '@/lib/highlight';
+import { createDraftArticle, type ScreenshotResolver } from '@/lib/article-writer';
 
 const STOPWORDS = new Set([
   'the', 'a', 'an', 'how', 'do', 'i', 'to', 'of', 'in', 'on', 'for', 'and', 'or', 'is', 'my',
@@ -18,19 +20,6 @@ function keywords(prompt: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
   return [...new Set(words)];
-}
-
-function highlightFor(
-  bbox: { x: number; y: number; w: number; h: number } | undefined,
-  viewport: { w: number; h: number } | undefined,
-): { x: number; y: number; w: number; h: number } | undefined {
-  if (!bbox || !viewport?.w || !viewport?.h) return undefined;
-  const x = Math.min(Math.max(bbox.x / viewport.w, 0), 1);
-  const y = Math.min(Math.max(bbox.y / viewport.h, 0), 1);
-  const w = Math.min(Math.max(bbox.w / viewport.w, 0), 1 - x);
-  const h = Math.min(Math.max(bbox.h / viewport.h, 0), 1 - y);
-  if (w <= 0 || h <= 0) return undefined;
-  return { x, y, w, h };
 }
 
 export type PromptResult =
@@ -66,20 +55,17 @@ export async function generateFromPrompt(prompt: string): Promise<PromptResult> 
     take: 40,
   });
 
-  const items: PromptItem[] = rows.map((r) => {
-    const d = r.data as unknown as { event: CapturedEvent; narration: string | null };
-    return { sourceId: r.sourceId, event: d.event, narration: d.narration ?? null };
-  });
+  const items: PromptItem[] = rows.map((r) => ({ sourceId: r.sourceId, ...decodeStepData(r.data) }));
 
   // Per-source viewport (for highlight rectangles) + an event→source/file index (for screenshots).
+  // Steps can span recordings, so each event must resolve against the source it came from.
   const sourceIds = [...new Set(items.map((i) => i.sourceId))];
   const sources = await prisma.knowledgeSource.findMany({ where: { id: { in: sourceIds } }, select: { id: true, manifest: true } });
   const viewportBySource = new Map<string, { w: number; h: number } | undefined>();
   for (const s of sources) {
-    const m = s.manifest as unknown as SessionManifest;
-    viewportBySource.set(s.id, m.app?.viewport);
+    viewportBySource.set(s.id, (s.manifest as unknown as SessionManifest).app?.viewport);
   }
-  const eventIndex = new Map<string, { sourceId: string; file?: string; bbox?: { x: number; y: number; w: number; h: number } }>();
+  const eventIndex = new Map<string, { sourceId: string; file?: string; bbox?: Bbox }>();
   for (const it of items) {
     eventIndex.set(it.event.id, { sourceId: it.sourceId, file: it.event.screenshot?.file, bbox: it.event.target?.bbox });
   }
@@ -95,39 +81,22 @@ export async function generateFromPrompt(prompt: string): Promise<PromptResult> 
     return { ok: false, reason: result.reason, gapId: gap.id };
   }
 
-  const a = result.article;
-  const created = await prisma.article.create({
-    data: {
-      workspaceId,
-      sessionId: null, // prompt-grounded articles can span recordings — no single source
-      title: a.title,
-      intent: a.intent ?? null,
-      tags: a.tags,
-      routes: a.routes,
-      preconditions: a.preconditions,
-      source: 'prompt_grounded',
-      type: 'workflow_backed',
-      status: 'draft',
-      orderIndex: 0,
-      steps: {
-        create: a.steps.map((s, j) => {
-          const idx = s.screenshotEventId ? eventIndex.get(s.screenshotEventId) : undefined;
-          const screenshotKey = idx?.file ? sessionObjectKey(workspaceId, idx.sourceId, idx.file) : null;
-          const highlight = idx ? highlightFor(idx.bbox, viewportBySource.get(idx.sourceId)) : undefined;
-          return {
-            orderIndex: j,
-            instruction: s.instruction,
-            rationale: s.rationale ?? null,
-            selector: s.selector ?? null,
-            route: s.route ?? null,
-            expectedOutcome: s.expectedOutcome ?? null,
-            uncertain: Boolean(s.uncertain),
-            screenshotKey,
-            highlight: highlight ?? undefined,
-          };
-        }),
-      },
-    },
+  const resolveScreenshot: ScreenshotResolver = (eventId) => {
+    const idx = eventId ? eventIndex.get(eventId) : undefined;
+    if (!idx) return { screenshotKey: null };
+    return {
+      screenshotKey: idx.file ? sessionObjectKey(workspaceId, idx.sourceId, idx.file) : null,
+      highlight: highlightFromBbox(idx.bbox, viewportBySource.get(idx.sourceId)),
+    };
+  };
+
+  const created = await createDraftArticle({
+    workspaceId,
+    sessionId: null, // prompt-grounded articles can span recordings — no single source
+    source: 'prompt_grounded',
+    orderIndex: 0,
+    article: result.article,
+    resolveScreenshot,
   });
 
   revalidatePath('/dashboard');

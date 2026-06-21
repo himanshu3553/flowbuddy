@@ -22,6 +22,17 @@ export interface KbStepItem {
   narration: string | null; // aligned narration ("why")
 }
 
+/** Split KB items into the parallel `events` + `narration`-by-event-id the synthesis stages expect. */
+function eventsAndNarration(items: KbStepItem[]): {
+  events: CapturedEvent[];
+  narration: Map<string, string>;
+} {
+  const events = items.map((it) => it.event);
+  const narration = new Map<string, string>();
+  for (const it of items) if (it.narration) narration.set(it.event.id, it.narration);
+  return { events, narration };
+}
+
 // ---------- Module 2: capture → KB ----------
 
 export interface BuildKBInput {
@@ -70,10 +81,8 @@ export interface SegmentItemsInput {
  *  titles become the candidates the Studio "Auto Generate Articles" picker lists — M6.1. */
 export async function segmentItems(input: SegmentItemsInput): Promise<Segment[]> {
   const openai = new OpenAI({ apiKey: input.apiKey });
-  const events = input.items.map((it) => it.event);
-  const narration = new Map<string, string>();
-  for (const it of input.items) if (it.narration) narration.set(it.event.id, it.narration);
-  return segment(openai, input.synthModel, events, input.markers || [], narration);
+  const { events, narration } = eventsAndNarration(input.items);
+  return segment(openai, input.synthModel, events, input.markers ?? [], narration);
 }
 
 // ---------- Module 3.1: KB → article (curated — ONE selected candidate at a time) ----------
@@ -90,59 +99,24 @@ export interface GenerateArticleInput {
  *  Called synchronously from the Studio server action after the user selects candidates. */
 export async function generateArticleForSegment(input: GenerateArticleInput): Promise<SynthArticle> {
   const openai = new OpenAI({ apiKey: input.apiKey });
-  const events = input.items.map((it) => it.event);
-  const narration = new Map<string, string>();
-  for (const it of input.items) if (it.narration) narration.set(it.event.id, it.narration);
+  const { events, narration } = eventsAndNarration(input.items);
 
   const seg: Segment = { title: input.title, eventIds: events.map((e) => e.id) };
   const [article] = await synthesizeArticles(openai, input.synthModel, [seg], events, narration, input.getArtifact);
   return article ?? { title: input.title, tags: [], routes: [], preconditions: [], steps: [] };
 }
 
-// ---------- Module 3.1 (legacy convenience): segment + synthesize all in one ----------
+// ---------- KB persistence helpers (Module 2 ⇄ DB) ----------
 
-export interface CreateArticlesInput {
-  items: KbStepItem[];
-  markers: Marker[];
-  getArtifact: ArtifactReader;
-  apiKey: string;
-  synthModel: string;
+/** Shape of `KnowledgeItem.data` for a `step` item, as the worker writes it. */
+export interface StepItemData {
+  event: CapturedEvent;
+  narration: string | null;
 }
 
-/** Segment-then-synthesize ALL workflows in one call. Retained for non-curated/batch use;
- *  the curated M6.1 flow uses segmentItems (KB build) + generateArticleForSegment (per selection). */
-export async function createArticlesFromItems(
-  input: CreateArticlesInput,
-): Promise<{ articles: SynthArticle[]; segments: Segment[] }> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
-  const events = input.items.map((it) => it.event);
-  const narration = new Map<string, string>();
-  for (const it of input.items) if (it.narration) narration.set(it.event.id, it.narration);
-
-  const segments = await segment(openai, input.synthModel, events, input.markers || [], narration);
-  const articles = await synthesizeArticles(openai, input.synthModel, segments, events, narration, input.getArtifact);
-  return { articles, segments };
-}
-
-// ---------- Convenience: full pipeline (capture → KB → articles) in one call ----------
-
-export interface SynthesizeInput {
-  manifest: SessionManifest;
-  getArtifact: ArtifactReader;
-  apiKey: string;
-  transcribeModel: string;
-  synthModel: string;
-}
-
-/** Used where a single call is convenient; the worker uses buildKB + createArticlesFromItems separately so the KB is persisted in between. */
-export async function synthesizeSession(input: SynthesizeInput): Promise<SynthArticle[]> {
-  const { items } = await buildKB(input);
-  const { articles } = await createArticlesFromItems({
-    items,
-    markers: input.manifest.markers || [],
-    getArtifact: input.getArtifact,
-    apiKey: input.apiKey,
-    synthModel: input.synthModel,
-  });
-  return articles;
+/** Safely decode a `KnowledgeItem.data` JSON value (Prisma `Json`) into its typed step payload.
+ *  Centralizes the cast so callers (worker, Studio actions) don't repeat `as unknown as {...}`. */
+export function decodeStepData(data: unknown): StepItemData {
+  const d = (data ?? {}) as Partial<StepItemData>;
+  return { event: d.event as CapturedEvent, narration: d.narration ?? null };
 }

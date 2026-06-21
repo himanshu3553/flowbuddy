@@ -1,6 +1,8 @@
 // The structured content model (PRD §6.2). Stored in Postgres; this is the
 // in-memory/transport shape used by synthesis, Studio, and the portal.
 
+import type { Highlight } from './highlight.js';
+
 export type ArticleSource = 'recording_auto' | 'prompt_grounded' | 'manual' | 'import';
 export type ArticleType = 'workflow_backed' | 'static';
 export type ArticleStatus = 'draft' | 'published';
@@ -14,6 +16,8 @@ export interface Step {
   route?: string;
   expectedOutcome?: string;
   uncertain?: boolean;
+  /** Element-highlight rectangle over the screenshot, as viewport fractions (0..1). */
+  highlight?: Highlight;
 }
 
 export interface Article {

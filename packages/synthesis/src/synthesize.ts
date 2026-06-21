@@ -22,6 +22,41 @@ export interface SynthArticle {
   steps: SynthStep[];
 }
 
+/** The raw step shape the LLM returns (before grounding enrichment). */
+export interface RawArticleStep {
+  instruction: string;
+  rationale?: string;
+  screenshotRef?: string;
+  expectedOutcome?: string;
+  uncertain?: boolean;
+}
+
+/**
+ * Turn one raw LLM step into a grounded `SynthStep`: keep the model's instruction/rationale, but
+ * fill `selector`/`route`/`expectedOutcome` from the referenced captured event — ground truth, not
+ * for the LLM to invent. Shared by auto synthesis (synthOne) and prompt-to-article.
+ */
+export function enrichStepFromEvent(raw: RawArticleStep, event?: CapturedEvent): SynthStep {
+  const step: SynthStep = {
+    instruction: raw.instruction,
+    rationale: raw.rationale || undefined,
+    screenshotEventId: raw.screenshotRef || undefined,
+    expectedOutcome: raw.expectedOutcome || undefined,
+    uncertain: Boolean(raw.uncertain),
+  };
+  if (event) {
+    step.selector = event.target?.cssPath || event.target?.xpath;
+    step.route = event.route?.path;
+    if (!step.expectedOutcome) {
+      const postRoute = event.postAction?.route?.path;
+      if (postRoute && postRoute !== event.route?.path) {
+        step.expectedOutcome = `The app navigates to ${postRoute}.`;
+      }
+    }
+  }
+  return step;
+}
+
 const MAX_IMAGES_PER_SEGMENT = 30;
 
 const SYSTEM = `You turn ONE captured product workflow into a precise, step-by-step help article.
@@ -132,27 +167,9 @@ async function synthOne(
 
   // Deterministically enrich each step with selector/route/expectedOutcome from the
   // referenced event — ground truth from capture, not for the LLM to invent.
-  const steps: SynthStep[] = (a.steps || []).map((s: any) => {
-    const ev = s.screenshotRef ? eventsById.get(s.screenshotRef) : undefined;
-    const step: SynthStep = {
-      instruction: s.instruction,
-      rationale: s.rationale || undefined,
-      screenshotEventId: s.screenshotRef || undefined,
-      expectedOutcome: s.expectedOutcome || undefined,
-      uncertain: Boolean(s.uncertain),
-    };
-    if (ev) {
-      step.selector = ev.target?.cssPath || ev.target?.xpath;
-      step.route = ev.route?.path;
-      if (!step.expectedOutcome) {
-        const postRoute = ev.postAction?.route?.path;
-        if (postRoute && postRoute !== ev.route?.path) {
-          step.expectedOutcome = `The app navigates to ${postRoute}.`;
-        }
-      }
-    }
-    return step;
-  });
+  const steps: SynthStep[] = (a.steps ?? []).map((s: RawArticleStep) =>
+    enrichStepFromEvent(s, s.screenshotRef ? eventsById.get(s.screenshotRef) : undefined),
+  );
 
   return {
     title: a.title || seg.title,

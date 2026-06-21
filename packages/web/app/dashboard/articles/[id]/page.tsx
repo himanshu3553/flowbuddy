@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@sync/db';
+import type { Highlight } from '@sync/shared';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl } from '@/lib/storage';
 import { ArticleEditor, type EditorArticle } from './editor';
@@ -26,7 +27,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
       route: s.route ?? '',
       expectedOutcome: s.expectedOutcome ?? '',
       uncertain: s.uncertain,
-      highlight: (s.highlight as { x: number; y: number; w: number; h: number } | null) ?? null,
+      highlight: (s.highlight as Highlight | null) ?? null,
       screenshotUrl: s.screenshotKey ? await signedUrl(s.screenshotKey) : null,
     })),
   );

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { Highlight } from '@sync/shared';
 import * as actions from '@/lib/article-actions';
 
 export interface EditorStep {
@@ -13,7 +14,7 @@ export interface EditorStep {
   route: string;
   expectedOutcome: string;
   uncertain: boolean;
-  highlight: { x: number; y: number; w: number; h: number } | null;
+  highlight: Highlight | null;
   screenshotUrl: string | null;
 }
 
