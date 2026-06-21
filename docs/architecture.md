@@ -88,7 +88,7 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
 Job: produce human-facing **Articles** by reading the KB. **Articles are not the KB** — they're curated outputs.
 
 - **3.1 Auto (curated, M6.1)** — propose candidate **titles** (the segment titles persisted at KB build — Option C; free, no LLM) → user **selects** → synthesize Article(s) for **only the selected** segments. Workflow step-items → `workflow_backed` step-by-step articles. *(narration topic-items → `static` explainer prose = **Version 2**.)* **Not auto-pushed** — generation is user-triggered.
-- **3.2 Prompt-to-article** — query the **index** for items relevant to a topic *across the workspace* → synthesize one grounded Article; **decline + create a `CoverageGap`** if nothing matches. ❌ *new.*
+- **3.2 Prompt-to-article** — query the **index** for items relevant to a topic *across the workspace* → synthesize one grounded Article; **decline + create a `CoverageGap`** if nothing matches. ✅ *built (M7).*
 
 ### Article types vs. sources (clarified)
 `type` describes **shape / self-validatability**; `source` describes **origin**. They're independent:
