@@ -10,6 +10,8 @@ export type { ArtifactReader } from './types';
 export type { SynthArticle, SynthStep } from './synthesize';
 export type { Transcript } from './transcribe';
 export type { Segment } from './segment';
+export { promptToArticle } from './prompt';
+export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './prompt';
 
 /** A KB step-item as the synthesis package produces/consumes it (Module 2 ⇄ Module 3). */
 export interface KbStepItem {

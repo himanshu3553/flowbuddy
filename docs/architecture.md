@@ -135,8 +135,8 @@ Module 2 — KNOWLEDGE BASE  (extract → normalize → segment+tag → index)  
 | Layer | Today (Phase 1a as built) | Target (this model — **V1**) |
 |---|---|---|
 | Module 1 | 1.1 workflow only | **1.1 workflow only** (narration 1.2 + video 1.3 = **Version 2**); capture carries `kind` |
-| **Module 2 (KB)** | **explicit `KnowledgeSource` + `KnowledgeItem` + persisted transcript + segment tags (M6 done)** | + keyword/LLM index (M7) |
-| Module 3 | **3.1 curated** — propose titles → select → generate (M6.1 done) | + **3.2 prompt** (M7), both reading the **KB** |
+| **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + keyword retrieval (M6/M7 done)** | + pgvector embeddings (later) |
+| Module 3 | **3.1 curated** (M6.1) **+ 3.2 prompt-to-article** (M7), both reading the **KB** | — (complete for V1) |
 
 **Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics); add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
 

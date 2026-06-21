@@ -5,8 +5,10 @@ import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signOutAction } from '@/lib/actions';
 import { listCandidates } from '@/lib/candidates';
+import { resolveCoverageGap } from '@/lib/prompt-actions';
 import { CreateToken } from './create-token';
 import { GeneratePanel } from './generate-panel';
+import { PromptBox } from './prompt-box';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +33,12 @@ export default async function DashboardPage() {
       include: { _count: { select: { steps: true } } },
     }),
   ]);
+
+  const openGaps = await prisma.coverageGap.findMany({
+    where: { workspaceId: workspace.id, status: 'open' },
+    orderBy: { createdAt: 'desc' },
+    take: 25,
+  });
 
   // Workspace-wide "opportunities": un-generated workflow candidates across all recordings.
   const opportunities = (await listCandidates(workspace.id)).filter((c) => !c.generatedArticleId);
@@ -90,6 +98,32 @@ export default async function DashboardPage() {
               <GeneratePanel sourceId={sourceId} candidates={group.items} />
             </section>
           ))
+        )}
+      </div>
+
+      <div className="card">
+        <h2 style={{ fontSize: 15, margin: '0 0 2px' }}>Text → Article (generate from a prompt)</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Describe a topic. The AI assembles a draft grounded only in your recordings — or declines and logs a coverage gap if nothing covers it.
+        </p>
+        <PromptBox />
+        {openGaps.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <h3 style={{ fontSize: 13, margin: '0 0 6px' }}>Coverage gaps — record these next</h3>
+            <ul className="list">
+              {openGaps.map((g) => (
+                <li key={g.id}>
+                  <span className="grow">
+                    <strong>{g.prompt}</strong>
+                    {g.reason && <span className="muted"> — {g.reason}</span>}
+                  </span>
+                  <form action={resolveCoverageGap.bind(null, g.id)}>
+                    <button type="submit" className="secondary">Dismiss</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 

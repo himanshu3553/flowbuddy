@@ -72,10 +72,11 @@ model Workspace {
   ownerId   String
   createdAt DateTime @default(now())
 
-  owner    User         @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  tokens   ApiToken[]
-  sessions KnowledgeSource[]
-  articles Article[]
+  owner        User             @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  tokens       ApiToken[]
+  sessions     KnowledgeSource[]
+  articles     Article[]
+  coverageGaps CoverageGap[]
 }
 
 model ApiToken {
@@ -152,6 +153,20 @@ model Article {
   steps     Step[]
 
   @@index([sessionId, segmentIndex])
+}
+
+model CoverageGap {
+  // Module 3.2: a prompt-to-article request the KB could NOT cover → "record this next".
+  id          String   @id @default(cuid())
+  workspaceId String
+  prompt      String // the requested topic
+  reason      String? // why the AI declined (grounding gap)
+  status      String   @default("open") // open | resolved
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model Step {
