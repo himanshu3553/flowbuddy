@@ -2,6 +2,7 @@
 // and post-action settle, streaming them to the background over a long-lived port.
 
 import type { AppMeta, CapturedEvent, EventTarget, PortMsg, Route } from './types.js';
+import { showToast } from './indicator.js';
 
 let recording = false;
 let startTime = 0;
@@ -18,6 +19,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse?.({ ok: true });
   } else if (msg?.cmd === 'stopCapture') {
     stopCapture();
+    sendResponse?.({ ok: true });
+  } else if (msg?.cmd === 'setStatus') {
+    // Brief, non-blocking toast for the upload outcome. The "uploading" interim state is shown
+    // on the extension (badge + popup), so we only toast the terminal result here.
+    if (msg.phase === 'done') showToast('✓ Uploaded — processing in Sync', 'done', 3000);
+    else if (msg.phase === 'failed') showToast(`✗ ${msg.message || 'Recording failed'}`, 'fail', 7000);
     sendResponse?.({ ok: true });
   }
   // Respond synchronously — do NOT keep the channel open (avoids the
@@ -37,6 +44,8 @@ function startCapture(t0: number): void {
   addEventListener('submit', onSubmit, true);
   addEventListener('keydown', onKeydown, true);
   addEventListener('popstate', onNav, true);
+  // Brief, non-blocking confirmation; the persistent REC state is shown on the extension itself.
+  showToast('● Recording started', 'rec', 2000);
 }
 
 function stopCapture(): void {

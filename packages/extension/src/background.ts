@@ -45,6 +45,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     } else if (msg?.cmd === 'getState') {
       const rec = await getRec();
       sendResponse({ recording: rec.recording, backendUrl: rec.backendUrl });
+    } else if (msg?.cmd === 'connect') {
+      // From the Studio /connect page (via the content-script bridge): store the minted token
+      // + API URL under the same keys the popup already reads.
+      await chrome.storage.local.set({
+        apiToken: msg.token,
+        backendUrl: msg.backendUrl || 'http://localhost:8787',
+        connectedEmail: msg.email || '',
+      });
+      sendResponse({ ok: true });
+    } else if (msg?.cmd === 'getConnection') {
+      const { apiToken, backendUrl, connectedEmail } = await chrome.storage.local.get([
+        'apiToken',
+        'backendUrl',
+        'connectedEmail',
+      ]);
+      sendResponse({ connected: Boolean(apiToken), email: connectedEmail || '', backendUrl: backendUrl || '' });
+    } else if (msg?.cmd === 'disconnect') {
+      await chrome.storage.local.remove(['apiToken', 'connectedEmail']);
+      sendResponse({ ok: true });
     } else if (msg?.type === 'audioData') {
       await kvPut('audio', { dataUrl: msg.dataUrl || null, durationMs: msg.durationMs || 0 });
       // Only finalize if we're actually stopping. (If the mic fails at START,
@@ -161,7 +180,7 @@ function captureShot(windowId?: number): Promise<string | null> {
 
 async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean; error?: string }> {
   if (!token) {
-    return { ok: false, error: 'Paste your workspace API token in the popup first.' };
+    return { ok: false, error: 'Connect the extension to Sync Studio first.' };
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || /^(chrome|edge|about|chrome-extension):/.test(tab.url)) {
@@ -190,6 +209,7 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
       return { ok: false, error: 'Could not inject the recorder into this page. Reload the page and try again.' };
     }
   }
+  await setBadge('rec'); // toolbar shows REC for the duration
   return { ok: true };
 }
 
@@ -198,7 +218,11 @@ async function onStop(): Promise<void> {
   if (!rec.recording) return;
   await setRec({ ...rec, recording: false, stopping: true });
 
-  if (rec.tabId) chrome.tabs.sendMessage(rec.tabId, { cmd: 'stopCapture' }).catch(() => {});
+  await setBadge('up');
+  if (rec.tabId) {
+    chrome.tabs.sendMessage(rec.tabId, { cmd: 'stopCapture' }).catch(() => {});
+    await notifyTab(rec.tabId, { cmd: 'setStatus', phase: 'uploading' });
+  }
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stopAudio' }).catch(() => {});
 
   // Fallback: if the offscreen audio never reports back, finalize without it.
@@ -219,72 +243,87 @@ async function onMarker(): Promise<void> {
 async function finalize(): Promise<void> {
   if (finalizing) return;
   finalizing = true;
+
+  const rec = await getRec();
+  // Single result path: EVERY outcome (no events, upload error, exception) reports back
+  // via the badge, the stored lastUpload, and the on-page indicator — never silent.
+  let result: { ok: boolean; sessionId?: string; error?: string };
   try {
-    const rec = await getRec();
-    const meta = (await kvGet<any>('meta')) || {};
-    const eventEntries = await kvEntriesByPrefix<CapturedEvent>('event:');
-    eventEntries.sort((a, b) => (a.key < b.key ? -1 : 1));
-    const events = eventEntries.map((e) => e.value);
-    if (events.length === 0) {
-      console.warn('No events captured; nothing to upload.');
-      await ensureClosed();
-      return;
-    }
-
-    const audio = await kvGet<{ dataUrl: string | null; durationMs: number }>('audio');
-
-    const manifest = {
-      id: '',
-      createdAt: meta.createdAt || new Date().toISOString(),
-      app: meta.app || { baseUrl: '', userAgent: navigator.userAgent, viewport: { w: 0, h: 0 }, devicePixelRatio: 1 },
-      audio: audio?.dataUrl ? { file: 'audio.webm', durationMs: audio.durationMs } : undefined,
-      video: null,
-      markers: meta.markers || [],
-      events,
-    };
-
-    const shotEntries = await kvEntriesByPrefix<string>('shot:');
-    console.log(`[capture] summary: events=${events.length}, screenshots=${shotEntries.length}, audio=${audio?.dataUrl ? 'yes' : 'no'}`);
-
-    // Send each file's relative path as the FIELD NAME (multipart strips
-    // directories from the filename, so the path must ride on the field name).
-    const fd = new FormData();
-    fd.append('manifest', JSON.stringify(manifest));
-    if (audio?.dataUrl) fd.append('audio.webm', await dataUrlToBlob(audio.dataUrl), 'audio.webm');
-
-    for (const { key, value } of shotEntries) {
-      const rel = key.slice('shot:'.length);
-      fd.append(rel, await dataUrlToBlob(value), rel);
-    }
-    for (const { key, value } of await kvEntriesByPrefix<string>('dom:')) {
-      const rel = key.slice('dom:'.length);
-      fd.append(rel, new Blob([value], { type: 'text/html' }), rel);
-    }
-
-    const apiBase = (rec.backendUrl || 'http://localhost:8787').replace(/\/$/, '');
-    let result: { ok: boolean; sessionId?: string; error?: string };
-    try {
-      const res = await fetch(`${apiBase}/v1/sessions`, {
-        method: 'POST',
-        headers: rec.token ? { Authorization: `Bearer ${rec.token}` } : {},
-        body: fd,
-      });
-      const json = await res.json().catch(() => ({}));
-      result =
-        res.ok && json?.sessionId
-          ? { ok: true, sessionId: json.sessionId }
-          : { ok: false, error: json?.error || `Upload failed (HTTP ${res.status})` };
-    } catch (e) {
-      result = { ok: false, error: (e as Error)?.message || 'Upload failed' };
-    }
-    await kvClear();
-    await chrome.storage.local.set({ lastUpload: { ...result, at: Date.now() } });
-    await setBadge(result.ok);
-    console[result.ok ? 'log' : 'error']('[upload]', result.ok ? `session ${result.sessionId}` : result.error);
+    result = await assembleAndUpload(rec);
   } catch (e) {
-    console.error('finalize failed', e);
-  } finally {
-    await ensureClosed();
+    result = { ok: false, error: (e as Error)?.message || 'Recording failed to finalize.' };
+  }
+
+  await kvClear();
+  await chrome.storage.local.set({ lastUpload: { ...result, at: Date.now() } });
+  await setBadge(result.ok ? 'ok' : 'fail');
+  await notifyTab(rec.tabId, {
+    cmd: 'setStatus',
+    phase: result.ok ? 'done' : 'failed',
+    message: result.error,
+  });
+  console[result.ok ? 'log' : 'error']('[finalize]', result.ok ? `session ${result.sessionId}` : result.error);
+  await ensureClosed();
+}
+
+/** Build the bundle from IndexedDB and POST it. Throws on assembly errors (caught by finalize). */
+async function assembleAndUpload(rec: Rec): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const meta = (await kvGet<any>('meta')) || {};
+  const eventEntries = await kvEntriesByPrefix<CapturedEvent>('event:');
+  eventEntries.sort((a, b) => (a.key < b.key ? -1 : 1));
+  const events = eventEntries.map((e) => e.value);
+
+  if (events.length === 0) {
+    return {
+      ok: false,
+      error:
+        'No interaction events were captured. Click elements directly in the page (recording ignores embedded iframes) and avoid full-page reloads while recording.',
+    };
+  }
+
+  const audio = await kvGet<{ dataUrl: string | null; durationMs: number }>('audio');
+
+  const manifest = {
+    id: '',
+    createdAt: meta.createdAt || new Date().toISOString(),
+    app: meta.app || { baseUrl: '', userAgent: navigator.userAgent, viewport: { w: 0, h: 0 }, devicePixelRatio: 1 },
+    audio: audio?.dataUrl ? { file: 'audio.webm', durationMs: audio.durationMs } : undefined,
+    video: null,
+    markers: meta.markers || [],
+    events,
+  };
+
+  const shotEntries = await kvEntriesByPrefix<string>('shot:');
+  console.log(`[capture] summary: events=${events.length}, screenshots=${shotEntries.length}, audio=${audio?.dataUrl ? 'yes' : 'no'}`);
+
+  // Send each file's relative path as the FIELD NAME (multipart strips directories
+  // from the filename, so the path must ride on the field name).
+  const fd = new FormData();
+  fd.append('manifest', JSON.stringify(manifest));
+  if (audio?.dataUrl) fd.append('audio.webm', await dataUrlToBlob(audio.dataUrl), 'audio.webm');
+
+  for (const { key, value } of shotEntries) {
+    const rel = key.slice('shot:'.length);
+    fd.append(rel, await dataUrlToBlob(value), rel);
+  }
+  for (const { key, value } of await kvEntriesByPrefix<string>('dom:')) {
+    const rel = key.slice('dom:'.length);
+    fd.append(rel, new Blob([value], { type: 'text/html' }), rel);
+  }
+
+  const apiBase = (rec.backendUrl || 'http://localhost:8787').replace(/\/$/, '');
+  try {
+    const res = await fetch(`${apiBase}/v1/sessions`, {
+      method: 'POST',
+      headers: rec.token ? { Authorization: `Bearer ${rec.token}` } : {},
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    return res.ok && json?.sessionId
+      ? { ok: true, sessionId: json.sessionId }
+      : { ok: false, error: json?.error || `Upload failed (HTTP ${res.status})` };
+  } catch (e) {
+    return { ok: false, error: `Could not reach the Sync API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
   }
 }
 
@@ -292,17 +331,35 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return await (await fetch(dataUrl)).blob();
 }
 
-/** Toolbar badge feedback: ✓ on success, ! on failure, cleared on start (null). */
-async function setBadge(state: boolean | null): Promise<void> {
+/** Toolbar badge state machine: REC while recording, ↑ uploading, ✓ done, ! failed, clear. */
+type Badge = 'rec' | 'up' | 'ok' | 'fail';
+const BADGE: Record<Badge, { text: string; color: string }> = {
+  rec: { text: 'REC', color: '#d12f2f' },
+  up: { text: '↑', color: '#b07407' },
+  ok: { text: '✓', color: '#1a8a4f' },
+  fail: { text: '!', color: '#c0392b' },
+};
+
+async function setBadge(state: Badge | null): Promise<void> {
   try {
     if (state === null) {
       await chrome.action.setBadgeText({ text: '' });
       return;
     }
-    await chrome.action.setBadgeText({ text: state ? '✓' : '!' });
-    await chrome.action.setBadgeBackgroundColor({ color: state ? '#22aa66' : '#cc3333' });
+    await chrome.action.setBadgeText({ text: BADGE[state].text });
+    await chrome.action.setBadgeBackgroundColor({ color: BADGE[state].color });
   } catch {
     /* ignore */
+  }
+}
+
+/** Drive the on-page indicator in the recorded tab (best-effort; the tab may be gone). */
+async function notifyTab(tabId: number | undefined, msg: object): Promise<void> {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, msg);
+  } catch {
+    /* tab closed/navigated — toolbar badge + popup still convey state */
   }
 }
 

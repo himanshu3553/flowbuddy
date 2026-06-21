@@ -1,34 +1,34 @@
-// Popup UI: API URL, workspace token, mic permission, and start/stop/marker controls.
+// Popup UI: connect/disconnect to Sync Studio, mic permission, and start/stop/marker controls.
+// The API URL + token are no longer typed here — they arrive via the "Connect" flow.
+
+declare const __STUDIO_URL__: string; // baked at build time (build.mjs)
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const backendInput = $<HTMLInputElement>('backend');
-const tokenInput = $<HTMLInputElement>('token');
+const conn = $<HTMLDivElement>('conn');
 const grantMicBtn = $<HTMLButtonElement>('grantMic');
 const startBtn = $<HTMLButtonElement>('start');
 const stopBtn = $<HTMLButtonElement>('stop');
 const markerBtn = $<HTMLButtonElement>('marker');
 const micStatus = $<HTMLDivElement>('micStatus');
+const statusBox = $<HTMLDivElement>('status');
 const dot = $<HTMLSpanElement>('dot');
 const statusText = $<HTMLSpanElement>('statusText');
 
-const DEFAULT_API = 'http://localhost:8787';
+let connected = false;
+let recording = false;
 
 init();
 
 async function init(): Promise<void> {
-  const { backendUrl, apiToken, lastUpload } = await chrome.storage.local.get([
-    'backendUrl',
-    'apiToken',
-    'lastUpload',
-  ]);
-  backendInput.value = backendUrl || DEFAULT_API;
-  tokenInput.value = apiToken || '';
-
+  await refreshConnection();
   await refreshMic();
   const state = await send({ cmd: 'getState' });
   setRecordingUI(Boolean(state?.recording));
-  if (!state?.recording && lastUpload) showLastUpload(lastUpload);
+  if (!state?.recording) {
+    const { lastUpload } = await chrome.storage.local.get('lastUpload');
+    if (lastUpload) showLastUpload(lastUpload);
+  }
 
   grantMicBtn.addEventListener('click', grantMic);
   startBtn.addEventListener('click', start);
@@ -36,10 +36,35 @@ async function init(): Promise<void> {
   markerBtn.addEventListener('click', () => send({ cmd: 'marker' }));
 }
 
+/** Render the connection row (Connected as … / Disconnect, or Connect to Sync Studio). */
+async function refreshConnection(): Promise<void> {
+  const c = await send({ cmd: 'getConnection' });
+  connected = Boolean(c?.connected);
+  conn.textContent = '';
+  conn.className = connected ? 'conn on' : 'conn';
+
+  const who = document.createElement('span');
+  who.className = 'who';
+  const btn = document.createElement('button');
+
+  if (connected) {
+    who.textContent = c.email ? `✓ Connected as ${c.email}` : '✓ Connected to Sync';
+    btn.textContent = 'Disconnect';
+    btn.className = 'ghost';
+    btn.onclick = async () => { await send({ cmd: 'disconnect' }); await refreshConnection(); applyButtonState(); };
+  } else {
+    who.textContent = 'Not connected to Sync';
+    btn.id = 'connect';
+    btn.textContent = 'Connect';
+    btn.onclick = () => { chrome.tabs.create({ url: `${__STUDIO_URL__}/connect` }); window.close(); };
+  }
+  conn.append(who, btn);
+  applyButtonState();
+}
+
 function showLastUpload(u: { ok: boolean; sessionId?: string; error?: string }): void {
-  statusText.textContent = u.ok
-    ? `Last upload ✓ (${u.sessionId?.slice(0, 8)}…)`
-    : `Last upload failed: ${u.error}`;
+  if (u.ok) setStatus(`Last upload ✓ (${u.sessionId?.slice(0, 8)}…)`, 'ok');
+  else setStatus(`Last upload failed — ${u.error}`, 'fail');
 }
 
 async function refreshMic(): Promise<void> {
@@ -59,43 +84,48 @@ async function refreshMic(): Promise<void> {
 }
 
 async function grantMic(): Promise<void> {
-  // Prompt from a real tab — the popup can't reliably show the mic dialog.
   await chrome.tabs.create({ url: chrome.runtime.getURL('permission.html') });
   micStatus.textContent = 'A tab opened — click Allow there, then reopen this popup.';
   micStatus.className = '';
 }
 
 async function start(): Promise<void> {
-  const backendUrl = (backendInput.value || DEFAULT_API).trim();
-  const token = tokenInput.value.trim();
-  if (!token) {
-    statusText.textContent = 'Paste your workspace API token first.';
+  const { apiToken, backendUrl } = await chrome.storage.local.get(['apiToken', 'backendUrl']);
+  if (!apiToken) {
+    setStatus('Connect to Sync Studio first.', 'fail');
     return;
   }
-  await chrome.storage.local.set({ backendUrl, apiToken: token });
-  const res = await send({ cmd: 'start', backendUrl, token });
-  if (res?.ok) {
-    setRecordingUI(true);
-  } else {
-    statusText.textContent = res?.error || 'Could not start recording.';
-  }
+  const res = await send({ cmd: 'start', backendUrl, token: apiToken });
+  if (res?.ok) setRecordingUI(true);
+  else setStatus(res?.error || 'Could not start recording.', 'fail');
 }
 
 async function stop(): Promise<void> {
   setRecordingUI(false);
-  statusText.textContent = 'Uploading… watch the toolbar badge (✓ / !).';
+  setStatus('Uploading… watch the toolbar badge (REC → ↑ → ✓/!) or the on-page toast.', 'neutral');
   dot.className = 'dot';
   await send({ cmd: 'stop' });
 }
 
-function setRecordingUI(recording: boolean): void {
-  startBtn.disabled = recording;
+function setRecordingUI(isRecording: boolean): void {
+  recording = isRecording;
+  dot.className = recording ? 'dot live' : 'dot';
+  if (recording) setStatus('REC · Recording — narrate & click through your workflow.', 'rec');
+  else setStatus('Idle', 'neutral');
+  applyButtonState();
+}
+
+/** Start needs a connection + not already recording; stop/marker need an active recording. */
+function applyButtonState(): void {
+  startBtn.disabled = recording || !connected;
   stopBtn.disabled = !recording;
   markerBtn.disabled = !recording;
-  backendInput.disabled = recording;
-  tokenInput.disabled = recording;
-  dot.className = recording ? 'dot live' : 'dot';
-  statusText.textContent = recording ? 'Recording…' : 'Idle';
+}
+
+/** Set the status line text + colour (neutral / recording / green ok / red fail). */
+function setStatus(text: string, kind: 'neutral' | 'rec' | 'ok' | 'fail' = 'neutral'): void {
+  statusText.textContent = text;
+  statusBox.className = kind === 'neutral' ? 'status' : `status ${kind}`;
 }
 
 function send(msg: unknown): Promise<any> {
