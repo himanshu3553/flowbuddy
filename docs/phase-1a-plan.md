@@ -1,6 +1,6 @@
 # Sync — Phase 1a Plan (Thin Slice)
 
-> **Goal of the slice:** prove the *real* product architecture end-to-end on **one path** — record → async synthesis → edit → publish → public portal — with real accounts, multi-tenancy, database, object storage, and a background worker. Feature breadth comes in Phase 1b.
+> **Goal of the slice:** prove the *real* product architecture end-to-end on **one path** — record → async synthesis → edit → publish → public portal — with real accounts, multi-tenancy, database, object storage, and a background worker. Feature breadth comes in **Phase 1b** ([phase-1b-plan.md](phase-1b-plan.md)).
 
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-21
@@ -18,7 +18,7 @@
 
 **Deferred to Version 2:** **narration-only capture (1.2)** and **video capture (1.3)** — V1 capture is **workflow-only (1.1)**.
 
-**Deferred to 1b:** productized redaction, hybrid/semantic search (vector DB), brand voice/theming, screenshot retake/crop, highlight **arrow** pointer, coverage-gap analytics dashboards, custom domains/gated portals, multi-seat/roles.
+**Deferred to 1b:** productized redaction, hybrid/semantic search (vector DB), brand voice/theming, screenshot retake/crop, highlight **arrow** pointer, coverage-gap analytics dashboards, custom domains/gated portals, multi-seat/roles. **Now sequenced as milestones M9–M14 in [phase-1b-plan.md](phase-1b-plan.md).**
 
 ---
 

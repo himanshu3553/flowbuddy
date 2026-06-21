@@ -257,6 +257,8 @@ Uploads are **enqueued** (Redis + BullMQ) and handled by a **background worker**
 - *(Phase 1 capture is **workflow-only**.)*
 
 ### Planned for Phase 1b (within Phase 1's wedge)
+> **Now sequenced (beta-blocking first) as milestones M9–M14 in [phase-1b-plan.md](phase-1b-plan.md).**
+
 Productized PII redaction · hybrid/semantic (vector) search + a KB search UI · brand voice/theming · screenshot retake/crop · arrow-pointer highlight · coverage-gap **analytics dashboards** · custom domains / gated portals · multi-seat/roles · manual `static` authoring UI · iframe & multi-tab capture · "was this helpful?" feedback loop.
 
 ### Operational
