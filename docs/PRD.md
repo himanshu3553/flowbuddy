@@ -103,7 +103,9 @@ Sync ships as **four distinct surfaces** over one shared structured knowledge ba
 ### 5.1 Chrome Extension — "the Recorder"
 **Who:** the builder (Founder Fiona). **Purpose:** effortless multi-layer capture.
 
+- **One-click "Connect with Sync"** — links the extension to the signed-in Studio account (mints a workspace token via the `/connect` page; no token/URL copy-paste).
 - Start/stop/pause recording of the active tab; mic capture for narration.
+- **Recording feedback:** a blinking **REC** indicator (toolbar badge + popup) while recording, and clear success/failure feedback after stop (never fails silently).
 - **Capture modes (Module 1):** **V1 = workflow** (interactions + DOM + screenshots + audio). **Version 2** adds **narration-only** (audio ± a context screenshot — for conceptual content like policies/FAQs with no clickable workflow) and **video**. See [`architecture.md`](architecture.md).
 - **Capture model (locked 2026-06-18): event/DOM-primary.** The semantic backbone is per-interaction capture — event + DOM snapshot + hi-res screenshot — plus a **post-action snapshot** (after DOM settles / network idle) for the step's `expected_outcome`, **continuous audio** for narration, and an **optional low-fps/low-res context video** as a visual safety net for non-event moments. Events are ground truth; video is a secondary aid, never the source of truth. (See [data model](#6-core-architecture--data-model).)
 - Visual recording indicator + a "marker/chapter" hotkey so the user can signal "new workflow starts here."

@@ -4,7 +4,7 @@
 
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-21
-- **Build status (2026-06-21):** **M0–M7 complete** — capture → KB → curated generation (M6.1) → prompt-to-article (M7) → edit/publish → portal. **Verified end-to-end manually** on a clean DB: fresh sign-up → record via the extension → KB builds (`ready`) → curate + generate → edit → publish → live on the portal. A code-quality refactor pass has landed (commit `c007e7b`). **Only M8 (Render deploy) remains.**
+- **Build status (2026-06-21):** **M0–M7 complete** — capture → KB → curated generation (M6.1) → prompt-to-article (M7) → edit/publish → portal. **Verified end-to-end manually** on a clean DB: fresh sign-up → record via the extension → KB builds (`ready`) → curate + generate → edit → publish → live on the portal. Landed since: a code-quality **refactor** (`c007e7b`); **recorder UX** — lifecycle feedback + no silent failures; and a **"Connect with Sync" auth flow** (no token/URL paste) (`70a8daa`). **Only M8 (Render deploy) remains.**
 - **Precedes/zooms into:** [phase-1-spec.md](phase-1-spec.md). Builds on the validated [spike](SPIKE.md) (verdict: GO).
 - **Decisions locked:** port-into-fresh • monorepo (pnpm + Turborepo) • Node/TS + Next.js • Postgres • Redis/BullMQ • **Auth.js (self-hosted)** • **Render** (compute + Postgres + Redis) + **Cloudflare R2** (blobs) • single-user = single-workspace.
 - **Architecture (frozen 2026-06-19):** 3-module model — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). **Course-correction:** introduce the explicit **KB layer** (`KnowledgeSource` + `KnowledgeItem` + persisted transcript + keyword/LLM index); the worker does **capture → KB**, and article creation (curated auto + prompt) reads the KB. **Prompt-to-article (3.2)** is **in 1a**.
@@ -190,7 +190,7 @@ Services (all from the monorepo; **each built from its package `Dockerfile`**):
 - R2: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`.
 - LLM (worker): `OPENAI_API_KEY`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`.
 - Auth (web): `NEXTAUTH_SECRET`, `NEXTAUTH_URL`.
-- Extension: configured with the `api` base URL + a **workspace API token** (generated in Studio, pasted into the popup) — no OAuth in the extension for the slice.
+- Extension: **"Connect with Sync" flow (built 2026-06-21)** — the popup opens Studio's **`/connect`** page (auth-gated), which **mints a workspace token server-side** and relays it + the API URL to the extension via a **content-script bridge** on the Studio origin (same-origin checked). No token/URL is typed or pasted; URLs are baked at build (`STUDIO_URL`). Full OAuth (`chrome.identity`) remains a future option if the extension is published to many third-party users.
 
 Dev uses free tiers (note: free web services spin down; free Postgres expires ~90 days). Flip `sync-api`/`sync-portal` to paid before launch.
 
@@ -213,7 +213,7 @@ Migrating off Render = provision Postgres/Redis elsewhere, set the same env vars
 - **Synthesis R2 refactor:** the artifact-accessor change is the main porting effort — do it first (M3).
 - **Next.js + Prisma on Render (monorepo):** ensure `prisma generate` runs in build; pnpm + turbo filters per service.
 - **Extension hardening (from spike findings):** single-tab only, capture stops on full-page nav, in-memory buffer, minimal redaction — acceptable for the slice; track for 1b.
-- **Known recorder UX gap (found 2026-06-21):** a recording that captures **zero interaction events** (e.g. the app UI lives in an `<iframe>` — recorder only captures the top frame, `all_frames:false` — or a full-page navigation detaches the content script) **bails silently in `finalize()`** with no upload and no badge ("nothing happened"). Fix in 1b: surface a clear error + `!` badge (and consider iframe/`all_frames` capture). Not a pipeline bug — the server side is unaffected.
+- **Recorder feedback (built 2026-06-21):** the recorder now gives clear lifecycle feedback — a toolbar badge state machine (**REC → ↑ → ✓/!**), a blinking red **REC** dot in the popup, and a brief **non-blocking on-page toast** (start / uploaded / failed; `pointer-events:none`, auto-dismiss). `finalize()` was rewritten to a single result path so **every** outcome surfaces a badge + status + toast — the earlier **zero-event silent bail is fixed** (now shows *"No interaction events were captured…"*). **Still 1b:** the *root cause* of zero-event captures — app UIs inside an `<iframe>` (recorder is `all_frames:false`, top-frame only) and full-page navigations detaching the content script — i.e. actually capturing those cases (now they're at least surfaced, not silent).
 - **Auth.js in the slice:** credentials/email provider; create a Workspace + first ApiToken on signup.
 
 ---
