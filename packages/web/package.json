@@ -13,6 +13,7 @@
     "@aws-sdk/s3-request-presigner": "^3.700.0",
     "@sync/db": "workspace:*",
     "@sync/shared": "workspace:*",
+    "@sync/synthesis": "workspace:*",
     "bcryptjs": "^2.4.3",
     "next": "^15.1.3",
     "next-auth": "5.0.0-beta.25",

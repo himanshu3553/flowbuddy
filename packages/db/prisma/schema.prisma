@@ -95,7 +95,7 @@ model KnowledgeSource {
   workspaceId String
   createdById String
   kind        String   @default("workflow") // workflow | narration | video
-  status      String   @default("uploaded") // uploaded | processing | done | error
+  status      String   @default("uploaded") // uploaded | processing | ready | done | error  (ready = KB built + segmented, candidates available, no articles yet)
   appBaseUrl  String?
   manifest    Json // raw capture manifest (events, markers, meta)
   transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval
@@ -142,12 +142,16 @@ model Article {
   type          String   @default("workflow_backed") // workflow_backed | static
   status        String   @default("draft") // draft | published
   orderIndex    Int      @default(0)
+  segmentIndex  Int? // the workflow candidate (KnowledgeItem.segmentIndex within `session`) this article was generated from — marks the candidate "generated"
+  segmentTitle  String? // candidate title at generation time
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   session   KnowledgeSource? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   steps     Step[]
+
+  @@index([sessionId, segmentIndex])
 }
 
 model Step {

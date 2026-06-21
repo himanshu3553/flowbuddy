@@ -54,7 +54,50 @@ export async function buildKB(input: BuildKBInput): Promise<BuiltKB> {
   return { transcript, items };
 }
 
-// ---------- Module 3.1: KB → articles (auto) ----------
+// ---------- Module 2 (cont.): segment the KB into workflow candidates ----------
+
+export interface SegmentItemsInput {
+  items: KbStepItem[];
+  markers: Marker[];
+  apiKey: string;
+  synthModel: string;
+}
+
+/** Segment the KB items into candidate workflows (titles). Runs at KB build (no synthesis).
+ *  The worker persists the result onto each item (segmentIndex/segmentTitle, Option C); those
+ *  titles become the candidates the Studio "Auto Generate Articles" picker lists — M6.1. */
+export async function segmentItems(input: SegmentItemsInput): Promise<Segment[]> {
+  const openai = new OpenAI({ apiKey: input.apiKey });
+  const events = input.items.map((it) => it.event);
+  const narration = new Map<string, string>();
+  for (const it of input.items) if (it.narration) narration.set(it.event.id, it.narration);
+  return segment(openai, input.synthModel, events, input.markers || [], narration);
+}
+
+// ---------- Module 3.1: KB → article (curated — ONE selected candidate at a time) ----------
+
+export interface GenerateArticleInput {
+  items: KbStepItem[]; // the items belonging to ONE segment (ordered)
+  title: string; // the candidate title to synthesize
+  getArtifact: ArtifactReader;
+  apiKey: string;
+  synthModel: string;
+}
+
+/** Curated generation (M6.1): synthesize a SINGLE chosen workflow candidate into an article.
+ *  Called synchronously from the Studio server action after the user selects candidates. */
+export async function generateArticleForSegment(input: GenerateArticleInput): Promise<SynthArticle> {
+  const openai = new OpenAI({ apiKey: input.apiKey });
+  const events = input.items.map((it) => it.event);
+  const narration = new Map<string, string>();
+  for (const it of input.items) if (it.narration) narration.set(it.event.id, it.narration);
+
+  const seg: Segment = { title: input.title, eventIds: events.map((e) => e.id) };
+  const [article] = await synthesizeArticles(openai, input.synthModel, [seg], events, narration, input.getArtifact);
+  return article ?? { title: input.title, tags: [], routes: [], preconditions: [], steps: [] };
+}
+
+// ---------- Module 3.1 (legacy convenience): segment + synthesize all in one ----------
 
 export interface CreateArticlesInput {
   items: KbStepItem[];
@@ -64,8 +107,8 @@ export interface CreateArticlesInput {
   synthModel: string;
 }
 
-/** Auto article creation FROM the KB: segment (at creation) then synthesize. Also returns the
- *  segments so the KB items can be tagged with the workflow they belong to (Path 2). */
+/** Segment-then-synthesize ALL workflows in one call. Retained for non-curated/batch use;
+ *  the curated M6.1 flow uses segmentItems (KB build) + generateArticleForSegment (per selection). */
 export async function createArticlesFromItems(
   input: CreateArticlesInput,
 ): Promise<{ articles: SynthArticle[]; segments: Segment[] }> {

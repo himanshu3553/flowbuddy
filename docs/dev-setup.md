@@ -17,10 +17,13 @@ sync/
   turbo.json            # task pipeline (build/dev/typecheck across packages)
   docker-compose.yml    # local Postgres + Redis
   packages/
-    shared/   # types + zod schemas shared by everyone
-    db/       # Prisma schema + client
-    web/      # Next.js Studio app  (the "app", like a normal project)
-    # coming: api, worker, portal, extension
+    shared/     # types + zod schemas shared by everyone
+    db/         # Prisma schema + client
+    synthesis/  # transcribe → KB → segment → generate (OpenAI); used by worker + web
+    api/        # Fastify ingestion HTTP service + the BullMQ worker (worker entrypoint)
+    web/        # Next.js Studio app (dashboard/editor + curated generation)
+    portal/     # Next.js public help site
+    extension/  # Chrome MV3 recorder
   spike/      # Phase-0 reference code (NOT part of the workspace)
   docs/       # PRD, specs, plans, this file
 ```
@@ -72,8 +75,12 @@ corepack enable
 pnpm install
 
 # every working session
-docker compose up -d                          # start Postgres + Redis
+docker compose up -d                          # start Postgres + Redis + MinIO
 pnpm --filter @sync/web dev                   # run Studio → http://localhost:3000
+pnpm --filter @sync/api worker                # run the worker (turns recordings into the KB)
+# optional, for the full loop:
+pnpm --filter @sync/api dev                   # ingestion API (extension upload) → :8787
+pnpm --filter @sync/portal dev                # public help portal → :3001
 
 # building / checking
 pnpm build                                    # build everything (Turbo)
@@ -99,7 +106,8 @@ docker compose down                           # stop Postgres + Redis (add -v to
 - **"command not found: pnpm"** → run `corepack enable` (once per machine / Node version).
 - **DB errors / "can't reach database"** → is Postgres up? `docker compose up -d`, then `docker compose ps` (postgres should be `healthy`).
 - **Type changes not picked up across packages** → `pnpm build` (Turbo rebuilds deps in order); for the Prisma client specifically, `pnpm db:generate`.
-- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/db/.env`). The root `.env.example` documents every variable.
+- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in BOTH `packages/api/.env`** (worker — transcribe + segment) **and `packages/web/.env`** (Studio — curated article generation runs synchronously there).
+- **Nothing happens after recording?** The **worker must be running** (`pnpm --filter @sync/api worker`) to turn an upload into the KB (`status → ready`). Articles then appear only when you click **"Auto Generate Articles"** in Studio — they are no longer auto-created.
 - **Docker must be running** (Docker Desktop) before `docker compose up`.
 
 ---

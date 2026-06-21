@@ -22,3 +22,19 @@ export function signedUrl(key: string, expiresIn = 3600): Promise<string> {
 export function sessionObjectKey(workspaceId: string, sessionId: string, rel: string): string {
   return `workspaces/${workspaceId}/sessions/${sessionId}/${rel}`;
 }
+
+/** An `ArtifactReader` (relPath → Buffer) for synthesis to fetch a session's screenshots from
+ *  object storage during curated generation (M6.1). Mirrors the worker's getArtifact. */
+export function artifactReader(workspaceId: string, sessionId: string) {
+  return async (relPath: string): Promise<Buffer | null> => {
+    try {
+      const obj = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: sessionObjectKey(workspaceId, sessionId, relPath) }),
+      );
+      const bytes = await (obj.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
+      return Buffer.from(bytes);
+    } catch {
+      return null;
+    }
+  };
+}

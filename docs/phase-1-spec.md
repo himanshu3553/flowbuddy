@@ -6,7 +6,7 @@
 - **Last updated:** 2026-06-18
 - **Scope:** Phase 1 only. Copilot (Phase 2) and self-validation (Phase 3) are out of scope but the data captured here must not preclude them.
 - **Build approach (decided 2026-06-18):** port the validated [spike](SPIKE.md) (verdict: GO) into a fresh **monorepo** and ship a **thin slice first** — see [`phase-1a-plan.md`](phase-1a-plan.md). Stack: Node/TS · Next.js · Postgres · Redis/BullMQ · Auth.js (self-hosted). Deploy: Render (Dockerized) + Cloudflare R2.
-- **Architecture (frozen 2026-06-19):** Phase 1 follows the **3-module model** — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). Capture now includes a **narration-only** mode (1.2); articles are generated from an explicit **KB** (`KnowledgeSource` + `KnowledgeItem` + transcript + keyword/LLM index) via **auto** or **prompt**.
+- **Architecture (frozen 2026-06-19; version scope locked 2026-06-21):** Phase 1 follows the **3-module model** — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). **V1 capture is workflow-only** (narration-only 1.2 + video 1.3 = **Version 2**); articles are generated from an explicit **KB** (`KnowledgeSource` + `KnowledgeItem` + transcript + keyword/LLM index) via **curated auto** (propose titles → select → generate) or **prompt**.
 
 ---
 
@@ -95,9 +95,9 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 - AC: Start/stop/pause controls; persistent recording indicator; mic level shown; recording survives in-app (same-tab) navigations.
 - AC: Audio is captured continuously for the whole session.
 
-**US-EXT-1b — Narration-only capture (Module 1.2).** As a founder I want to record audio-only (no clicking) so that I can create conceptual articles (policies, FAQs, "what is X").
-- AC: an audio-only mode that uploads even with **zero interaction events** (just audio ± an optional context screenshot); the source is marked `kind = narration`.
-- AC: the narration path produces a `static` (explainer) article, grounded in the transcript — never general knowledge.
+**US-EXT-1b — Narration-only capture (Module 1.2) — ⏭ DEFERRED TO VERSION 2.** As a founder I want to record audio-only (no clicking) so that I can create conceptual articles (policies, FAQs, "what is X"). **Not in V1 — V1 capture is workflow-only.** (See [`architecture.md`](architecture.md) → Product versions.)
+- AC *(V2)*: an audio-only mode that uploads even with **zero interaction events** (just audio ± an optional context screenshot); the source is marked `kind = narration`.
+- AC *(V2)*: the narration path produces a `static` (explainer) article, grounded in the transcript — never general knowledge.
 
 **US-EXT-2 — Capture interactions as ground truth.** As the system I need to capture each meaningful interaction with full semantic context so that synthesis is accurate and steps are self-validatable later.
 - AC: For each interaction event, capture: event type, target element (role, accessible name, text, tag, css_path, xpath, bbox, iframe path), route, DOM snapshot, hi-res screenshot. (See [capture contract](#6-the-capture-contract-session-bundle).)
@@ -121,7 +121,7 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 
 **US-PROC-1 — Transcribe narration.** AC: Audio → timestamped transcript; transcript segments aligned to the event timeline by timestamp.
 
-**US-PROC-2 — Segment into workflows.** AC: Produce candidate article boundaries using (priority order) user markers → route changes → narration topic cues → LLM topic segmentation. Each candidate becomes a draft article.
+**US-PROC-2 — Segment into workflows (at KB build).** AC: Produce candidate workflow boundaries using (priority order) user markers → route changes → narration topic cues → LLM topic segmentation. Segmentation runs at **KB build** and persists a **candidate title** (`segmentTitle`) per workflow. Each candidate becomes a **proposable title** (not an auto-created article) — the founder selects which to generate (curated; see US-SYN-1).
 
 **US-PROC-3 — Prepare screenshots.** AC: For each step, crop the screenshot to the target element bbox with padding and apply a highlight (box/arrow); keep the full-frame original too. Honor device pixel ratio.
 
@@ -129,8 +129,8 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 
 ### 5.3 Synthesis
 
-**US-SYN-1 — Generate structured articles.** As the system I want to fuse transcript (why) + events (what) + screenshots (visual) into the [structured content model](#7-content--storage-model) so that articles are accurate and editable.
-- AC: Each segment → an Article with title, intent, tags, routes, preconditions, and ordered Steps.
+**US-SYN-1 — Generate structured articles (curated).** As the system I want to fuse transcript (why) + events (what) + screenshots (visual) into the [structured content model](#7-content--storage-model) so that articles are accurate and editable. **Generation is user-triggered**: the founder picks candidate titles ("Auto Generate Articles") and only the **selected** segments are synthesized — articles are not auto-pushed on capture.
+- AC: Each **selected** segment → an Article with title, intent, tags, routes, preconditions, and ordered Steps.
 - AC: Each Step has: instruction (from the event/element), rationale (from nearby narration), screenshot (cropped+highlighted), selector (multi-signal), route, and expected_outcome (from the post-action snapshot).
 - AC: Trivial/noise events (incidental scroll, focus) are collapsed; only meaningful steps surface.
 - AC: Articles are created as **drafts** with `source = recording_auto`, `type = workflow-backed`.
@@ -139,7 +139,7 @@ User stories use: **As a** \<role\> **I want** \<capability\> **so that** \<valu
 
 **US-PTA-1 — Author by topic, grounded in recordings.** As a founder I want to type a topic and get an article assembled only from my recordings so that I can fill specific gaps fast.
 - AC: A searchable index exists over the **Knowledge Base** (`KnowledgeItem.text`) — **keyword/LLM retrieval first, pgvector embeddings later** (decided 2026-06-19).
-- AC: On prompt, retrieve the relevant `KnowledgeItem`s (across captures), then synthesize an article via the same synthesis path; `source = prompt_grounded` (`type` = `workflow-backed` for workflow items, `static` for narration/topic items).
+- AC: On prompt, retrieve the relevant `KnowledgeItem`s (across captures), then synthesize an article via the same synthesis path; `source = prompt_grounded`, `type = workflow-backed` for workflow items. *(`static` from narration/topic items = **Version 2**.)*
 - AC: If retrieval confidence is below threshold, **decline** and create a **coverage-gap** entry ("record this"); never fabricate steps.
 - AC: The article cites which session(s)/spans it drew from.
 
@@ -259,7 +259,7 @@ A B2B sales gate — must work in v1.
 
 ## 10. Build sequence (milestones)
 
-> **Authoritative, current build sequence (M0–M9) lives in [`phase-1a-plan.md`](phase-1a-plan.md) §9–§10.** The list below is the original Phase-1 conceptual breakdown (kept for context).
+> **Authoritative, current build sequence (M0–M8) lives in [`phase-1a-plan.md`](phase-1a-plan.md) §9–§10.** The list below is the original Phase-1 conceptual breakdown (kept for context).
 
 - **M0 — Foundations:** workspace, auth, multi-seat (owner/editor), object storage, signed uploads.
 - **M1 — Capture & upload:** extension emits the full [session bundle](#6-the-capture-contract-session-bundle) with client-side redaction; verify capture quality on real apps *before* building synthesis.

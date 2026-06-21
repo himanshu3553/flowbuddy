@@ -3,39 +3,10 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
 import type { CapturedEvent, SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
-import { buildKB, createArticlesFromItems, type KbStepItem } from '@sync/synthesis';
+import { buildKB, segmentItems, type KbStepItem } from '@sync/synthesis';
 import { config } from './config';
 import { connection } from './queue';
 import { s3, sessionKey } from './storage';
-
-function shotKeyFor(
-  eventId: string | undefined,
-  events: CapturedEvent[],
-  workspaceId: string,
-  sessionId: string,
-): string | null {
-  if (!eventId) return null;
-  const ev = events.find((e) => e.id === eventId);
-  if (!ev?.screenshot?.file) return null;
-  return sessionKey(workspaceId, sessionId, ev.screenshot.file);
-}
-
-/** The clicked element's bbox as fractions (0..1) of the viewport — for the highlight rectangle. */
-function highlightFor(
-  eventId: string | undefined,
-  events: CapturedEvent[],
-  viewport: { w: number; h: number } | undefined,
-): { x: number; y: number; w: number; h: number } | undefined {
-  if (!eventId || !viewport?.w || !viewport?.h) return undefined;
-  const b = events.find((e) => e.id === eventId)?.target?.bbox;
-  if (!b) return undefined;
-  const x = Math.min(Math.max(b.x / viewport.w, 0), 1);
-  const y = Math.min(Math.max(b.y / viewport.h, 0), 1);
-  const w = Math.min(Math.max(b.w / viewport.w, 0), 1 - x);
-  const h = Math.min(Math.max(b.h / viewport.h, 0), 1 - y);
-  if (w <= 0 || h <= 0) return undefined;
-  return { x, y, w, h };
-}
 
 const worker = new Worker(
   SYNTHESIS_QUEUE,
@@ -91,7 +62,9 @@ const worker = new Worker(
       }
       console.log(`[worker] KB built: transcript(${transcript.segments.length} seg) + ${items.length} items`);
 
-      // ── Module 3.1: KB → articles (read items back from the DB; segment-at-creation, Option B) ──
+      // ── Module 2 (cont.): segment the KB into workflow candidates + tag items (Option C) ──
+      // Curated flow (M6.1): we STOP here. No synthesis, no articles — the user generates
+      // selected candidates later from Studio. Segmentation persists candidate titles only.
       const dbItems = await prisma.knowledgeItem.findMany({
         where: { sourceId: sessionId, kind: 'step' },
         orderBy: { orderIndex: 'asc' },
@@ -101,18 +74,23 @@ const worker = new Worker(
         return { orderIndex: i.orderIndex, kind: 'step', text: i.text, event: d.event, narration: d.narration ?? null };
       });
 
-      const { articles, segments } = await createArticlesFromItems({
+      const segments = await segmentItems({
         items: stepItems,
         markers: manifest.markers || [],
-        getArtifact,
         apiKey: config.openaiApiKey,
         synthModel: config.synthModel,
       });
 
-      // Tag each KB item with the workflow segment it belongs to (Path 2 — persisted grouping for the KB UI).
+      // Tag each KB item with the workflow candidate it belongs to (these titles become the
+      // candidates the Studio "Auto Generate Articles" picker lists).
       const eventToItemId = new Map(
         dbItems.map((i) => [(i.data as unknown as { event: CapturedEvent }).event.id, i.id]),
       );
+      // Reset tags first so re-processing is idempotent.
+      await prisma.knowledgeItem.updateMany({
+        where: { sourceId: sessionId },
+        data: { segmentIndex: null, segmentTitle: null },
+      });
       for (let si = 0; si < segments.length; si++) {
         const seg = segments[si]!;
         const itemIds = seg.eventIds
@@ -126,42 +104,8 @@ const worker = new Worker(
         }
       }
 
-      // Idempotent: replace any prior articles for this source.
-      await prisma.article.deleteMany({ where: { sessionId } });
-      for (let i = 0; i < articles.length; i++) {
-        const a = articles[i]!;
-        await prisma.article.create({
-          data: {
-            workspaceId: rec.workspaceId,
-            sessionId,
-            title: a.title,
-            intent: a.intent ?? null,
-            tags: a.tags,
-            routes: a.routes,
-            preconditions: a.preconditions,
-            source: 'recording_auto',
-            type: 'workflow_backed',
-            status: 'draft',
-            orderIndex: i,
-            steps: {
-              create: a.steps.map((s, j) => ({
-                orderIndex: j,
-                instruction: s.instruction,
-                rationale: s.rationale ?? null,
-                selector: s.selector ?? null,
-                route: s.route ?? null,
-                expectedOutcome: s.expectedOutcome ?? null,
-                uncertain: Boolean(s.uncertain),
-                screenshotKey: shotKeyFor(s.screenshotEventId, manifest.events, rec.workspaceId, sessionId),
-                highlight: highlightFor(s.screenshotEventId, manifest.events, manifest.app?.viewport) ?? undefined,
-              })),
-            },
-          },
-        });
-      }
-
-      await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'done', error: null } });
-      console.log(`[worker] done ${sessionId}: ${articles.length} article(s) from ${stepItems.length} items`);
+      await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'ready', error: null } });
+      console.log(`[worker] ready ${sessionId}: ${segments.length} workflow candidate(s) from ${stepItems.length} items (no articles — curated generation)`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'error', error: msg } });

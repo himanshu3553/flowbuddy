@@ -4,7 +4,9 @@ import { auth } from '@/auth';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signOutAction } from '@/lib/actions';
+import { listCandidates } from '@/lib/candidates';
 import { CreateToken } from './create-token';
+import { GeneratePanel } from './generate-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +31,15 @@ export default async function DashboardPage() {
       include: { _count: { select: { steps: true } } },
     }),
   ]);
+
+  // Workspace-wide "opportunities": un-generated workflow candidates across all recordings.
+  const opportunities = (await listCandidates(workspace.id)).filter((c) => !c.generatedArticleId);
+  const oppBySource = new Map<string, { appBaseUrl: string | null; items: typeof opportunities }>();
+  for (const c of opportunities) {
+    const g = oppBySource.get(c.sourceId) ?? { appBaseUrl: c.appBaseUrl, items: [] };
+    g.items.push(c);
+    oppBySource.set(c.sourceId, g);
+  }
 
   return (
     <main style={{ maxWidth: 720 }}>
@@ -63,9 +74,29 @@ export default async function DashboardPage() {
       </div>
 
       <div className="card">
+        <h2 style={{ fontSize: 15, margin: '0 0 2px' }}>Auto Generate Articles — opportunities</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Workflows captured in your recordings that don&apos;t have an article yet. Pick the helpful ones and generate them as drafts.
+        </p>
+        {opportunities.length === 0 ? (
+          <p className="muted">No un-generated workflows. Record more, or you&apos;ve generated everything captured so far.</p>
+        ) : (
+          [...oppBySource.entries()].map(([sourceId, group]) => (
+            <section key={sourceId} style={{ marginTop: 14 }}>
+              <h3 style={{ fontSize: 13, margin: '0 0 6px' }}>
+                <Link href={`/dashboard/kb/${sourceId}`}>{group.appBaseUrl || '(unknown app)'}</Link>{' '}
+                <span className="muted" style={{ fontWeight: 400 }}>· {group.items.length} workflow(s)</span>
+              </h3>
+              <GeneratePanel sourceId={sourceId} candidates={group.items} />
+            </section>
+          ))
+        )}
+      </div>
+
+      <div className="card">
         <h2 style={{ fontSize: 15, margin: '0 0 10px' }}>Articles</h2>
         {articles.length === 0 ? (
-          <p className="muted">No articles yet. They appear after a recording is synthesized.</p>
+          <p className="muted">No articles yet. Use “Auto Generate Articles” above to create them from your recordings.</p>
         ) : (
           <ul className="list">
             {articles.map((a) => (

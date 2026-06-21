@@ -154,6 +154,9 @@ importers:
       '@sync/shared':
         specifier: workspace:*
         version: link:../shared
+      '@sync/synthesis':
+        specifier: workspace:*
+        version: link:../synthesis
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3

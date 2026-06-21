@@ -6,15 +6,18 @@
 - **Last updated:** 2026-06-18
 - **Precedes/zooms into:** [phase-1-spec.md](phase-1-spec.md). Builds on the validated [spike](SPIKE.md) (verdict: GO).
 - **Decisions locked:** port-into-fresh • monorepo (pnpm + Turborepo) • Node/TS + Next.js • Postgres • Redis/BullMQ • **Auth.js (self-hosted)** • **Render** (compute + Postgres + Redis) + **Cloudflare R2** (blobs) • single-user = single-workspace.
-- **Architecture (frozen 2026-06-19):** 3-module model — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). **Course-correction:** introduce the explicit **KB layer** (`KnowledgeSource` + `KnowledgeItem` + persisted transcript + keyword/LLM index); the worker does **capture → KB**, and article creation (auto + prompt) reads the KB. **Prompt-to-article (3.2)** and **narration-only capture (1.2)** are now **in 1a**.
+- **Architecture (frozen 2026-06-19):** 3-module model — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). **Course-correction:** introduce the explicit **KB layer** (`KnowledgeSource` + `KnowledgeItem` + persisted transcript + keyword/LLM index); the worker does **capture → KB**, and article creation (curated auto + prompt) reads the KB. **Prompt-to-article (3.2)** is **in 1a**.
+- **Version scope (locked 2026-06-21):** **Version 1 = Phases 1–3, capture is workflow-only (1.1).** **Narration-only capture (1.2) and video capture (1.3) are deferred to Version 2** (see [`architecture.md`](architecture.md) → Product versions). Article generation is **curated, not auto-pushed** (M6.1). The **copilot grounds on PUBLISHED articles, not the raw KB.**
 
 ---
 
 ## 1. Scope
 
-**In the slice:** accounts + one workspace (multi-tenant isolation), ported Recorder uploading to the real API with a workspace token, ingestion → R2 + Postgres → **enqueue**, **async worker** that builds the **Knowledge Base** (Module 2) and creates articles (Module 3), minimal Studio (list/view/edit-text/reorder/delete/publish), basic public Help Portal, **element-highlight rectangles** on step screenshots. **Added 2026-06-19:** the explicit **KB layer**, **prompt-to-article** (3.2), and **narration-only capture** (1.2).
+**In the slice:** accounts + one workspace (multi-tenant isolation), ported Recorder uploading to the real API with a workspace token, ingestion → R2 + Postgres → **enqueue**, **async worker** that builds the **Knowledge Base** (Module 2), **curated** article generation (Module 3.1 — propose titles → select → generate), minimal Studio (list/view/edit-text/reorder/delete/publish), basic public Help Portal, **element-highlight rectangles** on step screenshots. **Added 2026-06-19:** the explicit **KB layer** and **prompt-to-article** (3.2).
 
-**Deferred to 1b:** productized redaction, hybrid/semantic search (vector DB), brand voice/theming, screenshot retake/crop, highlight **arrow** pointer, coverage-gap analytics dashboards, custom domains/gated portals, multi-seat/roles, **video capture (1.3)**.
+**Deferred to Version 2:** **narration-only capture (1.2)** and **video capture (1.3)** — V1 capture is **workflow-only (1.1)**.
+
+**Deferred to 1b:** productized redaction, hybrid/semantic search (vector DB), brand voice/theming, screenshot retake/crop, highlight **arrow** pointer, coverage-gap analytics dashboards, custom domains/gated portals, multi-seat/roles.
 
 ---
 
@@ -120,7 +123,9 @@ model Step {
 
 **Element highlight (enhancement, shipped in 1a):** each step's screenshot shows a rectangle around the element that was clicked/typed. The worker computes `Step.highlight` from `event.target.bbox / manifest.app.viewport` (already captured); Studio and the portal overlay a CSS `%`-positioned box (`.shot-frame` + `.hl`) — resolution-independent, no image processing. (An arrow pointer is a possible future add.)
 
-**Knowledge Base layer (Module 2 — implemented in M6, 2026-06-21).** `RecSession` → **`KnowledgeSource`** (via `@@map`; + `kind: workflow|narration|video`, + persisted `transcript`) and a new **`KnowledgeItem`** (the normalized, indexed unit — `step` or `topic` — searchable `text` + keyword/LLM index). The worker now does **capture → KB**, and article creation reads the KB. Full schema in [`architecture.md`](architecture.md). **Segmentation: Option B → promoted toward C (2026-06-21)** — segmentation *logic* runs at **article creation (Module 3.1)**, and its *output* is **persisted** on `KnowledgeItem` (`segmentIndex`/`segmentTitle`) so the Studio KB view groups by workflow. (Full Option A — first-class Workflow entities — remains future.)
+**Knowledge Base layer (Module 2 — implemented in M6, 2026-06-21).** `RecSession` → **`KnowledgeSource`** (via `@@map`; + `kind: workflow|narration|video`, + persisted `transcript`) and a new **`KnowledgeItem`** (the normalized, indexed unit — `step` or `topic` — searchable `text` + keyword/LLM index). The worker now does **capture → KB**, and article creation reads the KB. Full schema in [`architecture.md`](architecture.md).
+
+**Segmentation + curated generation (Option C, finalized in M6.1, 2026-06-21).** Segmentation now runs at **KB build** (the worker calls `segmentItems` after extracting items) and its output is **persisted** on `KnowledgeItem` (`segmentIndex`/`segmentTitle`) — these become the candidate titles. The worker **stops at `status = ready`** (no articles). Article generation is **curated**: Studio lists candidates → user selects → a synchronous server action synthesizes only the selected, writing an `Article` linked by **`Article.segmentIndex`/`segmentTitle`** (the "generated" marker). (Full Option A — first-class Workflow entities — remains future, needed only for the copilot / supersession.)
 
 **R2 object layout:** `workspaces/<wsId>/sessions/<sessionId>/{shots/<eventId>.png, dom/<eventId>.html, audio.webm}`. Screenshots referenced from `Step.screenshotKey`. Served via **server-generated signed URLs** (Studio) / a public-read path for published portal content *(final choice in §8 risks)*.
 
@@ -150,7 +155,7 @@ Bundle upload reuses the spike's **field-name-as-path** trick (multipart strips 
   3. Write `Article` + `Step` rows; set `RecSession.status = done` (or `error` with message).
 - Studio reflects status by refetching; concurrency low (1–2) with retries.
 
-> **Update (2026-06-19):** the worker is being **split** — (a) **capture → KB extraction** (transcribe + persist transcript + normalize into `KnowledgeSource`/`KnowledgeItem` + index), then (b) **KB → articles** (auto). **Prompt-to-article (3.2)** is a second Module-3 path (synchronous in Studio for v1; movable to the queue later). Narration-only captures (1.2) flow through the same KB → article path producing `static` explainer articles. See [`architecture.md`](architecture.md).
+> **Update (2026-06-19; revised 2026-06-21):** the worker is **split** — (a) **capture → KB extraction** (transcribe + persist transcript + normalize into `KnowledgeSource`/`KnowledgeItem` + **segment + tag** + index), then it **stops** at status `ready` (**no articles**). Article generation (b) is now a **curated, user-triggered** Studio action (M6.1 — propose titles → select → generate), not an auto worker step. **Prompt-to-article (3.2)** is a second Module-3 path (synchronous in Studio for v1; movable to the queue later). *(Narration-only captures (1.2) → `static` explainer articles = **Version 2**.)* See [`architecture.md`](architecture.md).
 
 ---
 
@@ -222,22 +227,40 @@ Migrating off Render = provision Postgres/Redis elsewhere, set the same env vars
 | **M4** | Studio | list sessions/articles, view article (steps + screenshots), edit text + reorder/delete, publish toggle |
 | **M5** | Portal | public subdomain renders published articles with screenshots |
 
-**Definition of done for Phase 1a (thin slice):** a real user signs up → records with the extension → synthesis runs async in the worker → edits and publishes in Studio → the article is live on the public portal, running on Render + R2. ✅ **M0–M5 done.** The KB layer, advanced authoring, and deploy follow as **M6–M9** (§10).
+**Definition of done for Phase 1a (thin slice):** a real user signs up → records with the extension → KB builds async in the worker → user curates + generates articles → edits and publishes in Studio → the article is live on the public portal, running on Render + R2. ✅ **M0–M5 done.** The KB layer, curated authoring, prompt-to-article, and deploy follow as **M6–M8** (§10).
 
 ---
 
-## 10. KB layer, advanced authoring & deploy (M6–M9)
+## 10. KB layer, curated authoring & deploy (M6–M8)
 
-Implements the [frozen architecture](architecture.md): the explicit **Module 2 KB**, **prompt-to-article** (3.2), **narration-only capture** (1.2), then **Render deploy**. **M6 is the foundation; M7 and M8 depend on it (independent of each other); M9 (deploy) runs once the slice is feature-complete** (it can also be pulled earlier if you want the thin slice live sooner).
+Implements the [frozen architecture](architecture.md): the explicit **Module 2 KB**, **curated article generation** (3.1, M6.1), **prompt-to-article** (3.2, M7), then **Render deploy** (M8). **M6 is the foundation; M6.1 and M7 build on it; M8 (deploy) runs once the slice is feature-complete** (it can also be pulled earlier if you want the thin slice live sooner).
+
+**Build sequence (V1, locked 2026-06-21):** **M6** (KB layer ✅) → **M6.1** (curated generation ✅) → **M7** (prompt-to-article — *next*) → **M8** (Render deploy). **Narration-only capture is removed from V1 → see "Version 2 backlog" at the end of this section.**
 
 ### M6 — Knowledge Base layer (the foundational refactor)
 The big one: introduce Module 2 and route article creation through it.
 - **Schema:** evolve `RecSession` → **`KnowledgeSource`** (+ `kind: workflow|narration|video`, persisted **`transcript`**, `status … ready`); add **`KnowledgeItem`** (`step` items now; searchable `text`). Migration + update api/worker/web/portal references.
-- **Worker → two stages:** **(A) capture → KB** — transcribe (persist transcript), normalize events into `KnowledgeItem`s; **(B) KB → articles** — auto-create reads *items* (not the raw manifest), **segments at creation (Option B)**, writes `Article`/`Step` as today.
+- **Worker → two stages:** **(A) capture → KB** — transcribe (persist transcript), normalize events into `KnowledgeItem`s; **(B) KB → articles** — auto-create reads *items* (not the raw manifest), **segments at creation (Option B)**, writes `Article`/`Step`. *(Note: stage (B) was **superseded by M6.1** — segmentation moved to KB build and auto-creation was replaced by curated generation.)*
 - **Regression guard:** existing auto output must stay equivalent.
 - **KB browser (Studio):** a read-only **"Knowledge Base"** section — open a recording → transcript + items **grouped by workflow** + the articles it produced (Studio mirrors the 3 modules: Recordings → Knowledge Base → Articles). Workspace-wide *search* arrives with M7's index.
 - **Persisted segmentation (promoted toward C, 2026-06-21):** the segmentation computed at article creation is stored on `KnowledgeItem` (`segmentIndex`/`segmentTitle`) so the KB view groups by workflow.
 - **Done when:** re-processing the Chatful session produces a `KnowledgeSource` + `KnowledgeItem`s + persisted transcript, the **same auto articles** (now from the KB), and the Studio KB view shows items grouped by workflow. ✅ **DONE 2026-06-21.**
+
+### M6.1 — Curated article generation (correction to M6 auto-gen) ✅ DONE 2026-06-21
+**Change (decided 2026-06-21):** articles are **no longer auto-generated**. Generation becomes a **two-phase, user-curated** action — propose candidate titles (free — from the segment titles **Option C already persists**) → user selects → generate **only the selected**. **Stays on Option C** (no `Workflow` table / Option A — the titles already live in the KB as segment tags; A's only extra is stable workflow IDs, not needed until the copilot / supersession).
+
+- **Worker (behavior change):** `capture → KB → segment + tag items` (`segmentIndex`/`segmentTitle`) → **status `ready`**. **No synthesis, no articles.** (Supersedes M6's auto-synthesis step; the segmentation/tagging stays.)
+- **Schema:** `Article.segmentIndex` + `segmentTitle` (links an article to the candidate it came from → "generated" state + avoids duplicates); `KnowledgeSource.status` gains **`ready`** (KB built, candidates available, no articles yet).
+- **Studio — "Auto Generate Articles" (TWO entry points, resolved 2026-06-21 — user wants both):**
+  - **Propose (instant, no LLM):** the picker **lists** candidate titles — it does **not** generate them. Titles already exist: they are the `segmentTitle`s produced at **KB build** (step 2) and persisted by Option C. A candidate is "un-generated" when **no `Article` is linked to its `(sourceId, segmentIndex)`**. Each row has a **checkbox**.
+    - **(a) Per-recording** — on the recording's KB page (`/dashboard/kb/[id]`): list that recording's candidate titles (generated ones shown as "✓ generated" → link; un-generated ones checkable).
+    - **(b) Workspace-wide "opportunities"** — in the Articles section: list **un-generated** candidates across **all `ready` recordings** (grouped by recording) so the founder spots opportunities to create more helpful articles.
+  - **Generate selected:** a **synchronous server action** synthesizes each checked segment (synthesis over that segment's items, screenshots via an S3 read helper) → creates a draft `Article` (`source=recording_auto`, linked by `sourceId` + `segmentIndex`/`segmentTitle`). Consistent with M7's prompt-to-article.
+- **Web setup (shared with M7):** `OPENAI_API_KEY` + `@sync/synthesis` dep + an S3 `getObject` `ArtifactReader` helper.
+- **Resolved sub-decisions (2026-06-21):** candidate scope = **BOTH** per-recording (on KB page) **and** workspace-wide opportunities (Articles section); generate = **synchronous** server action.
+- **Deferred (separate discussion):** supersession / re-recording the same workflow (update-vs-create an existing article).
+- **Done when:** uploading a recording yields a **`ready` KB with no articles**; "Auto Generate Articles" lists candidate titles; checking a subset + generate creates **only those** articles.
+- **✅ DONE 2026-06-21 — as built & verified:** schema migration `20260621081225_article_segment_link` (additive: `Article.segmentIndex`/`segmentTitle` + `@@index([sessionId, segmentIndex])`, `status` adds `ready`). `@sync/synthesis` split into `segmentItems()` (KB-build segmentation, no synth) + `generateArticleForSegment()` (synth ONE candidate). Worker stops at `ready` (segment+tag, idempotent reset; no synthesis). Web: `lib/candidates.ts` (`listCandidates`), `lib/generate-actions.ts` (`'use server' generateArticles` — synchronous, skips already-generated), `lib/storage.ts` `artifactReader`, client `app/dashboard/generate-panel.tsx`; both entry points wired (KB page + dashboard opportunities); web gets `OPENAI_API_KEY`+`SYNTH_MODEL`, `transpilePackages` += `@sync/synthesis`, `.pill-ready` style. **Verified end-to-end:** reprocessed Chatful via the real worker → `ready` + 16 tagged items + **0 articles**; generation → draft "How to Create a New Project in Chatful AI" (`segmentIndex=0`, 9 steps w/ screenshots+highlights); candidate then reads "✓ generated". 7/7 typecheck + web `next build` clean. **Uncommitted.**
 
 ### M7 — Prompt-to-article (Module 3.2)
 - **Index/retrieval:** keyword/LLM over `KnowledgeItem.text`, **workspace-scoped** (across all recordings).
@@ -246,16 +269,24 @@ The big one: introduce Module 2 and route article creation through it.
 - **Studio:** "Generate from a prompt" box (synchronous server action, per the locked decision) + a coverage-gaps list.
 - **Done when:** a covered topic produces a grounded draft article; an uncovered topic declines + logs a coverage gap.
 
-### M8 — Narration-only capture (Module 1.2) + explainer articles
+### M8 — Render deployment
+- Per-service **Dockerfiles** (api, worker, web, portal) + a **`render.yaml`** blueprint (api web service + background worker + web + portal + managed Postgres + Redis).
+- Wire **Cloudflare R2** (prod bucket + credentials) for blobs; set env/secrets in Render. Needs Cloudflare + Render accounts (GitHub repo is already set up).
+- **Done when:** all services run on Render via `render.yaml` (Docker images); a full end-to-end smoke test passes in the cloud (record → KB → curated article → edit/publish → portal).
+
+---
+
+### Version 2 backlog (deferred out of V1 — 2026-06-21)
+
+> Capture in **V1 is workflow-only**. The following are **Version 2** (see [`architecture.md`](architecture.md) → Product versions). The KB layer was deliberately built modality-agnostic (`KnowledgeSource.kind`, `KnowledgeItem.kind = step|topic`) so these slot in additively.
+
+**V2.1 — Narration-only capture (Module 1.2) + explainer articles**
 - **Extension:** an **audio-only record mode** (no interactions); upload with `kind = narration` (api/worker **accept zero-event sessions**).
-- **Worker:** narration KB extraction → `topic` items; article creation → a **`static` explainer article** (prose, grounded in the transcript).
+- **Worker:** narration KB extraction → `topic` items; curated generation → a **`static` explainer article** (prose, grounded in the transcript).
 - **Schema:** add **`Article.body`** (markdown) for prose/static articles.
 - **Studio + portal:** render `body` for `static` articles (steps for `workflow_backed`).
 - **Done when:** a narration recording (e.g. the refund policy) becomes an editable, publishable `static` article on the portal.
 
-### M9 — Render deployment
-- Per-service **Dockerfiles** (api, worker, web, portal) + a **`render.yaml`** blueprint (api web service + background worker + web + portal + managed Postgres + Redis).
-- Wire **Cloudflare R2** (prod bucket + credentials) for blobs; set env/secrets in Render. Needs Cloudflare + Render accounts (GitHub repo is already set up).
-- **Done when:** all services run on Render via `render.yaml` (Docker images); a full end-to-end smoke test passes in the cloud (record → KB → article → edit/publish → portal).
+**V2.2 — Video + audio capture (Module 1.3).** A future capture modality; out of scope for now.
 
-> **Cadence:** built one milestone at a time, each verified, with a stop for review (per the working agreement). **M6's regression guard** is the key risk — we don't advance until auto articles still come out right *through the KB*.
+> **Cadence:** built one milestone at a time, each verified, with a stop for review (per the working agreement). **M6's regression guard** is the key risk — we don't advance until articles still come out right *through the KB*.

@@ -34,6 +34,7 @@ ul.list li:first-child { border-top: 0; }
 .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #e8e8ea; color: #444; text-transform: capitalize; }
 .pill-published, .pill-done { background: #def3e4; color: #176c33; }
 .pill-processing, .pill-uploaded { background: #fdf2d6; color: #8a6d1b; }
+.pill-ready { background: #dde9fb; color: #1b4f8a; }
 .pill-error { background: #fdecec; color: #a11; }
 .pill-draft { background: #e8e8ea; color: #555; }
 
