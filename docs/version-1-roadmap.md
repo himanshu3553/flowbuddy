@@ -53,7 +53,7 @@ VERSION 2  (later) — additional capture modalities: narration-only (1.2) + vid
 | **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ built | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ built | C5 |
 | **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ built | C6 |
-| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe (answer quality) | ⏳ to build | M9 (+ recorder backlog R1–R13) |
+| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe (answer quality) | ✅ core (R1/R2/R3); R4/iframe→backlog | M9 (+ recorder backlog R1–R13) |
 | **P1-M12** | **PII redaction** — client masking + review + server backstop (elevated: end-user-facing) | ⏳ to build | M10 |
 
 **Build order (to-build) — deploy LAST (locked 2026-06-22):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. We build & verify the entire copilot **locally** (docker-compose) and only then deploy **P1 of V1** to cloud. pgvector retrieval upgrade folds into P1-M3 when answer quality needs it.

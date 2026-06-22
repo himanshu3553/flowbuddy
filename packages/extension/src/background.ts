@@ -42,6 +42,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     } else if (msg?.cmd === 'marker') {
       await onMarker();
       sendResponse({ ok: true });
+    } else if (msg?.cmd === 'retryUpload') {
+      sendResponse(await onRetryUpload());
     } else if (msg?.cmd === 'getState') {
       const rec = await getRec();
       sendResponse({ recording: rec.recording, backendUrl: rec.backendUrl });
@@ -84,6 +86,29 @@ chrome.runtime.onConnect.addListener((port) => {
     handlePortMsg(msg).catch((e) => console.error('port msg error', e));
   });
 });
+
+// R1 — survive full-page navigations: when the recording tab finishes navigating, re-arm the
+// freshly-loaded content script with the ORIGINAL startTime so the event timeline stays continuous
+// (a hard nav destroys the old content script, which would otherwise silently stop capture).
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') return;
+  rearmIfRecording(tabId).catch((e) => console.warn('[rearm]', e));
+});
+
+async function rearmIfRecording(tabId: number): Promise<void> {
+  const rec = await getRec();
+  if (!rec.recording || rec.tabId !== tabId) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, { cmd: 'startCapture', startTime: rec.startTime });
+  } catch {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+      await chrome.tabs.sendMessage(tabId, { cmd: 'startCapture', startTime: rec.startTime });
+    } catch (e) {
+      console.warn('[rearm] could not re-arm after navigation', e);
+    }
+  }
+}
 
 async function handlePortMsg(msg: PortMsg): Promise<void> {
   const rec = await getRec();
@@ -225,8 +250,9 @@ async function onStop(): Promise<void> {
   }
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stopAudio' }).catch(() => {});
 
-  // Fallback: if the offscreen audio never reports back, finalize without it.
-  setTimeout(() => { finalize().catch((e) => console.error(e)); }, 5000);
+  // Fallback: if the offscreen audio never reports back, finalize without it. Generous (R3) so
+  // long recordings have time to stop/encode/flush — don't drop narration by finalizing too early.
+  setTimeout(() => { finalize().catch((e) => console.error(e)); }, 30000);
 }
 
 async function onMarker(): Promise<void> {
@@ -254,8 +280,10 @@ async function finalize(): Promise<void> {
     result = { ok: false, error: (e as Error)?.message || 'Recording failed to finalize.' };
   }
 
-  await kvClear();
-  await chrome.storage.local.set({ lastUpload: { ...result, at: Date.now() } });
+  // R2: only wipe the buffer on SUCCESS — keep it on failure so the user can Retry (don't lose a
+  // recording to a transient network blip).
+  if (result.ok) await kvClear();
+  await chrome.storage.local.set({ lastUpload: { ...result, retryable: !result.ok, at: Date.now() } });
   await setBadge(result.ok ? 'ok' : 'fail');
   await notifyTab(rec.tabId, {
     cmd: 'setStatus',
@@ -264,6 +292,24 @@ async function finalize(): Promise<void> {
   });
   console[result.ok ? 'log' : 'error']('[finalize]', result.ok ? `session ${result.sessionId}` : result.error);
   await ensureClosed();
+}
+
+/** R2 — re-attempt the upload from the buffer kept after a failed finalize (triggered from the popup). */
+async function onRetryUpload(): Promise<{ ok: boolean; error?: string }> {
+  const { lastUpload } = await chrome.storage.local.get('lastUpload');
+  if (lastUpload?.ok) return { ok: true };
+  const rec = await getRec();
+  await setBadge('up');
+  let result: { ok: boolean; sessionId?: string; error?: string };
+  try {
+    result = await assembleAndUpload(rec);
+  } catch (e) {
+    result = { ok: false, error: (e as Error)?.message || 'Retry failed.' };
+  }
+  if (result.ok) await kvClear();
+  await chrome.storage.local.set({ lastUpload: { ...result, retryable: !result.ok, at: Date.now() } });
+  await setBadge(result.ok ? 'ok' : 'fail');
+  return { ok: result.ok, error: result.error };
 }
 
 /** Build the bundle from IndexedDB and POST it. Throws on assembly errors (caught by finalize). */

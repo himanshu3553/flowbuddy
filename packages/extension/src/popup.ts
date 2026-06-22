@@ -62,9 +62,27 @@ async function refreshConnection(): Promise<void> {
   applyButtonState();
 }
 
-function showLastUpload(u: { ok: boolean; sessionId?: string; error?: string }): void {
-  if (u.ok) setStatus(`Last upload ✓ (${u.sessionId?.slice(0, 8)}…)`, 'ok');
-  else setStatus(`Last upload failed — ${u.error}`, 'fail');
+function showLastUpload(u: { ok: boolean; sessionId?: string; error?: string; retryable?: boolean }): void {
+  if (u.ok) {
+    setStatus(`Last upload ✓ (${u.sessionId?.slice(0, 8)}…)`, 'ok');
+    return;
+  }
+  setStatus(`Last upload failed — ${u.error}`, 'fail');
+  // R2: the recording is still buffered — let the user retry instead of losing it.
+  if (u.retryable) {
+    const btn = document.createElement('button');
+    btn.textContent = 'Retry upload';
+    btn.className = 'ghost';
+    btn.style.marginTop = '8px';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      setStatus('Retrying upload…', 'neutral');
+      const res = await send({ cmd: 'retryUpload' });
+      if (res?.ok) setStatus('Upload ✓', 'ok');
+      else { setStatus(`Retry failed — ${res?.error || 'unknown error'}`, 'fail'); btn.disabled = false; }
+    };
+    statusBox.appendChild(btn);
+  }
 }
 
 async function refreshMic(): Promise<void> {
