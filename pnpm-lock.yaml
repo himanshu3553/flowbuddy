@@ -158,6 +158,15 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/widget:
+    devDependencies:
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
 packages:
 
   '@auth/core@0.37.2':

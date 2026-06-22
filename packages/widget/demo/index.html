@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sync Copilot — embed demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
+    .hero { padding: 48px; max-width: 720px; }
+    h1 { margin: 0 0 8px; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 4px; }
+    .note { color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Acme App</h1>
+    <p>This page simulates a customer's product. The Sync copilot is embedded with a single script tag (bottom-right). Click it and ask about a workflow you've <strong>approved for the copilot</strong>.</p>
+    <p class="note">Before loading: build the widget (<code>pnpm --filter @sync/widget build</code>), run the API + Studio, approve a workflow, then set <code>data-sync-key</code> to a workspace token and <code>data-sync-api</code> to your API base below.</p>
+  </div>
+
+  <!-- The entire embed: one script tag. -->
+  <script
+    src="../dist/sync-copilot.js"
+    data-sync-api="http://localhost:8787"
+    data-sync-key="REPLACE_WITH_WORKSPACE_TOKEN"
+    data-sync-title="Acme Help"
+    data-sync-greeting="Hi! Ask me how to do anything in Acme."
+  ></script>
+</body>
+</html>
