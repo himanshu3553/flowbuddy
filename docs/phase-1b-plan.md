@@ -2,6 +2,8 @@
 
 > **Goal of Phase 1b:** take the proven thin slice and make it **beta-ready for real external users** — close the *unmet* items in the [phase-1-spec.md](phase-1-spec.md) definition-of-done so the wedge holds up when a founder records their *own* product against *real* data and ships a portal their customers actually use. 1a proved the architecture on one clean path; 1b makes it trustworthy, searchable, and editable enough to invite people in.
 
+> **⚠️ Copilot-first pivot — phases redefined (2026-06-22).** This plan's milestones now distribute across the new Version-1 phases ([`version-1-roadmap.md`](version-1-roadmap.md)): **M9 → P1-M11** (capture hardening) and **M10 → P1-M12** (PII) are **Phase 1 (copilot)**; the **retrieval half of M11 → P1-M3** upgrade (Phase 1). **M11 search-UI → P2-M3**, **M12 → P2-M4**, **M13 → P2-M5**, **M14 → P2-M6** are **Phase 2 (portal/articles — by-products)**. This doc remains the **detailed reference** for all of them (incl. the recorder backlog **R1–R13** under P1-M11/M12). Direction: [`pivot-copilot-first.md`](pivot-copilot-first.md); copilot plan: [`phase-1-copilot-plan.md`](phase-1-copilot-plan.md).
+
 - **Status:** Draft v0.2
 - **Last updated:** 2026-06-21
 - **Precedes/zooms into:** [phase-1-spec.md](phase-1-spec.md) (acceptance criteria). **Builds on** the completed thin slice ([phase-1a-plan.md](phase-1a-plan.md), M0–M7) and the as-built product reference ([phase-1-features.md](phase-1-features.md)).

@@ -2,12 +2,17 @@
 
 > **Canonical model.** Sync is three modules: **(1) Capture** raw data, **(2)** turn it into an explicit **Knowledge Base**, **(3)** create **Articles** from the KB. Capture *modality* and article-creation *mode* are **orthogonal** — connected only through the KB. Every other doc (PRD, specs, plans) refers here for the module structure.
 
-- **Status:** Frozen v1.0 — 2026-06-19. Segmentation placement **locked: Option B → C** (§Decisions). Product-version scope **locked 2026-06-21** (below).
+- **Status:** Frozen v1.0 — 2026-06-19. Segmentation placement **locked: Option B → C** (§Decisions). Product-version scope **locked 2026-06-21** (below). **UPDATED 2026-06-22 — copilot-first pivot:** the copilot grounds on **approved-KB** (not published articles) and copilot/portal are **decoupled** targets; the 3-module model is unchanged. See [`pivot-copilot-first.md`](pivot-copilot-first.md). *(Supersedes §Decisions "copilot grounds on PUBLISHED articles".)*
 - **Key principle preserved:** *grounded authorship* — AI writes **only** from the customer's own recordings, never the model's general knowledge.
 
-### Product versions (scope, locked 2026-06-21)
-- **Version 1** = **Phases 1, 2, 3** and everything between (capture → KB → help portal → in-app copilot → self-validation). **Capture is workflow-only (1.1).**
+### Product versions & phases (scope — **phases REDEFINED 2026-06-22, copilot-first**)
+- **Version 1** = the **workflow-capture** product (**capture is workflow-only, 1.1**), released in **three phases** — authoritative roadmap: [`version-1-roadmap.md`](version-1-roadmap.md):
+  - **Phase 1 — Copilot** ⭐ (the Version 1 release, ships first): the foundation we've built (capture → KB → retrieval/grounding) + the embeddable copilot. Modules **P1-M0…P1-M12** ([`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)).
+  - **Phase 2 — Help Portal & Articles** (the human-facing **by-products**; a decoupled publish target): Studio editor + curated generation + portal (built) + productization. Modules **P2-M0…P2-M6** ([`phase-1b-plan.md`](phase-1b-plan.md)).
+  - **Phase 3 — Self-validation & freshness** (the moat; to be planned).
 - **Version 2** = additional **capture modalities** — **narration-only (1.2)** and **video (1.3)** — plus the narration-derived `static` explainer-article path. Deferred out of V1.
+
+> **⚠️ Phase numbers were redefined 2026-06-22.** The 3-module model below is **unchanged**; only the *phase grouping* and the *copilot's grounding* (**approved-KB**, not published articles) changed. Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. **Now:** Phase 1 = **copilot** (primary, ships first), Phase 2 = **portal/articles** (by-products), Phase 3 = self-validation. Module IDs are now **per-phase** (`P{phase}-M{n}`); the old global `M0–M14` are mapped in [`version-1-roadmap.md`](version-1-roadmap.md) §5. See also [`pivot-copilot-first.md`](pivot-copilot-first.md).
 
 ---
 
@@ -112,21 +117,28 @@ Module 1 — CAPTURE (kind: workflow[V1] | narration[V2] | video[V2])
         ▼
 Module 2 — KNOWLEDGE BASE  (extract → normalize → segment+tag → index)   ◄── the explicit layer
    KnowledgeSource + KnowledgeItem[] (segmentIndex/segmentTitle) + transcript + index
-        │   ── the RAW substrate: builder-internal, powers AUTHORING only ──
-        ├──► Module 3.1 Auto (curated)  propose titles → user selects → Article[] for selected
-        └──► Module 3.2 Prompt           query index → Article, or decline → CoverageGap
         │
-        ▼
-   Article / Step (draft) → Studio edit → PUBLISH
-        │   ── published articles = the customer-facing, approved knowledge ──
-        ├──► Help Portal (humans)
-        ├──► In-app Copilot (Phase 2)        ◄── grounds on PUBLISHED articles, NOT the raw KB
-        └──► Self-validation (Phase 3)
+        │   ── ONE KB → per-target approval / visibility (DECOUPLED targets) ──
+        │
+        ├──► approved-for-copilot (per-workflow flag)
+        │       └──► In-app COPILOT   ◄── PRIMARY product; grounds on APPROVED-KB (Stage A)
+        │
+        ├──► authoring (builder-internal)
+        │       ├──► Module 3.1 Auto (curated)  propose titles → select → Article[]
+        │       └──► Module 3.2 Prompt           query index → Article, or decline → CoverageGap
+        │               └──► Article/Step (draft) → Studio edit → PUBLISH
+        │                       └──► Help PORTAL (public/SEO)  ◄── BY-PRODUCT (decoupled target)
+        │
+        └──► Self-validation (Phase 3)  grounds on the selector-bearing KB
 ```
 
-**Two knowledge layers, two audiences (locked 2026-06-21):**
-- **Raw KB (Module 2)** = the *builder's internal* substrate. It powers **authoring** (auto-generate + prompt-to-article). It is **not** exposed to customers.
-- **Published articles** = the *customer-facing, approved* knowledge. They power **both the Help Portal and the Copilot**. The copilot **never** answers from raw, un-reviewed, or draft knowledge — only from what the founder published (no leaking unapproved content).
+**One KB, decoupled publish targets (UPDATED 2026-06-22 — copilot-first pivot):**
+- **The KB (Module 2)** is the single substrate; access is gated **per target**:
+  - **Copilot (primary product)** grounds on **approved-KB** — `KnowledgeItem`s behind a lightweight **per-workflow "approve for copilot"** flag. Richer than prose (selectors/routes/expected-outcomes) → context-aware + actionable, and it's the substrate Phase-3 freshness needs.
+  - **Help Portal (by-product)** serves **published articles** (Module 3 → Studio → publish) to public/SEO readers.
+- **Copilot and portal are decoupled** — different audiences (in-app authenticated end-users vs. public/SEO), potentially different visibility; approving a workflow for the copilot and publishing an article are **independent** actions over the same KB.
+- **No-leak preserved:** the copilot answers **only** from approved-KB — never raw/un-approved items, never draft articles. **Approval ≠ article authoring** (one click on a workflow).
+- Detail: [`pivot-copilot-first.md`](pivot-copilot-first.md), [`phase-1-copilot-plan.md`](phase-1-copilot-plan.md). *(Grounding **Stage B** — also citing a published article when one exists — is **deferred**; not to be confused with product Phase 2.)*
 
 ---
 
@@ -165,7 +177,9 @@ Retrieval over `KnowledgeItem.text` starts as keyword/LLM; embeddings (pgvector)
 ### Article generation — LOCKED: curated, not auto-pushed (2026-06-21)
 Articles are **not auto-generated** on capture. Segmentation runs at **KB build** and persists candidate **titles** (`segmentTitle`, Option C). The Studio **"Auto Generate Articles"** button then **lists** those titles (instant, **no LLM** — titles already exist) → user **selects** → the system synthesizes **only the selected** segments into draft articles. Titles are produced **once** (at KB build); the button surfaces them — it does not re-generate them. Stays on Option C (no first-class `Workflow` entity). See [`phase-1a-plan.md`](phase-1a-plan.md) §10 M6.1.
 
-### Copilot grounds on PUBLISHED articles, not the raw KB — LOCKED (2026-06-21)
-The **raw KB is builder-internal** (authoring only). The **copilot and portal serve only PUBLISHED articles** — never raw/draft/un-reviewed knowledge. This prevents leaking unapproved content to customers and creates the right loop.
+### Copilot grounding — SUPERSEDED 2026-06-22 (was: "grounds on PUBLISHED articles")
+> **⚠️ Superseded by the copilot-first pivot ([`pivot-copilot-first.md`](pivot-copilot-first.md)).** **New (locked 2026-06-22):** separate **substrate** from **trust gate** — the copilot grounds on the **KB** (substrate) behind a **per-workflow "approve for copilot"** flag (trust gate = *approved-KB*). The no-leak intent is preserved (only human-approved knowledge reaches end-users), but approval is **one click on a workflow, not full article authoring**, and the **copilot and portal are decoupled publish targets**. The portal still serves published articles; the copilot does **not** depend on them (grounding **Stage A**). *(Hybrid "also cite a published article when present" = grounding **Stage B**, deferred — distinct from product Phase 2.)*
+
+**Original text (history, 2026-06-21):** the **raw KB is builder-internal** (authoring only); the **copilot and portal serve only PUBLISHED articles** — never raw/draft/un-reviewed knowledge. This prevented leaking unapproved content to customers and created the right loop. *(The "no-leak" goal survives; the mechanism changed to approved-KB.)*
 
 > **Coverage gaps — two tiers (future; note for Phase 2/3 design):** when a customer asks the copilot something it can't answer from published articles, that's a coverage-gap signal. Two cases: **(a) KB-covered but unpublished** — the topic *was* captured and lives in the raw KB but no article was generated/published → the founder fills it fast with **Text-to-Article (3.2)** over the raw KB → review → publish. **(b) Truly uncovered** — not even captured → "**record this next**." The detection mechanism (low-confidence copilot answers + prompt-to-article declines) and the fill flow (gap → Text-to-Article vs. record) are to be designed when the copilot lands.

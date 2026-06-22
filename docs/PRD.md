@@ -4,6 +4,8 @@
 
 > **Core loop:** Record once → knowledge base → help portal + context-aware copilot → kept fresh automatically.
 
+> **⚠️ Copilot-first pivot (2026-06-22).** Sync's primary product is now the **embeddable in-app copilot**; the help portal + human-facing articles are **by-products**. This PRD still reflects the original portal-first framing and is **pending a v0.2 reposition** — for current direction, the phase/module roadmap, and the copilot's grounding model see **[`version-1-roadmap.md`](version-1-roadmap.md)** + **[`pivot-copilot-first.md`](pivot-copilot-first.md)** (which win on any conflict) and **[`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)**. *(The portal/articles this PRD centers on are now **Phase 2**.)*
+
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-17
 - **Target buyer (initial):** Small SaaS / founders (see [Target User](#2-target-user))

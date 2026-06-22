@@ -2,6 +2,8 @@
 
 > **The wedge:** record once → good structured articles → published help portal, in under an hour, with no manual writing required. This document is the buildable detail for Phase 1. Strategy/context lives in the [PRD](PRD.md).
 
+> **⚠️ Copilot-first pivot (2026-06-22).** This spec describes the **help-portal/article surface**, which is now a **by-product**. The capture + KB foundation it specifies is **core and reused** by the copilot (Phase 1), but the portal/article surface here is now **Phase 2** and its *priority* is superseded. Roadmap: **[`version-1-roadmap.md`](version-1-roadmap.md)**; direction: **[`pivot-copilot-first.md`](pivot-copilot-first.md)**; copilot build plan: **[`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)**.
+
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-18
 - **Scope:** Phase 1 only. Copilot (Phase 2) and self-validation (Phase 3) are out of scope but the data captured here must not preclude them.

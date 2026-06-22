@@ -2,6 +2,8 @@
 
 > **Goal of the slice:** prove the *real* product architecture end-to-end on **one path** — record → async synthesis → edit → publish → public portal — with real accounts, multi-tenancy, database, object storage, and a background worker. Feature breadth comes in **Phase 1b** ([phase-1b-plan.md](phase-1b-plan.md)).
 
+> **⚠️ Note (2026-06-22 copilot-first pivot).** This is the **as-built foundation log**, using **legacy global milestone IDs M0–M7**. Under the redefined roadmap these map to **Phase 1 (copilot) P1-M0…P1-M3** (foundation) + **Phase 2 (portal) P2-M0…P2-M2** (built portal/article modules) — see the mapping in **[`version-1-roadmap.md`](version-1-roadmap.md)** §5. Current direction: **[`pivot-copilot-first.md`](pivot-copilot-first.md)**.
+
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-21
 - **Build status (2026-06-21):** **M0–M7 complete** — capture → KB → curated generation (M6.1) → prompt-to-article (M7) → edit/publish → portal. **Verified end-to-end manually** on a clean DB: fresh sign-up → record via the extension → KB builds (`ready`) → curate + generate → edit → publish → live on the portal. Landed since: a code-quality **refactor** (`c007e7b`); **recorder UX** — lifecycle feedback + no silent failures; and a **"Connect with Sync" auth flow** (no token/URL paste) (`70a8daa`). **Only M8 (Render deploy) remains.**

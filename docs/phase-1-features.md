@@ -2,6 +2,8 @@
 
 > **What this is.** A detailed, section-by-section description of everything **Phase 1 of Sync delivers as a product**, end-to-end. It documents the **as-built** state (milestones M0–M7); features that belong to Phase 1 but are deferred are called out with a **🔜 Phase 1b** note. For *why* see [`PRD.md`](PRD.md); for the *technical* model see [`architecture.md`](architecture.md); for *build milestones* see [`phase-1a-plan.md`](phase-1a-plan.md).
 
+> **⚠️ Copilot-first pivot (2026-06-22).** This reference documents the **as-built M0–M7** product, which was framed portal-first. That foundation (capture → KB → retrieval) is **core and reused** by the copilot (**Phase 1**); the portal/article surfaces it describes are now **Phase 2 by-products**. For the phase/module roadmap and the built-vs-next map, see **[`version-1-roadmap.md`](version-1-roadmap.md)** + **[`pivot-copilot-first.md`](pivot-copilot-first.md)** (§3–§4) and **[`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)**.
+
 - **Status:** Phase 1 (thin slice) feature-complete & verified end-to-end — M0–M7 done; cloud deploy (M8) pending.
 - **Last updated:** 2026-06-21
 - **Audience:** founders/stakeholders, onboarding, and as the seed for help/marketing content.
