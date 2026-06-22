@@ -6,7 +6,7 @@
 
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-18
-- **Scope:** Phase 1 only. Copilot (Phase 2) and self-validation (Phase 3) are out of scope but the data captured here must not preclude them.
+- **Scope:** the help-portal/article surface (old "Phase 1" wedge). *(Pre-pivot phase tags: the copilot — old "Phase 2", now **Phase 1** — and self-validation — **Phase 3** — are out of this spec's scope, but the data captured here must not preclude them.)*
 - **Build approach (decided 2026-06-18):** port the validated [spike](SPIKE.md) (verdict: GO) into a fresh **monorepo** and ship a **thin slice first** — see [`phase-1a-plan.md`](phase-1a-plan.md). Stack: Node/TS · Next.js · Postgres · Redis/BullMQ · Auth.js (self-hosted). Deploy: Render (Dockerized) + Cloudflare R2.
 - **Architecture (frozen 2026-06-19; version scope locked 2026-06-21):** Phase 1 follows the **3-module model** — **Capture → Knowledge Base → Article creation** ([`architecture.md`](architecture.md)). **V1 capture is workflow-only** (narration-only 1.2 + video 1.3 = **Version 2**); articles are generated from an explicit **KB** (`KnowledgeSource` + `KnowledgeItem` + transcript + keyword/LLM index) via **curated auto** (propose titles → select → generate) or **prompt**.
 
@@ -53,7 +53,7 @@
 
 **In:** Chrome extension capture; ingestion/processing; synthesis into structured articles; prompt-to-article; Studio (review, edit, organize, publish); public help portal; client-side redaction; workspace/auth baseline; coverage-gap signal foundations.
 
-**Out (later phases):** in-app copilot; self-validation/sandbox/drift; integrations & public API; i18n; deflection analytics; custom domains; gated/private portals; billing (free beta).
+**Out (other phases):** in-app copilot *(now **Phase 1** — the headline product; see [`phase-1-copilot-plan.md`](phase-1-copilot-plan.md))*; self-validation/sandbox/drift *(Phase 3)*; integrations & public API; i18n; deflection analytics; custom domains; gated/private portals; billing (free beta).
 
 ---
 

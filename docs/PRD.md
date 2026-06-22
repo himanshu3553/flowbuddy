@@ -4,7 +4,9 @@
 
 > **Core loop:** Record once → knowledge base → help portal + context-aware copilot → kept fresh automatically.
 
-> **⚠️ Copilot-first pivot (2026-06-22).** Sync's primary product is now the **embeddable in-app copilot**; the help portal + human-facing articles are **by-products**. This PRD still reflects the original portal-first framing and is **pending a v0.2 reposition** — for current direction, the phase/module roadmap, and the copilot's grounding model see **[`version-1-roadmap.md`](version-1-roadmap.md)** + **[`pivot-copilot-first.md`](pivot-copilot-first.md)** (which win on any conflict) and **[`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)**. *(The portal/articles this PRD centers on are now **Phase 2**.)*
+> **⚠️ Copilot-first pivot (2026-06-22).** Sync's primary product is now the **embeddable in-app copilot**; the help portal + human-facing articles are **by-products**. This PRD still reflects the original portal-first framing and is **pending a v0.2 reposition** — for current direction, the phase/module roadmap, and the copilot's grounding model see **[`version-1-roadmap.md`](version-1-roadmap.md)** + **[`pivot-copilot-first.md`](pivot-copilot-first.md)** (which win on any conflict) and **[`phase-1-copilot-plan.md`](phase-1-copilot-plan.md)**.
+>
+> **🔁 Terminology note — phase/grounding tags BELOW are pre-pivot.** Read them with this mapping (full table: roadmap §5): old **"Phase 1 (wedge)"** → split into **Phase 1 (copilot foundation)** + **Phase 2 (portal/articles)**; old **"Phase 2 (copilot)"** → **Phase 1**; old **"Phase 3 (self-validation)"** → **Phase 3** (unchanged); old **"copilot grounds on PUBLISHED articles"** → **copilot grounds on APPROVED-KB**.
 
 - **Status:** Draft v0.1
 - **Last updated:** 2026-06-17
@@ -72,7 +74,7 @@ A SaaS builder installs a **Chrome extension** and records themselves using thei
 
 Sync captures that session in **multiple synchronized layers** (screen, voice, DOM, interaction events, routes) and builds an **explicit, structured Knowledge Base** from it. The founder then **curates** which workflows become articles — clean, step-by-step, each with screenshots — or generates one from a text prompt (see [`architecture.md`](architecture.md)). *(**Narration-only** captures — just explaining, e.g. a refund policy, with no clickable workflow — are a **Version 2** capture modality; V1 capture is workflow-only.)*
 
-> **Product versions (scope, locked 2026-06-21):** **Version 1 = Phases 1–3** (capture → KB → portal + copilot + self-validation) with **workflow-only capture**. **Version 2** adds **narration-only (1.2)** and **video (1.3)** capture modalities. See [`architecture.md`](architecture.md) → Product versions.
+> **Product versions & phases (scope — phases REDEFINED 2026-06-22):** **Version 1** = the **workflow-capture** product, released in three phases — **Phase 1 = Copilot** (ships first), **Phase 2 = Help Portal & Articles** (by-products), **Phase 3 = Self-validation**. **Version 2** adds **narration-only (1.2)** and **video (1.3)** capture modalities. Authoritative roadmap + per-phase modules: [`version-1-roadmap.md`](version-1-roadmap.md); see also [`architecture.md`](architecture.md) → Product versions.
 
 That knowledge base then powers everything downstream:
 
@@ -167,7 +169,7 @@ Module 2 — KNOWLEDGE BASE  (extract → normalize → segment+tag → index)  
         ▼
    Article / Step (draft)  ◄── human review/edit in Studio → PUBLISH
         ├──► Help Portal (render)                            [customer-facing]
-        ├──► In-App Copilot (RAG over PUBLISHED articles)    [Phase 2 — not the raw KB]
+        ├──► In-App Copilot (RAG over APPROVED-KB)           [now Phase 1 — approved-KB, not published articles]
         └──► Self-Validation engine (replay + diff)          [Phase 3]
 Analytics / feedback loop ──► coverage gaps ("record this next")
 ```

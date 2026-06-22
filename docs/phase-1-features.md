@@ -42,7 +42,7 @@ A founder installs the **Sync Recorder** Chrome extension, connects it to their 
 | **Studio** (web app) | the builder | review the KB, curate/generate/edit articles, publish |
 | **Help Portal** (public web) | the builder's customers | browse & read published help articles |
 
-> 🔜 **Phase 2:** an embedded in-app **Copilot** widget (a fourth surface) answers customer questions from the *published* articles. Out of Phase 1.
+> **Copilot (now Phase 1 — the headline product):** an embedded in-app **Copilot** widget (the fourth surface) answers customer questions grounded in **approved-KB** (not published articles). *(Pre-pivot this doc called it "Phase 2, from published articles" — both superseded; see [`phase-1-copilot-plan.md`](phase-1-copilot-plan.md).)*
 
 ---
 
@@ -250,7 +250,7 @@ Uploads are **enqueued** (Redis + BullMQ) and handled by a **background worker**
 ## 9. Scope boundaries — what is *not* in Phase 1
 
 ### Explicitly later phases
-- **In-app Copilot** (answers customers from *published* articles) — **Phase 2**.
+- **In-app Copilot** (answers customers from **approved-KB**) — **now Phase 1, the headline product** (was tagged "Phase 2, from published articles" pre-pivot).
 - **Self-validation / drift detection** (replays workflows in a sandbox, flags stale docs) — **Phase 3**. *(Phase 1 deliberately captures robust selectors/routes/expected-outcomes so this is possible later.)*
 
 ### Version 2 (capture modalities)
