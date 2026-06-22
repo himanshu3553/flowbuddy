@@ -6,6 +6,7 @@
 - **Branch:** `copilot`
 - **Last updated:** 2026-06-22
 - **Modules:** **P1-M0 … P1-M12** (per-phase numbering). **P1-M0…P1-M3 are already built** (the foundation); **P1-M4…P1-M12 are the copilot + release-hardening to build.**
+- **Sequencing (locked 2026-06-22): build & verify ALL of Phase 1 locally first; cloud deploy (P1-M4) is the FINAL step.** We deploy P1 of V1 to cloud only **after** the whole copilot is built and working locally (via docker-compose). So P1-M4's module ID stays 4, but it is **executed last** in the build order below.
 - **Grounding (locked 2026-06-22) — Stage A:** the copilot grounds on **approved-KB** (`KnowledgeItem`s behind a per-workflow approval flag), **not** published articles. **Stage B** (also prefer/cite a published article when one exists) is **deferred** — out of scope here. *(These "Stages" are the grounding rollout within Phase 1 — not to be confused with the product Phases 1/2/3.)*
 - **Cadence:** one module at a time, each verified end-to-end, with a stop for review — same working agreement as the foundation build.
 
@@ -88,7 +89,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 
 ## 6. Per-module detail (to-build)
 
-### P1-M4 — Cloud deploy (legacy M8)
+### P1-M4 — Cloud deploy (legacy M8) — **executed LAST (final step of Phase 1)**
 Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R2 for blobs; per-service Dockerfiles + `render.yaml`. *(On deploy: serve the widget + answer API from the deployed origin; configure CORS for customer origins; set `STUDIO_URL` / `SYNC_API_URL`; add the prod Studio origin to the extension manifest.)*
 
 ### P1-M5 — Approval gate (build first — it defines the corpus)
@@ -133,4 +134,4 @@ Brought into Phase 1 and **elevated** — the copilot speaks to the customer's e
 
 ---
 
-> **Cadence:** one module at a time, verified, with a stop for review. **P1-M4 → M5 → M6 → M7** reaches a first real demo; **P1-M9** is the gate for external embedding; **P1-M8/M10** make it differentiated and self-improving; **P1-M11/M12** harden it for real end-users. Portal/articles (Phase 2) stay **frozen and decoupled** throughout. **When Phase 1's DoD is met, that's the Version 1 release.**
+> **Cadence:** one module at a time, verified, with a stop for review. Build order (deploy last): **P1-M5 → M6 → M7** reaches a first *local* demo; **P1-M8/M10** make it differentiated and self-improving; **P1-M11/M12** harden it for real end-users; **P1-M4 cloud deploy is the FINAL step** — we deploy P1 of V1 only after the whole copilot is built & verified locally. Portal/articles (Phase 2) stay **frozen and decoupled** throughout. **When Phase 1's DoD is met (post-deploy), that's the Version 1 release.**
