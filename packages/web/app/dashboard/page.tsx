@@ -121,6 +121,7 @@ export default async function DashboardPage() {
             <ul className="list">
               {openGaps.map((g) => (
                 <li key={g.id}>
+                  <span className="pill pill-draft">{g.source}</span>
                   <span className="grow">
                     <strong>{g.prompt}</strong>
                     {g.reason && <span className="muted"> — {g.reason}</span>}

@@ -79,7 +79,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M7** ✅ | **Embeddable widget & SDK** (built 2026-06-23) | One `<script>` on a test page renders a working chat widget that talks to P1-M6 and shows answers + citations. **First end-to-end demo.** | C3 |
 | **P1-M8** ✅ | **Context API** (built 2026-06-23) | The widget reports host route/page; the copilot biases retrieval/answers to "where the user is" and degrades gracefully without context. | C4 |
 | **P1-M9** ✅ | **Embed auth & tenant scoping** (built 2026-06-23) | A workspace has a public embeddable key + origin allowlist; requests are scoped, rate-limited; end-user sessions handled. **Gate for external embed.** | C5 |
-| **P1-M10** | **Feedback loop & analytics** | Every Q&A is logged with hit/miss + thumbs; Studio surfaces top questions + coverage gaps ("record this next"). | C6 |
+| **P1-M10** ✅ | **Feedback loop & analytics** (built 2026-06-23) | Every Q&A is logged with hit/miss + thumbs; Studio surfaces top questions + coverage gaps ("record this next"). | C6 |
 | **P1-M11** | **Capture reliability hardening** | No recording the user made is silently lost (nav/upload/audio/SW); iframe + full-page-nav captures are complete. Detail + recorder backlog (R1–R13): [`phase-1b-plan.md`](phase-1b-plan.md) §M9. | M9 |
 | **P1-M12** | **PII redaction** | Passwords never captured; input values masked by default; pre-record + review redaction persists; server backstop blurs detected PII. Detail: [`phase-1b-plan.md`](phase-1b-plan.md) §M10. | M10 |
 
@@ -115,7 +115,8 @@ Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R
 *Built: `Workspace.copilotPublicKey` (unique, `pk_…`) + `copilotAllowedOrigins[]` (migration `…_copilot_embed_key`); api `copilot-auth.ts` `resolveCopilotKey` (key→workspace + origin allowlist, empty=any) + `checkRateLimit` (30/min/key, in-memory); route now authenticates via `X-Sync-Key` (+ CORS header); widget sends `X-Sync-Key`; Studio `/dashboard/copilot` shows the key + copyable embed snippet + origins editor + rotate. Verified: unknown/missing key→401, disallowed origin→403, empty allowlist=any, rate limit 30 then 429+reset.*
 - Per-workspace **public embeddable key** (safe in client HTML), distinct from the recorder's secret token. Resolve key → workspace; enforce **origin allowlist** (CORS + server check); **rate-limit** per key/origin; handle anonymous vs. host-authenticated end-users.
 
-### P1-M10 — Feedback loop & analytics
+### P1-M10 — Feedback loop & analytics — ✅ DONE (2026-06-23)
+*Built: `CopilotQuery` model + `CoverageGap.source` (migration `…_copilot_query`); `/answer` logs each Q&A and returns a `queryId`; new `POST /v1/copilot/feedback` (tenant-scoped thumbs); copilot gaps tagged `source=copilot`; widget renders 👍/👎 on answers and posts feedback; Studio `/dashboard/copilot` "Copilot activity" (total · answered% · 👍/👎 · recent) + dashboard gaps show source. Verified: logging, tenant-scoped feedback, aggregates, gap source default vs copilot.*
 - Persist conversations/messages (or a query log) with `answered` + thumbs. Unify **copilot misses** + **prompt-to-article declines** into one "record this next" view in Studio (reuses/extends `CoverageGap`).
 
 ### P1-M11 — Capture reliability hardening (legacy M9)

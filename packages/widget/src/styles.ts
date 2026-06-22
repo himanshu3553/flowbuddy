@@ -38,4 +38,9 @@ export const CSS = `
 .sc-input input:focus { border-color: #1a8a4f; }
 .sc-send { padding: 9px 14px; background: #1a8a4f; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
 .sc-send:disabled { opacity: .5; cursor: default; }
+.sc-feedback { display: flex; gap: 6px; padding: 2px 4px; }
+.sc-thumb { background: transparent; border: none; cursor: pointer; font-size: 13px; opacity: .5; padding: 2px; }
+.sc-thumb:hover { opacity: 1; }
+.sc-thumb-on { opacity: 1; }
+.sc-thumb:disabled { cursor: default; }
 `;

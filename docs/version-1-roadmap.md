@@ -52,7 +52,7 @@ VERSION 2  (later) — additional capture modalities: narration-only (1.2) + vid
 | **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ built | C3 |
 | **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ built | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ built | C5 |
-| **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ⏳ to build | C6 |
+| **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ built | C6 |
 | **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe (answer quality) | ⏳ to build | M9 (+ recorder backlog R1–R13) |
 | **P1-M12** | **PII redaction** — client masking + review + server backstop (elevated: end-user-facing) | ⏳ to build | M10 |
 

@@ -11,7 +11,7 @@
 import { CSS } from './styles.js';
 
 interface Citation { segmentTitle: string | null }
-interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean }
+interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean; queryId?: string; feedback?: 'up' | 'down' }
 
 const script = document.currentScript as HTMLScriptElement | null;
 const g = (window as unknown as { SyncCopilot?: Record<string, string> }).SyncCopilot ?? {};
@@ -75,6 +75,16 @@ function render(): void {
     row.appendChild(el('div', 'sc-bubble', m.content));
     const titles = [...new Set((m.citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
     if (titles.length) row.appendChild(el('div', 'sc-cites', 'From: ' + titles.join(' · ')));
+    if (m.role === 'assistant' && !m.error && m.queryId) {
+      const fb = el('div', 'sc-feedback');
+      for (const v of ['up', 'down'] as const) {
+        const b = el('button', `sc-thumb${m.feedback === v ? ' sc-thumb-on' : ''}`, v === 'up' ? '👍' : '👎');
+        if (m.feedback) b.disabled = true;
+        b.addEventListener('click', () => void sendFeedback(m, v));
+        fb.appendChild(b);
+      }
+      row.appendChild(fb);
+    }
     list.appendChild(row);
   }
   if (loading) {
@@ -100,17 +110,30 @@ async function ask(question: string): Promise<void> {
       body: JSON.stringify({ question, history, context: { path: location.pathname, title: document.title } }),
     });
     const data = (await res.json().catch(() => ({}))) as {
-      covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string;
+      covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
     };
     if (!res.ok) messages.push({ role: 'assistant', content: data.error || `Request failed (${res.status})`, error: true });
-    else if (data.covered) messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [] });
-    else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true });
+    else if (data.covered) messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
+    else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true, queryId: data.queryId });
   } catch {
     messages.push({ role: 'assistant', content: 'Could not reach the assistant. Please try again.', error: true });
   } finally {
     loading = false;
     render();
   }
+}
+
+async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
+  if (!m.queryId || m.feedback) return;
+  m.feedback = fb;
+  render();
+  try {
+    await fetch(`${cfg.apiBase}/v1/copilot/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
+      body: JSON.stringify({ queryId: m.queryId, feedback: fb }),
+    });
+  } catch { /* best-effort */ }
 }
 
 launcher.addEventListener('click', () => { open = true; render(); input.focus(); });

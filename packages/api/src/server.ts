@@ -108,7 +108,8 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   const items = await retrieveApprovedKBItems(workspaceId, question, { contextPath });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
-    return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.' };
+    const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false }, select: { id: true } });
+    return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.', queryId: q.id };
   }
 
   const result = await answerFromKB({
@@ -120,6 +121,12 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     model: config.synthModel,
   });
 
+  // P1-M10: log the Q&A (analytics + the thumbs-feedback target).
+  const logged = await prisma.copilotQuery.create({
+    data: { workspaceId, question, answered: result.covered },
+    select: { id: true },
+  });
+
   if (!result.covered) {
     // Decline → log a coverage gap (dedupe: one open gap per distinct question).
     const existing = await prisma.coverageGap.findFirst({
@@ -127,12 +134,31 @@ app.post('/v1/copilot/answer', async (req, reply) => {
       select: { id: true },
     });
     if (!existing) {
-      await prisma.coverageGap.create({ data: { workspaceId, prompt: question, reason: result.reason } });
+      await prisma.coverageGap.create({ data: { workspaceId, prompt: question, reason: result.reason, source: 'copilot' } });
     }
-    return { covered: false, answer: null, citations: [], reason: result.reason };
+    return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }
 
-  return { covered: true, answer: result.answer, citations: result.citations };
+  return { covered: true, answer: result.answer, citations: result.citations, queryId: logged.id };
+});
+
+/** P1-M10 — thumbs feedback on a copilot answer (by the queryId returned from /answer). */
+app.post('/v1/copilot/feedback', async (req, reply) => {
+  const key = req.headers['x-sync-key'] as string | undefined;
+  const auth = await resolveCopilotKey(key, req.headers.origin as string | undefined);
+  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+
+  const body = (req.body ?? {}) as { queryId?: string; feedback?: string };
+  const feedback = body.feedback === 'up' || body.feedback === 'down' ? body.feedback : null;
+  if (!body.queryId || !feedback) return reply.code(400).send({ error: 'queryId and feedback (up|down) required' });
+
+  // Scope the update to this workspace's queries only.
+  const updated = await prisma.copilotQuery.updateMany({
+    where: { id: body.queryId, workspaceId: auth.workspaceId },
+    data: { feedback },
+  });
+  if (updated.count === 0) return reply.code(404).send({ error: 'query not found' });
+  return { ok: true };
 });
 
 await ensureBucket();
