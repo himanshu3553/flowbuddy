@@ -81,7 +81,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M9** ✅ | **Embed auth & tenant scoping** (built 2026-06-23) | A workspace has a public embeddable key + origin allowlist; requests are scoped, rate-limited; end-user sessions handled. **Gate for external embed.** | C5 |
 | **P1-M10** ✅ | **Feedback loop & analytics** (built 2026-06-23) | Every Q&A is logged with hit/miss + thumbs; Studio surfaces top questions + coverage gaps ("record this next"). | C6 |
 | **P1-M11** ✅ core | **Capture reliability hardening** (R1/R2/R3 built 2026-06-23; R4/iframe → backlog) | No recording the user made is silently lost (nav/upload/audio/SW); iframe + full-page-nav captures are complete. Detail + recorder backlog (R1–R13): [`phase-1b-plan.md`](phase-1b-plan.md) §M9. | M9 |
-| **P1-M12** | **PII redaction** | Passwords never captured; input values masked by default; pre-record + review redaction persists; server backstop blurs detected PII. Detail: [`phase-1b-plan.md`](phase-1b-plan.md) §M10. | M10 |
+| **P1-M12** ✅ core | **PII redaction** (client masking built 2026-06-23; Studio/server → backlog) | Passwords never captured; input values masked by default; pre-record + review redaction persists; server backstop blurs detected PII. Detail: [`phase-1b-plan.md`](phase-1b-plan.md) §M10. | M10 |
 
 **Definition of done for Phase 1 (= the Version 1 release):** an external SaaS embeds the snippet on a real page; its end-users ask questions in-app; the copilot answers **grounded only in approved-KB** with citations, **declines + logs a gap** when uncovered, is **scoped to the correct workspace** (public key + origin allowlist), is **PII-safe**, and **logs each Q&A + feedback** — all **without touching the portal/articles** (Phase 2, frozen). Ship it.
 
@@ -122,8 +122,8 @@ Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R
 ### P1-M11 — Capture reliability hardening (legacy M9) — ✅ CORE DONE (2026-06-23)
 Brought into Phase 1 because **copilot answer quality = capture quality**. **Shipped the no-silent-data-loss core:** **R1** survive full-page navigations (background re-arms the freshly-loaded content script with the original `startTime` via `tabs.onUpdated`); **R2** don't discard the bundle on upload failure — keep it + a popup **Retry**; **R3** longer finalize fallback (30s) so long recordings don't drop narration. **Deferred to the recorder backlog** ([`phase-1b-plan.md`](phase-1b-plan.md) §M9): R4 SW-eviction, R8/R9 iframe + multi-tab coverage, R5–R7 recorder UX, R12/R13 quality — not blocking the copilot release. Recorder changes are browser-verified by the user (typecheck + build green).
 
-### P1-M12 — PII redaction (legacy M10)
-Brought into Phase 1 and **elevated** — the copilot speaks to the customer's end-users, so approved-KB content (text + screenshots) must be redactable. Client masking beyond passwords + pre-record controls + Studio review redaction + server OCR/DOM backstop. Detail: [`phase-1b-plan.md`](phase-1b-plan.md) §M10.
+### P1-M12 — PII redaction (legacy M10) — ✅ CORE DONE (2026-06-23)
+Elevated for the copilot (end-user-facing). **Shipped client-side default masking** in the recorder (`content.ts`): values for `password`/`email`/`tel`, sensitive `autocomplete` (cc-*, current/new-password, one-time-code), common card/CVV/SSN/secret/token field patterns, and any host-marked **`data-sync-redact`** field are masked **before anything leaves the browser**. **Deferred to backlog** ([`phase-1b-plan.md`](phase-1b-plan.md) §M10): "mask-all-by-default + per-field opt-in" pre-record toggle, Studio review-time redaction, server OCR/DOM backstop (screenshots still capture pixels — test-account guidance remains the primary protection until the server backstop lands).
 
 ---
 

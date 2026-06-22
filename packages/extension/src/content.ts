@@ -167,9 +167,34 @@ function resolveTarget(el: Element | null): Element | null {
   return interactive || el;
 }
 
+// P1-M12 — redact sensitive values client-side, BEFORE anything leaves the browser.
+const MASK = '••••••';
+const SENSITIVE_TYPES = new Set(['password', 'email', 'tel']);
+const SENSITIVE_AUTOCOMPLETE = new Set([
+  'current-password', 'new-password', 'cc-number', 'cc-csc', 'cc-exp', 'cc-name', 'one-time-code',
+]);
+// Sensitive field patterns + an explicit `data-sync-redact` opt-in for the host app to mark fields.
+const REDACT_SELECTORS = [
+  '[data-sync-redact]',
+  '[autocomplete*="cc-" i]',
+  '[name*="card" i]', '[name*="cvv" i]', '[name*="cvc" i]', '[name*="ssn" i]',
+  '[name*="secret" i]', '[name*="token" i]', '[id*="ssn" i]',
+];
+
+function isSensitive(el: Element): boolean {
+  const type = ((el as HTMLInputElement).type || '').toLowerCase();
+  if (SENSITIVE_TYPES.has(type)) return true;
+  const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+  if (ac && SENSITIVE_AUTOCOMPLETE.has(ac)) return true;
+  for (const sel of REDACT_SELECTORS) {
+    try { if (el.matches(sel) || el.closest(sel)) return true; } catch { /* ignore bad selector */ }
+  }
+  return false;
+}
+
 function maskValue(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): string {
-  const type = (el as HTMLInputElement).type;
-  if (type === 'password') return '••••••';
+  // Passwords, emails, phones, card/SSN/secret fields, and host-marked fields never leave the browser.
+  if (isSensitive(el)) return MASK;
   return String(el.value ?? '').slice(0, 200);
 }
 
