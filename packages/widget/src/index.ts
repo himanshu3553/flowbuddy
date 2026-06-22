@@ -96,7 +96,7 @@ async function ask(question: string): Promise<void> {
   try {
     const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
+      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
       body: JSON.stringify({ question, history, context: { path: location.pathname, title: document.title } }),
     });
     const data = (await res.json().catch(() => ({}))) as {

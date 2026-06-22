@@ -72,6 +72,11 @@ model Workspace {
   ownerId   String
   createdAt DateTime @default(now())
 
+  // P1-M9 — embeddable copilot: a PUBLIC key (safe in client HTML, distinct from the secret
+  // recorder ApiToken) + an origin allowlist (empty = allow any, for dev).
+  copilotPublicKey      String?  @unique
+  copilotAllowedOrigins String[] @default([])
+
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]
   sessions         KnowledgeSource[]

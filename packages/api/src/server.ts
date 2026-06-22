@@ -9,6 +9,7 @@ import { ensureBucket, putObject, sessionKey } from './storage';
 import { synthesisQueue } from './queue';
 import { answerFromKB } from '@sync/synthesis';
 import { retrieveApprovedKBItems, sanitizeHistory } from './copilot';
+import { resolveCopilotKey, checkRateLimit } from './copilot-auth';
 
 const app = Fastify({ logger: true });
 
@@ -16,7 +17,7 @@ const app = Fastify({ logger: true });
 app.addHook('onRequest', async (req, reply) => {
   reply.header('Access-Control-Allow-Origin', '*');
   reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Sync-Key');
   if (req.method === 'OPTIONS') return reply.code(204).send();
 });
 
@@ -90,8 +91,12 @@ app.get('/v1/sessions/:id', async (req, reply) => {
  * workspace token for now; P1-M9 adds a public embeddable key + origin allowlist for in-app embed.
  */
 app.post('/v1/copilot/answer', async (req, reply) => {
-  const ws = await authWorkspace(req.headers.authorization);
-  if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
+  // P1-M9: authenticate with the PUBLIC embeddable key (x-sync-key) + origin allowlist + rate limit.
+  const key = req.headers['x-sync-key'] as string | undefined;
+  const auth = await resolveCopilotKey(key, req.headers.origin as string | undefined);
+  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+  if (!checkRateLimit(key ?? '')) return reply.code(429).send({ error: 'rate limit exceeded — slow down' });
+  const workspaceId = auth.workspaceId;
 
   const body = (req.body ?? {}) as { question?: string; history?: unknown; context?: { path?: string } };
   const question = (body.question ?? '').trim();
@@ -100,7 +105,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
 
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
   const contextPath = typeof body.context?.path === 'string' ? body.context.path : null;
-  const items = await retrieveApprovedKBItems(ws.workspaceId, question, { contextPath });
+  const items = await retrieveApprovedKBItems(workspaceId, question, { contextPath });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
     return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.' };
@@ -118,11 +123,11 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   if (!result.covered) {
     // Decline → log a coverage gap (dedupe: one open gap per distinct question).
     const existing = await prisma.coverageGap.findFirst({
-      where: { workspaceId: ws.workspaceId, prompt: question, status: 'open' },
+      where: { workspaceId, prompt: question, status: 'open' },
       select: { id: true },
     });
     if (!existing) {
-      await prisma.coverageGap.create({ data: { workspaceId: ws.workspaceId, prompt: question, reason: result.reason } });
+      await prisma.coverageGap.create({ data: { workspaceId, prompt: question, reason: result.reason } });
     }
     return { covered: false, answer: null, citations: [], reason: result.reason };
   }

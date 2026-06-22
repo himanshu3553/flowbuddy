@@ -54,6 +54,14 @@ export default async function DashboardPage() {
       <h1>Sync Studio</h1>
       <p className="sub">{session.user.email} · {workspace.name}</p>
 
+      <div className="card" style={{ borderLeft: '3px solid #1a8a4f' }}>
+        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Copilot</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Embed the in-app copilot in your product — it answers only from workflows you approve.{' '}
+          <Link href="/dashboard/copilot">Set up the copilot →</Link>
+        </p>
+      </div>
+
       <div className="card">
         <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Extension API token</h2>
         <p className="muted" style={{ marginTop: 0 }}>
