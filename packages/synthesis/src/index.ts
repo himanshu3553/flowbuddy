@@ -12,6 +12,8 @@ export type { Transcript } from './transcribe';
 export type { Segment } from './segment';
 export { promptToArticle } from './prompt';
 export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './prompt';
+export { answerFromKB } from './copilot';
+export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 
 /** A KB step-item as the synthesis package produces/consumes it (Module 2 ⇄ Module 3). */
 export interface KbStepItem {

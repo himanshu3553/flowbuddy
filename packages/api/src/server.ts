@@ -7,6 +7,8 @@ import { config } from './config';
 import { authWorkspace } from './auth';
 import { ensureBucket, putObject, sessionKey } from './storage';
 import { synthesisQueue } from './queue';
+import { answerFromKB } from '@sync/synthesis';
+import { retrieveApprovedKBItems, sanitizeHistory } from './copilot';
 
 const app = Fastify({ logger: true });
 
@@ -80,6 +82,49 @@ app.get('/v1/sessions/:id', async (req, reply) => {
   const s = await prisma.knowledgeSource.findFirst({ where: { id, workspaceId: ws.workspaceId } });
   if (!s) return reply.code(404).send({ error: 'not found' });
   return { id: s.id, status: s.status, error: s.error };
+});
+
+/**
+ * P1-M6 — copilot answer endpoint. Grounded ONLY in APPROVED-KB (P1-M5): retrieve approved items,
+ * answer or honestly decline; on a decline, log a CoverageGap ("record this next"). Auth = the
+ * workspace token for now; P1-M9 adds a public embeddable key + origin allowlist for in-app embed.
+ */
+app.post('/v1/copilot/answer', async (req, reply) => {
+  const ws = await authWorkspace(req.headers.authorization);
+  if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
+
+  const body = (req.body ?? {}) as { question?: string; history?: unknown };
+  const question = (body.question ?? '').trim();
+  if (!question) return reply.code(400).send({ error: 'question is required' });
+  if (!config.openaiApiKey) return reply.code(500).send({ error: 'OPENAI_API_KEY not configured' });
+
+  const items = await retrieveApprovedKBItems(ws.workspaceId, question);
+  if (items.length === 0) {
+    // No approved content at all — an un-provisioned copilot, not a coverage gap.
+    return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.' };
+  }
+
+  const result = await answerFromKB({
+    question,
+    history: sanitizeHistory(body.history),
+    items,
+    apiKey: config.openaiApiKey,
+    model: config.synthModel,
+  });
+
+  if (!result.covered) {
+    // Decline → log a coverage gap (dedupe: one open gap per distinct question).
+    const existing = await prisma.coverageGap.findFirst({
+      where: { workspaceId: ws.workspaceId, prompt: question, status: 'open' },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.coverageGap.create({ data: { workspaceId: ws.workspaceId, prompt: question, reason: result.reason } });
+    }
+    return { covered: false, answer: null, citations: [], reason: result.reason };
+  }
+
+  return { covered: true, answer: result.answer, citations: result.citations };
 });
 
 await ensureBucket();

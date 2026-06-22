@@ -75,7 +75,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M3** | Retrieval & grounding engine | ✅ built (pgvector upgrade pending) | M7 |
 | **P1-M4** | **Cloud deploy** | The stack is live on Render + R2; the copilot API + widget serve from the deployed origin. | M8 |
 | **P1-M5** ✅ | **Approval gate** (built 2026-06-23) | A builder marks a workflow "approved for copilot" in Studio; only approved KB items are copilot-eligible; reversible + audited. | C1 |
-| **P1-M6** | **Answer endpoint** | An API call returns a **grounded** answer (citing source workflow/step) from **only** approved-KB, or an honest **decline → `CoverageGap`**; multi-turn works. | C2 |
+| **P1-M6** ✅ | **Answer endpoint** (built 2026-06-23) | An API call returns a **grounded** answer (citing source workflow/step) from **only** approved-KB, or an honest **decline → `CoverageGap`**; multi-turn works. | C2 |
 | **P1-M7** | **Embeddable widget & SDK** | One `<script>` on a test page renders a working chat widget that talks to P1-M6 and shows answers + citations. **First end-to-end demo.** | C3 |
 | **P1-M8** | **Context API** | The widget reports host route/page; the copilot biases retrieval/answers to "where the user is" and degrades gracefully without context. | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** | A workspace has a public embeddable key + origin allowlist; requests are scoped, rate-limited; end-user sessions handled. **Gate for external embed.** | C5 |
@@ -98,7 +98,8 @@ Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R
 - **Data:** lean boolean-on-items vs. a `CopilotApproval`/`Workflow` table (§4).
 - **Guardrail:** retrieval (P1-M6) filters to approved items only — the enforcement point for "no-leak."
 
-### P1-M6 — Answer endpoint (repurpose `prompt.ts`)
+### P1-M6 — Answer endpoint (repurpose `prompt.ts`) — ✅ DONE (2026-06-23)
+*Built: `@sync/synthesis` `answerFromKB` (conversational, structured-output **covered/answer/citations** or decline; multi-turn history); api `retrieveApprovedKBItems` (keyword shortlist over the **approved-KB seam** — mirrors P1-M5 `listApprovedItems`); route `POST /v1/copilot/answer` (workspace-token auth for now; decline → dedup `CoverageGap`). Verified with a real LLM: grounded answer + citations, honest decline, coverage-gap logged, and **no-leak** (un-approved workflow not retrievable even when asked directly). Keyword retrieval; pgvector = the P1-M3 upgrade.*
 - Generalize retrieve → ground → answer-or-decline into a shared engine. Input: question (+ history + optional context from P1-M8). Retrieve over **approved-KB** (keyword first; pgvector optional). Output: grounded answer + **citations** (source recording/workflow/step) + `covered` boolean.
 - On `covered=false` (or zero retrieval): honest decline + log **`CoverageGap`** (`source=copilot`). Multi-turn supported.
 
