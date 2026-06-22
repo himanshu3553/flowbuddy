@@ -5,6 +5,7 @@ import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import { listCandidates } from '@/lib/candidates';
 import { GeneratePanel } from '../../generate-panel';
+import { CopilotApprovalPanel } from '../../copilot-approval-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,8 +122,21 @@ export default async function KbSourcePage({ params }: { params: Promise<{ id: s
         </section>
       ))}
 
+      <div className="card" style={{ marginTop: 24, borderLeft: '3px solid #1a8a4f' }}>
+        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Copilot — approve workflows</h2>
+        {candidates.length === 0 ? (
+          <p className="muted">
+            {source.status === 'ready' || source.status === 'done'
+              ? 'No workflows found in this recording.'
+              : 'Knowledge Base is still building — workflows appear once it is ready.'}
+          </p>
+        ) : (
+          <CopilotApprovalPanel candidates={candidates} />
+        )}
+      </div>
+
       <div className="card" style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Auto Generate Articles</h2>
+        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Auto Generate Articles <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· Phase 2 (help portal)</span></h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Each workflow below was detected when the Knowledge Base was built. Pick the ones worth an article and generate — only the selected ones are created (as drafts).
         </p>

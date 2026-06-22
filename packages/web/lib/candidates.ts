@@ -1,7 +1,8 @@
 import { prisma } from '@sync/db';
+import { approvedSegmentKeys } from './copilot-approvals';
 
-/** A workflow candidate = one persisted segment (Option C) the user can choose to generate into an
- *  article. "Generated" when an Article is linked to its (sourceId, segmentIndex). Server-only. */
+/** A workflow candidate = one persisted segment (Option C). It's both the unit the user can
+ *  generate into an article (Phase 2) AND the unit approved for the copilot (P1-M5). Server-only. */
 export interface Candidate {
   sourceId: string;
   appBaseUrl: string | null;
@@ -9,6 +10,7 @@ export interface Candidate {
   segmentTitle: string;
   itemCount: number;
   generatedArticleId: string | null;
+  copilotApproved: boolean;
 }
 
 /** List workflow candidates for a workspace, optionally scoped to one recording (KB page).
@@ -50,6 +52,7 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
     select: { id: true, appBaseUrl: true },
   });
   const appById = new Map(sources.map((s) => [s.id, s.appBaseUrl]));
+  const approved = await approvedSegmentKeys(workspaceId);
 
   return [...grouped.values()]
     .sort((a, b) => a.sourceId.localeCompare(b.sourceId) || a.segmentIndex - b.segmentIndex)
@@ -57,5 +60,6 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
       ...c,
       appBaseUrl: appById.get(c.sourceId) ?? null,
       generatedArticleId: genByKey.get(`${c.sourceId}:${c.segmentIndex}`) ?? null,
+      copilotApproved: approved.has(`${c.sourceId}:${c.segmentIndex}`),
     }));
 }

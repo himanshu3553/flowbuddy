@@ -74,7 +74,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M2** | Knowledge Base | ✅ built | M3/M6 |
 | **P1-M3** | Retrieval & grounding engine | ✅ built (pgvector upgrade pending) | M7 |
 | **P1-M4** | **Cloud deploy** | The stack is live on Render + R2; the copilot API + widget serve from the deployed origin. | M8 |
-| **P1-M5** | **Approval gate** | A builder marks a workflow "approved for copilot" in Studio; only approved KB items are copilot-eligible; reversible + audited. | C1 |
+| **P1-M5** ✅ | **Approval gate** (built 2026-06-23) | A builder marks a workflow "approved for copilot" in Studio; only approved KB items are copilot-eligible; reversible + audited. | C1 |
 | **P1-M6** | **Answer endpoint** | An API call returns a **grounded** answer (citing source workflow/step) from **only** approved-KB, or an honest **decline → `CoverageGap`**; multi-turn works. | C2 |
 | **P1-M7** | **Embeddable widget & SDK** | One `<script>` on a test page renders a working chat widget that talks to P1-M6 and shows answers + citations. **First end-to-end demo.** | C3 |
 | **P1-M8** | **Context API** | The widget reports host route/page; the copilot biases retrieval/answers to "where the user is" and degrades gracefully without context. | C4 |
@@ -92,7 +92,8 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 ### P1-M4 — Cloud deploy (legacy M8) — **executed LAST (final step of Phase 1)**
 Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R2 for blobs; per-service Dockerfiles + `render.yaml`. *(On deploy: serve the widget + answer API from the deployed origin; configure CORS for customer origins; set `STUDIO_URL` / `SYNC_API_URL`; add the prod Studio origin to the extension manifest.)*
 
-### P1-M5 — Approval gate (build first — it defines the corpus)
+### P1-M5 — Approval gate (build first — it defines the corpus) — ✅ DONE (2026-06-23)
+*Built: `CopilotApproval` table keyed by (sourceId, segmentIndex) — survives the worker's item delete+recreate; `lib/copilot-approvals.ts` (`listApprovedItems` = the enforcement seam P1-M6 retrieves through); `setCopilotApproval` action; per-workflow toggle on the Studio KB page. Verified: build 6/6 + functional seam incl. survive-reprocess.*
 - **Studio:** an "Approve for copilot" toggle at the **workflow** level (a `(sourceId, segmentIndex)` group — the same segment tags that drive curated-gen candidates). Bulk approve/un-approve; show approved state in the KB browser.
 - **Data:** lean boolean-on-items vs. a `CopilotApproval`/`Workflow` table (§4).
 - **Guardrail:** retrieval (P1-M6) filters to approved items only — the enforcement point for "no-leak."

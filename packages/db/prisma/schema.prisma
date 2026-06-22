@@ -72,11 +72,12 @@ model Workspace {
   ownerId   String
   createdAt DateTime @default(now())
 
-  owner        User             @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  tokens       ApiToken[]
-  sessions     KnowledgeSource[]
-  articles     Article[]
-  coverageGaps CoverageGap[]
+  owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  tokens           ApiToken[]
+  sessions         KnowledgeSource[]
+  articles         Article[]
+  coverageGaps     CoverageGap[]
+  copilotApprovals CopilotApproval[]
 }
 
 model ApiToken {
@@ -103,10 +104,11 @@ model KnowledgeSource {
   error       String?
   createdAt   DateTime @default(now())
 
-  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy User            @relation(fields: [createdById], references: [id])
-  articles  Article[]
-  items     KnowledgeItem[]
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation(fields: [createdById], references: [id])
+  articles         Article[]
+  items            KnowledgeItem[]
+  copilotApprovals CopilotApproval[]
 
   @@map("RecSession")
 }
@@ -166,6 +168,25 @@ model CoverageGap {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
+}
+
+model CopilotApproval {
+  // P1-M5: the copilot trust gate. One row = one workflow approved for the copilot to answer from.
+  // Keyed by (sourceId, segmentIndex) so approval SURVIVES KnowledgeItem delete+recreate on reprocess
+  // (the worker deletes+recreates items, which would wipe a per-item flag). Absence = not approved.
+  id           String   @id @default(cuid())
+  workspaceId  String
+  sourceId     String // KnowledgeSource the workflow belongs to
+  segmentIndex Int // the workflow within that source (KnowledgeItem.segmentIndex)
+  segmentTitle String? // snapshot of the title at approval time (display/audit)
+  approvedById String? // who approved (audit)
+  createdAt    DateTime @default(now())
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, segmentIndex])
   @@index([workspaceId])
 }
 
