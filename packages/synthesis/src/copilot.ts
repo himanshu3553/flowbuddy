@@ -61,6 +61,7 @@ export async function answerFromKB(input: {
   question: string;
   history?: CopilotTurn[];
   items: CopilotKBItem[];
+  context?: { path?: string | null }; // P1-M8: where the end-user is in the host app
   apiKey: string;
   model: string;
 }): Promise<CopilotAnswer> {
@@ -82,9 +83,12 @@ export async function answerFromKB(input: {
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }
+  const ctxLine = input.context?.path
+    ? `The user is currently on the page "${input.context.path}". Prefer steps relevant to that screen when applicable (but still answer the actual question).\n\n`
+    : '';
   messages.push({
     role: 'user',
-    content: `KNOWLEDGE ITEMS (the only thing you may use):\n${itemBlock}\n\nQuestion: ${input.question}`,
+    content: `${ctxLine}KNOWLEDGE ITEMS (the only thing you may use):\n${itemBlock}\n\nQuestion: ${input.question}`,
   });
 
   const res = await openai.chat.completions.create({

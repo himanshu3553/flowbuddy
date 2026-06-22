@@ -77,7 +77,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M5** ✅ | **Approval gate** (built 2026-06-23) | A builder marks a workflow "approved for copilot" in Studio; only approved KB items are copilot-eligible; reversible + audited. | C1 |
 | **P1-M6** ✅ | **Answer endpoint** (built 2026-06-23) | An API call returns a **grounded** answer (citing source workflow/step) from **only** approved-KB, or an honest **decline → `CoverageGap`**; multi-turn works. | C2 |
 | **P1-M7** ✅ | **Embeddable widget & SDK** (built 2026-06-23) | One `<script>` on a test page renders a working chat widget that talks to P1-M6 and shows answers + citations. **First end-to-end demo.** | C3 |
-| **P1-M8** | **Context API** | The widget reports host route/page; the copilot biases retrieval/answers to "where the user is" and degrades gracefully without context. | C4 |
+| **P1-M8** ✅ | **Context API** (built 2026-06-23) | The widget reports host route/page; the copilot biases retrieval/answers to "where the user is" and degrades gracefully without context. | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** | A workspace has a public embeddable key + origin allowlist; requests are scoped, rate-limited; end-user sessions handled. **Gate for external embed.** | C5 |
 | **P1-M10** | **Feedback loop & analytics** | Every Q&A is logged with hit/miss + thumbs; Studio surfaces top questions + coverage gaps ("record this next"). | C6 |
 | **P1-M11** | **Capture reliability hardening** | No recording the user made is silently lost (nav/upload/audio/SW); iframe + full-page-nav captures are complete. Detail + recorder backlog (R1–R13): [`phase-1b-plan.md`](phase-1b-plan.md) §M9. | M9 |
@@ -107,7 +107,8 @@ Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R
 *Built: new `packages/widget` — esbuild → a single 5.4kb IIFE `dist/sync-copilot.js`; shadow-DOM chat (launcher + panel, isolated styles); config via `data-sync-*` script attrs (`data-sync-api`, `data-sync-key`, `data-sync-title`); POSTs `/v1/copilot/answer`, renders answers + citations + decline/error states; multi-turn history; `demo/index.html`. `data-sync-key` = workspace token for now (P1-M9 swaps in a public embeddable key). Verified: bundle builds, typecheck, monorepo build 7/7; in-browser demo is the user's to run.*
 - A single script (`sync-copilot.js`) the customer adds with their public key; renders a launcher + chat panel (web component or sandboxed iframe). Calls P1-M6. Streaming answers, citation links, "was this helpful?" affordance (wired in P1-M10), graceful empty/decline states.
 
-### P1-M8 — Context API (the differentiation)
+### P1-M8 — Context API (the differentiation) — ✅ DONE (2026-06-23)
+*Built: the widget sends `context.path` (host `location.pathname`); `retrieveApprovedKBItems` boosts items whose captured `route.path` matches the current page (+3), and `answerFromKB` gets a "user is on page X" line. Soft boost — biases, never excludes (degrades gracefully with no context). Verified deterministically: on-route workflow ranks first; other workflows still retrievable.*
 - The SDK reports the host's current **route/page** (+ optional app-provided context). The engine biases retrieval toward KB items whose captured `route` matches → "help **for this screen**." Degrades gracefully when absent.
 
 ### P1-M9 — Embed auth & tenant scoping (gate for external embed)

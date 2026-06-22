@@ -93,12 +93,14 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   const ws = await authWorkspace(req.headers.authorization);
   if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
 
-  const body = (req.body ?? {}) as { question?: string; history?: unknown };
+  const body = (req.body ?? {}) as { question?: string; history?: unknown; context?: { path?: string } };
   const question = (body.question ?? '').trim();
   if (!question) return reply.code(400).send({ error: 'question is required' });
   if (!config.openaiApiKey) return reply.code(500).send({ error: 'OPENAI_API_KEY not configured' });
 
-  const items = await retrieveApprovedKBItems(ws.workspaceId, question);
+  // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
+  const contextPath = typeof body.context?.path === 'string' ? body.context.path : null;
+  const items = await retrieveApprovedKBItems(ws.workspaceId, question, { contextPath });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
     return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.' };
@@ -108,6 +110,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     question,
     history: sanitizeHistory(body.history),
     items,
+    context: { path: contextPath },
     apiKey: config.openaiApiKey,
     model: config.synthModel,
   });

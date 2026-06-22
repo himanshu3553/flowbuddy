@@ -17,8 +17,10 @@ const STOP = new Set([
 export async function retrieveApprovedKBItems(
   workspaceId: string,
   question: string,
-  limit = 24,
+  opts: { contextPath?: string | null; limit?: number } = {},
 ): Promise<CopilotKBItem[]> {
+  const limit = opts.limit ?? 24;
+  const contextPath = (opts.contextPath ?? '').trim();
   const approvals = await prisma.copilotApproval.findMany({
     where: { workspaceId },
     select: { sourceId: true, segmentIndex: true },
@@ -39,6 +41,11 @@ export async function retrieveApprovedKBItems(
     const hay = i.text.toLowerCase();
     let score = 0;
     for (const t of terms) if (hay.includes(t)) score++;
+    // P1-M8: boost items captured on the route the end-user is currently on ("answer for this screen").
+    const route = ((i.data as { event?: { route?: { path?: string } } } | null) ?? {})?.event?.route?.path ?? '';
+    if (contextPath && route && (route === contextPath || route.includes(contextPath) || contextPath.includes(route))) {
+      score += 3;
+    }
     return { i, score };
   });
   // Highest term-overlap first; ties keep KB order. Always return up to `limit` (even on 0 matches)
