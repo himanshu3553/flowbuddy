@@ -73,7 +73,7 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 | **P1-M1** | Recorder / workflow capture | ✅ built | M2 |
 | **P1-M2** | Knowledge Base | ✅ built | M3/M6 |
 | **P1-M3** | Retrieval & grounding engine | ✅ built (pgvector upgrade pending) | M7 |
-| **P1-M4** | **Cloud deploy** | The stack is live on Render + R2; the copilot API + widget serve from the deployed origin. | M8 |
+| **P1-M4** 🟡 config | **Cloud deploy** (Dockerfiles + render.yaml ready 2026-06-23; actual deploy = user's Render/R2) | The stack is live on Render + R2; the copilot API + widget serve from the deployed origin. | M8 |
 | **P1-M5** ✅ | **Approval gate** (built 2026-06-23) | A builder marks a workflow "approved for copilot" in Studio; only approved KB items are copilot-eligible; reversible + audited. | C1 |
 | **P1-M6** ✅ | **Answer endpoint** (built 2026-06-23) | An API call returns a **grounded** answer (citing source workflow/step) from **only** approved-KB, or an honest **decline → `CoverageGap`**; multi-turn works. | C2 |
 | **P1-M7** ✅ | **Embeddable widget & SDK** (built 2026-06-23) | One `<script>` on a test page renders a working chat widget that talks to P1-M6 and shows answers + citations. **First end-to-end demo.** | C3 |
@@ -89,8 +89,8 @@ All **additive migrations** on the [existing schema](phase-1a-plan.md#3-data-mod
 
 ## 6. Per-module detail (to-build)
 
-### P1-M4 — Cloud deploy (legacy M8) — **executed LAST (final step of Phase 1)**
-Render (api web service + worker + web/Studio + Postgres + Redis) + Cloudflare R2 for blobs; per-service Dockerfiles + `render.yaml`. *(On deploy: serve the widget + answer API from the deployed origin; configure CORS for customer origins; set `STUDIO_URL` / `SYNC_API_URL`; add the prod Studio origin to the extension manifest.)*
+### P1-M4 — Cloud deploy (legacy M8) — 🟡 CONFIG READY (2026-06-23); deploy = user's step
+**Prepared:** per-service **Dockerfiles** (`packages/api/Dockerfile` — api + worker via command override; `packages/web/Dockerfile` — Studio), `.dockerignore`, and a full **`render.yaml`** (Postgres + Redis + sync-api + sync-worker + sync-web, env wiring, `preDeployCommand: prisma migrate deploy`). Deploy-readiness fix: the api now binds `0.0.0.0` (was localhost). **Needs the user (gated on accounts):** create Render + Cloudflare R2; set secrets (`OPENAI_API_KEY`, `R2_*`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`); host the widget bundle + set `SYNC_WIDGET_URL`; add the prod Studio origin to the extension manifest + set `STUDIO_URL`/`SYNC_API_URL`. The Dockerfiles/blueprint are a starting point — validate on the first real `docker build`/deploy.
 
 ### P1-M5 — Approval gate (build first — it defines the corpus) — ✅ DONE (2026-06-23)
 *Built: `CopilotApproval` table keyed by (sourceId, segmentIndex) — survives the worker's item delete+recreate; `lib/copilot-approvals.ts` (`listApprovedItems` = the enforcement seam P1-M6 retrieves through); `setCopilotApproval` action; per-workflow toggle on the Studio KB page. Verified: build 6/6 + functional seam incl. survive-reprocess.*

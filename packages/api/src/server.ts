@@ -164,8 +164,8 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
 await ensureBucket();
 
 app
-  .listen({ port: config.port, host: '127.0.0.1' })
-  .then(() => app.log.info(`Sync api on http://localhost:${config.port}`))
+  .listen({ port: config.port, host: process.env.HOST || '0.0.0.0' })
+  .then(() => app.log.info(`Sync api on :${config.port}`))
   .catch((err) => {
     app.log.error(err);
     process.exit(1);

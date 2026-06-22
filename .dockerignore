@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+docs
+spike
+**/runs
+**/*.log
+.DS_Store

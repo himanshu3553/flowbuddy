@@ -46,7 +46,7 @@ VERSION 2  (later) — additional capture modalities: narration-only (1.2) + vid
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **built** | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource` / `KnowledgeItem`, transcript, segmentation, keyword index) | ✅ **built** | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (`prompt.ts`: retrieve → ground → answer-or-decline) | ✅ **built**; ⏳ pgvector upgrade | M7 (+ M11 retrieval) |
-| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ⏳ to build | M8 |
+| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | 🟡 config ready; deploy needs user's Render/R2 accounts | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ built | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ built | C2 |
 | **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ built | C3 |

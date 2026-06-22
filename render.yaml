@@ -1,8 +1,13 @@
 # Render Blueprint — the ONLY Render-specific file (app code stays host-agnostic).
-# SKELETON: infra is declared now; app services are uncommented as each milestone
-# lands. Copilot-first (Phase 1): api + worker + web(Studio) + copilot widget/answer API.
-# Cloud deploy is P1-M4 — the FINAL Phase-1 step. Portal/articles = Phase 2 (deferred).
-# See docs/version-1-roadmap.md.
+# Copilot-first Version 1, Phase 1: api (answer endpoint) + worker (synthesis) + web (Studio).
+# Portal/articles = Phase 2 (not deployed). Blobs = Cloudflare R2 (S3-compatible).
+#
+# ⚠️ P1-M4 — this blueprint is prepared but NOT yet deploy-verified. Before first deploy:
+#   1. Create the R2 bucket + API token; set the R2_* + OPENAI_API_KEY secrets in Render.
+#   2. Set NEXTAUTH_SECRET (openssl rand -hex 32) and NEXTAUTH_URL (the deployed web URL).
+#   3. Apply DB migrations: `prisma migrate deploy` (preDeployCommand on sync-api below).
+#   4. Host the widget bundle (packages/widget/dist/sync-copilot.js) and set SYNC_WIDGET_URL.
+#   5. Add the deployed Studio origin to the extension manifest + set STUDIO_URL/SYNC_API_URL.
 
 databases:
   - name: sync-db
@@ -16,32 +21,62 @@ services:
     plan: free
     ipAllowList: [] # only reachable from Render services
 
-  # --- App services (each built from its package Dockerfile) ---
-  #
-  # - type: web
-  #   name: sync-api
-  #   runtime: docker
-  #   dockerfilePath: ./packages/api/Dockerfile
-  #   envVars:
-  #     - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
-  #     - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
-  #     - { key: R2_ACCOUNT_ID, sync: false }
-  #     - { key: R2_ACCESS_KEY_ID, sync: false }
-  #     - { key: R2_SECRET_ACCESS_KEY, sync: false }
-  #     - { key: R2_BUCKET, sync: false }
-  #     - { key: R2_ENDPOINT, sync: false }
-  #
-  # - type: worker
-  #   name: sync-worker
-  #   runtime: docker
-  #   dockerfilePath: ./packages/api/Dockerfile
-  #   dockerCommand: node dist/worker.js
-  #   envVars: [ DATABASE_URL, REDIS_URL, R2_*, OPENAI_API_KEY, TRANSCRIBE_MODEL, SYNTH_MODEL ]
-  #
-  # - type: web
-  #   name: sync-web      # Next.js Studio
-  #   runtime: docker
-  #   dockerfilePath: ./packages/web/Dockerfile
-  #   envVars: [ DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL ]
-  #
+  # --- API: copilot answer endpoint + recorder ingestion ---
+  - type: web
+    name: sync-api
+    runtime: docker
+    dockerfilePath: ./packages/api/Dockerfile
+    dockerContext: .
+    preDeployCommand: pnpm --filter @sync/db exec prisma migrate deploy
+    envVars:
+      - { key: PORT, value: 8787 }
+      - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
+      - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: TRANSCRIBE_MODEL, value: whisper-1 }
+      - { key: SYNTH_MODEL, value: gpt-4o }
+      - { key: R2_ENDPOINT, sync: false }
+      - { key: R2_REGION, value: auto }
+      - { key: R2_ACCESS_KEY_ID, sync: false }
+      - { key: R2_SECRET_ACCESS_KEY, sync: false }
+      - { key: R2_BUCKET, sync: false }
+
+  # --- Worker: synthesis (capture → KB). Same image, different command. ---
+  - type: worker
+    name: sync-worker
+    runtime: docker
+    dockerfilePath: ./packages/api/Dockerfile
+    dockerContext: .
+    dockerCommand: pnpm --filter @sync/api worker
+    envVars:
+      - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
+      - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: TRANSCRIBE_MODEL, value: whisper-1 }
+      - { key: SYNTH_MODEL, value: gpt-4o }
+      - { key: R2_ENDPOINT, sync: false }
+      - { key: R2_REGION, value: auto }
+      - { key: R2_ACCESS_KEY_ID, sync: false }
+      - { key: R2_SECRET_ACCESS_KEY, sync: false }
+      - { key: R2_BUCKET, sync: false }
+
+  # --- Studio (Next.js): approve workflows, copilot settings, analytics ---
+  - type: web
+    name: sync-web
+    runtime: docker
+    dockerfilePath: ./packages/web/Dockerfile
+    dockerContext: .
+    envVars:
+      - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
+      - { key: NEXTAUTH_SECRET, sync: false }
+      - { key: NEXTAUTH_URL, sync: false } # the deployed web URL
+      - { key: AUTH_TRUST_HOST, value: true }
+      - { key: SYNC_API_URL, fromService: { name: sync-api, type: web, property: hostport } }
+      - { key: SYNC_WIDGET_URL, sync: false } # where sync-copilot.js is hosted
+      - { key: R2_ENDPOINT, sync: false }
+      - { key: R2_REGION, value: auto }
+      - { key: R2_ACCESS_KEY_ID, sync: false }
+      - { key: R2_SECRET_ACCESS_KEY, sync: false }
+      - { key: R2_BUCKET, sync: false }
+
   # (Phase 2 — deferred: a sync-portal web service for the public help site.)
