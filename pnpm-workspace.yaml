@@ -1,3 +1,2 @@
 packages:
   - "packages/*"
-# Note: spike/ is intentionally NOT a workspace — it's kept as reference only.

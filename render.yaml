@@ -1,6 +1,8 @@
 # Render Blueprint — the ONLY Render-specific file (app code stays host-agnostic).
 # SKELETON: infra is declared now; app services are uncommented as each milestone
-# lands (api=M2, worker=M3, web=M4, portal=M5). Full wiring at M6.
+# lands. Copilot-first (Phase 1): api + worker + web(Studio) + copilot widget/answer API.
+# Cloud deploy is P1-M4 — the FINAL Phase-1 step. Portal/articles = Phase 2 (deferred).
+# See docs/version-1-roadmap.md.
 
 databases:
   - name: sync-db
@@ -42,8 +44,4 @@ services:
   #   dockerfilePath: ./packages/web/Dockerfile
   #   envVars: [ DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL ]
   #
-  # - type: web
-  #   name: sync-portal   # Next.js public help site
-  #   runtime: docker
-  #   dockerfilePath: ./packages/portal/Dockerfile
-  #   envVars: [ DATABASE_URL ]
+  # (Phase 2 — deferred: a sync-portal web service for the public help site.)
