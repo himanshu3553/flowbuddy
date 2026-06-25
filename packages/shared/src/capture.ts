@@ -1,5 +1,5 @@
 // The capture contract: what the extension Recorder emits and the API ingests.
-// Ported from the validated spike (docs/SPIKE.md §12). `file` refs are relative
+// The capture contract spec: docs/phase-1-copilot.md §6. `file` refs are relative
 // keys within a session bundle (resolved to R2 object keys server-side).
 
 export interface Bbox {

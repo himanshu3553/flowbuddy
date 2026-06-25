@@ -1,6 +1,6 @@
 // The element-highlight rectangle drawn over a step screenshot (Studio + portal).
 // Stored as fractions (0..1) of the screenshot so it's resolution-independent and
-// rendered as a CSS %-positioned box — no image processing. See docs/phase-1a-plan.md.
+// rendered as a CSS %-positioned box — no image processing. See docs/phase-2-portal.md §2.3.
 //
 // This file holds only the TYPE (so every package can import it cheaply, type-only).
 // The bbox→Highlight conversion lives in the web app (`packages/web/lib/highlight.ts`),

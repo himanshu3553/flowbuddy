@@ -6,7 +6,7 @@
 //           data-sync-api="https://api.example.com"
 //           data-sync-key="<workspace key>"
 //           data-sync-title="Help"></script>
-// (data-sync-key is the workspace token for now; P1-M9 swaps in a public embeddable key.)
+// (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
 
 import { CSS } from './styles.js';
 

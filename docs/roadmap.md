@@ -1,0 +1,175 @@
+# Sync — Roadmap & Status (Versions · Phases · Modules)
+
+> **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2).
+
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-06-25 · **Branch:** `copilot`
+- **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
+
+---
+
+## 0. The shape of Version 1
+
+**Version 1 = Sync, the workflow-capture product, released in phases. Phase 1 is the copilot and ships first.**
+
+```
+VERSION 1 — Workflow capture · copilot-first        ✅ shipping
+│
+├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟨🟨🟩🟩🟩🟩🟩🟩🟨🟨   9 done · 4 in progress
+├─ PHASE 2 · Help Portal & Articles (frozen)    🟩🟩🟩⬜⬜⬜⬜               3 done · 4 draft
+└─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
+
+VERSION 2 — Additional capture modalities (later) ⬜⬜                       deferred
+```
+
+🟩 Done · 🟨 In Progress · ⬜ Draft  *(one square per module)*
+
+- **Module IDs are per-phase**, written `P{phase}-M{n}` — e.g. **`P1-M5`** = Phase 1, Module 5. (The old docs used one *global* `M0–M14`; those are "legacy IDs," mapped in §6.)
+- **Modules already built are kept and marked ✅** — Phase 1 reuses the foundation we already shipped.
+
+> **⚠️ Phase numbers were redefined on 2026-06-22.** Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. The mapping:
+>
+> | Old phase | New phase |
+> |---|---|
+> | Phase 1 (wedge: capture → KB → articles → portal) | **split** → foundation into **Phase 1**, portal/articles into **Phase 2** |
+> | Phase 2 (in-app copilot) | **Phase 1** (now the headline) |
+> | Phase 3 (self-validation) | **Phase 3** (unchanged) |
+
+### Legend
+
+| Badge | Status | Meaning |
+|:---:|---|---|
+| ✅ | **Done** | Built, verified end-to-end, nothing outstanding for this scope. |
+| 🔄 | **In Progress** | Core shipped or config ready, but work remains (deferred items, a pending upgrade, or a user-gated step). |
+| 📝 | **Draft** | Planned / specified but not started. |
+
+### Progress at a glance
+
+| Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
+|---|:---:|:---:|:---:|:---:|
+| **Phase 1 — Copilot** | 13 | **9** | 4 | 0 |
+| **Phase 2 — Portal & Articles** | 7 | **3** | 0 | 4 |
+| **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
+| **Version 2 — Modalities** | 2 | 0 | 0 | 2 |
+
+---
+
+## 1. Phase 0 — Discovery spike — ✅ DONE (verdict: GO, 2026-06-18)
+
+A throwaway, lightweight spike answered one question before building any product: **does capture → KB generation actually work?** No login, Studio, multi-tenancy, or portal — just the core pipeline and a way to eyeball output.
+
+- **Hypothesis (validated):** a narrated screen recording can be captured in multi-layer form (event + DOM + screenshot + post-action + audio) and **synthesized into accurate, structured, step-by-step articles**.
+- **Build decisions that carried forward:** LLM = **OpenAI** (quality over cost); **fully multimodal**; **Node/TS**; API key **backend-only**; fully automated.
+- **Outcome:** built, run on a real app, hypothesis confirmed. Code was disposable; the **capture engine + synthesis prompts** carried into Phase 1. The tracked `spike/` was removed from the repo (commit `c9f13f4`, 2026-06-22).
+
+---
+
+## 2. Phase 1 — Copilot ⭐ (the Version 1 release)
+
+**Goal:** a SaaS records its product, approves workflows for the copilot, drops in a `<script>`, and its end-users get an in-app chat widget that answers **grounded only in approved-KB**, with citations and honest declines. **Decoupled** from articles/portal. Build/spec/as-built detail: [`phase-1-copilot.md`](phase-1-copilot.md).
+
+| Module | What it is | Status | Legacy |
+|:---|:---|:---|:---|
+| **P1-M0** | Monorepo, infrastructure & auth (Postgres, R2/MinIO, Redis/BullMQ, Auth.js, api, worker, multi-tenancy) | ✅ **Done** | M0, M1 |
+| **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** | M2 |
+| **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation, keyword index) | ✅ **Done** | M3, M6 |
+| **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending | M7 (+ M11 retrieval) |
+| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | 🔄 **In Progress** — Dockerfiles + `render.yaml` ready; deploy needs your Render/R2 accounts; **executed last** | M8 |
+| **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
+| **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
+| **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ **Done** | C3 |
+| **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ **Done** | C4 |
+| **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ **Done** | C5 |
+| **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ **Done** | C6 |
+| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — core R1/R2/R3 done; R4 / iframe / multi-tab → backlog | M9 (+ R1–R13) |
+| **P1-M12** | **PII redaction** — client masking + review + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking done; review-time + server OCR/DOM backstop → backlog | M10 |
+
+**Build order (locked 2026-06-22, deploy last):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. The whole copilot is built & verified **locally** (docker-compose) first; pgvector retrieval folds into P1-M3 when answer quality needs it.
+
+**Done when (= the Version 1 release):** an external SaaS embeds the snippet on a real page; its end-users get grounded, cited answers from approved-KB (honest declines on gaps); scoped to the right workspace; PII-safe; Q&A logged — **without touching the portal/articles.**
+
+---
+
+## 3. Phase 2 — Help Portal & Articles (decoupled by-products · frozen)
+
+**Goal:** the human-facing help center over the *same* KB — a **decoupled** publish target. The article editor + curated generation are built (in Studio); the public portal app validated the render path and **returns in Phase 2**. Stays **frozen** (no new investment) until the copilot ships. Detail: [`phase-2-portal.md`](phase-2-portal.md).
+
+| Module | What it is | Status | Legacy |
+|:---|:---|:---|:---|
+| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ **Done** (in Studio) | M4 |
+| **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ **Done** (in Studio) | M6.1 / M7 |
+| **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ Built → 🔄 `packages/portal` **removed for the Phase-1 clean slate (`c9f13f4`); returns in Phase 2** (render path proven) | M5 |
+| **P2-M3** | Portal + KB **search UI** (hybrid; user-facing half of search) | 📝 **Draft** | M11 (portal half) |
+| **P2-M4** | Authoring depth (split/merge/move, retake/crop, callouts, arrow highlight, manual `static`, collections, versioning, brand voice) | 📝 **Draft** | M12 |
+| **P2-M5** | Portal productization (theming, custom domains, public/gated, "was this helpful?", SEO/sitemap) | 📝 **Draft** | M13 |
+| **P2-M6** | Coverage analytics + collaboration (gaps dashboard, multi-seat/roles) | 📝 **Draft** | M14 |
+
+---
+
+## 4. Phase 3 — Self-validation & freshness (the moat)
+
+**Goal:** keep the KB/articles from going stale by re-checking themselves against the live app (replay captured selectors/routes/expected-outcomes), detect drift, and manage **supersession** (a re-recording becomes the current authority). **Validation environment (decided 2026-06-18):** the customer provisions a dedicated **sandbox** (base URL + test credentials in Studio); validation runs **only** there — never production — so full replay is safe.
+
+| Module | What it is | Status |
+|:---|:---|:---|
+| **P3-M0+** | Drift detection · replay validation · supersession · coverage signals | 📝 **Draft** — to be planned |
+
+**Depends on:** the selector-bearing KB (P1-M2) and ranked locators (recorder backlog R13, captured in Phase 1 but consumed here). The riskiest engineering bet — prototype sandbox replay + auth/MFA + selector-robustness early.
+
+---
+
+## 5. Version 2 — additional capture modalities (deferred)
+
+Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
+
+| Module | What it is | Status |
+|:---|:---|:---|
+| **V2 · 1.2** | **Narration-only capture** (+ narration-derived `static` explainer articles) | 📝 **Draft** — deferred |
+| **V2 · 1.3** | **Video capture** | 📝 **Draft** — deferred |
+
+---
+
+## 6. Legacy ID → new module map (nothing lost)
+
+| Legacy ID | Was | New module | Status |
+|---|---|---|---|
+| **M0** monorepo/infra · **M1** auth + Studio base | old Phase 1a | P1-M0 | ✅ |
+| **M2** api ingestion + extension | old Phase 1a | P1-M1 | ✅ |
+| **M3** synthesis worker · **M6** KB layer | old Phase 1a | P1-M2 | ✅ |
+| **M4** Studio article editor | old Phase 1a | **P2-M0** | ✅ |
+| **M5** public portal | old Phase 1a | **P2-M2** | ✅ built → removed, returns Phase 2 |
+| **M6.1** curated generation | old Phase 1a | **P2-M1** | ✅ |
+| **M7** prompt-to-article / engine | old Phase 1a | P1-M3 (engine) + P2-M1 (article path) | ✅ |
+| **M8** cloud deploy | old Phase 1a | P1-M4 | 🔄 config ready |
+| **M9** capture reliability (incl. R1–R13) | old Phase 1b | P1-M11 | 🔄 core |
+| **M10** PII redaction (incl. R11) | old Phase 1b | P1-M12 | 🔄 core |
+| **M11** search | old Phase 1b | P1-M3 (retrieval) + **P2-M3** (UI) | 🔄 / 📝 |
+| **M12** authoring depth | old Phase 1b | **P2-M4** | 📝 |
+| **M13** portal productization | old Phase 1b | **P2-M5** | 📝 |
+| **M14** analytics + collaboration | old Phase 1b | **P2-M6** | 📝 |
+| **C1–C6** copilot plan | (this pivot) | P1-M5 … P1-M10 | ✅ |
+| **R1–R13** recorder backlog | old Phase 1b (M9/M10) | detail under P1-M11 / P1-M12 ([`phase-1-copilot.md`](phase-1-copilot.md) §8) | 🔄 |
+
+---
+
+## 7. What's left to ship Version 1
+
+Only **Phase 1** gates the Version 1 release. Remaining work, in build order:
+
+1. 🔄 **P1-M11 / P1-M12** — release-hardening is at *core*; the deferred items (iframe/multi-tab capture, server-side PII backstop) are backlog, not release-blocking.
+2. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
+3. 🔄 **P1-M4 — Cloud deploy (FINAL step)** — config is ready; the actual deploy is gated on **your Render + Cloudflare R2 accounts + secrets**.
+
+> Everything else in Phase 1 is ✅. The whole copilot is built & verified **locally** (docker-compose); cloud deploy is the last step — and when Phase 1's definition-of-done is met post-deploy, **that is the Version 1 release.**
+
+---
+
+## 8. Doc map
+
+| Doc | Role |
+|---|---|
+| **`roadmap.md`** (this) | **The map** — versions/phases/modules, status, legacy mapping. |
+| [`product.md`](product.md) | What Sync is, who it's for, **why copilot-first** (decision record + grounding model + guardrails), moats, surfaces, risks, metrics. |
+| [`architecture.md`](architecture.md) | Canonical **technical** model — 3 modules, KB schema, data model, decisions, flows. |
+| [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
+| [`phase-2-portal.md`](phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (as-built, frozen) + to-build modules P2-M3…M6. |
+| [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |

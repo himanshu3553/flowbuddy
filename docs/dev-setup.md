@@ -19,16 +19,17 @@ sync/
   packages/
     shared/     # types + zod schemas shared by everyone
     db/         # Prisma schema + client
-    synthesis/  # transcribe → KB → segment → generate (OpenAI); used by worker + web
-    api/        # Fastify ingestion HTTP service + the BullMQ worker (worker entrypoint)
-    web/        # Next.js Studio app (dashboard/editor + curated generation)
-    portal/     # Next.js public help site
+    synthesis/  # transcribe → KB → segment → generate + the copilot answer engine (OpenAI)
+    api/        # Fastify ingestion + copilot routes + the BullMQ worker (worker entrypoint)
+    web/        # Next.js Studio (dashboard/editor + approval gate + copilot settings/analytics)
+    widget/     # embeddable copilot <script> (esbuild → sync-copilot.js) — Phase 1
     extension/  # Chrome MV3 recorder
-  spike/      # Phase-0 reference code (NOT part of the workspace)
-  docs/       # PRD, specs, plans, this file
+  docs/       # product · architecture · roadmap · phase-1-copilot · phase-2-portal · this file
 ```
 
-Why a monorepo: the extension, api, web, and portal must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
+> **Note:** the `portal/` package (Phase-2 public help site) and the throwaway `spike/` were **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22). The portal **returns in Phase 2**.
+
+Why a monorepo: the extension, api, web, and widget must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
 
 ---
 
@@ -76,11 +77,12 @@ pnpm install
 
 # every working session
 docker compose up -d                          # start Postgres + Redis + MinIO
+pnpm --filter @sync/api dev                   # ingestion API + copilot endpoints → :8787
+pnpm --filter @sync/api worker                # the worker (turns recordings into the KB)
 pnpm --filter @sync/web dev                   # run Studio → http://localhost:3000
-pnpm --filter @sync/api worker                # run the worker (turns recordings into the KB)
-# optional, for the full loop:
-pnpm --filter @sync/api dev                   # ingestion API (extension upload) → :8787
-pnpm --filter @sync/portal dev                # public help portal → :3001
+# for the copilot embed (Phase 1):
+pnpm --filter @sync/widget build              # build sync-copilot.js → open packages/widget/demo/index.html
+pnpm --filter @sync/extension build           # build the recorder → load packages/extension/dist/ in Chrome
 
 # building / checking
 pnpm build                                    # build everything (Turbo)
@@ -116,11 +118,13 @@ docker compose down                           # stop Postgres + Redis (add -v to
 
 | Package | What it is | Run locally |
 |---|---|---|
-| `web` | Next.js Studio (dashboard/editor) | `pnpm --filter @sync/web dev` → :3000 |
-| `portal` | Next.js public help site | `pnpm --filter @sync/portal dev` |
-| `api` | Fastify HTTP service (ingestion) | `pnpm --filter @sync/api dev` |
+| `web` | Next.js Studio (dashboard/editor + approval + copilot settings) | `pnpm --filter @sync/web dev` → :3000 |
+| `api` | Fastify HTTP service (ingestion + copilot endpoints) | `pnpm --filter @sync/api dev` → :8787 |
 | `worker` | BullMQ synthesis worker | `pnpm --filter @sync/api worker` |
+| `widget` | embeddable copilot `<script>` (esbuild) | `pnpm --filter @sync/widget build` → `demo/index.html` |
 | `extension` | Chrome MV3 recorder | `pnpm --filter @sync/extension build` → load `dist/` |
 | `shared`, `db` | shared types + Prisma | built as dependencies of the above |
 
-(Deploy maps these to Render services + Cloudflare R2 — see [phase-1a-plan.md](phase-1a-plan.md).)
+*(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
+
+(Deploy maps these to Render services + Cloudflare R2 — see [`phase-1-copilot.md`](phase-1-copilot.md) §5 P1-M4.)

@@ -7,4 +7,7 @@ export interface SynthesisJob {
   workspaceId: string;
 }
 
-export type RecSessionStatus = 'uploaded' | 'processing' | 'done' | 'error';
+// Source/recording status. The worker writes: uploaded → processing → ready | error
+// (`ready` = KB built + segmented, candidates available, no articles yet — the curated model).
+// `done` is a legacy value still tolerated for pre-KB-layer rows.
+export type RecSessionStatus = 'uploaded' | 'processing' | 'ready' | 'done' | 'error';
