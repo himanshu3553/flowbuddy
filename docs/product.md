@@ -101,7 +101,7 @@ That knowledge base powers, in priority order:
 - **Decoupled, always** — the copilot path must never *require* article authoring or portal publish; approving a workflow and publishing an article are independent actions over the same KB.
 - **No-leak preserved** — the copilot answers **only** from approved-KB; never raw/un-approved items, never draft articles.
 - **Don't build grounding Stage B** until explicitly revisited.
-- **By-products are frozen, not deleted** — they keep working; investment pauses until the copilot is out. *(The standalone public-portal app was removed for the Phase-1 clean slate and returns in Phase 2 — see [`phase-2-portal.md`](phase-2-portal.md).)*
+- **By-products are frozen, not deleted** — investment pauses until the copilot is out. Concretely (as of 2026-06-25): the article/portal **engine code is kept dormant in-tree** (still type-checked) but its **Studio UI was removed** so the released product is copilot-only — resuming Phase 2 re-wires the UI, it doesn't rebuild the engine. *(The standalone public-portal app was hard-removed earlier for the clean slate and returns rebuilt in Phase 2.)* Parked-code inventory + re-wiring map: [`phase-2-portal.md`](phase-2-portal.md) §6.
 
 ---
 

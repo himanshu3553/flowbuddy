@@ -91,12 +91,12 @@ A throwaway, lightweight spike answered one question before building any product
 
 ## 3. Phase 2 — Help Portal & Articles (decoupled by-products · frozen)
 
-**Goal:** the human-facing help center over the *same* KB — a **decoupled** publish target. The article editor + curated generation are built (in Studio); the public portal app validated the render path and **returns in Phase 2**. Stays **frozen** (no new investment) until the copilot ships. Detail: [`phase-2-portal.md`](phase-2-portal.md).
+**Goal:** the human-facing help center over the *same* KB — a **decoupled** publish target. The article editor + curated generation are built; their **Studio UI was removed 2026-06-25** so the released product is copilot-only, while the **engine stays dormant in-tree** (parked-code map: [`phase-2-portal.md`](phase-2-portal.md) §6). The public portal app validated the render path and **returns in Phase 2**. Stays **frozen** (no new investment) until the copilot ships. Detail: [`phase-2-portal.md`](phase-2-portal.md).
 
 | Module | What it is | Status | Legacy |
 |:---|:---|:---|:---|
-| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ **Done** (in Studio) | M4 |
-| **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ **Done** (in Studio) | M6.1 / M7 |
+| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ **Built** — UI parked 2026-06-25, engine in-tree | M4 |
+| **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ **Built** — UI parked 2026-06-25, engine in-tree | M6.1 / M7 |
 | **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ Built → 🔄 `packages/portal` **removed for the Phase-1 clean slate (`c9f13f4`); returns in Phase 2** (render path proven) | M5 |
 | **P2-M3** | Portal + KB **search UI** (hybrid; user-facing half of search) | 📝 **Draft** | M11 (portal half) |
 | **P2-M4** | Authoring depth (split/merge/move, retake/crop, callouts, arrow highlight, manual `static`, collections, versioning, brand voice) | 📝 **Draft** | M12 |

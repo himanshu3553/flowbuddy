@@ -23,13 +23,15 @@ pnpm + Turborepo. One repo, several packages under `packages/`:
 |---|---|
 | `shared` | Shared types + zod schemas (capture contract, content model, job contracts). |
 | `db` | Prisma schema + client (Postgres). |
-| `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`). |
+| `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`). *(Article-generation engine `synthesize.ts`/`prompt.ts` is present but **parked Phase 2** — see below.)* |
 | `api` | Fastify HTTP service (ingestion + copilot routes) **and** the BullMQ worker (`worker` entrypoint). |
-| `web` | Next.js **Studio** (dashboard/editor + approval gate + copilot settings/analytics). |
+| `web` | Next.js **Studio** — copilot-first: approval gate + copilot settings/analytics. *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
 | `widget` | Embeddable copilot `<script>` (esbuild → `sync-copilot.js`). |
 | `extension` | Chrome MV3 recorder. |
 
 *(`portal` — the Phase-2 public help site — was removed for the Phase-1 clean slate and returns in Phase 2; it's not in the current workspace.)*
+
+> **Phase-2 code is parked, not gone.** As of 2026-06-25 the article/portal **engine** is kept dormant in-tree (still type-checked) while its **Studio UI was removed** so the shipped product is copilot-only. Parked files carry a `// PARKED — Phase 2` banner; the full inventory + re-wiring map is in [`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6. **Don't extend or wire up parked code unless resuming Phase 2.**
 
 ---
 

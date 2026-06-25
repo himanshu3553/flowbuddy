@@ -4,7 +4,6 @@ import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import { listCandidates } from '@/lib/candidates';
-import { GeneratePanel } from '../../generate-panel';
 import { CopilotApprovalPanel } from '../../copilot-approval-panel';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +24,6 @@ export default async function KbSourcePage({ params }: { params: Promise<{ id: s
     where: { id, workspaceId: ctx.workspace.id },
     include: {
       items: { orderBy: [{ segmentIndex: 'asc' }, { orderIndex: 'asc' }] },
-      articles: { select: { id: true, title: true, status: true }, orderBy: { orderIndex: 'asc' } },
     },
   });
   if (!source) notFound();
@@ -78,7 +76,7 @@ export default async function KbSourcePage({ params }: { params: Promise<{ id: s
       <h1>Knowledge Base</h1>
       <p className="sub">
         <span className={`pill pill-${source.status}`}>{source.status}</span>{' '}
-        <span className="muted">{source.kind} · {source.appBaseUrl || '(unknown app)'} · {items.length} items · {groups.length} workflow(s) · {source.articles.length} article(s)</span>
+        <span className="muted">{source.kind} · {source.appBaseUrl || '(unknown app)'} · {items.length} items · {groups.length} workflow(s)</span>
       </p>
 
       <div className="card">
@@ -132,38 +130,6 @@ export default async function KbSourcePage({ params }: { params: Promise<{ id: s
           </p>
         ) : (
           <CopilotApprovalPanel candidates={candidates} />
-        )}
-      </div>
-
-      <div className="card" style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Auto Generate Articles <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· Phase 2 (help portal)</span></h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Each workflow below was detected when the Knowledge Base was built. Pick the ones worth an article and generate — only the selected ones are created (as drafts).
-        </p>
-        {candidates.length === 0 ? (
-          <p className="muted">
-            {source.status === 'ready' || source.status === 'done'
-              ? 'No workflow candidates found in this recording.'
-              : 'Knowledge Base is still building — candidates appear once it is ready.'}
-          </p>
-        ) : (
-          <GeneratePanel sourceId={source.id} candidates={candidates} />
-        )}
-      </div>
-
-      <div className="card" style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>Articles generated from this recording</h2>
-        {source.articles.length === 0 ? (
-          <p className="muted">None.</p>
-        ) : (
-          <ul className="list">
-            {source.articles.map((a) => (
-              <li key={a.id}>
-                <span className={`pill pill-${a.status}`}>{a.status}</span>
-                <Link className="grow" href={`/dashboard/articles/${a.id}`}>{a.title}</Link>
-              </li>
-            ))}
-          </ul>
         )}
       </div>
     </main>

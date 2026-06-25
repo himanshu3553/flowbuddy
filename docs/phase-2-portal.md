@@ -1,8 +1,8 @@
 # Sync — Phase 2: Help Portal & Articles (by-products)
 
-> **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**: the article editor + curated generation are built (and still run in Studio); the public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
+> **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**: the article editor + curated generation are **built but parked** — their **Studio UI was removed for the Phase-1 copilot clean slate (2026-06-25)** and the **engine code is kept dormant in-tree** (still type-checked) to resume from; the public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
-- **Status:** **Frozen.** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article). P2-M2 (public portal) **built → removed for the Phase-1 clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
+- **Status:** **Frozen — UI removed, engine parked.** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article); the **Studio UI for both was removed 2026-06-25** so the released product is copilot-only, but the **engine stays dormant in-tree** (inventory + re-wiring: **§6**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
 - **Last updated:** 2026-06-25 · **Branch:** `copilot`
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publish. Approving a workflow for the copilot and publishing an article are **independent** actions over the same KB. Mental model: `ONE raw KB → per-target approval/visibility → { Copilot, Portal }`.
 
@@ -14,8 +14,8 @@ The same recordings that power the copilot also produce **clean, step-by-step he
 
 | Module | What it is | Status |
 |:---|:---|:---|
-| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ built (in Studio) |
-| **P2-M1** | Curated article generation + prompt-to-article | ✅ built (in Studio) |
+| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ built — **UI parked 2026-06-25, engine in-tree (§6)** |
+| **P2-M1** | Curated article generation + prompt-to-article | ✅ built — **UI parked 2026-06-25, engine in-tree (§6)** |
 | **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ built → app removed, **returns in Phase 2** |
 | **P2-M3** | Portal + KB **search UI** (hybrid) | 📝 to build |
 | **P2-M4** | Authoring depth | 📝 to build |
@@ -24,7 +24,9 @@ The same recordings that power the copilot also produce **clean, step-by-step he
 
 ---
 
-## 2. As built (frozen)
+## 2. As built (frozen — UI parked 2026-06-25)
+
+> **What "parked" means.** Everything in §2 was built and verified. On 2026-06-25 the **Studio UI** for it (the "Auto Generate Articles" + "Text → Article" cards, the article list, and the `/dashboard/articles/[id]` editor) was **removed from the Phase-1 pages** so the released product is copilot-only — but the **engine code stays in-tree, dormant and type-checked**. Resuming Phase 2 = re-wiring the UI, not rebuilding the engine. File-by-file inventory + re-wiring steps are in **§6**.
 
 ### 2.1 Curated auto-generation ("Auto Generate Articles") — P2-M1
 Articles are **not pushed automatically**:
@@ -119,3 +121,44 @@ All **additive migrations** on the foundation schema — nothing existing change
 - **Portal app restoration (P2-M2):** rebuild the removed `packages/portal` (render path proven) on the current schema; wire it to the published-article view and the P2-M5 productization.
 
 > **Not in Phase 2:** the in-app **Copilot** (Phase 1), **self-validation/drift** (Phase 3), **Version 2 capture modalities** (narration-only + video), billing, and i18n (tracked, English-first beta).
+
+---
+
+## 6. Parked Phase 2 code (dormant, in-tree) — the resume map
+
+When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 2 article/portal code was **kept** (not deleted) but **disconnected from the Studio UI** so the shipped product is copilot-only. Every file below is **still in the repo and still type-checked** (`pnpm typecheck` covers it) — it just isn't reachable from any Phase-1 page. Each carries a `// PARKED — Phase 2 …` banner pointing back here. **Resuming Phase 2 means re-wiring these in, not rebuilding them.**
+
+> Why parked, not deleted: Phase 2 is a confirmed future deliverable and these modules are ✅ built, so deleting working code we'll reuse — plus a destructive DB migration — was net-negative. We keep the engine and tables; we only hide the product surface. (The standalone `packages/portal` app is the exception — it was hard-removed earlier, commit `c9f13f4`, and returns rebuilt.)
+
+### What's parked (the engine — leave dormant)
+
+| File | What it is |
+|---|---|
+| `packages/synthesis/src/synthesize.ts` | Article synthesis (KB items → structured article) |
+| `packages/synthesis/src/prompt.ts` | Prompt-to-article (retrieve → synthesize or decline) |
+| `packages/shared/src/content.ts` | The structured Article/Step content model + types |
+| `packages/shared/src/highlight.ts` | `Highlight` rectangle type (article screenshots) |
+| `packages/web/lib/article-writer.ts` | `createDraftArticle` (persist a synthesized article) |
+| `packages/web/lib/article-actions.ts` | Article edit/reorder/publish server actions |
+| `packages/web/lib/generate-actions.ts` | "Auto Generate Articles" server action |
+| `packages/web/lib/prompt-actions.ts` | "Text → Article" server action (`generateFromPrompt`) |
+| `packages/web/lib/highlight.ts` | bbox → fractional `Highlight` conversion |
+| `packages/web/app/dashboard/generate-panel.tsx` | "Auto Generate Articles" UI |
+| `packages/web/app/dashboard/prompt-box.tsx` | "Text → Article" UI |
+| `packages/web/app/dashboard/articles/[id]/` | Article viewer + editor route (still URL-reachable, just unlinked) |
+
+> Note: `synthesis/src/index.ts` and `shared/src/index.ts` **still export** the parked symbols, and the **`Article` + `Step` Prisma tables are kept** — so the dormant code compiles untouched. The copilot engine (`synthesis/src/copilot.ts`, `answerFromKB`) and the worker share *none* of this.
+
+### What was changed in the Phase-1 code (re-wire to resume)
+
+- **`packages/web/app/dashboard/page.tsx`** — the "opportunities", "Auto Generate Articles", "Text → Article", and Articles-list cards were removed; only Copilot / token / Recordings-KB / coverage-gaps remain. *(Restore those cards + their `GeneratePanel`/`PromptBox` imports.)*
+- **`packages/web/app/dashboard/kb/[id]/page.tsx`** — the "Auto Generate Articles" and "Articles generated from this recording" cards (and the `articles` include) were removed; the Copilot approval panel stays. *(Restore the two cards + the `GeneratePanel` import + the `articles` include.)*
+- **`packages/web/lib/candidates.ts`** — the `Article` join + `generatedArticleId` field were dropped (it's now Phase-1-only, feeding the approval gate). *(Re-add the `Article` query + `generatedArticleId` so generated workflows show "✓ generated".)*
+- **`resolveCoverageGap`** — moved out of `prompt-actions.ts` into **`packages/web/lib/copilot-actions.ts`** (coverage-gap dismissal is a Phase-1 copilot signal). The parked `prompt-actions.ts` still *creates* gaps; dismissal now lives with the copilot. *(No change needed on resume — both can import it from `copilot-actions.ts`.)*
+
+### Re-wiring checklist (when Phase 2 resumes)
+1. Restore the removed Studio cards/imports listed above (recover the exact prior versions from git: `git show <pre-cleanup-commit>:<path>`).
+2. Re-add the `Article` join to `candidates.ts`.
+3. Rebuild `packages/portal` (P2-M2) on the current schema (see §5).
+4. Remove the `// PARKED — Phase 2` banners as each file goes live again.
+5. Then pick up the to-build modules P2-M3…M6 (§3).

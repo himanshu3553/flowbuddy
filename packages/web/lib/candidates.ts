@@ -1,20 +1,21 @@
 import { prisma } from '@sync/db';
 import { approvedSegmentKeys } from './copilot-approvals';
 
-/** A workflow candidate = one persisted segment (Option C). It's both the unit the user can
- *  generate into an article (Phase 2) AND the unit approved for the copilot (P1-M5). Server-only. */
+/** A workflow candidate = one persisted segment (Option C) — the unit the founder approves for
+ *  the copilot (P1-M5). Server-only.
+ *  Phase 2 note: this same unit is what the (parked) article generator turns into an article; when
+ *  Phase 2 resumes, re-add the `Article` join + a `generatedArticleId` here. See docs/phase-2-portal.md. */
 export interface Candidate {
   sourceId: string;
   appBaseUrl: string | null;
   segmentIndex: number;
   segmentTitle: string;
   itemCount: number;
-  generatedArticleId: string | null;
   copilotApproved: boolean;
 }
 
 /** List workflow candidates for a workspace, optionally scoped to one recording (KB page).
- *  Candidates come from KnowledgeItem segmentation tags; generation status from linked Articles. */
+ *  Candidates come from KnowledgeItem segmentation tags; approval status from CopilotApproval. */
 export async function listCandidates(workspaceId: string, sourceId?: string): Promise<Candidate[]> {
   const items = await prisma.knowledgeItem.findMany({
     where: { workspaceId, segmentIndex: { not: null }, ...(sourceId ? { sourceId } : {}) },
@@ -37,15 +38,6 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
   }
   if (grouped.size === 0) return [];
 
-  const articles = await prisma.article.findMany({
-    where: { workspaceId, segmentIndex: { not: null }, ...(sourceId ? { sessionId: sourceId } : {}) },
-    select: { id: true, sessionId: true, segmentIndex: true },
-  });
-  const genByKey = new Map<string, string>();
-  for (const a of articles) {
-    if (a.sessionId != null && a.segmentIndex != null) genByKey.set(`${a.sessionId}:${a.segmentIndex}`, a.id);
-  }
-
   const sourceIds = [...new Set([...grouped.values()].map((c) => c.sourceId))];
   const sources = await prisma.knowledgeSource.findMany({
     where: { id: { in: sourceIds } },
@@ -59,7 +51,6 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
     .map((c) => ({
       ...c,
       appBaseUrl: appById.get(c.sourceId) ?? null,
-      generatedArticleId: genByKey.get(`${c.sourceId}:${c.segmentIndex}`) ?? null,
       copilotApproved: approved.has(`${c.sourceId}:${c.segmentIndex}`),
     }));
 }

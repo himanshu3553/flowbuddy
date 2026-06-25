@@ -1,3 +1,6 @@
+// PARKED — Phase 2 (Help Portal & Articles). Dormant for the Phase-1 copilot release; not
+// reachable from the shipped product. Kept in-tree (type-checked) so Phase 2 resumes from it —
+// do not delete. Inventory + re-wiring steps: docs/phase-2-portal.md → "Parked Phase 2 code".
 import { prisma } from '@sync/db';
 import type { ArticleSource, Highlight } from '@sync/shared';
 import type { SynthArticle } from '@sync/synthesis';

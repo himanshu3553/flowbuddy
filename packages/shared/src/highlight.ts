@@ -1,3 +1,6 @@
+// PARKED — Phase 2 (Help Portal & Articles). Dormant for the Phase-1 copilot release; not
+// reachable from the shipped product. Kept in-tree (type-checked) so Phase 2 resumes from it —
+// do not delete. Inventory + re-wiring steps: docs/phase-2-portal.md → "Parked Phase 2 code".
 // The element-highlight rectangle drawn over a step screenshot (Studio + portal).
 // Stored as fractions (0..1) of the screenshot so it's resolution-independent and
 // rendered as a CSS %-positioned box — no image processing. See docs/phase-2-portal.md §2.3.

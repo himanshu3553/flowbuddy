@@ -47,7 +47,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 | Surface | Who | Purpose |
 |---|---|---|
 | **Sync Recorder** (Chrome extension) | the builder | capture narrated product workflows |
-| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure + monitor it; (by-product) author/publish articles |
+| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure + monitor it *(article authoring is a parked Phase-2 by-product)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
 | **Help Portal** (public web) — *Phase 2* | the builder's customers | browse + search published help articles |
 
@@ -76,12 +76,14 @@ packages/
   db/         # Prisma schema + client (Postgres)
   synthesis/  # OpenAI pipeline — capture → KB synthesis + the copilot answer engine (answerFromKB)
   api/        # Fastify ingestion + copilot routes  AND  the BullMQ worker (worker entrypoint)
-  web/        # Next.js Studio (dashboard/editor + approval gate + copilot settings/analytics)
+  web/        # Next.js Studio — copilot-first: approval gate + copilot settings/analytics
   widget/     # embeddable copilot <script> (esbuild → sync-copilot.js)
   extension/  # Chrome MV3 recorder
 ```
 
 *(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
+
+> **Phase-2 code is parked, not gone.** The article/portal **engine** stays dormant in-tree (type-checked), but its **Studio UI was removed (2026-06-25)** so the shipped product is copilot-only. Parked files carry a `// PARKED — Phase 2` banner; inventory + re-wiring map in [`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6.
 
 ---
 
@@ -106,7 +108,7 @@ cp .env.example packages/web/.env
 cp .env.example packages/db/.env
 ```
 Then edit:
-- **`OPENAI_API_KEY`** in **both** `packages/api/.env` (worker: transcribe + segment) **and** `packages/web/.env` (Studio: article generation).
+- **`OPENAI_API_KEY`** in `packages/api/.env` (worker: transcribe + segment; copilot answers). *(Also read by `packages/web/.env` only for the **parked Phase-2** article generation — not needed for the copilot.)*
 - An **auth secret** for Studio in `packages/web/.env` (`AUTH_SECRET` — `openssl rand -hex 32`).
 
 Local defaults for Postgres/Redis/MinIO already match `docker-compose.yml`, so you don't need to change those.
@@ -188,7 +190,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 | `DATABASE_URL` | all | Postgres connection (matches docker-compose locally) |
 | `REDIS_URL` | api, worker | BullMQ queue |
 | `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | api, worker, web | S3-compatible storage; defaults to local MinIO |
-| `OPENAI_API_KEY` | **api + web** | transcription, synthesis, copilot answers |
+| `OPENAI_API_KEY` | **api** (web: parked Phase-2 only) | transcription, segmentation, copilot answers |
 | `TRANSCRIBE_MODEL` / `SYNTH_MODEL` | api, worker | default `whisper-1` / `gpt-4o` |
 | `AUTH_SECRET` / `AUTH_URL` | web | Studio auth (Auth.js v5) |
 
@@ -198,7 +200,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 **Phase 1 (the copilot) is code-complete and verified locally** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). The only remaining step is **cloud deploy (P1-M4)** — Docker + `render.yaml` are ready; the deploy itself is gated on Render + Cloudflare R2 accounts.
 
-**Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen**. **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
+**Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — its engine is **parked dormant in-tree** and its Studio UI was removed for the copilot release ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
 
 ---
 

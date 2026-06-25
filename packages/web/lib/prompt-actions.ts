@@ -1,3 +1,6 @@
+// PARKED — Phase 2 (Help Portal & Articles). Dormant for the Phase-1 copilot release; not
+// reachable from the shipped product. Kept in-tree (type-checked) so Phase 2 resumes from it —
+// do not delete. Inventory + re-wiring steps: docs/phase-2-portal.md → "Parked Phase 2 code".
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -101,13 +104,4 @@ export async function generateFromPrompt(prompt: string): Promise<PromptResult> 
 
   revalidatePath('/dashboard');
   return { ok: true, articleId: created.id, title: created.title };
-}
-
-export async function resolveCoverageGap(gapId: string): Promise<void> {
-  const ctx = await getCurrentWorkspace();
-  if (!ctx) throw new Error('Not authenticated');
-  const gap = await prisma.coverageGap.findUnique({ where: { id: gapId } });
-  if (!gap || gap.workspaceId !== ctx.workspace.id) throw new Error('Not found');
-  await prisma.coverageGap.update({ where: { id: gapId }, data: { status: 'resolved' } });
-  revalidatePath('/dashboard');
 }

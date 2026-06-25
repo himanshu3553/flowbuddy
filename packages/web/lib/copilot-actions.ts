@@ -47,3 +47,17 @@ export async function setCopilotApproval(input: {
   revalidatePath(`/dashboard/kb/${input.sourceId}`);
   revalidatePath('/dashboard');
 }
+
+/**
+ * P1-M10 — dismiss a copilot coverage gap ("record this next"). When the copilot declines a
+ * question it logs a `CoverageGap` (source=copilot); the founder dismisses it from the dashboard
+ * once recorded/handled. (The Phase 2 prompt-to-article path also logs gaps — same dismiss action.)
+ */
+export async function resolveCoverageGap(gapId: string): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const gap = await prisma.coverageGap.findUnique({ where: { id: gapId } });
+  if (!gap || gap.workspaceId !== ctx.workspace.id) throw new Error('Not found');
+  await prisma.coverageGap.update({ where: { id: gapId }, data: { status: 'resolved' } });
+  revalidatePath('/dashboard');
+}
