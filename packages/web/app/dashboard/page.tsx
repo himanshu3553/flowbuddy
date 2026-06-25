@@ -1,102 +1,190 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Check, Code2, KeyRound, ShieldCheck, Video } from 'lucide-react';
+
 import { auth } from '@/auth';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
-import { signOutAction } from '@/lib/actions';
 import { resolveCoverageGap } from '@/lib/copilot-actions';
-import { CreateToken } from './create-token';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect('/signin');
   const ctx = await getCurrentWorkspace();
-  if (!ctx) redirect('/signin');
-  const { workspace } = ctx;
+  if (!session?.user || !ctx) redirect('/signin');
+  const wsId = ctx.workspace.id;
 
-  const [sessions, openGaps] = await Promise.all([
-    prisma.knowledgeSource.findMany({
-      where: { workspaceId: workspace.id },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    }),
-    prisma.coverageGap.findMany({
-      where: { workspaceId: workspace.id, status: 'open' },
-      orderBy: { createdAt: 'desc' },
-      take: 25,
-    }),
-  ]);
+  const [tokenCount, readyCount, approvalCount, queryCount, openGaps] =
+    await Promise.all([
+      prisma.apiToken.count({ where: { workspaceId: wsId } }),
+      prisma.knowledgeSource.count({
+        where: { workspaceId: wsId, status: { in: ['ready', 'done'] } },
+      }),
+      prisma.copilotApproval.count({ where: { workspaceId: wsId } }),
+      prisma.copilotQuery.count({ where: { workspaceId: wsId } }),
+      prisma.coverageGap.findMany({
+        where: { workspaceId: wsId, status: 'open' },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+      }),
+    ]);
+
+  const steps = [
+    {
+      done: tokenCount > 0,
+      icon: KeyRound,
+      title: 'Connect the recorder',
+      desc: 'Generate a token — or use the extension’s Connect button.',
+      href: '/dashboard/settings',
+      cta: 'Get token',
+    },
+    {
+      done: readyCount > 0,
+      icon: Video,
+      title: 'Record & review a workflow',
+      desc: 'Record your product; the worker turns it into knowledge.',
+      href: '/dashboard/recordings',
+      cta: 'View recordings',
+    },
+    {
+      done: approvalCount > 0,
+      icon: ShieldCheck,
+      title: 'Approve a workflow for the copilot',
+      desc: 'Approve the workflows the copilot may answer from.',
+      href: '/dashboard/recordings',
+      cta: 'Approve',
+    },
+    {
+      done: queryCount > 0,
+      icon: Code2,
+      title: 'Embed the copilot',
+      desc: 'Copy the snippet into your app and start answering.',
+      href: '/dashboard/copilot',
+      cta: 'Get snippet',
+    },
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
 
   return (
-    <main style={{ maxWidth: 720 }}>
-      <h1>Sync Studio</h1>
-      <p className="sub">{session.user.email} · {workspace.name}</p>
-
-      <div className="card" style={{ borderLeft: '3px solid #1a8a4f' }}>
-        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Copilot</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Embed the in-app copilot in your product — it answers only from workflows you approve.{' '}
-          <Link href="/dashboard/copilot">Set up the copilot →</Link>
+    <div className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 md:px-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Welcome to Sync Studio
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Record your product, approve workflows, and embed an in-app copilot
+          grounded only in what you approve.
         </p>
       </div>
 
-      <div className="card">
-        <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Extension API token</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          {/* tokens are write-only; generate one to paste into the recorder */}
-          Generate a token and paste it into the Sync Recorder extension.
-        </p>
-        <CreateToken />
-      </div>
-
-      <div className="card">
-        <h2 style={{ fontSize: 15, margin: '0 0 2px' }}>Recordings &amp; Knowledge Base</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Click a recording to see the knowledge extracted from it (transcript + items) and approve workflows for the copilot.</p>
-        {sessions.length === 0 ? (
-          <p className="muted">No recordings yet. Record one with the extension.</p>
-        ) : (
-          <ul className="list">
-            {sessions.map((s) => (
-              <li key={s.id}>
-                <span className={`pill pill-${s.status}`}>{s.status}</span>
-                <Link className="grow" href={`/dashboard/kb/${s.id}`}>{s.appBaseUrl || '(unknown app)'}</Link>
-                <span className="muted">{s.kind}</span>
-              </li>
-            ))}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Get started</CardTitle>
+            <span className="text-sm text-muted-foreground">
+              {doneCount} of {steps.length} done
+            </span>
+          </div>
+          <CardDescription>
+            Four steps to a live, grounded copilot in your app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="divide-y">
+            {steps.map((s, i) => {
+              const Icon = s.icon;
+              return (
+                <li key={i} className="flex items-center gap-4 py-3">
+                  <span
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+                      s.done
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {s.done ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        'text-sm font-medium',
+                        s.done && 'text-muted-foreground',
+                      )}
+                    >
+                      {s.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{s.desc}</p>
+                  </div>
+                  {!s.done && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={s.href}>{s.cta}</Link>
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h2 style={{ fontSize: 15, margin: '0 0 2px' }}>Coverage gaps — record these next</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Questions your copilot couldn&apos;t answer from approved workflows. Record (and approve) these to close the gap.
-        </p>
-        {openGaps.length === 0 ? (
-          <p className="muted">No open gaps. Once the copilot is live, questions it can&apos;t answer show up here.</p>
-        ) : (
-          <ul className="list">
-            {openGaps.map((g) => (
-              <li key={g.id}>
-                <span className="pill pill-draft">{g.source}</span>
-                <span className="grow">
-                  <strong>{g.prompt}</strong>
-                  {g.reason && <span className="muted"> — {g.reason}</span>}
-                </span>
-                <form action={resolveCoverageGap.bind(null, g.id)}>
-                  <button type="submit" className="secondary">Dismiss</button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <form action={signOutAction}>
-        <button type="submit" className="secondary">Sign out</button>
-      </form>
-    </main>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Coverage gaps — record these next
+          </CardTitle>
+          <CardDescription>
+            Questions your copilot couldn’t answer from approved workflows.
+            Record (and approve) these to close the gap.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {openGaps.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No open gaps. Once the copilot is live, questions it can’t answer
+              show up here.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {openGaps.map((g) => (
+                <li key={g.id} className="flex items-center gap-3 py-3">
+                  <Badge variant="secondary" className="capitalize">
+                    {g.source}
+                  </Badge>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{g.prompt}</span>
+                    {g.reason && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {g.reason}
+                      </span>
+                    )}
+                  </span>
+                  <form action={resolveCoverageGap.bind(null, g.id)}>
+                    <Button type="submit" variant="ghost" size="sm">
+                      Dismiss
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

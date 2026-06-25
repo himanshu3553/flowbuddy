@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CheckCircle2 } from 'lucide-react';
 import { connectExtension } from '@/lib/connect-actions';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 type Phase = 'idle' | 'connecting' | 'done' | 'error';
 
@@ -38,41 +47,70 @@ export function ConnectClient({ email }: { email: string }) {
       setPhase('error');
       return;
     }
-    window.postMessage({ source: 'sync-page', type: 'connect', ...res.payload }, window.location.origin);
+    window.postMessage(
+      { source: 'sync-page', type: 'connect', ...res.payload },
+      window.location.origin,
+    );
     // The bridge acks with 'connected'; fall back to success if the ack is missed.
     setTimeout(() => setPhase((p) => (p === 'connecting' ? 'done' : p)), 2000);
   }
 
   return (
-    <main style={{ maxWidth: 520 }}>
-      <h1>Connect the Sync Recorder</h1>
-      <p className="sub">Link the browser extension to your account so it can upload recordings — no tokens to copy.</p>
-
-      <div className="card">
-        <p className="muted" style={{ marginTop: 0 }}>Signed in as</p>
-        <p style={{ marginTop: 0 }}><strong>{email}</strong></p>
-
-        {phase === 'done' ? (
-          <p style={{ color: '#176c33', fontWeight: 600 }}>
-            ✓ Connected. You can close this tab and start recording from the extension.
+    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="mb-6 text-center">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Connect the Sync Recorder
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Link the browser extension to your account — no tokens to copy.
           </p>
-        ) : (
-          <>
-            {!extPresent && (
-              <p className="rationale">
-                The Sync Recorder extension isn&apos;t detected on this page. Install/enable it
-                (chrome://extensions), then reload this page.
-              </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardDescription>Signed in as</CardDescription>
+            <CardTitle className="text-base">{email}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {phase === 'done' ? (
+              <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Connected. You can close this tab and start recording from the
+                extension.
+              </div>
+            ) : (
+              <>
+                {!extPresent && (
+                  <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    The Sync Recorder extension isn&apos;t detected on this page.
+                    Install/enable it (chrome://extensions), then reload this
+                    page.
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={connect}
+                  disabled={!extPresent || phase === 'connecting'}
+                >
+                  {phase === 'connecting'
+                    ? 'Connecting…'
+                    : 'Connect this extension'}
+                </Button>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </>
             )}
-            <button type="button" onClick={connect} disabled={!extPresent || phase === 'connecting'}>
-              {phase === 'connecting' ? 'Connecting…' : 'Connect this extension'}
-            </button>
-            {error && <p className="error" style={{ marginTop: 10 }}>{error}</p>}
-          </>
-        )}
+          </CardContent>
+        </Card>
+        <p className="mt-4 text-center text-sm">
+          <Link
+            href="/dashboard"
+            className="text-muted-foreground underline-offset-4 hover:underline"
+          >
+            ← Back to Studio
+          </Link>
+        </p>
       </div>
-
-      <p className="muted"><Link href="/dashboard">← Back to Studio</Link></p>
-    </main>
+    </div>
   );
 }

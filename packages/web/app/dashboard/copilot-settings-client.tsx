@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { setCopilotOrigins, regenerateCopilotKey } from '@/lib/copilot-settings-actions';
+import { Check, Copy, RefreshCw } from 'lucide-react';
+import {
+  setCopilotOrigins,
+  regenerateCopilotKey,
+} from '@/lib/copilot-settings-actions';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 /** P1-M9 — Studio controls: copy the embed snippet, edit the origin allowlist, rotate the key. */
 export function CopilotSettingsClient({
@@ -24,32 +31,63 @@ export function CopilotSettingsClient({
     });
   }
   function saveOrigins() {
-    start(async () => { await setCopilotOrigins(origins); router.refresh(); });
+    start(async () => {
+      await setCopilotOrigins(origins);
+      router.refresh();
+    });
   }
   function rotate() {
-    if (!confirm('Rotate the key? The current snippet/key stops working immediately.')) return;
-    start(async () => { await regenerateCopilotKey(); router.refresh(); });
+    if (
+      !confirm(
+        'Rotate the key? The current snippet/key stops working immediately.',
+      )
+    )
+      return;
+    start(async () => {
+      await regenerateCopilotKey();
+      router.refresh();
+    });
   }
 
   return (
-    <div>
-      <div className="row" style={{ gap: 10, marginBottom: 16 }}>
-        <button type="button" onClick={copy}>{copied ? 'Copied ✓' : 'Copy embed snippet'}</button>
-        <button type="button" onClick={rotate} disabled={pending} style={{ background: '#b07407' }}>Rotate key</button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={copy}>
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? 'Copied' : 'Copy embed snippet'}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={rotate}
+          disabled={pending}
+        >
+          <RefreshCw className="h-4 w-4" />
+          Rotate key
+        </Button>
       </div>
 
-      <label className="muted" style={{ display: 'block', marginBottom: 4 }}>
-        Allowed origins (one per line). Leave empty to allow any origin while testing.
-      </label>
-      <textarea
-        value={origins}
-        onChange={(e) => setOrigins(e.target.value)}
-        placeholder={'https://app.yourcompany.com\nhttps://www.yourcompany.com'}
-        rows={4}
-        style={{ width: '100%', fontFamily: 'monospace', fontSize: 13, padding: 8, borderRadius: 8, border: '1px solid #d6d6d6' }}
-      />
-      <div className="row" style={{ marginTop: 8 }}>
-        <button type="button" onClick={saveOrigins} disabled={pending}>{pending ? 'Saving…' : 'Save origins'}</button>
+      <div className="space-y-2">
+        <Label htmlFor="origins">Allowed origins</Label>
+        <p className="text-xs text-muted-foreground">
+          One per line. Leave empty to allow any origin while testing.
+        </p>
+        <Textarea
+          id="origins"
+          value={origins}
+          onChange={(e) => setOrigins(e.target.value)}
+          placeholder={'https://app.yourcompany.com\nhttps://www.yourcompany.com'}
+          rows={4}
+          className="font-mono text-xs"
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={saveOrigins}
+          disabled={pending}
+        >
+          {pending ? 'Saving…' : 'Save origins'}
+        </Button>
       </div>
     </div>
   );

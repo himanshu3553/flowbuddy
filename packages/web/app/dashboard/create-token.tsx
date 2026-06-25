@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { createTokenAction } from '@/lib/actions';
+import { Button } from '@/components/ui/button';
 
 type State = { token?: string; error?: string };
 
@@ -12,20 +13,23 @@ export function CreateToken() {
   );
 
   return (
-    <div>
+    <div className="space-y-3">
       <form action={action}>
-        <button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending}>
           {pending ? 'Generating…' : 'Create API token'}
-        </button>
+        </Button>
       </form>
       {state.token && (
-        <p style={{ marginTop: 12 }}>
-          <span className="muted">Copy this now — it&apos;s shown only once:</span>
-          <br />
-          <code>{state.token}</code>
-        </p>
+        <div className="rounded-md border bg-muted/40 p-3">
+          <p className="mb-1 text-xs text-muted-foreground">
+            Copy this now — it&apos;s shown only once:
+          </p>
+          <code className="block break-all rounded bg-background px-2 py-1 text-xs">
+            {state.token}
+          </code>
+        </div>
       )}
-      {state.error && <p className="error">{state.error}</p>}
+      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
     </div>
   );
 }
