@@ -21,7 +21,7 @@ sync/
     db/         # Prisma schema + client
     synthesis/  # transcribe → KB → segment + the copilot answer engine (OpenAI). (article generation = parked Phase 2)
     api/        # Fastify ingestion + copilot routes + the BullMQ worker (worker entrypoint)
-    web/        # Next.js Studio (dashboard/editor + approval gate + copilot settings/analytics)
+    web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui)
     widget/     # embeddable copilot <script> (esbuild → sync-copilot.js) — Phase 1
     extension/  # Chrome MV3 recorder
   docs/       # product · architecture · roadmap · phase-1-copilot · phase-2-portal · this file

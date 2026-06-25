@@ -57,7 +57,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 
 - **Monorepo:** pnpm + Turborepo
 - **Language:** TypeScript (Node 20+)
-- **Studio:** Next.js 15 + Auth.js (self-hosted, email + password)
+- **Studio:** Next.js 15 + Auth.js (self-hosted, email + password) · **Tailwind CSS + shadcn/ui** (neutral)
 - **API / worker:** Fastify (HTTP) + BullMQ (background jobs)
 - **Database:** Postgres (Prisma)
 - **Queue / cache:** Redis

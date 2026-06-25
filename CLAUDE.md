@@ -25,7 +25,7 @@ pnpm + Turborepo. One repo, several packages under `packages/`:
 | `db` | Prisma schema + client (Postgres). |
 | `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`). *(Article-generation engine `synthesize.ts`/`prompt.ts` is present but **parked Phase 2** — see below.)* |
 | `api` | Fastify HTTP service (ingestion + copilot routes) **and** the BullMQ worker (`worker` entrypoint). |
-| `web` | Next.js **Studio** — copilot-first: approval gate + copilot settings/analytics. *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
+| `web` | Next.js **Studio** — copilot-first: app shell (sidebar + top bar) over Home/Recordings/Copilot/Settings; built on **Tailwind + shadcn/ui** (neutral). *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
 | `widget` | Embeddable copilot `<script>` (esbuild → `sync-copilot.js`). |
 | `extension` | Chrome MV3 recorder. |
 

@@ -120,10 +120,15 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 - **Embed auth (P1-M9):** the API authenticates via **`X-Sync-Key`** → resolve key → workspace; enforce **origin allowlist** (CORS + server, empty=any); **rate-limit** 30/min/key. Unknown/missing → 401, disallowed origin → 403, over limit → 429; key rotatable in Studio.
 - **Feedback & analytics (P1-M10):** every question is logged with its outcome (`CopilotQuery`: question + answered + thumbs; returns `queryId`); widget renders **👍/👎** → `POST /v1/copilot/feedback` (tenant-scoped); Studio shows **Copilot activity** + unified **coverage gaps** ("record this next").
 
-### 4.4 Studio (Dashboard + Editor) — the builder's console
+### 4.4 Studio (Dashboard) — the builder's console
+*UI redesigned 2026-06-26 (commit `f5197c0`) on **Tailwind + shadcn/ui** (neutral theme): an app shell (sidebar + top bar) with a copilot-only information architecture; web-only change.*
 - **Accounts:** email+password (self-hosted, JWT); sign-up auto-creates the workspace; single-user = single-workspace; full tenant isolation.
-- **Dashboard:** Recordings & KB (status `uploaded → processing → ready` → KB page with transcript, items by workflow, **approve-for-copilot** toggles); **Copilot** (`/dashboard/copilot`: public key, copyable embed snippet, origin allowlist + rotate, Copilot activity + coverage gaps).
-- **By-product (Phase 2):** Auto Generate Articles, Text → Article, and the article editor — see [`phase-2-portal.md`](phase-2-portal.md).
+- **Shell & IA:** persistent sidebar — **Home · Recordings · Copilot · Settings** — + a top bar (workspace name + account menu); responsive (mobile drawer).
+  - **Home** (`/dashboard`): a live **"get started" checklist** (token → recording ready → workflow approved → copilot embedded, computed from real state) + **coverage gaps** ("record these next").
+  - **Recordings** (`/dashboard/recordings`): the recordings/KB list → a recording's **KB page** (status `uploaded → processing → ready`, transcript, items by workflow, **approve-for-copilot** toggles).
+  - **Copilot** (`/dashboard/copilot`): public key, copyable embed snippet, origin allowlist + rotate, Copilot activity.
+  - **Settings** (`/dashboard/settings`): extension API token + workspace details.
+- **By-product (Phase 2 — parked):** Auto Generate Articles, Text → Article, and the article editor — **UI removed from Studio**, engine dormant in-tree — see [`phase-2-portal.md`](phase-2-portal.md) §6.
 
 > **Help Portal** is a **Phase 2 by-product** (decoupled) — [`phase-2-portal.md`](phase-2-portal.md).
 
