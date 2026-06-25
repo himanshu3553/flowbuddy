@@ -90,6 +90,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 ## 4. The four surfaces (as built)
 
 ### 4.1 Sync Recorder (Chrome extension) — Module 1: Capture
+*UI restyled 2026-06-26 to the same **neutral shadcn theme** as the Studio (popup, permission page, on-page toast) for a consistent look; vanilla CSS (no Tailwind in the esbuild bundle).*
 **Connect with Sync** — the popup's **Connect** opens Studio's `/connect` (already signed in); one click mints a workspace token **server-side** and hands it + the API URL back via a content-script bridge — **no tokens/URLs typed**. The popup then shows **"✓ Connected as you@email"**; recording is disabled until connected.
 
 **Recording controls** — **Start/Stop** the active tab; **Mark new workflow** drops a marker (one recording → multiple workflows; the strongest segmentation signal); **Grant microphone** via a guided flow.

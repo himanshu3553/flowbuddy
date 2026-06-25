@@ -4,11 +4,12 @@
 
 type ToastKind = 'rec' | 'done' | 'fail' | 'info';
 
+// Aligned with the Sync Studio shadcn/ui neutral palette (destructive red, green-600, near-black).
 const BG: Record<ToastKind, string> = {
-  rec: '#d12f2f',
-  done: '#1a8a4f',
-  fail: '#c0392b',
-  info: '#333',
+  rec: '#dc2626',
+  done: '#16a34a',
+  fail: '#dc2626',
+  info: '#171717',
 };
 
 let host: HTMLDivElement | null = null;
@@ -27,7 +28,7 @@ export function showToast(message: string, kind: ToastKind = 'info', durationMs 
       :host{all:initial}
       .toast{display:flex;align-items:center;gap:8px;background:${BG[kind]};color:#fff;
         font:600 13px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-        padding:9px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.28);max-width:80vw;
+        padding:9px 14px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.28);max-width:80vw;
         opacity:0;transition:opacity .18s ease}
       .dot{width:9px;height:9px;border-radius:50%;background:#fff;flex:none}
       .dot.blink{animation:b 1s ease-in-out infinite}
