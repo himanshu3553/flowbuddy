@@ -5,8 +5,11 @@
 //   <script src=".../sync-copilot.js"
 //           data-sync-api="https://api.example.com"
 //           data-sync-key="<workspace key>"
-//           data-sync-title="Help"></script>
+//           data-sync-title="Help"
+//           data-sync-accent="#4f46e5"        (optional — brand the widget to the host)
+//           data-sync-position="left"></script> (optional — "left" | "right", default right)
 // (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
+// The default theme is neutral (matches Sync Studio); data-sync-accent should be a dark-ish brand color (text on it is white).
 
 import { CSS } from './styles.js';
 
@@ -20,6 +23,8 @@ const cfg = {
   key: script?.dataset.syncKey || g.key || '',
   title: script?.dataset.syncTitle || g.title || 'Ask AI',
   greeting: script?.dataset.syncGreeting || g.greeting || 'Hi! Ask me anything about this product.',
+  accent: script?.dataset.syncAccent || g.accent || '',
+  position: (script?.dataset.syncPosition || g.position || 'right').toLowerCase(),
 };
 
 const messages: Msg[] = [];
@@ -35,6 +40,12 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 
 const host = el('div');
 host.id = 'sync-copilot-root';
+// Host theming (optional) — applied as inline CSS vars that inherit into the shadow tree.
+if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);
+if (cfg.position === 'left') {
+  host.style.setProperty('--sc-right', 'auto');
+  host.style.setProperty('--sc-left', '20px');
+}
 const root = host.attachShadow({ mode: 'open' });
 const styleEl = document.createElement('style');
 styleEl.textContent = CSS;
