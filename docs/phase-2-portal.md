@@ -68,6 +68,8 @@ A **public, per-workspace** site rendering **only published articles** (drafts +
 
 > Priority within Phase 2 mirrors the old "beta-blocking" order: search first, then authoring/portal polish, then collaboration last. Each is built one at a time, verified, with a stop for review.
 
+> **⚠️ CARRIED OVER FROM PHASE 1 — must build before the portal goes public: PII redaction Cut 2 (screenshot OCR + region blur + DOM-pixel scrub).** Phase 1 shipped **Cut 1** (P1-M12) — scrubbing high-confidence PII from the *text* the copilot reads. But PII *displayed on the page* is captured in **screenshot pixels + DOM** (e.g. a customer name in a table, "signed in as jane@acme.com"). The copilot never surfaces those, **but the public portal renders screenshots** — so Cut 2 is a **hard prerequisite for publishing**. Build it in/with **P2-M5 (portal productization)**: OCR each screenshot → detect high-confidence PII (email/phone/card/SSN) → blur those regions in the stored image; scrub DOM-text/attributes at rest. Engine decision (self-hosted to avoid shipping screenshots to a 3rd party): **Microsoft Presidio** (text + image redactor, self-hostable) vs. Tesseract.js + a blur step. Pairs with the **Studio review-time one-click redaction** in P2-M4. Reuse the Phase-1 `redactText` detectors (`@sync/synthesis/src/redact.ts`) for the text side. See [`phase-1-copilot.md`](phase-1-copilot.md) §8.
+
 ### P2-M3 — Search (portal + KB UI) *(legacy M11, portal half)*
 The user-facing half of search (the retrieval/embedding half is the Phase-1 P1-M3 pgvector upgrade).
 - **Portal search UI** — search published articles (**hybrid** keyword + semantic); **no-result queries logged** as coverage signals (feeds P2-M6).
@@ -91,7 +93,8 @@ Makes the public portal credible for a real customer-facing launch.
 - **Public / gated visibility** — public default; gated/private as a fast-follow.
 - **"Was this helpful?"** per-article feedback → analytics foundations (feeds P2-M6).
 - **SEO** — server-rendered article pages (already SSR), structured data + a **sitemap**.
-- **Done when:** the portal is themed, supports a custom domain + gated visibility, collects feedback, and is SEO-clean.
+- **🔒 PII redaction Cut 2 (prerequisite to publishing) — screenshot OCR + region blur + DOM-pixel scrub** (carried from Phase 1 P1-M12, §3 callout). The portal renders screenshots publicly, so this gates "publish." Self-hosted engine (Presidio or Tesseract.js + blur); reuse `@sync/synthesis` `redactText` for the text side.
+- **Done when:** the portal is themed, supports a custom domain + gated visibility, collects feedback, is SEO-clean, **and published screenshots are PII-redacted (Cut 2)**.
 
 ### P2-M6 — Coverage analytics + collaboration *(legacy M14, last)*
 The lowest-leverage items for an invite-only beta, so they close the phase.
@@ -107,7 +110,7 @@ All **additive migrations** on the foundation schema — nothing existing change
 
 - **P2-M3 (search):** `KnowledgeItem.embedding` (pgvector) + the **pgvector** extension (shared with the Phase-1 P1-M3 retrieval upgrade); a `SearchQuery` log (workspace, query, result-count, ts) so portal **no-result** queries become coverage signals.
 - **P2-M4 (authoring):** `Article.body` (markdown — for **manual `static`** articles; also the hook V2 narration reuses); `ArticleVersion` (lightweight history at publish); `Collection` (+ Article↔Collection); `Step` callout/warning fields + a highlight `kind` (rectangle | arrow).
-- **P2-M5 (portal):** `Workspace` theme fields (logo key, colors), `customDomain`, `visibility` (public | gated) + access secret; `ArticleFeedback` (article, helpful bool, optional note).
+- **P2-M5 (portal):** `Workspace` theme fields (logo key, colors), `customDomain`, `visibility` (public | gated) + access secret; `ArticleFeedback` (article, helpful bool, optional note); **PII Cut 2** — a `redactions Json` on `Step`/`KnowledgeItem` (persisted blur regions) and/or redacted-image artifacts so published screenshots are scrubbed.
 - **P2-M6 (collaboration):** `Membership` (User↔Workspace + `role: owner | editor`) + `Invitation`; `CoverageGap` aggregation across sources (prompt-miss · portal-no-result · copilot-decline) for the analytics view.
 
 ---

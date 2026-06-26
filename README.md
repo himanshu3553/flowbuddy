@@ -139,7 +139,7 @@ pnpm --filter @sync/web dev        # Studio → http://localhost:3000
 Build the client bundles:
 
 ```bash
-pnpm --filter @sync/widget build      # → packages/widget/dist/sync-copilot.js  (load packages/widget/demo/index.html)
+pnpm --filter @sync/widget build      # → packages/widget/dist/sync-copilot.js  (serve the demo over HTTP — see Testing step 6, not file://)
 pnpm --filter @sync/extension build   # → packages/extension/dist/  (load unpacked in Chrome at chrome://extensions)
 ```
 
@@ -175,7 +175,7 @@ The copilot answer endpoint enforces a **public embeddable key** + **origin allo
 3. **Record:** open the product you want to document, hit **Start**, narrate while clicking through a workflow (use **Mark new workflow** to separate tasks), then **Stop**. The recorder shows `REC → ↑ → ✓` and uploads.
 4. **Knowledge Base:** the worker transcribes + segments the recording; it turns **`ready`** in Studio. Open its KB page to see the transcript + items grouped by workflow.
 5. **Approve for the copilot:** on the KB page, toggle **"approve for copilot"** on the workflows worth answering.
-6. **Embed & ask:** grab the **public key** from `Studio → Copilot`, set it in [`packages/widget/demo/index.html`](packages/widget/demo/index.html) (`data-sync-key`) with `data-sync-api="http://localhost:8787"`, open that file in a browser, and ask a question — you should get a **grounded answer with a citation**, an **honest decline** on something uncovered, and 👍/👎 feedback flowing back to Studio.
+6. **Embed & ask:** grab the **public key** from `Studio → Copilot`, set it in [`packages/widget/demo/index.html`](packages/widget/demo/index.html) (`data-sync-key`) with `data-sync-api="http://localhost:8787"`. **Serve the demo over HTTP** (opening it via `file://` shows no launcher — Chrome blocks the script + the API call): `cd packages/widget && python3 -m http.server 8080`, then open **http://localhost:8080/demo/index.html**. Ask a question — you should get a **grounded answer with a citation**, an **honest decline** on something uncovered, and 👍/👎 feedback flowing back to Studio.
 
 Teardown: `docker compose down` (add `-v` to wipe data).
 

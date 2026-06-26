@@ -4,6 +4,7 @@ import { transcribe, type Transcript } from './transcribe';
 import { alignNarration } from './align';
 import { segment, eventLabel, type Segment } from './segment';
 import { synthesizeArticles, type SynthArticle } from './synthesize';
+import { redactText, redactTranscript } from './redact';
 import type { ArtifactReader } from './types';
 
 export type { ArtifactReader } from './types';
@@ -14,6 +15,7 @@ export { promptToArticle } from './prompt';
 export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './prompt';
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
+export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 
 /** A KB step-item as the synthesis package produces/consumes it (Module 2 ⇄ Module 3). */
 export interface KbStepItem {
@@ -49,10 +51,15 @@ export interface BuiltKB {
   items: KbStepItem[];
 }
 
-/** Extract a workflow capture into KB knowledge: persistable transcript + normalized step items. */
+/** Extract a workflow capture into KB knowledge: persistable transcript + normalized step items.
+ *  P1-M12 (Cut 1): high-confidence PII is scrubbed from everything the copilot later reads —
+ *  the transcript (before alignment), each item's searchable text, and the aligned narration. */
 export async function buildKB(input: BuildKBInput): Promise<BuiltKB> {
   const openai = new OpenAI({ apiKey: input.apiKey });
-  const transcript = await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact);
+  // Scrub the transcript first so the narration spans derived from it are already clean.
+  const transcript = redactTranscript(
+    await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
+  );
   const narration = alignNarration(input.manifest.events, transcript);
 
   const items: KbStepItem[] = input.manifest.events.map((event, i) => {
@@ -60,9 +67,10 @@ export async function buildKB(input: BuildKBInput): Promise<BuiltKB> {
     return {
       orderIndex: i,
       kind: 'step',
-      text: `${eventLabel(event)}${n ? ` — ${n}` : ''}`,
+      // Redact the final searchable text too — it also carries event labels/values, not just narration.
+      text: redactText(`${eventLabel(event)}${n ? ` — ${n}` : ''}`),
       event,
-      narration: n,
+      narration: n ? redactText(n) : null,
     };
   });
 

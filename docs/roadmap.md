@@ -81,7 +81,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ **Done** | C5 |
 | **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ **Done** | C6 |
 | **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — core R1/R2/R3 done; R4 / iframe / multi-tab → backlog | M9 (+ R1–R13) |
-| **P1-M12** | **PII redaction** — client masking + review + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking done; review-time + server OCR/DOM backstop → backlog | M10 |
+| **P1-M12** | **PII redaction** — client masking + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking + **server text-scrub (Cut 1)** done; screenshot OCR/blur (Cut 2) → **Phase 2** | M10 |
 
 **Build order (locked 2026-06-22, deploy last):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. The whole copilot is built & verified **locally** (docker-compose) first; pgvector retrieval folds into P1-M3 when answer quality needs it.
 
@@ -155,7 +155,7 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 
 Only **Phase 1** gates the Version 1 release. Remaining work, in build order:
 
-1. 🔄 **P1-M11 / P1-M12** — release-hardening is at *core*; the deferred items (iframe/multi-tab capture, server-side PII backstop) are backlog, not release-blocking.
+1. 🔄 **P1-M11 / P1-M12** — release-hardening; the deferred items (iframe/multi-tab capture; PII Cut 2 = screenshot OCR/blur, moved to Phase 2) are not release-blocking. **P1-M12 Cut 1 (copilot answer-path PII scrub) is done.**
 2. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
 3. 🔄 **P1-M4 — Cloud deploy (FINAL step)** — config is ready; the actual deploy is gated on **your Render + Cloudflare R2 accounts + secrets**.
 

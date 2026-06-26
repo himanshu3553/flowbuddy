@@ -39,7 +39,8 @@ Strict rules:
 - Use ONLY the knowledge items. NEVER use general knowledge, and NEVER invent UI, steps, features, or facts.
 - If the items genuinely cover the question, write a concise, friendly answer — step-by-step when the user is asking how to do something. Set "covered" to true.
 - If the items do NOT cover the question, set "covered" to false and give a one-sentence reason. Do NOT guess or partially answer from outside the items.
-- In "citedItemIds", list the ids of the knowledge items you actually used (empty if you declined).`;
+- In "citedItemIds", list the ids of the knowledge items you actually used (empty if you declined).
+- Privacy: items are pre-redacted — placeholders like [redacted-email], [redacted-phone], [redacted-card], [redacted-ssn] mark removed personal data. Treat them as opaque, never reproduce them, and never emit personal data; refer to such values generically (e.g. "your email"). This rule ONLY governs how you phrase things — it does NOT change whether a question is "covered". Answer normally in every other respect.`;
 
 const schema = {
   name: 'copilot_answer',

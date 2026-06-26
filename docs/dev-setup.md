@@ -81,7 +81,7 @@ pnpm --filter @sync/api dev                   # ingestion API + copilot endpoint
 pnpm --filter @sync/api worker                # the worker (turns recordings into the KB)
 pnpm --filter @sync/web dev                   # run Studio → http://localhost:3000
 # for the copilot embed (Phase 1):
-pnpm --filter @sync/widget build              # build sync-copilot.js → open packages/widget/demo/index.html
+pnpm --filter @sync/widget build              # build sync-copilot.js → SERVE the demo over HTTP (cd packages/widget && python3 -m http.server 8080), not file://
 pnpm --filter @sync/extension build           # build the recorder → load packages/extension/dist/ in Chrome
 
 # building / checking
@@ -121,7 +121,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 | `web` | Next.js Studio (dashboard/editor + approval + copilot settings) | `pnpm --filter @sync/web dev` → :3000 |
 | `api` | Fastify HTTP service (ingestion + copilot endpoints) | `pnpm --filter @sync/api dev` → :8787 |
 | `worker` | BullMQ synthesis worker | `pnpm --filter @sync/api worker` |
-| `widget` | embeddable copilot `<script>` (esbuild) | `pnpm --filter @sync/widget build` → `demo/index.html` |
+| `widget` | embeddable copilot `<script>` (esbuild) | `pnpm --filter @sync/widget build` → serve `demo/` over HTTP (`python3 -m http.server 8080`) |
 | `extension` | Chrome MV3 recorder | `pnpm --filter @sync/extension build` → load `dist/` |
 | `shared`, `db` | shared types + Prisma | built as dependencies of the above |
 

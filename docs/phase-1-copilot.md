@@ -151,7 +151,7 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 | **P1-M9** | **Embed auth & tenant scoping** | public key + origin allowlist; scoped, rate-limited; end-user sessions | ✅ **built** 2026-06-23 — 401/403/429 verified |
 | **P1-M10** | **Feedback loop & analytics** | every Q&A logged + thumbs; Studio surfaces top questions + coverage gaps | ✅ **built** 2026-06-23 |
 | **P1-M11** | **Capture reliability** | no recording the user made is silently lost (nav/upload/audio) | 🔄 **core** (R1/R2/R3) 2026-06-23; R4/iframe/multi-tab → §8 backlog |
-| **P1-M12** | **PII redaction** | passwords never captured; values masked by default before upload | 🔄 **core** (client masking) 2026-06-23; review-time + server backstop → §8 backlog |
+| **P1-M12** | **PII redaction** | passwords never captured; values masked by default before upload; copilot-facing text scrubbed server-side | 🔄 client masking 2026-06-23 + **server text-scrub (Cut 1) 2026-06-26**; screenshot OCR/blur (Cut 2) → Phase 2 (§8) |
 
 **Package layout:** `packages/api` (Fastify ingestion + copilot routes + the BullMQ worker), `packages/synthesis` (the shared `answerFromKB` engine + capture synthesis), `packages/widget` (the embeddable copilot, esbuild), `packages/web` (Studio: approval toggle, copilot settings, analytics), plus `shared`/`db`/`extension`.
 
@@ -238,7 +238,9 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 ### P1-M12 — PII redaction (the B2B trust gate)
 - **Client-side, before upload (R11) — ✅ core shipped.** Masks password values/regions (never captured) + `email`/`tel`, sensitive `autocomplete`, card/CVV/SSN/secret/token patterns, and host-marked `data-sync-redact`. *(Backlog: a "mask-all-by-default + per-field opt-in" pre-record toggle; pause-and-skip for sensitive screens.)*
 - **Studio review-time redaction — backlog.** One-click blur of any screenshot region or text span, persisted to the artifact (e.g. a `redactions Json` on `Step`/`KnowledgeItem`).
-- **Server-side backstop — backlog.** OCR screenshots + scrub DOM text for high-confidence PII (emails/phone/card/SSN-like) on ingest → blur/scrub. **Screenshots still capture pixels until this lands — test-account guidance remains the primary protection.**
+- **Server-side backstop — split into two cuts:**
+  - **Cut 1 (copilot-facing text) — ✅ shipped 2026-06-26.** At KB build the worker scrubs high-confidence structured PII (email / phone / card-with-Luhn / SSN) from everything the copilot reads — the persisted **transcript**, each **`KnowledgeItem.text`**, and the aligned **narration** — replacing it with typed placeholders (`[redacted-email]` …). Plus a **guardrail in the answer-engine prompt** (never emit personal data; the rule does **not** change coverage). High-PRECISION patterns (Luhn for cards, separator-required phones) so prices/dates/IDs/versions are never touched — no answer-quality regression. Impl: `@sync/synthesis` `redactText` (`src/redact.ts`), applied in `buildKB`. This closes the **end-user answer-leak** path.
+  - **Cut 2 (pixels/DOM at rest) — deferred to Phase 2.** OCR screenshots + region-blur + DOM-attribute scrub for PII *displayed* on the page (captured in screenshot pixels / DOM, which the copilot does **not** surface but the **Phase-2 portal renders publicly**). See [`phase-2-portal.md`](phase-2-portal.md) §7. **Until Cut 2 lands, screenshots/DOM still hold pixels — test-account guidance remains the primary protection for those artifacts.**
 - **Onboarding nudge:** "use a test/dummy account."
 
 ---
@@ -249,7 +251,7 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 
 - **Never captured:** `type=password` values and their on-screen regions.
 - **Masked by default (client-side, before upload):** input values; `email`/`tel`; sensitive `autocomplete` (cc-*, current/new-password, one-time-code); card/CVV/SSN/secret/token patterns; any host-marked **`data-sync-redact`** field.
-- **PII in answers:** approved-KB may still contain captured PII — redaction at capture is the first line; the **server OCR/DOM backstop** (§8 backlog) is the real protection before external beta.
+- **PII in answers:** client masking is the first line; the **server text-scrub (P1-M12 Cut 1, §8)** is the second — it strips high-confidence structured PII from the transcript/KB-text/narration the copilot reads, so the **answer path is protected**. PII *displayed* in screenshots/DOM is scrubbed by **Cut 2 (Phase 2)**; until then test-account guidance covers those at-rest artifacts.
 - **Data handling:** encryption at rest + in transit; per-workspace isolation; signed, expiring URLs. The **public embeddable key** is a separate, safe-in-client credential (origin allowlist + rate limit), distinct from the recorder's hashed secret token.
 
 ---
@@ -271,7 +273,7 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 - **Grounding strictness (P1-M6):** tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob; confidently-wrong answers are the trust-killer.
 - **Retrieval quality (P1-M6 / P1-M3 upgrade):** keyword-first vs. pgvector; embedding model + dimensions; folding conversation history + page context into retrieval; confirm the deploy target's Postgres supports the `vector` extension.
 - **Citation UX without leaking structure (P1-M6/M7):** Stage A has no articles to link, so a citation points to the workflow/step (e.g. a step thumbnail).
-- **PII in answers (P1-M12):** approved-KB may contain captured PII; the server backstop is the real protection before external beta.
+- **PII in answers (P1-M12):** **Cut 1 done** — the server text-scrub protects the copilot answer path; **Cut 2 (screenshot/DOM pixel redaction)** is the remaining piece, deferred to Phase 2 (needed before the public portal renders screenshots).
 - **Embed security & cost (P1-M9):** public key + origin allowlist + rate limiting; per-workspace LLM ceilings; anonymous end-user session model.
 - **Context mapping (P1-M8):** host routes vs. captured routes when paths differ (params/hashes); privacy of host-sent context.
 - **Capture reliability internals (P1-M11):** nav re-arm + buffer durability; upload-retry bounds; audio finalize race; SW reconnect; iframe/multi-tab scope; event-vocabulary noise; selector robustness (defer healing to Phase 3).
