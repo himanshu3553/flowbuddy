@@ -1,6 +1,6 @@
 # KB Step Distillation — design & build plan
 
-**Status:** ✅ **Built & verified end-to-end (2026-06-26)** — Phases 1–6 done · **Owner:** copilot KB pipeline
+**Status:** ✅ **Built, verified end-to-end & committed (2026-06-27)** — Phases 1–6 done (distillation pipeline built 2026-06-26; segmenter finalized + E2E-verified + committed `e5f81d8` on 2026-06-27) · **Owner:** copilot KB pipeline
 
 Turn the noisy, raw, 1:1 event dump that the KB currently stores into a clean, deduplicated, user-facing **step list** per workflow — so the copilot is grounded on real steps, not DOM telemetry. *(How many workflows* a recording splits into is the **segmenter's** job, separate from this doc. The segmenter ([`segment.ts`](../packages/synthesis/src/segment.ts)) is a single **event-aware** LLM pass driven primarily by **goal-completion / terminal states** (redirects, route resets, dashboards, sign-outs, success toasts), with narration + user markers as supporting signals; it emits a per-boundary `confidence` to flag splits an editor should review, and a carry-forward guard ensures no event is ever silently dropped. It went through a few iterations on 2026-06-27 — an initial single-task bias over-merged a 4-task recording, a narration-only two-stage attempt over-anchored, and the terminal-state pass landed it.)* This doc is the next layer down: the steps *inside* a workflow.
 
@@ -182,11 +182,12 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 - **Built:** [`api/src/copilot.ts`](../packages/api/src/copilot.ts) route-boost now reads `data.route` (with an `event.route.path` fallback for any pre-distillation rows). The Studio KB page ([`kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx)) now reads the distilled shape (`instruction`/`detail`/`narration`/`route`/`screenshotFile`), renders "Step N" with the curated screenshot, and is relabelled "Steps by workflow" (counts say "steps"). The answer engine needed no change (reads `text` + `narration`).
 - **DoD (met):** KB page renders clean steps + curated screenshots from the new shape; route-boost reads `data.route`; full repo `pnpm typecheck` green. Flag 1 (half-state) is closed.
 
-### Phase 5 — End-to-end verification ✅ done (2026-06-26)
+### Phase 5 — End-to-end verification ✅ done (2026-06-27)
 - **Verified by the user** on a fresh recording (Parts 6–11 of [`e2e-testing.md`](./e2e-testing.md)): the pipeline produces clean distilled steps with curated screenshots and the copilot answers correctly. Confirmed working end-to-end.
 
-### Phase 6 — Docs + memory ✅ done (2026-06-26)
-- **Done:** [`architecture.md`](./architecture.md) (Module 2 = distilled steps; raw events discarded, only in manifest), [`phase-1-copilot.md`](./phase-1-copilot.md) (KB worker pipeline + `KnowledgeItem` data shape + KB-page label), this doc's status → Built, and the auto-memory KB note updated.
+### Phase 6 — Docs + memory ✅ done (2026-06-27)
+- **Done (2026-06-26):** [`architecture.md`](./architecture.md) (Module 2 = distilled steps; raw events discarded, only in manifest), [`phase-1-copilot.md`](./phase-1-copilot.md) (KB worker pipeline + `KnowledgeItem` data shape + KB-page label), this doc's status → Built, and the auto-memory KB note updated.
+- **Follow-up sync (2026-06-27):** the remaining docs that still described the pre-distillation pipeline were updated to match — [`roadmap.md`](./roadmap.md) (P1-M2 = distilled steps; doc map), [`phase-1-modules-map.md`](./phase-1-modules-map.md) (worker/KB nodes), and [`e2e-testing.md`](./e2e-testing.md) (worker-log lines, KB-page labels, architecture diagram).
 
 **Dependency order:** 1 → 2 → 3 → 4 → 5 → 6. Phases 1 and 2 can be built in parallel (independent modules); 3 depends on both.
 

@@ -54,7 +54,7 @@ There is **one cumulative KB per workspace (per product)** — *not* one KB per 
 ### KB schema (target — Prisma-style; evolves today's `RecSession`)
 
 ```prisma
-model KnowledgeSource {          // evolves RecSession
+model KnowledgeSource {          // evolves RecSession (table kept as "RecSession" via @@map — data preserved)
   id           String   @id @default(cuid())
   workspaceId  String
   createdById  String
@@ -115,8 +115,8 @@ Module 1 — CAPTURE (kind: workflow[V1] | narration[V2] | video[V2])
    raw artifacts (R2) + raw source record
         │
         ▼
-Module 2 — KNOWLEDGE BASE  (extract → normalize → segment+tag → index)   ◄── the explicit layer
-   KnowledgeSource + KnowledgeItem[] (segmentIndex/segmentTitle) + transcript + index
+Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill steps → index)   ◄── the explicit layer
+   KnowledgeSource + distilled-step KnowledgeItem[] (segmentIndex/segmentTitle) + transcript + index
         │
         │   ── ONE KB → per-target approval / visibility (DECOUPLED targets) ──
         │
@@ -150,7 +150,7 @@ Module 2 — KNOWLEDGE BASE  (extract → normalize → segment+tag → index)  
 | **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + keyword retrieval (M6/M7 done)** | + pgvector embeddings (later) |
 | Module 3 | **3.1 curated** (M6.1) **+ 3.2 prompt-to-article** (M7), both reading the **KB** — **engine parked dormant in-tree, Studio UI removed 2026-06-25** (Phase-2 by-product; [`phase-2-portal.md`](phase-2-portal.md) §6) | — (complete for V1) |
 
-**Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics); add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
+**Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics) — the **Prisma model** was renamed; the underlying **table is kept as `RecSession`** (`@@map`) so existing data is preserved; add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
 
 ---
 

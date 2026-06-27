@@ -1,8 +1,8 @@
 # Sync — Roadmap & Status (Versions · Phases · Modules)
 
-> **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). In-flight KB step-quality work (raw events → clean per-workflow steps) is planned in [`kb-step-distillation.md`](kb-step-distillation.md).
+> **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-06-25 · **Branch:** `copilot`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-06-27 · **Branch:** `copilot`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -71,7 +71,7 @@ A throwaway, lightweight spike answered one question before building any product
 |:---|:---|:---|:---|
 | **P1-M0** | Monorepo, infrastructure & auth (Postgres, R2/MinIO, Redis/BullMQ, Auth.js, api, worker, multi-tenancy) | ✅ **Done** | M0, M1 |
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** | M2 |
-| **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation, keyword index) | ✅ **Done** | M3, M6 |
+| **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending | M7 (+ M11 retrieval) |
 | **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | 🔄 **In Progress** — Dockerfiles + `render.yaml` ready; deploy needs your Render/R2 accounts; **executed last** | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
@@ -173,4 +173,6 @@ Only **Phase 1** gates the Version 1 release. Remaining work, in build order:
 | [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
 | [`phase-1-modules-map.md`](phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map + P1-M# cross-ref. |
 | [`phase-2-portal.md`](phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (as-built, frozen) + to-build modules P2-M3…M6. |
+| [`kb-step-distillation.md`](kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
+| [`e2e-testing.md`](e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics; per-step PASS signals. |
 | [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |

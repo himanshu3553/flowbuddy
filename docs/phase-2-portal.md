@@ -3,7 +3,7 @@
 > **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**: the article editor + curated generation are **built but parked** — their **Studio UI was removed for the Phase-1 copilot clean slate (2026-06-25)** and the **engine code is kept dormant in-tree** (still type-checked) to resume from; the public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
 - **Status:** **Frozen — UI removed, engine parked.** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article); the **Studio UI for both was removed 2026-06-25** so the released product is copilot-only, but the **engine stays dormant in-tree** (inventory + re-wiring: **§6**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
-- **Last updated:** 2026-06-25 · **Branch:** `copilot`
+- **Last updated:** 2026-06-27 · **Branch:** `copilot`
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publish. Approving a workflow for the copilot and publishing an article are **independent** actions over the same KB. Mental model: `ONE raw KB → per-target approval/visibility → { Copilot, Portal }`.
 
 ---
@@ -152,6 +152,8 @@ When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 
 
 > Note: `synthesis/src/index.ts` and `shared/src/index.ts` **still export** the parked symbols, and the **`Article` + `Step` Prisma tables are kept** — so the dormant code compiles untouched. The copilot engine (`synthesis/src/copilot.ts`, `answerFromKB`) and the worker share *none* of this.
 
+> **⚠️ Resume gotcha — KB step distillation changed the item shape (2026-06-27).** The parked article engine (`generate-actions.ts`, `prompt-actions.ts`) reads raw events from `KnowledgeItem.data.event`, but the worker **no longer persists that** — since the [KB step-distillation](kb-step-distillation.md) work, items hold **distilled steps** (`{ instruction, detail, route, narration, screenshotFile, bbox }`) and the raw event log lives only in `KnowledgeSource.manifest`. On resume, the article engine must **re-source raw events from `manifest`** (not `data.event`). The worker also now calls `buildWorkflowKB`, not `buildKB`/`segmentItems` (both still exported for the parked engine). Don't touch parked code until Phase 2 resumes.
+
 ### What was changed in the Phase-1 code (re-wire to resume)
 
 - **`packages/web/app/dashboard/page.tsx`** — the "opportunities", "Auto Generate Articles", "Text → Article", and Articles-list cards were removed; only Copilot / token / Recordings-KB / coverage-gaps remain. *(Restore those cards + their `GeneratePanel`/`PromptBox` imports.)*
@@ -162,6 +164,7 @@ When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 
 ### Re-wiring checklist (when Phase 2 resumes)
 1. Restore the removed Studio cards/imports listed above (recover the exact prior versions from git: `git show <pre-cleanup-commit>:<path>`).
 2. Re-add the `Article` join to `candidates.ts`.
-3. Rebuild `packages/portal` (P2-M2) on the current schema (see §5).
-4. Remove the `// PARKED — Phase 2` banners as each file goes live again.
-5. Then pick up the to-build modules P2-M3…M6 (§3).
+3. **Re-source raw events from `KnowledgeSource.manifest`** in `generate-actions.ts` / `prompt-actions.ts` — `KnowledgeItem.data.event` is gone since KB step distillation (see the resume-gotcha note above).
+4. Rebuild `packages/portal` (P2-M2) on the current schema (see §5).
+5. Remove the `// PARKED — Phase 2` banners as each file goes live again.
+6. Then pick up the to-build modules P2-M3…M6 (§3).

@@ -12,10 +12,10 @@ The full manual test plan for the Sync copilot, top to bottom: from a clean slat
 
 ```
 Chrome Extension ──upload──▶  API (Fastify :8787)  ──enqueue──▶  Worker (BullMQ)
-   (record + narrate)            /v1/sessions                     transcribe → KB → segment
+   (record + narrate)            /v1/sessions             transcribe → clean → segment → distill
                                                                          │
                                                                          ▼
-        Studio (Next.js :3000) ◀── reads ── Postgres / MinIO ◀── writes KB items + segments
+        Studio (Next.js :3000) ◀── reads ── Postgres / MinIO ◀── writes distilled steps + segments
         Recordings · KB approval · Copilot settings · Analytics
                                                                          │
    Widget (<script>) ──ask──▶ API /v1/copilot/answer ──grounded in APPROVED KB only──▶ answer
@@ -84,7 +84,7 @@ docker exec sync-postgres-1 psql -U sync -d sync -t -c \
 
 ✅ **PASS:** all counts are 0. (The MinIO `sync-artifacts` bucket auto-creates when the API boots in Part 3.)
 
-> Note: model table names differ from Prisma model names — `KnowledgeSource` is the `RecSession` table, `WorkflowApproval` is `CopilotApproval`.
+> Note: one Prisma model maps to a differently-named table — the **`KnowledgeSource`** model is the **`RecSession`** table (`@@map`, to preserve existing data). `KnowledgeItem` and `CopilotApproval` keep their model names (hence the `"CopilotApproval"` query above).
 
 ---
 
@@ -96,7 +96,7 @@ Three terminals, all from the repo root:
 # Terminal 1 — ingestion API + copilot endpoints → :8787
 pnpm --filter @sync/api dev
 
-# Terminal 2 — worker (transcribe → KB → segment). REQUIRED for processing.
+# Terminal 2 — worker (transcribe → clean → segment → distill). REQUIRED for processing.
 pnpm --filter @sync/api worker
 
 # Terminal 3 — Studio → http://localhost:3000
@@ -153,14 +153,14 @@ This is the core capture → knowledge path **and** the workflow-segmentation qu
 Watch the **worker terminal**:
 ```
 [worker] processing session <id>
-[worker] KB built: transcript(N seg) + M items
-[worker] ready <id>: 1 workflow candidate(s) from M items (no articles — curated generation)
+[worker] ready <id>: 1 workflow(s), M distilled step(s) from transcript(N seg)
 ```
+*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `M` is the **distilled step** count, not the raw event count.)*
 
 ✅ **PASS criteria:**
 - Upload returns a `sessionId` (extension shows success; no 401).
 - Worker reaches `status → ready`.
-- **The recording produces exactly ONE workflow candidate** (`1 workflow candidate(s)`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
+- **The recording produces exactly ONE workflow** (`1 workflow(s)`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
 
 ❌ **FAIL:** ≥2 workflows, or any workflow titled by a phase. **If it still over-splits,** the lever is the segmenter prompt + inputs in [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts): strengthen the "default to ONE workflow" framing, confirm the full transcript reaches it as `overallNarration` (needs captured audio narration), and check no markers were placed unintentionally.
 
@@ -172,11 +172,11 @@ Watch the **worker terminal**:
 
 1. Studio → **Recordings**: the session is listed with a **Ready** status badge and the app's base URL.
 2. Click it → the **Knowledge Base** page (`/dashboard/kb/<id>`):
-   - Header shows the source URL, item count, and **N workflow(s)** (expect **1** for the sign-in case).
+   - The **"Steps by workflow"** panel shows the step count and **N workflow(s)** (expect **1** for the sign-in case).
    - The **"Approve workflows for the copilot"** panel lists each workflow with its step count and an approve toggle.
-   - Each captured step is grounded in a real event (click/type) + aligned narration.
+   - Each step is a **clean, distilled instruction** (stray clicks dropped, low-level interactions merged) grounded in real captured events + aligned narration, with one curated screenshot.
 
-✅ **PASS:** the KB page renders one goal-titled workflow with all steps; nothing is mangled or duplicated.
+✅ **PASS:** the KB page renders one goal-titled workflow with clean distilled steps; nothing is mangled or duplicated.
 
 ---
 
@@ -259,7 +259,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 | Auth | Studio | signup → workspace; signin works |
 | Capture | Extension | Connect mints token; record → upload `sessionId`, no 401 |
 | Ingestion | API | `/v1/sessions` stores source + enqueues; `/healthz` ok |
-| KB build | Worker | transcript + items built; `status → ready` |
+| KB build | Worker | transcript + **distilled steps** built; `status → ready` |
 | **Segmentation** | Worker | **single task → 1 workflow; multi-task → N** |
 | Review | Studio KB | one goal-titled workflow, steps intact |
 | Approval | Studio | toggle persists; `CopilotApproval` written |
@@ -291,4 +291,4 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 ---
 
-*Last updated 2026-06-26. Local data was wiped on this date as part of preparing a clean retest (Parts 2–11 start from empty).*
+*Last updated 2026-06-27 (worker now cleans + distills events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md)). Local data was wiped 2026-06-26 as part of preparing a clean retest (Parts 2–11 start from empty).*

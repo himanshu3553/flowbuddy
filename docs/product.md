@@ -5,8 +5,8 @@
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.
 
 - **Status:** v0.2 — **copilot-first** (supersedes the original portal-first framing)
-- **Last updated:** 2026-06-25 · **Branch:** `copilot`
-- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 2 by-products → [`phase-2-portal.md`](phase-2-portal.md) · local dev → [`dev-setup.md`](dev-setup.md)
+- **Last updated:** 2026-06-27 · **Branch:** `copilot`
+- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · Phase 2 by-products → [`phase-2-portal.md`](phase-2-portal.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · local dev → [`dev-setup.md`](dev-setup.md)
 
 ---
 
@@ -143,7 +143,7 @@ Sync ships as **four distinct surfaces** over one shared structured knowledge ba
 
 - **Capture quality is the foundation** — copilot answer quality *is* capture quality. Highest-priority engineering (→ capture reliability).
 - **Grounding strictness** — tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob. Confidently-wrong answers are the trust-killer.
-- **PII in answers** — approved-KB may still contain captured PII; client masking is the first line, a server backstop is the real protection before external beta.
+- **PII in answers** — approved-KB may still contain captured PII; client masking is the first line, and the **server text-scrub (P1-M12 Cut 1, shipped)** strips high-confidence structured PII from the copilot's answer path (transcript / KB text / narration). Screenshot- and DOM-pixel redaction (Cut 2) is deferred to Phase 2 — needed before the public portal renders captured screenshots.
 - **Embed security & cost** — public key + origin allowlist + rate limiting; per-workspace LLM ceilings for an end-user-facing surface; anonymous session model.
 - **Context mapping** — mapping host routes to captured routes when paths differ (params/hashes); privacy of host-sent context.
 - **Citation UX without leaking structure** — Stage A has no articles to link, so a citation points to the workflow/step.
