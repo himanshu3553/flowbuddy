@@ -54,6 +54,7 @@ export default async function CopilotSettingsPage() {
   const primaryOrigin = allowedOrigins[0]
     ? originHost(allowedOrigins[0])
     : 'your site';
+  const widgetIsPlaceholder = widgetSrc.includes('YOUR_WIDGET_HOST');
 
   return (
     <>
@@ -74,6 +75,7 @@ export default async function CopilotSettingsPage() {
             publicKey={publicKey}
             allowedOrigins={allowedOrigins}
             primaryOrigin={primaryOrigin}
+            widgetIsPlaceholder={widgetIsPlaceholder}
           />
           <div className="lg:sticky lg:top-20 lg:self-start">
             <WidgetPreview />

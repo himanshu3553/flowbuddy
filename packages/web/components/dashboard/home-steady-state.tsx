@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Mic, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 import type { CopilotMetrics } from '@/lib/copilot-metrics';
+import { resolveCoverageGap } from '@/lib/copilot-actions';
 import { cn } from '@/lib/utils';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { MiniBarChart, ChartLegend } from '@/components/dashboard/mini-bar-chart';
@@ -140,12 +141,19 @@ export function HomeSteadyState({
                         {g.reason || 'no workflow covers this yet'}
                       </span>
                     </span>
-                    <Button asChild variant="outline" size="sm">
-                      <Link href="/dashboard/recordings">
-                        <Mic className="h-4 w-4" />
-                        Record
-                      </Link>
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/dashboard/recordings">
+                          <Mic className="h-4 w-4" />
+                          Record
+                        </Link>
+                      </Button>
+                      <form action={resolveCoverageGap.bind(null, g.id)}>
+                        <Button type="submit" variant="ghost" size="sm">
+                          Dismiss
+                        </Button>
+                      </form>
+                    </div>
                   </li>
                 ))}
               </ul>

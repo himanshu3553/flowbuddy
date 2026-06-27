@@ -46,11 +46,13 @@ export function CopilotWorkspace({
   publicKey,
   allowedOrigins,
   primaryOrigin,
+  widgetIsPlaceholder = false,
 }: {
   snippet: string;
   publicKey: string;
   allowedOrigins: string[];
   primaryOrigin: string;
+  widgetIsPlaceholder?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>('install');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
@@ -120,6 +122,20 @@ export function CopilotWorkspace({
               <CopyButton value={snippet} label="Copy snippet" />
             </div>
             <CodeBlock code={snippet} />
+            {widgetIsPlaceholder && (
+              <p className="mt-3 rounded-md border border-dashed bg-muted/30 px-2.5 py-2 text-[11px] text-muted-foreground">
+                The{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                  src
+                </code>{' '}
+                points to a placeholder — it’s set once the widget is deployed.
+                For local testing, load{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                  packages/widget/demo/index.html
+                </code>{' '}
+                with this key.
+              </p>
+            )}
           </section>
 
           <section className="rounded-xl border bg-card p-5 shadow-sm">

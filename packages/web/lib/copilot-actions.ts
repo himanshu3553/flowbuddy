@@ -60,4 +60,5 @@ export async function resolveCoverageGap(gapId: string): Promise<void> {
   if (!gap || gap.workspaceId !== ctx.workspace.id) throw new Error('Not found');
   await prisma.coverageGap.update({ where: { id: gapId }, data: { status: 'resolved' } });
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard/analytics');
 }

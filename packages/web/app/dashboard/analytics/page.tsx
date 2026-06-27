@@ -4,6 +4,7 @@ import { Mic } from 'lucide-react';
 
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
+import { resolveCoverageGap } from '@/lib/copilot-actions';
 import { getCopilotMetrics } from '@/lib/copilot-metrics';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { MetricCard } from '@/components/dashboard/metric-card';
@@ -132,12 +133,19 @@ export default async function AnalyticsPage() {
                         {g.reason || 'no coverage'}
                       </span>
                     </span>
-                    <Button asChild variant="outline" size="sm">
-                      <Link href="/dashboard/recordings">
-                        <Mic className="h-4 w-4" />
-                        Record
-                      </Link>
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/dashboard/recordings">
+                          <Mic className="h-4 w-4" />
+                          Record
+                        </Link>
+                      </Button>
+                      <form action={resolveCoverageGap.bind(null, g.id)}>
+                        <Button type="submit" variant="ghost" size="sm">
+                          Dismiss
+                        </Button>
+                      </form>
+                    </div>
                   </li>
                 ))}
               </ul>
