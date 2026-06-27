@@ -18,18 +18,22 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <Sidebar />
+      <Sidebar
+        workspaceName={ctx.workspace.name}
+        userEmail={session.user.email ?? ''}
+      />
       <div className="flex min-h-screen flex-col md:pl-60">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-8">
+        {/* Mobile-only top bar; on desktop each page renders its own PageHeader. */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
           <div className="flex items-center gap-2">
             <MobileNav />
-            <span className="text-sm font-medium text-muted-foreground">
-              {ctx.workspace.name}
+            <span className="text-sm font-semibold tracking-tight">
+              Sync Studio
             </span>
           </div>
           <UserMenu email={session.user.email ?? ''} />
         </header>
-        <div className="flex-1">{children}</div>
+        <div className="flex-1 overflow-x-clip">{children}</div>
       </div>
     </div>
   );

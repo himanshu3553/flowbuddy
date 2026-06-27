@@ -1,14 +1,12 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { HeaderSkeleton, CardSkeleton } from '@/components/dashboard/skeletons';
 
-export default function DashboardLoading() {
+export default function HomeLoading() {
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 md:px-8">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-56" />
-        <Skeleton className="h-4 w-80" />
+    <>
+      <HeaderSkeleton actions={2} />
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-8">
+        <CardSkeleton className="h-80" />
       </div>
-      <Skeleton className="h-32 w-full rounded-xl" />
-      <Skeleton className="h-48 w-full rounded-xl" />
-    </div>
+    </>
   );
 }

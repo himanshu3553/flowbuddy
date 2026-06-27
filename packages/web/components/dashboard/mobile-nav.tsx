@@ -27,12 +27,10 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="flex w-60 flex-col p-0">
-        <div className="flex h-14 items-center gap-2 border-b px-6">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
-            S
-          </span>
-          <SheetTitle className="text-base font-semibold tracking-tight">
-            Sync Studio
+        <div className="flex h-14 items-center gap-2.5 border-b px-6">
+          <span className="h-6 w-6 rounded-md bg-gradient-to-br from-[#4a63e8] to-[#3a50dd] shadow-[0_2px_8px_rgba(58,80,221,0.35)]" />
+          <SheetTitle className="text-base font-extrabold tracking-tight">
+            Sync
           </SheetTitle>
         </div>
         <NavLinks onNavigate={() => setOpen(false)} />

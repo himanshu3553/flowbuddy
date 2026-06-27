@@ -1,0 +1,24 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Sync Studio — INDIGO BRAND TOKENS
+   Paste these into app/globals.css, replacing only the --primary /
+   --primary-foreground / --ring lines in your existing :root and .dark blocks.
+   Everything else in your neutral theme stays as-is. All indigo-tinted
+   surfaces in the design (active nav, step tiles, focus rings) derive from
+   --primary via opacity utilities: bg-primary, bg-primary/10, border-primary/20,
+   text-primary. No new tokens required.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --primary: 232 73% 56%;            /* #3b50e0  indigo */
+  --primary-foreground: 0 0% 100%;   /* white on primary */
+  --ring: 232 73% 56%;               /* indigo focus ring */
+}
+
+.dark {
+  --primary: 232 80% 67%;
+  --primary-foreground: 232 45% 12%;
+  --ring: 232 80% 67%;
+}
+
+/* Optional brand-gradient flourish for the primary CTA (default shadcn primary
+   is a solid fill; use either). Tailwind: bg-gradient-to-b from-[#4a63e8] to-[#3a50dd] */

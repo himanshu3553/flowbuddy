@@ -54,7 +54,7 @@ flowchart TB
 
     APPROVAL -- "no-leak: retrieval filters<br/>to APPROVED items only" --> ENGINE
 
-    STUDIO["<b>STUDIO — builder console</b><br/>web (Next.js · Tailwind + shadcn)<br/>Home · Recordings · Copilot · Settings"]
+    STUDIO["<b>STUDIO — builder console</b><br/>web (Next.js · Tailwind + shadcn · indigo)<br/>Home · Recordings · Knowledge Base · Copilot · Analytics · Settings"]
 
     STUDIO -. "approve toggle" .-> APPROVAL
     KB -. "browse / status" .-> STUDIO
