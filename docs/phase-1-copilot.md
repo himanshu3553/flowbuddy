@@ -108,9 +108,9 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 ### 4.2 Knowledge Base — Module 2
 **One cumulative KB per workspace** (not per recording) — every recording compounds into the same KB; each item links to both its source recording (provenance) and its workspace.
 
-Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persisted transcript, raw manifest) and **`KnowledgeItem`** (the normalized, indexed unit — in V1 a **step item** per interaction, with searchable text, the captured event, selector/route/screenshot/expected-outcome, and aligned narration).
+Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persisted transcript, raw manifest) and **`KnowledgeItem`** (the normalized, indexed unit — in V1 a **distilled step item**: a clean imperative `instruction` (+ optional `detail`), `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, and searchable `text`).
 
-**The worker** (on upload): transcribes narration (`whisper-1`, persisted) → normalizes each interaction into a `KnowledgeItem` with aligned narration → **segments** into candidate workflows (markers → route changes → narration cues → LLM) and tags each item with its workflow title → sets status **`ready`**. It **stops at `ready`** (curated model; approval and article generation are separate explicit steps). Items are indexed by text for **keyword/LLM retrieval**, workspace-wide.
+**The worker** (on upload): transcribes narration (`whisper-1`, persisted) → aligns narration to events → **cleans** the raw events (deterministic dedupe/merge of mechanical duplicates) → **segments** into candidate workflows (markers → route changes → narration cues → LLM) → **distills** each workflow (LLM) into clean, user-facing steps — dropping stray clicks, merging low-level interactions, attributing narration, and keeping one curated screenshot per step — then persists those distilled steps tagged by workflow and sets status **`ready`**. Raw events are **not** persisted as items (only the distilled steps are; the raw log stays in the manifest). It **stops at `ready`** (curated model; approval and article generation are separate explicit steps). Items are indexed by text for **keyword/LLM retrieval**, workspace-wide. See [`kb-step-distillation.md`](kb-step-distillation.md) (2026-06-26).
 
 ### 4.3 In-App Copilot ⭐ — the primary KB consumer (the headline)
 *Grounds directly on the approved subset of the KB (Module 2) — parallel to, and independent of, Module 3 article creation (Phase 2).*
@@ -126,7 +126,7 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 - **Accounts:** email+password (self-hosted, JWT); sign-up auto-creates the workspace; single-user = single-workspace; full tenant isolation.
 - **Shell & IA:** persistent sidebar — **Home · Recordings · Copilot · Settings** — + a top bar (workspace name + account menu); responsive (mobile drawer).
   - **Home** (`/dashboard`): a live **"get started" checklist** (token → recording ready → workflow approved → copilot embedded, computed from real state) + **coverage gaps** ("record these next").
-  - **Recordings** (`/dashboard/recordings`): the recordings/KB list → a recording's **KB page** (status `uploaded → processing → ready`, transcript, items by workflow, **approve-for-copilot** toggles).
+  - **Recordings** (`/dashboard/recordings`): the recordings/KB list → a recording's **KB page** (status `uploaded → processing → ready`, transcript, **distilled steps by workflow** (with curated screenshots), **approve-for-copilot** toggles).
   - **Copilot** (`/dashboard/copilot`): public key, copyable embed snippet, origin allowlist + rotate, Copilot activity.
   - **Settings** (`/dashboard/settings`): extension API token + workspace details.
 - **By-product (Phase 2 — parked):** Auto Generate Articles, Text → Article, and the article editor — **UI removed from Studio**, engine dormant in-tree — see [`phase-2-portal.md`](phase-2-portal.md) §6.
@@ -195,7 +195,7 @@ Event {
 
 All **additive** on the foundation schema (`Workspace / ApiToken / KnowledgeSource / KnowledgeItem / Article / Step / CoverageGap`):
 
-- **KB:** `KnowledgeSource` (kind, appBaseUrl, status, persisted `transcript`, manifest) → `KnowledgeItem[]` (kind `step|topic`, `text` index field, `data` payload, `segmentIndex`/`segmentTitle`). The copilot retrieves over `KnowledgeItem`s, not articles.
+- **KB:** `KnowledgeSource` (kind, appBaseUrl, status, persisted `transcript`, manifest) → `KnowledgeItem[]` (kind `step|topic`, `text` index field, `data` payload — for `step`, the **distilled** `{ instruction, detail, route, narration, screenshotFile, bbox }` (2026-06-26), `segmentIndex`/`segmentTitle`). The copilot retrieves over `KnowledgeItem`s, not articles.
 - **Approval (P1-M5):** a first-class **`CopilotApproval`** row keyed by `(sourceId, segmentIndex)` (with a `workspaceId` scoping column) — **survives** the worker's item delete+recreate on reprocess. (The enforcement seam P1-M6 retrieves through.)
 - **Copilot embed/config (on `Workspace`):** `copilotPublicKey` (unique, `pk_…`) + `copilotAllowedOrigins[]`. *(The widget's title, greeting, accent, and position are client-side `data-sync-*` embed attributes — not stored server-side; theming is host-driven, not a Studio setting.)*
 - **Copilot logs (P1-M10):** **`CopilotQuery`** (question, answered, feedback `up|down|null` — the question + outcome + thumbs; the answer text and citations are returned to the widget but **not** persisted) + **`CoverageGap.source`** discriminator (`prompt | copilot`).

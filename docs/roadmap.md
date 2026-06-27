@@ -1,6 +1,6 @@
 # Sync — Roadmap & Status (Versions · Phases · Modules)
 
-> **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2).
+> **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). In-flight KB step-quality work (raw events → clean per-workflow steps) is planned in [`kb-step-distillation.md`](kb-step-distillation.md).
 
 - **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-06-25 · **Branch:** `copilot`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
@@ -171,5 +171,6 @@ Only **Phase 1** gates the Version 1 release. Remaining work, in build order:
 | [`product.md`](product.md) | What Sync is, who it's for, **why copilot-first** (decision record + grounding model + guardrails), moats, surfaces, risks, metrics. |
 | [`architecture.md`](architecture.md) | Canonical **technical** model — 3 modules, KB schema, data model, decisions, flows. |
 | [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
+| [`phase-1-modules-map.md`](phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map + P1-M# cross-ref. |
 | [`phase-2-portal.md`](phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (as-built, frozen) + to-build modules P2-M3…M6. |
 | [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |

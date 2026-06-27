@@ -5,6 +5,8 @@ import { alignNarration } from './align';
 import { segment, eventLabel, type Segment } from './segment';
 import { synthesizeArticles, type SynthArticle } from './synthesize';
 import { redactText, redactTranscript } from './redact';
+import { cleanEvents } from './clean';
+import { distillSteps, type DistilledStep } from './distill';
 import type { ArtifactReader } from './types';
 
 export type { ArtifactReader } from './types';
@@ -16,6 +18,10 @@ export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
+export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/kb-step-distillation.md
+export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
+export type { DistilledStep, DistilledStepLLM } from './distill';
+// Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
 /** A KB step-item as the synthesis package produces/consumes it (Module 2 ⇄ Module 3). */
 export interface KbStepItem {
@@ -77,6 +83,91 @@ export async function buildKB(input: BuildKBInput): Promise<BuiltKB> {
   return { transcript, items };
 }
 
+// ---------- Module 2 (LIVE copilot path): capture → distilled workflow KB ----------
+// docs/kb-step-distillation.md. This is what the worker runs: transcribe → align → clean (B) →
+// segment → distill (A). It SUPERSEDES the raw 1:1 `buildKB` + `segmentItems` path for the copilot.
+// (buildKB/segmentItems stay for the parked Phase-2 article engine, which still reads raw events.)
+
+export interface BuildWorkflowKBInput {
+  manifest: SessionManifest;
+  getArtifact: ArtifactReader;
+  apiKey: string;
+  transcribeModel: string;
+  synthModel: string;
+}
+
+/** One workflow: a positional index (the approval key), a goal title, and its clean distilled steps. */
+export interface DistilledWorkflow {
+  segmentIndex: number;
+  title: string;
+  steps: DistilledStep[];
+}
+
+export interface WorkflowKB {
+  transcript: Transcript;
+  workflows: DistilledWorkflow[];
+}
+
+/** Build the copilot KB for one recording: a persistable transcript + clean steps grouped by workflow.
+ *  Raw events are NOT returned/persisted — only the distilled steps (each with one curated screenshot). */
+export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<WorkflowKB> {
+  const openai = new OpenAI({ apiKey: input.apiKey });
+
+  // 1. Transcribe (PII-scrubbed) + align narration to the RAW events (alignment needs raw timestamps).
+  const transcript = redactTranscript(
+    await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
+  );
+  const narration = alignNarration(input.manifest.events, transcript);
+
+  // 2. Deterministic cleanup (B) — collapse mechanical dupes / redundant events.
+  const cleaned = cleanEvents(input.manifest.events);
+  if (cleaned.length === 0) return { transcript, workflows: [] };
+
+  // 3. Segment the cleaned events into coherent workflows (one task = one workflow).
+  const segments = await segment(
+    openai,
+    input.synthModel,
+    cleaned,
+    input.manifest.markers ?? [],
+    narration,
+    transcript.text,
+  );
+  // Observability: what the segmenter decided (counts must add up — the guard re-adds any omitted event).
+  const assigned = segments.reduce((n, s) => n + s.eventIds.length, 0);
+  console.log(
+    `[segment] ${cleaned.length} cleaned events → ${segments.length} workflow(s) ` +
+      `[${assigned} assigned]: ${segments.map((s) => `"${s.title}"(${s.eventIds.length})`).join(', ')}`,
+  );
+
+  // 4. Distill each workflow into clean, user-facing steps (A).
+  const cleanedById = new Map(cleaned.map((e) => [e.id, e]));
+  const workflows: DistilledWorkflow[] = [];
+  for (const seg of segments) {
+    const segEvents = seg.eventIds
+      .map((id) => cleanedById.get(id))
+      .filter((e): e is CapturedEvent => Boolean(e));
+    if (segEvents.length === 0) continue;
+    const steps = await distillSteps(openai, input.synthModel, seg.title, segEvents, narration, transcript.text);
+    if (steps.length === 0) {
+      // distillSteps has a 0-step fallback, so this is unexpected — surface it rather than silently drop.
+      console.warn(`[distill] "${seg.title}": ${segEvents.length} events distilled to 0 steps — skipping`);
+      continue;
+    }
+    console.log(`[distill] workflow "${seg.title}": ${segEvents.length} events → ${steps.length} steps`);
+    // Drop-guard: a workflow shedding most of its events usually means a mis-scoped segment
+    // (the distiller pruned a whole off-title sub-task). Surface it rather than let it pass silently.
+    if (segEvents.length >= 10 && steps.length < segEvents.length * 0.3) {
+      console.warn(
+        `[distill] ⚠️ "${seg.title}" kept only ${steps.length}/${segEvents.length} events as steps — possible mis-scoped segment (a sub-task may have been dropped)`,
+      );
+    }
+    // Contiguous segmentIndex (0..n) — the approval key; skip-on-empty keeps it dense.
+    workflows.push({ segmentIndex: workflows.length, title: seg.title, steps });
+  }
+
+  return { transcript, workflows };
+}
+
 // ---------- Module 2 (cont.): segment the KB into workflow candidates ----------
 
 export interface SegmentItemsInput {
@@ -84,6 +175,9 @@ export interface SegmentItemsInput {
   markers: Marker[];
   apiKey: string;
   synthModel: string;
+  /** Full session narration — gives the segmenter the author's overall intent so it can tell
+   *  "one task across many steps" from "several independent tasks". Strongly reduces over-splitting. */
+  transcriptText?: string;
 }
 
 /** Segment the KB items into candidate workflows (titles). Runs at KB build (no synthesis).
@@ -92,7 +186,7 @@ export interface SegmentItemsInput {
 export async function segmentItems(input: SegmentItemsInput): Promise<Segment[]> {
   const openai = new OpenAI({ apiKey: input.apiKey });
   const { events, narration } = eventsAndNarration(input.items);
-  return segment(openai, input.synthModel, events, input.markers ?? [], narration);
+  return segment(openai, input.synthModel, events, input.markers ?? [], narration, input.transcriptText ?? '');
 }
 
 // ---------- Module 3.1: KB → article (curated — ONE selected candidate at a time) ----------

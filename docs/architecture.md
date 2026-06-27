@@ -34,13 +34,13 @@ Notes:
 
 ## Module 2 — Knowledge Base (explicit, persisted, indexed substrate)
 
-Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This explicit layer is **implemented (M6)** — the worker does capture → KB (transcript + items + segment tags), and article creation reads the KB.
+Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This explicit layer is **implemented (M6)** — the worker does capture → KB (transcript + **distilled** steps grouped by workflow), and article creation reads the KB. As of 2026-06-26 the worker **cleans + distills** raw events into clean, user-facing steps rather than persisting events 1:1 — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
 A processing/extraction step (the worker, repurposed) reads a raw capture and writes:
 
 - **`KnowledgeSource`** — one per capture: `kind`, app, **persisted transcript**, status, link to raw artifacts/manifest.
 - **`KnowledgeItem[]`** — the normalized, **indexed units of knowledge** (what makes the KB queryable and modality-agnostic):
-  - from a **workflow** capture → *step items* (action, element label, selector, route, screenshotKey, highlight, expected outcome, aligned narration, + searchable `text`)
+  - from a **workflow** capture → *distilled step items* (clean imperative `instruction`, optional `detail`, `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, + searchable `text`). Raw events are **not** persisted as items — they're cleaned + distilled into these steps (2026-06-26); the raw event log remains only in the source `manifest`.
   - from a **narration-only** capture → *topic items* (transcript span text, time range, + searchable `text`)
 - **Index** over every item's `text` — **keyword / LLM retrieval now → pgvector embeddings later** (decided 2026-06-19).
 
@@ -77,7 +77,7 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
   orderIndex   Int
   text         String                          // searchable content (the index field)
   data         Json                            // kind-specific payload:
-  //   step  -> { action, elementLabel, selector, route, screenshotKey, highlight, expectedOutcome, narration }
+  //   step  -> { instruction, detail, route, narration, screenshotFile, bbox }   (distilled — 2026-06-26)
   //   topic -> { spanText, startMs, endMs }
   segmentIndex Int?    // workflow this item belongs to (persisted segmentation — promoted toward C)
   segmentTitle String?

@@ -15,11 +15,13 @@ import { StatusBadge } from '@/components/dashboard/status-badge';
 
 export const dynamic = 'force-dynamic';
 
-type EventData = {
-  type?: string;
-  target?: { cssPath?: string; xpath?: string };
-  route?: { path?: string };
-  screenshot?: { file?: string };
+// The distilled-step shape persisted in KnowledgeItem.data (see docs/kb-step-distillation.md).
+type StepData = {
+  instruction?: string;
+  detail?: string;
+  route?: string;
+  narration?: string | null;
+  screenshotFile?: string | null;
 };
 
 export default async function KbSourcePage({
@@ -46,25 +48,18 @@ export default async function KbSourcePage({
 
   const items = await Promise.all(
     source.items.map(async (it) => {
-      const d =
-        (it.data as unknown as {
-          event?: EventData;
-          narration?: string | null;
-        }) ?? {};
-      const ev = d.event ?? {};
-      const file = ev.screenshot?.file;
+      const d = (it.data as unknown as StepData) ?? {};
       return {
         id: it.id,
-        kind: it.kind,
         orderIndex: it.orderIndex,
         segmentIndex: it.segmentIndex,
         segmentTitle: it.segmentTitle,
-        text: it.text,
+        instruction: d.instruction ?? it.text, // distilled instruction; fall back to searchable text
+        detail: d.detail ?? '',
         narration: d.narration ?? null,
-        selector: ev.target?.cssPath ?? ev.target?.xpath ?? '',
-        route: ev.route?.path ?? '',
-        screenshotUrl: file
-          ? await signedUrl(sessionObjectKey(ctx.workspace.id, source.id, file))
+        route: d.route ?? '',
+        screenshotUrl: d.screenshotFile
+          ? await signedUrl(sessionObjectKey(ctx.workspace.id, source.id, d.screenshotFile))
           : null,
       };
     }),
@@ -101,7 +96,7 @@ export default async function KbSourcePage({
         </div>
         <p className="text-sm text-muted-foreground">
           {source.kind} · {source.appBaseUrl || '(unknown app)'} · {items.length}{' '}
-          items · {groups.length} workflow(s)
+          steps · {groups.length} workflow(s)
         </p>
       </div>
 
@@ -148,9 +143,9 @@ export default async function KbSourcePage({
       </Card>
 
       <div>
-        <h2 className="text-base font-semibold">Knowledge items by workflow</h2>
+        <h2 className="text-base font-semibold">Steps by workflow</h2>
         <p className="text-sm text-muted-foreground">
-          What the system extracted, grouped by workflow. Read-only.
+          The clean steps the copilot is grounded in, grouped by workflow. Read-only.
         </p>
       </div>
 
@@ -160,7 +155,7 @@ export default async function KbSourcePage({
             <CardTitle className="text-sm">
               {group.title}{' '}
               <span className="font-normal text-muted-foreground">
-                · {group.items.length} items
+                · {group.items.length} steps
               </span>
             </CardTitle>
           </CardHeader>
@@ -173,7 +168,7 @@ export default async function KbSourcePage({
                 <div className="min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">
-                      #{it.orderIndex + 1}
+                      Step {it.orderIndex + 1}
                     </span>
                     {it.route && (
                       <span className="truncate text-xs text-muted-foreground">
@@ -181,15 +176,13 @@ export default async function KbSourcePage({
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm">{it.text}</p>
+                  <p className="mt-1 text-sm">{it.instruction}</p>
+                  {it.detail && (
+                    <p className="mt-1 text-sm text-muted-foreground">{it.detail}</p>
+                  )}
                   {it.narration && (
                     <p className="mt-1 text-sm text-muted-foreground">
                       🗣 {it.narration}
-                    </p>
-                  )}
-                  {it.selector && (
-                    <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
-                      {it.selector}
                     </p>
                   )}
                 </div>
@@ -203,7 +196,7 @@ export default async function KbSourcePage({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={it.screenshotUrl}
-                      alt={`item ${it.orderIndex + 1}`}
+                      alt={`Step ${it.orderIndex + 1}`}
                       className="w-full rounded-md border"
                     />
                   </a>

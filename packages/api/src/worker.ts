@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
 import type { SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
-import { buildKB, segmentItems, decodeStepData, type KbStepItem } from '@sync/synthesis';
+import { buildWorkflowKB, distilledStepText } from '@sync/synthesis';
 import { config } from './config';
 import { connection } from './queue';
 import { sessionArtifactReader } from './storage';
@@ -24,76 +24,43 @@ const worker = new Worker(
       const manifest = rec.manifest as unknown as SessionManifest;
       const getArtifact = sessionArtifactReader(rec.workspaceId, sessionId);
 
-      // ── Module 2: capture → Knowledge Base (transcribe + normalized step items) ──
-      const { transcript, items } = await buildKB({
+      // ── Module 2 (LIVE copilot path): capture → distilled workflow KB ──
+      // transcribe → align → clean (B) → segment → distill (A). Persists clean steps grouped by
+      // workflow (segmentIndex/segmentTitle); raw events are NOT stored. See docs/kb-step-distillation.md.
+      const { transcript, workflows } = await buildWorkflowKB({
         manifest,
         getArtifact,
         apiKey: config.openaiApiKey,
         transcribeModel: config.transcribeModel,
+        synthModel: config.synthModel,
       });
+
       await prisma.knowledgeSource.update({
         where: { id: sessionId },
         data: { transcript: transcript as object },
       });
+
+      // Replace the recording's KB items idempotently with the freshly distilled steps.
       await prisma.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
-      if (items.length > 0) {
-        await prisma.knowledgeItem.createMany({
-          data: items.map((it) => ({
-            sourceId: sessionId,
-            workspaceId: rec.workspaceId,
-            kind: it.kind,
-            orderIndex: it.orderIndex,
-            text: it.text,
-            data: { event: it.event, narration: it.narration } as object,
-          })),
-        });
-      }
-      console.log(`[worker] KB built: transcript(${transcript.segments.length} seg) + ${items.length} items`);
-
-      // ── Module 2 (cont.): segment the KB into workflow candidates + tag items (Option C) ──
-      // Curated flow (M6.1): we STOP here. No synthesis, no articles — the user generates
-      // selected candidates later from Studio. Segmentation persists candidate titles only.
-      const dbItems = await prisma.knowledgeItem.findMany({
-        where: { sourceId: sessionId, kind: 'step' },
-        orderBy: { orderIndex: 'asc' },
-      });
-      const stepItems: KbStepItem[] = dbItems.map((i) => ({
-        orderIndex: i.orderIndex,
-        kind: 'step',
-        text: i.text,
-        ...decodeStepData(i.data),
-      }));
-
-      const segments = await segmentItems({
-        items: stepItems,
-        markers: manifest.markers || [],
-        apiKey: config.openaiApiKey,
-        synthModel: config.synthModel,
-      });
-
-      // Tag each KB item with the workflow candidate it belongs to (these titles become the
-      // candidates the Studio "Auto Generate Articles" picker lists).
-      const eventToItemId = new Map(dbItems.map((i) => [decodeStepData(i.data).event.id, i.id]));
-      // Reset tags first so re-processing is idempotent.
-      await prisma.knowledgeItem.updateMany({
-        where: { sourceId: sessionId },
-        data: { segmentIndex: null, segmentTitle: null },
-      });
-      for (let si = 0; si < segments.length; si++) {
-        const seg = segments[si]!;
-        const itemIds = seg.eventIds
-          .map((eid) => eventToItemId.get(eid))
-          .filter((x): x is string => Boolean(x));
-        if (itemIds.length > 0) {
-          await prisma.knowledgeItem.updateMany({
-            where: { id: { in: itemIds } },
-            data: { segmentIndex: si, segmentTitle: seg.title },
-          });
-        }
-      }
+      const rows = workflows.flatMap((wf) =>
+        wf.steps.map((step, i) => ({
+          sourceId: sessionId,
+          workspaceId: rec.workspaceId,
+          kind: 'step',
+          orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
+          text: distilledStepText(step), // searchable: instruction + detail + narration
+          segmentIndex: wf.segmentIndex,
+          segmentTitle: wf.title,
+          data: step as object,
+        })),
+      );
+      if (rows.length > 0) await prisma.knowledgeItem.createMany({ data: rows });
 
       await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'ready', error: null } });
-      console.log(`[worker] ready ${sessionId}: ${segments.length} workflow candidate(s) from ${stepItems.length} items (no articles — curated generation)`);
+      console.log(
+        `[worker] ready ${sessionId}: ${workflows.length} workflow(s), ${rows.length} distilled step(s) ` +
+          `from transcript(${transcript.segments.length} seg)`,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'error', error: msg } });

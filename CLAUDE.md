@@ -10,7 +10,9 @@
 | [`product.md`](docs/product.md) | What Sync is, who it's for, **why copilot-first** (decision record + grounding model). |
 | [`architecture.md`](docs/architecture.md) | Technical model — the 3 modules (Capture → KB → Article creation), KB schema, decisions. |
 | [`phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog. |
+| [`phase-1-modules-map.md`](docs/phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map. |
 | [`phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules. |
+| [`kb-step-distillation.md`](docs/kb-step-distillation.md) | **KB step quality (in build)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + phased build plan. |
 | [`dev-setup.md`](docs/dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |
 
 ---

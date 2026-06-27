@@ -42,7 +42,9 @@ export async function retrieveApprovedKBItems(
     let score = 0;
     for (const t of terms) if (hay.includes(t)) score++;
     // P1-M8: boost items captured on the route the end-user is currently on ("answer for this screen").
-    const route = ((i.data as { event?: { route?: { path?: string } } } | null) ?? {})?.event?.route?.path ?? '';
+    // Distilled steps carry `data.route`; the `event.route.path` fallback covers any pre-distillation rows.
+    const d = (i.data ?? {}) as { route?: string; event?: { route?: { path?: string } } };
+    const route = d.route ?? d.event?.route?.path ?? '';
     if (contextPath && route && (route === contextPath || route.includes(contextPath) || contextPath.includes(route))) {
       score += 3;
     }
