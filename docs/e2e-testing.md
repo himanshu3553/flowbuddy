@@ -143,11 +143,11 @@ This is the core capture → knowledge path **and** the workflow-segmentation qu
 
 ### 6a. Record (the canonical test case: sign-in)
 1. Navigate to a real product page (the reference case is **chatful.co**).
-2. Extension popup → **Start**. Grant mic permission if prompted. **Narrate continuously** — narration is a primary segmentation signal. Example:
+2. Extension popup → **Start recording**. Grant mic permission if prompted. **Narrate continuously** — narration is a primary segmentation signal. Example:
    > "I'm going to show how to sign in on Chatful. This is the landing page. Click **Sign in** at the top-right. The login page opens. Enter your email, then your password. Optionally tick **Remember me**. Click **Sign in** — and you land on the dashboard. You're signed in."
 3. Perform: click **Sign in** → type email → type password → (optional) toggle **Remember me** → click **Sign in** → land on dashboard.
 4. **Do NOT add markers** (the popup's marker button) — reproduces the "absent markers → one workflow" path.
-5. Extension popup → **Stop**. The bundle (events + screenshots + audio + manifest) uploads to `POST /v1/sessions`.
+5. Extension popup → **Stop & upload** (the popup shows the **uploading** state, then the toolbar badge ↑→✓). The bundle (events + screenshots + audio + manifest) uploads to `POST /v1/sessions`.
 
 ### 6b. Worker processing
 Watch the **worker terminal**:

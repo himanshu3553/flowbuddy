@@ -1,0 +1,68 @@
+<!-- @dsCard group="Components" viewport="700x520" subtitle="The embeddable widget preview — grounded answers, citations & honest declines" name="Copilot widget" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body{margin:0;padding:20px;background:#f4f6fd;font-family:var(--font-sans);color:var(--ink);}
+  .panel{max-width:380px;margin:0 auto;background:#fff;border:1px solid var(--media-border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-widget);display:flex;flex-direction:column;}
+  .phead{display:flex;align-items:center;gap:10px;padding:12px 13px;border-bottom:1px solid var(--border);}
+  .mark{width:28px;height:28px;border-radius:8px;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font:12px var(--font-sans);}
+  .pbody{padding:13px;display:flex;flex-direction:column;gap:10px;background:#fcfcfd;}
+  .pfoot{display:flex;align-items:center;gap:9px;padding:10px 12px;border-top:1px solid var(--border);}
+  .send{width:28px;height:28px;border-radius:8px;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font:13px;}
+  .cap{display:flex;align-items:center;justify-content:center;gap:14px;font:10px var(--font-mono);color:#8b93b4;margin-top:14px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/plain" id="demo">
+  function Demo(){
+    return (
+      <div>
+        <div className="panel">
+          <div className="phead">
+            <div className="mark">◆</div>
+            <div style={{flex:1}}><div style={{font:'700 13px var(--font-sans)',color:'var(--ink)'}}>Acme Copilot</div><div style={{font:'10px var(--font-mono)',color:'var(--text-faint)'}}>grounded in Acme's own docs</div></div>
+            <div style={{font:'16px',color:'var(--gray-300)'}}>×</div>
+          </div>
+          <div className="pbody">
+            <CopilotMessage from="user">How do I reset a customer's password?</CopilotMessage>
+            <CopilotMessage from="bot" citation="Reset a password" feedback>
+              Open the account menu, go to <b>Security</b>, then click <b>Reset password</b> and confirm. They'll get a reset email.
+            </CopilotMessage>
+            <CopilotMessage from="user">Do you support SAML SSO?</CopilotMessage>
+            <CopilotMessage from="bot" decline>
+              I don't have that in my approved sources yet, so I won't guess. I've flagged it for the Acme team to cover.
+            </CopilotMessage>
+          </div>
+          <div className="pfoot">
+            <div style={{flex:1,font:'12px var(--font-sans)',color:'var(--text-faint)'}}>Ask anything…</div>
+            <div className="send">↑</div>
+          </div>
+        </div>
+        <div className="cap"><span>context-aware</span><span>·</span><span>cites sources</span><span>·</span><span>declines honestly</span></div>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+<script>
+(async () => {
+  const files = ['CopilotMessage.jsx'];
+  try {
+    const srcs = await Promise.all(files.map((f) => fetch(f).then((r) => { if (!r.ok) throw new Error('Failed to load ' + f); return r.text(); })));
+    let combined = srcs.join('\n\n').replace(/^[ \t]*import[^\n]*\n/gm, '').replace(/\bexport\s+/g, '');
+    combined += '\n\n' + document.getElementById('demo').textContent;
+    const { code } = Babel.transform(combined, { presets: [['react', { runtime: 'classic' }]], sourceType: 'script' });
+    const s = document.createElement('script'); s.textContent = code; document.body.appendChild(s);
+  } catch (e) { document.getElementById('root').innerHTML = '<div style="font:12px ui-monospace,monospace;color:#9c5c4d;padding:8px">' + (e && e.message ? e.message : e) + '</div>'; console.error(e); }
+})();
+</script>
+</body>
+</html>

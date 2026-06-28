@@ -1,0 +1,31 @@
+<!-- @dsCard group="Spacing" viewport="700x170" subtitle="4px base grid · dense console lives in the 8–16px band" name="Spacing scale" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .row{display:flex;align-items:flex-end;gap:14px;}
+  .item{display:flex;flex-direction:column;align-items:center;gap:7px;}
+  .bar{background:var(--indigo-50);border:1px solid var(--indigo-100);border-radius:3px;width:22px;}
+  .v{font:500 10px var(--font-mono);color:var(--text-muted);}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="item"><div class="bar" style="height:8px;"></div><div class="v">4</div></div>
+    <div class="item"><div class="bar" style="height:12px;"></div><div class="v">6</div></div>
+    <div class="item"><div class="bar" style="height:16px;"></div><div class="v">8</div></div>
+    <div class="item"><div class="bar" style="height:20px;"></div><div class="v">10</div></div>
+    <div class="item"><div class="bar" style="height:24px;"></div><div class="v">12</div></div>
+    <div class="item"><div class="bar" style="height:28px;"></div><div class="v">14</div></div>
+    <div class="item"><div class="bar" style="height:32px;"></div><div class="v">16</div></div>
+    <div class="item"><div class="bar" style="height:36px;"></div><div class="v">18</div></div>
+    <div class="item"><div class="bar" style="height:44px;"></div><div class="v">22</div></div>
+    <div class="item"><div class="bar" style="height:48px;"></div><div class="v">24</div></div>
+  </div>
+  <div style="font:400 11.5px var(--font-mono);color:var(--text-faint);margin-top:16px;">page padding 22px · card padding 16–24px · row gap 10px · nav gap 4px</div>
+</body>
+</html>

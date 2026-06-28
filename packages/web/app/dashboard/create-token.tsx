@@ -20,7 +20,7 @@ export function CreateToken() {
         </Button>
       </form>
       {state.token && (
-        <div className="rounded-md border bg-muted/40 p-3">
+        <div className="rounded-control border bg-secondary p-3">
           <p className="mb-1 text-xs text-muted-foreground">
             Copy this now — it&apos;s shown only once:
           </p>

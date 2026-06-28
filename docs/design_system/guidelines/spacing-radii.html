@@ -1,0 +1,28 @@
+<!-- @dsCard group="Spacing" viewport="700x170" subtitle="Radii climb with surface scale: control → tile → card → dialog → pill" name="Corner radii" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .row{display:flex;gap:18px;align-items:flex-end;}
+  .item{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .box{width:74px;height:56px;background:var(--indigo-50);border:1.5px solid var(--indigo-200);}
+  .v{font:600 11px var(--font-sans);color:var(--ink);}
+  .t{font:500 10px var(--font-mono);color:var(--text-muted);}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="item"><div class="box" style="border-radius:6px;"></div><div class="v">xs · 6</div><div class="t">mark · chip</div></div>
+    <div class="item"><div class="box" style="border-radius:9px;"></div><div class="v">sm · 9</div><div class="t">button · nav</div></div>
+    <div class="item"><div class="box" style="border-radius:11px;"></div><div class="v">md · 11</div><div class="t">tile</div></div>
+    <div class="item"><div class="box" style="border-radius:13px;"></div><div class="v">lg · 13</div><div class="t">list tile</div></div>
+    <div class="item"><div class="box" style="border-radius:16px;"></div><div class="v">xl · 16</div><div class="t">card</div></div>
+    <div class="item"><div class="box" style="border-radius:18px;"></div><div class="v">2xl · 18</div><div class="t">dialog</div></div>
+    <div class="item"><div class="box" style="border-radius:999px;width:56px;"></div><div class="v">pill</div><div class="t">badge</div></div>
+  </div>
+</body>
+</html>

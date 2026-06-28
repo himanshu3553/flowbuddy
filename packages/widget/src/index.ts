@@ -9,7 +9,7 @@
 //           data-sync-accent="#4f46e5"        (optional — brand the widget to the host)
 //           data-sync-position="left"></script> (optional — "left" | "right", default right)
 // (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
-// The default theme is neutral (matches Sync Studio); data-sync-accent should be a dark-ish brand color (text on it is white).
+// The default theme is the Sync indigo brand (matches Sync Studio); data-sync-accent overrides it with the host's own brand color (text on it is white).
 
 import { CSS } from './styles.js';
 

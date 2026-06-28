@@ -55,6 +55,12 @@ export async function kvEntriesByPrefix<T>(prefix: string): Promise<Array<{ key:
   });
 }
 
+/** Cheap count of keys under a prefix (no value deserialization) — used for live step counts. */
+export async function kvCountByPrefix(prefix: string): Promise<number> {
+  const range = IDBKeyRange.bound(prefix, prefix + '￿');
+  return tx('readonly', (s) => s.count(range));
+}
+
 export async function kvClear(): Promise<void> {
   await tx('readwrite', (s) => s.clear());
 }

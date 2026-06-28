@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { CheckCircle2, ChevronLeft } from 'lucide-react';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
@@ -180,8 +180,8 @@ export default async function KbSourcePage({
                           </p>
                         )}
                         {it.narration && (
-                          <p className="mt-1.5 text-xs italic text-muted-foreground">
-                            🗣 {it.narration}
+                          <p className="mt-2 border-l-2 border-brand-200 pl-2.5 text-xs italic leading-relaxed text-muted-foreground">
+                            {it.narration}
                           </p>
                         )}
                       </div>
@@ -212,10 +212,17 @@ export default async function KbSourcePage({
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Used by the copilot</CardTitle>
                 <CardDescription className="text-xs">
-                  Citation stats appear once your copilot is live and answering.
+                  How this recording appears as a source when the copilot
+                  answers.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5">
+                <div className="inline-flex items-center gap-1.5 rounded-pill border border-brand-100 bg-brand-50 px-2.5 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span className="truncate font-mono text-[10.5px] text-primary">
+                    Source: {source.appBaseUrl || 'Recording'}
+                  </span>
+                </div>
                 {[
                   ['Cited by copilot', '—'],
                   ['Last cited', '—'],
@@ -226,14 +233,19 @@ export default async function KbSourcePage({
                     className="flex items-center justify-between text-xs"
                   >
                     <span className="text-muted-foreground">{k}</span>
-                    <span className="font-mono font-semibold">{v}</span>
+                    <span className="font-mono font-semibold text-ink">{v}</span>
                   </div>
                 ))}
-                <div className="rounded-md border border-dashed bg-muted/30 px-2.5 py-2 text-[11px] text-muted-foreground">
-                  {ready
-                    ? 'Selectors healthy · grounded and ready to cite.'
-                    : 'Still building — not yet citable.'}
-                </div>
+                {ready ? (
+                  <div className="flex items-center gap-2 rounded-control border border-success-border bg-success-bg px-2.5 py-2 text-[11px] text-success-text2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success-dot" />
+                    Selectors healthy · grounded and ready to cite.
+                  </div>
+                ) : (
+                  <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
+                    Still building — not yet citable.
+                  </div>
+                )}
               </CardContent>
             </Card>
 

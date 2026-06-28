@@ -21,14 +21,16 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 flex min-h-14 items-center justify-between gap-3 border-b bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-8',
+        'sticky top-0 z-30 flex h-[62px] items-center justify-between gap-5 border-b bg-card px-5 md:px-6',
         className,
       )}
     >
       <div className="min-w-0">
-        <h1 className="truncate text-base font-bold tracking-tight">{title}</h1>
+        <h1 className="truncate text-base font-bold tracking-[-0.01em] text-ink">
+          {title}
+        </h1>
         {subtitle && (
-          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+          <p className="truncate text-[11.5px] text-faint">{subtitle}</p>
         )}
       </div>
       {actions && (

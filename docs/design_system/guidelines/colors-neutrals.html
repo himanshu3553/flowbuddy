@@ -1,0 +1,37 @@
+<!-- @dsCard group="Colors" viewport="700x200" subtitle="Cool grays on a warm-white paper — the calm console base" name="Neutrals & text ramp" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:18px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .sw{width:104px;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+  .chip{height:46px;}
+  .meta{padding:6px 8px;}
+  .name{font:600 11px/1.2 var(--font-sans);color:var(--ink);}
+  .hex{font:500 10px/1.3 var(--font-mono);color:var(--text-muted);margin-top:2px;}
+  .txt{display:flex;flex-direction:column;gap:5px;}
+  .txt div{font:600 14px var(--font-sans);}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--paper);"></div><div class="meta"><div class="name">paper</div><div class="hex">#f6f7f9</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--paper-2);"></div><div class="meta"><div class="name">paper-2</div><div class="hex">#fafbfc</div></div></div>
+    <div class="sw"><div class="chip" style="background:#fff;"></div><div class="meta"><div class="name">surface</div><div class="hex">#ffffff</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--gray-100);"></div><div class="meta"><div class="name">border</div><div class="hex">#eceef3</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--gray-150);"></div><div class="meta"><div class="name">border-strong</div><div class="hex">#e6e8ee</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--gray-300);"></div><div class="meta"><div class="name">gray-300</div><div class="hex">#b4b8c6</div></div></div>
+  </div>
+  <div class="txt">
+    <div style="color:var(--ink);">Ink #14161f — headings & highest-contrast text</div>
+    <div style="color:var(--gray-700);">Gray-700 #3a3f4d — strong body</div>
+    <div style="color:var(--gray-600);">Gray-600 #6b7180 — secondary / inactive nav</div>
+    <div style="color:var(--gray-500);">Gray-500 #7a808e — muted</div>
+    <div style="color:var(--gray-400);">Gray-400 #9a9faf — faint captions</div>
+  </div>
+</body>
+</html>

@@ -56,13 +56,13 @@ export function ConnectClient({ email }: { email: string }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-gradient-logo text-sm font-bold text-white">
             S
           </span>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">
             Connect the Sync Recorder
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -76,7 +76,7 @@ export function ConnectClient({ email }: { email: string }) {
           </CardHeader>
           <CardContent className="space-y-3">
             {phase === 'done' ? (
-              <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
+              <div className="flex items-center gap-2 rounded-md border border-success-border bg-success-bg p-3 text-sm font-medium text-success-text2">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Connected. You can close this tab and start recording from the
                 extension.
@@ -84,7 +84,7 @@ export function ConnectClient({ email }: { email: string }) {
             ) : (
               <>
                 {!extPresent && (
-                  <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <p className="rounded-control border bg-secondary p-3 text-sm text-muted-foreground">
                     The Sync Recorder extension isn&apos;t detected on this page.
                     Install/enable it (chrome://extensions), then reload this
                     page.

@@ -18,13 +18,13 @@ import { Label } from '@/components/ui/label';
 export default function SignUpPage() {
   const [error, action, pending] = useActionState(signUpAction, undefined);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-gradient-logo text-sm font-bold text-white">
             S
           </span>
-          <h1 className="text-xl font-semibold tracking-tight">Sync Studio</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">Sync Studio</h1>
           <p className="text-sm text-muted-foreground">
             The in-app help copilot for your SaaS.
           </p>

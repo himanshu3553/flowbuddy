@@ -1,4 +1,4 @@
-import { Bot, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Bot } from 'lucide-react';
 
 /**
  * Static preview of the embeddable end-user copilot (the widget runtime is a
@@ -7,71 +7,79 @@ import { Bot, ThumbsDown, ThumbsUp } from 'lucide-react';
  */
 export function WidgetPreview() {
   return (
-    <div className="space-y-2">
-      <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+    <div>
+      <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.05em] text-faint">
         End-user preview — in your app
       </div>
-      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-        {/* widget header */}
-        <div className="flex items-center gap-2.5 border-b bg-muted/30 px-4 py-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#4a63e8] to-[#3a50dd] text-white">
-            <Bot className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold leading-tight">
-              Copilot
+      <div className="rounded-[14px] border border-[#e7eafb] bg-[#f4f6fd] p-4">
+        <div className="overflow-hidden rounded-[14px] border border-[color:var(--media-border)] bg-white shadow-widget">
+          {/* widget header */}
+          <div className="flex items-center gap-2.5 border-b px-3.5 py-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">
+              <Bot className="h-4 w-4" />
             </span>
-            <span className="block text-[10.5px] text-muted-foreground">
-              grounded in your approved docs
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-bold leading-tight text-ink">
+                Copilot
+              </span>
+              <span className="block font-mono text-[10px] text-faint">
+                grounded in your approved docs
+              </span>
             </span>
-          </span>
-          <span className="text-muted-foreground">×</span>
-        </div>
-
-        {/* conversation */}
-        <div className="space-y-3 px-4 py-4">
-          <div className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-xs text-primary-foreground">
-            How do I reset a customer’s password?
+            <span className="text-faint">×</span>
           </div>
-          <div className="w-fit max-w-[88%] rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-xs leading-relaxed">
-            Open the account menu, go to <b>Security</b>, then click{' '}
-            <b>Reset password</b> and confirm. They’ll get a reset email.
-            <div className="mt-2 flex items-center gap-2">
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                Source: Reset a password
-              </span>
-              <span className="ml-auto flex items-center gap-1.5 text-muted-foreground">
-                <ThumbsUp className="h-3 w-3" />
-                <ThumbsDown className="h-3 w-3" />
-              </span>
+
+          {/* conversation */}
+          <div className="flex flex-col gap-2.5 bg-[#fcfcfd] px-3.5 py-3.5">
+            <div className="ml-auto w-fit max-w-[78%] rounded-[13px] rounded-br-[4px] bg-primary px-3 py-2 text-xs text-primary-foreground">
+              How do I reset a customer’s password?
+            </div>
+            <div className="w-fit max-w-[88%] rounded-[13px] rounded-bl-[4px] border bg-white px-3 py-2.5 text-xs leading-relaxed text-secondary-foreground">
+              Open the account menu, go to <b>Security</b>, then click{' '}
+              <b>Reset password</b> and confirm. They’ll get a reset email.
+              <div className="mt-2.5 flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-pill border border-brand-100 bg-brand-50 px-2.5 py-[3px]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span className="font-mono text-[10px] text-primary">
+                    Source: Reset a password
+                  </span>
+                </span>
+                <span className="ml-auto flex items-center gap-2 text-[13px] leading-none">
+                  <span className="text-success-dot">▲</span>
+                  <span className="text-[color:var(--gray-300)]">▽</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="ml-auto w-fit max-w-[78%] rounded-[13px] rounded-br-[4px] bg-primary px-3 py-2 text-xs text-primary-foreground">
+              Do you support SAML SSO?
+            </div>
+            <div className="w-fit max-w-[88%] rounded-[13px] rounded-bl-[4px] border border-danger-border bg-white px-3 py-2.5 text-xs leading-relaxed text-secondary-foreground">
+              I don’t have that in my approved sources yet, so I won’t guess. I’ve
+              flagged it for your team to cover.
+              <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-pill border border-danger-border bg-danger-bg px-2.5 py-[3px]">
+                <span className="h-1.5 w-1.5 rounded-full bg-danger-ink" />
+                <span className="font-mono text-[10px] text-danger-text">
+                  Honest decline · gap logged
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-xs text-primary-foreground">
-            Do you support SAML SSO?
-          </div>
-          <div className="w-fit max-w-[88%] rounded-2xl rounded-bl-sm border border-dashed bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            I don’t have that in my approved sources yet, so I won’t guess. I’ve
-            flagged it for your team to cover.
-            <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">
-              Honest decline · gap logged
-            </div>
-          </div>
-        </div>
-
-        {/* input */}
-        <div className="border-t px-4 py-3">
-          <div className="flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Ask anything…
-            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          {/* input */}
+          <div className="flex items-center gap-2 border-t px-3 py-2.5">
+            <span className="flex-1 text-xs text-[color:var(--gray-300)]">
+              Ask anything…
+            </span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               ↑
             </span>
           </div>
         </div>
+        <p className="mt-3 text-center font-mono text-[10px] text-[#8b93b4]">
+          context-aware · cites sources · declines honestly
+        </p>
       </div>
-      <p className="text-center text-[11px] text-muted-foreground">
-        context-aware · cites sources · declines honestly
-      </p>
     </div>
   );
 }

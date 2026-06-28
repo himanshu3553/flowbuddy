@@ -47,18 +47,18 @@ function Stepper({ steps }: { steps: Step[] }) {
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border',
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-tile border',
                   s.tone === 'record'
-                    ? 'border-destructive/20 bg-destructive/10 text-destructive'
-                    : 'border-primary/20 bg-primary/10 text-primary',
+                    ? 'border-danger-border bg-danger-bg2 text-danger'
+                    : 'border-brand-100 bg-brand-50 text-primary',
                 )}
               >
                 <Icon className="h-[18px] w-[18px]" />
               </div>
-              {!last && <div className="my-1.5 w-0.5 flex-1 bg-primary/15" />}
+              {!last && <div className="my-1.5 w-0.5 flex-1 bg-[color:var(--indigo-150)]" />}
             </div>
             <div className={cn('flex-1', last ? 'pb-1' : 'pb-4')}>
-              <div className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-primary/60">
+              <div className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#9aa0c0]">
                 Step {i + 1}
               </div>
               <div className="mt-0.5 text-[14.5px] font-semibold tracking-tight">
@@ -83,11 +83,11 @@ function FooterCallout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/[0.06] p-3.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-card text-primary">
+    <div className="flex items-center gap-3 rounded-list border border-dashed border-brand-200 bg-[#f4f6ff] p-3.5">
+      <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-tile border border-brand-100 bg-card text-primary">
         <Icon className="h-[18px] w-[18px]" />
       </div>
-      <p className="text-[12.5px] leading-snug text-foreground/80">{children}</p>
+      <p className="text-[12.5px] leading-snug text-[#3a4a7a]">{children}</p>
     </div>
   );
 }
@@ -199,21 +199,14 @@ export function HomeHelpDialogs() {
   return (
     <>
       <HowItWorksDialog>
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-        >
+        <Button variant="outline" size="sm">
           <HelpCircle className="h-4 w-4" />
           How it works
         </Button>
       </HowItWorksDialog>
 
       <HowToRecordDialog>
-        <Button
-          size="sm"
-          className="bg-gradient-to-b from-[#4a63e8] to-[#3a50dd] text-white shadow-[0_2px_10px_rgba(58,80,221,0.3)] hover:opacity-95"
-        >
+        <Button size="sm">
           <span className="h-2.5 w-2.5 rounded-full bg-white" />
           How to Record
         </Button>

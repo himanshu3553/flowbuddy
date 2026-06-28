@@ -16,30 +16,45 @@ export function MetricCard({
   value: React.ReactNode;
   label: string;
   sublabel?: string;
-  tone?: 'default' | 'primary';
+  /** `success` = the tinted (green) ROI tile — the one stat that gets a fill. */
+  tone?: 'default' | 'success' | 'primary';
   className?: string;
 }) {
+  const success = tone === 'success';
+  const primary = tone === 'primary';
   return (
     <div
       className={cn(
-        'min-w-0 rounded-xl border bg-card p-4 shadow-sm',
-        tone === 'primary' && 'border-primary/20 bg-primary/[0.05]',
+        'min-w-0 rounded-list border border-[color:var(--gray-150)] bg-card px-[13px] py-[11px]',
+        success && 'border-success-border bg-success-bg',
+        primary && 'border-brand-200 bg-brand-50',
         className,
       )}
     >
       <div
         className={cn(
-          'truncate text-2xl font-extrabold tracking-tight',
-          tone === 'primary' && 'text-primary',
+          'truncate text-[21px] font-extrabold leading-tight tracking-tight text-ink',
+          success && 'text-success-text2',
+          primary && 'text-primary',
         )}
       >
         {value}
       </div>
-      <div className="mt-0.5 text-xs font-medium text-muted-foreground">
+      <div
+        className={cn(
+          'mt-0.5 text-[11px] font-medium text-muted-foreground',
+          success && 'text-success-text2',
+        )}
+      >
         {label}
       </div>
       {sublabel && (
-        <div className="mt-0.5 text-[11px] text-muted-foreground/80">
+        <div
+          className={cn(
+            'mt-0.5 text-[11px] leading-snug text-faint',
+            success && 'text-success-dot',
+          )}
+        >
           {sublabel}
         </div>
       )}

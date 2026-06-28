@@ -13,7 +13,7 @@
 | [`phase-1-modules-map.md`](docs/phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map. |
 | [`phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules. |
 | [`kb-step-distillation.md`](docs/kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
-| [`design_handoff_sync_studio/`](docs/design_handoff_sync_studio/README.md) | **Studio UI handoff (indigo rebrand)** — Claude Design source-of-truth: `README.md` (spec), `f1_home_states.html` (Home hi-fi target), `prototype_full.html` (all screens), `theme-indigo.css`. Implemented in `@sync/web` 2026-06-28. |
+| [`design_system/`](docs/design_system/README.md) | **Design system (indigo brand) — the source of truth for ALL UI.** Tokens (colors · type · spacing · elevation), components, the full Studio UI kit, + recorder/widget specs. Canonical since 2026-06-28; **supersedes the deleted Claude Design handoff** (`design_handoff_sync_studio/`). Studio + extension + widget are all token-aligned to it. |
 | [`e2e-testing.md`](docs/e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics, with per-step PASS signals. |
 | [`dev-setup.md`](docs/dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |
 
@@ -29,9 +29,9 @@ pnpm + Turborepo. One repo, several packages under `packages/`:
 | `db` | Prisma schema + client (Postgres). |
 | `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`). *(Article-generation engine `synthesize.ts`/`prompt.ts` is present but **parked Phase 2** — see below.)* |
 | `api` | Fastify HTTP service (ingestion + copilot routes) **and** the BullMQ worker (`worker` entrypoint). |
-| `web` | Next.js **Studio** — copilot-first: app shell (sidebar w/ workspace switcher + user footer; per-page header) over a 6-item nav **Home · Recordings · Knowledge Base · Copilot · Analytics · Settings**; built on **Tailwind + shadcn/ui** under the **indigo brand** (rebuilt 2026-06-28 from `docs/design_handoff_sync_studio/`). Every screen has empty/loading/error states. *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
-| `widget` | Embeddable copilot `<script>` (esbuild → `sync-copilot.js`). |
-| `extension` | Chrome MV3 recorder. |
+| `web` | Next.js **Studio** — copilot-first: app shell (sidebar w/ workspace switcher + user footer; per-page header) over a 6-item nav **Home · Recordings · Knowledge Base · Copilot · Analytics · Settings**; built on **Tailwind + shadcn/ui** under the **indigo brand**, token-aligned to [`docs/design_system/`](docs/design_system/README.md) (cool-gray neutrals, low-sat status palette, radii/shadow ramps, Plus Jakarta Sans + JetBrains Mono). Every screen has empty/loading/error states. *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
+| `widget` | Embeddable copilot `<script>` (esbuild → `sync-copilot.js`); **Sync-indigo by default**, host-rebrandable via `data-sync-accent` — aligned to the design system. |
+| `extension` | Chrome MV3 recorder; indigo UI aligned to the design system (record/danger = terracotta). |
 
 *(`portal` — the Phase-2 public help site — was removed for the Phase-1 clean slate and returns in Phase 2; it's not in the current workspace.)*
 

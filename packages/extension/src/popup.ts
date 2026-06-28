@@ -1,149 +1,213 @@
-// Popup UI: connect/disconnect to Sync Studio, mic permission, and start/stop/marker controls.
-// The API URL + token are no longer typed here — they arrive via the "Connect" flow.
+// Popup UI — a 4-state machine (idle · recording · uploading · retry) mirroring the Sync design.
+// Real data: connection email, live REC timer, captured domain + step/workflow counts (from
+// getState). Placeholders (no backing capability): Mask-PII toggle (always on), mic level, Pause,
+// upload progress (indeterminate), and the partial "N of M" retry count.
 
 declare const __STUDIO_URL__: string; // baked at build time (build.mjs)
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-
-const conn = $<HTMLDivElement>('conn');
-const grantMicBtn = $<HTMLButtonElement>('grantMic');
-const startBtn = $<HTMLButtonElement>('start');
-const stopBtn = $<HTMLButtonElement>('stop');
-const markerBtn = $<HTMLButtonElement>('marker');
-const micStatus = $<HTMLDivElement>('micStatus');
-const statusBox = $<HTMLDivElement>('status');
-const dot = $<HTMLSpanElement>('dot');
-const statusText = $<HTMLSpanElement>('statusText');
+const body = document.body;
 
 let connected = false;
-let recording = false;
+let email = '';
+let recStart = 0; // startTime for the live timer
+let ticker: number | null = null;
+let poller: number | null = null;
 
 init();
 
 async function init(): Promise<void> {
-  await refreshConnection();
-  await refreshMic();
-  const state = await send({ cmd: 'getState' });
-  setRecordingUI(Boolean(state?.recording));
-  if (!state?.recording) {
-    const { lastUpload } = await chrome.storage.local.get('lastUpload');
-    if (lastUpload) showLastUpload(lastUpload);
-  }
-
-  grantMicBtn.addEventListener('click', grantMic);
-  startBtn.addEventListener('click', start);
-  stopBtn.addEventListener('click', stop);
-  markerBtn.addEventListener('click', () => send({ cmd: 'marker' }));
-}
-
-/** Render the connection row (Connected as … / Disconnect, or Connect to Sync Studio). */
-async function refreshConnection(): Promise<void> {
   const c = await send({ cmd: 'getConnection' });
   connected = Boolean(c?.connected);
-  conn.textContent = '';
-  conn.className = connected ? 'conn on' : 'conn';
+  email = c?.email || '';
 
-  const who = document.createElement('span');
-  who.className = 'who';
-  const btn = document.createElement('button');
+  const state = await send({ cmd: 'getState' });
+  wire();
 
-  if (connected) {
-    who.textContent = c.email ? `✓ Connected as ${c.email}` : '✓ Connected to Sync';
-    btn.textContent = 'Disconnect';
-    btn.className = 'ghost';
-    btn.onclick = async () => { await send({ cmd: 'disconnect' }); await refreshConnection(); applyButtonState(); };
-  } else {
-    who.textContent = 'Not connected to Sync';
-    btn.id = 'connect';
-    btn.textContent = 'Connect';
-    btn.onclick = () => { chrome.tabs.create({ url: `${__STUDIO_URL__}/connect` }); window.close(); };
-  }
-  conn.append(who, btn);
-  applyButtonState();
-}
-
-function showLastUpload(u: { ok: boolean; sessionId?: string; error?: string; retryable?: boolean }): void {
-  if (u.ok) {
-    setStatus(`Last upload ✓ (${u.sessionId?.slice(0, 8)}…)`, 'ok');
+  if (state?.recording) {
+    enterRecording(state);
     return;
   }
-  setStatus(`Last upload failed — ${u.error}`, 'fail');
-  // R2: the recording is still buffered — let the user retry instead of losing it.
-  if (u.retryable) {
-    const btn = document.createElement('button');
-    btn.textContent = 'Retry upload';
-    btn.className = 'ghost';
-    btn.style.marginTop = '8px';
-    btn.onclick = async () => {
-      btn.disabled = true;
-      setStatus('Retrying upload…', 'neutral');
-      const res = await send({ cmd: 'retryUpload' });
-      if (res?.ok) setStatus('Upload ✓', 'ok');
-      else { setStatus(`Retry failed — ${res?.error || 'unknown error'}`, 'fail'); btn.disabled = false; }
-    };
-    statusBox.appendChild(btn);
+  if (!connected) {
+    setState('disconnected');
+    return;
+  }
+  const { lastUpload } = await chrome.storage.local.get('lastUpload');
+  if (lastUpload && !lastUpload.ok && lastUpload.retryable) enterRetry(lastUpload);
+  else enterIdle(lastUpload);
+}
+
+function setState(s: string): void {
+  body.dataset.state = s;
+  if (s !== 'recording') stopTimers();
+}
+
+function stopTimers(): void {
+  if (ticker != null) { clearInterval(ticker); ticker = null; }
+  if (poller != null) { clearInterval(poller); poller = null; }
+}
+
+// ---- views ----
+
+function enterIdle(lastUpload?: { ok?: boolean; sessionId?: string }): void {
+  $('connWho').textContent = email ? `✓ Connected as ${email}` : '✓ Connected to Sync';
+  renderRecent(lastUpload);
+  void refreshMic();
+  setState('idle');
+}
+
+function renderRecent(lastUpload?: { ok?: boolean; sessionId?: string }): void {
+  const recent = $('recent');
+  if (lastUpload?.ok && lastUpload.sessionId) {
+    recent.textContent = '';
+    const row = document.createElement('div');
+    row.className = 'recent-row';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = `Session ${String(lastUpload.sessionId).slice(0, 8)}…`;
+    const badge = document.createElement('span');
+    badge.className = 'badge-ok';
+    badge.textContent = 'uploaded';
+    row.append(name, badge);
+    recent.appendChild(row);
+  } else {
+    recent.innerHTML = '<p class="empty">No recordings yet.</p>';
+  }
+}
+
+interface RecState { recording?: boolean; startTime?: number; appBaseUrl?: string; steps?: number; workflows?: number }
+
+function enterRecording(state: RecState): void {
+  recStart = state.startTime || Date.now();
+  $('recDomain').textContent = hostOf(state.appBaseUrl || '');
+  updateRecCounts(state.steps ?? 0, state.workflows ?? 1);
+  setState('recording');
+  tick();
+  ticker = setInterval(tick, 1000) as unknown as number;
+  poller = setInterval(pollCounts, 2000) as unknown as number;
+}
+
+function updateRecCounts(steps: number, workflows: number): void {
+  $('recWorkflow').textContent = `Workflow ${workflows}`;
+  $('recSteps').textContent = `${steps} step${steps === 1 ? '' : 's'} captured`;
+}
+
+function tick(): void {
+  $('recTimer').textContent = `REC · ${fmt(Date.now() - recStart)}`;
+}
+
+async function pollCounts(): Promise<void> {
+  const s: RecState = await send({ cmd: 'getState' });
+  if (!s?.recording) { stopTimers(); return; }
+  updateRecCounts(s.steps ?? 0, s.workflows ?? 1);
+}
+
+function enterRetry(lastUpload: { error?: string }): void {
+  $('retryDetail').textContent = lastUpload?.error ? `Last error: ${lastUpload.error}` : '';
+  setState('retry');
+}
+
+// ---- handlers ----
+
+function wire(): void {
+  $('settingsGear').addEventListener('click', () => {
+    chrome.tabs.create({ url: `${__STUDIO_URL__}/dashboard/settings` });
+  });
+  $('connectBtn').addEventListener('click', () => {
+    chrome.tabs.create({ url: `${__STUDIO_URL__}/connect` });
+    window.close();
+  });
+  $('disconnectBtn').addEventListener('click', async () => {
+    await send({ cmd: 'disconnect' });
+    connected = false;
+    setState('disconnected');
+  });
+  $('grantMic').addEventListener('click', grantMic);
+  $('start').addEventListener('click', start);
+  $('marker').addEventListener('click', async () => { await send({ cmd: 'marker' }); await pollCounts(); });
+  $('stop').addEventListener('click', stop);
+  $('retry').addEventListener('click', retry);
+  $('resumeLater').addEventListener('click', () => window.close());
+}
+
+async function start(): Promise<void> {
+  const { apiToken, backendUrl } = await chrome.storage.local.get(['apiToken', 'backendUrl']);
+  if (!apiToken) { setState('disconnected'); return; }
+  const res = await send({ cmd: 'start', backendUrl, token: apiToken });
+  if (res?.ok) {
+    const s = await send({ cmd: 'getState' });
+    enterRecording(s || { startTime: Date.now() });
+  } else {
+    const micStatus = $('micStatus');
+    micStatus.textContent = `⚠ ${res?.error || 'Could not start recording.'}`;
+    micStatus.className = 'mic-bad';
+  }
+}
+
+async function stop(): Promise<void> {
+  const s: RecState = await send({ cmd: 'getState' });
+  const durationMs = recStart ? Date.now() - recStart : 0;
+  const workflows = s?.workflows ?? 1;
+  $('upMeta').textContent = `${fmt(durationMs)} · ${workflows} workflow${workflows === 1 ? '' : 's'} · narration saved`;
+  setState('uploading');
+  await send({ cmd: 'stop' });
+}
+
+async function retry(): Promise<void> {
+  const btn = $<HTMLButtonElement>('retry');
+  btn.disabled = true;
+  $('retryDetail').textContent = 'Retrying upload…';
+  const res = await send({ cmd: 'retryUpload' });
+  if (res?.ok) {
+    const { lastUpload } = await chrome.storage.local.get('lastUpload');
+    enterIdle(lastUpload);
+  } else {
+    $('retryDetail').textContent = `Retry failed — ${res?.error || 'unknown error'}`;
+    btn.disabled = false;
   }
 }
 
 async function refreshMic(): Promise<void> {
+  const micStatus = $('micStatus');
+  const grant = $<HTMLButtonElement>('grantMic');
   try {
     const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
     if (status.state === 'granted') {
       micStatus.textContent = '✓ microphone granted';
       micStatus.className = 'mic-ok';
-      grantMicBtn.disabled = true;
+      grant.style.display = 'none';
     } else {
       micStatus.textContent = '⚠ microphone not granted — click to enable narration';
       micStatus.className = 'mic-bad';
+      grant.style.display = '';
     }
   } catch {
     micStatus.textContent = 'Click "Grant microphone" before recording.';
+    micStatus.className = '';
   }
 }
 
 async function grantMic(): Promise<void> {
   await chrome.tabs.create({ url: chrome.runtime.getURL('permission.html') });
+  const micStatus = $('micStatus');
   micStatus.textContent = 'A tab opened — click Allow there, then reopen this popup.';
   micStatus.className = '';
 }
 
-async function start(): Promise<void> {
-  const { apiToken, backendUrl } = await chrome.storage.local.get(['apiToken', 'backendUrl']);
-  if (!apiToken) {
-    setStatus('Connect to Sync Studio first.', 'fail');
-    return;
-  }
-  const res = await send({ cmd: 'start', backendUrl, token: apiToken });
-  if (res?.ok) setRecordingUI(true);
-  else setStatus(res?.error || 'Could not start recording.', 'fail');
+// ---- helpers ----
+
+function hostOf(url: string): string {
+  try { return new URL(url).host; } catch { return url.replace(/^https?:\/\//, ''); }
 }
 
-async function stop(): Promise<void> {
-  setRecordingUI(false);
-  setStatus('Uploading… watch the toolbar badge (REC → ↑ → ✓/!) or the on-page toast.', 'neutral');
-  dot.className = 'dot';
-  await send({ cmd: 'stop' });
-}
-
-function setRecordingUI(isRecording: boolean): void {
-  recording = isRecording;
-  dot.className = recording ? 'dot live' : 'dot';
-  if (recording) setStatus('REC · Recording — narrate & click through your workflow.', 'rec');
-  else setStatus('Idle', 'neutral');
-  applyButtonState();
-}
-
-/** Start needs a connection + not already recording; stop/marker need an active recording. */
-function applyButtonState(): void {
-  startBtn.disabled = recording || !connected;
-  stopBtn.disabled = !recording;
-  markerBtn.disabled = !recording;
-}
-
-/** Set the status line text + colour (neutral / recording / green ok / red fail). */
-function setStatus(text: string, kind: 'neutral' | 'rec' | 'ok' | 'fail' = 'neutral'): void {
-  statusText.textContent = text;
-  statusBox.className = kind === 'neutral' ? 'status' : `status ${kind}`;
+function fmt(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 function send(msg: unknown): Promise<any> {

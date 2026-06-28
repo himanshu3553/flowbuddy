@@ -34,12 +34,14 @@ export const navItems: NavItem[] = [
 export function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
-    <nav className="flex-1 space-y-1 p-3">
+    <nav className="flex flex-1 flex-col gap-1 py-1">
       {navItems.map((item) => {
         const active = item.exact
           ? pathname === item.href
           : (item.match ?? [item.href]).some((m) => pathname.startsWith(m));
         const Icon = item.icon;
+        // Settings sits pinned at the bottom of the rail (design IA).
+        const pinned = item.href === '/dashboard/settings';
         return (
           <Link
             key={item.href}
@@ -47,13 +49,14 @@ export function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-2.5 rounded-control px-2.5 py-2 text-[13px] transition-colors',
+              pinned && 'mt-auto',
               active
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
+                ? 'bg-brand-50 font-semibold text-primary'
+                : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
             )}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.25 : 2} />
             {item.label}
           </Link>
         );

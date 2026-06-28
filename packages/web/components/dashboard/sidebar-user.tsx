@@ -29,7 +29,7 @@ export function SidebarUser({ email, role }: { email: string; role: string }) {
           <span className="block truncate text-xs font-semibold text-foreground">
             {name}
           </span>
-          <span className="block truncate text-[10.5px] text-muted-foreground">
+          <span className="block truncate text-[10.5px] text-faint">
             {role}
           </span>
         </span>

@@ -1,0 +1,70 @@
+<!-- @dsCard group="Components" viewport="700x620" subtitle="Dialog · StepItem timeline · EmptyState" name="Feedback & dialogs" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--paper);font-family:var(--font-sans);color:var(--ink);}
+  .group{background:#fff;border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:16px 18px;margin-bottom:14px;}
+  .gl{font:700 9.5px var(--font-mono);letter-spacing:.08em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px;}
+  .frame{position:relative;height:430px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--paper);}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/plain" id="demo">
+  function Demo(){
+    const callout = (
+      <div style={{display:'flex',alignItems:'center',gap:13,border:'1.5px dashed var(--indigo-200)',background:'#f4f6ff',borderRadius:13,padding:'14px 16px'}}>
+        <div style={{width:34,height:34,borderRadius:10,background:'#fff',border:'1px solid var(--indigo-100)',display:'flex',alignItems:'center',justifyContent:'center',flex:'0 0 auto'}}><span style={{fontFamily:"'Material Symbols Outlined'",fontVariationSettings:"'FILL' 1,'opsz' 20",fontSize:19,color:'var(--primary)'}}>autorenew</span></div>
+        <div style={{font:'12.5px/1.5 var(--font-sans)',color:'#3a4a7a'}}><b>It gets better on its own.</b> Every question the copilot can't answer becomes a "record this next" tip.</div>
+      </div>
+    );
+    return (
+      <React.Fragment>
+        <div className="group">
+          <div className="gl">Dialog + StepItem</div>
+          <div className="frame">
+            <Dialog title="How Sync works" subtitle="From one recording to live, trustworthy answers — in five steps." footer={callout} onClose={()=>{}}>
+              <StepItem index={1} icon="videocam" title="Record your product" desc="Click through your product while talking out loud. The Sync extension captures screen, voice and clicks." />
+              <StepItem index={2} icon="menu_book" title="Sync builds your knowledge base" desc="It turns that recording into clean, step-by-step workflows. No manual writing." />
+              <StepItem index={3} icon="task_alt" title="Approve what the copilot can use" desc="Review and approve with one click. The copilot only answers from what you approve." last />
+            </Dialog>
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">EmptyState</div>
+          <div style={{height:330,display:'flex'}}>
+            <EmptyState media={true}
+              title="No recordings yet"
+              desc="Install the Sync Recorder, click Connect with Sync, and narrate your way through a real workflow."
+              actions={<React.Fragment><Button>Install the recorder</Button><Button variant="secondary">How it works</Button></React.Fragment>}
+              chips={['Screen','Voice','DOM','Events','Routes']}
+              footnote="Captured in sync · PII masked in your browser before upload" />
+          </div>
+        </div>
+      </React.Fragment>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+<script>
+(async () => {
+  const files = ['../core/Button.jsx','../core/Tag.jsx','Dialog.jsx','StepItem.jsx','EmptyState.jsx'];
+  try {
+    const srcs = await Promise.all(files.map((f) => fetch(f).then((r) => { if (!r.ok) throw new Error('Failed to load ' + f); return r.text(); })));
+    let combined = srcs.join('\n\n').replace(/^[ \t]*import[^\n]*\n/gm, '').replace(/\bexport\s+/g, '');
+    combined += '\n\n' + document.getElementById('demo').textContent;
+    const { code } = Babel.transform(combined, { presets: [['react', { runtime: 'classic' }]], sourceType: 'script' });
+    const s = document.createElement('script'); s.textContent = code; document.body.appendChild(s);
+  } catch (e) { document.getElementById('root').innerHTML = '<div style="font:12px ui-monospace,monospace;color:#9c5c4d;padding:8px">' + (e && e.message ? e.message : e) + '</div>'; console.error(e); }
+})();
+</script>
+</body>
+</html>

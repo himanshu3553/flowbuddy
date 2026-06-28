@@ -1,0 +1,9 @@
+/* ============================================================================
+   Webfonts — all Google-hosted (canonical for the Sync rebrand).
+   Plus Jakarta Sans = --font-sans · JetBrains Mono = --font-mono.
+   Material Symbols Outlined = the product icon set (see readme · ICONOGRAPHY).
+   These @import rules pull the @font-face declarations in for any consumer
+   that links styles.css. HTML specimens/kits also <link> them for instant load.
+   ============================================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block");

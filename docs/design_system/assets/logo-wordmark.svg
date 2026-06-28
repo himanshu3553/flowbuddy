@@ -1,0 +1,10 @@
+<svg width="168" height="56" viewBox="0 0 168 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sync">
+  <defs>
+    <linearGradient id="syncWordMark" x1="6" y1="12" x2="42" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a63e8"></stop>
+      <stop offset="1" stop-color="#3a50dd"></stop>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="14" width="28" height="28" rx="8" fill="url(#syncWordMark)"></rect>
+  <text x="48" y="29" dy=".35em" font-family="&#39;Plus Jakarta Sans&#39;, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.02em" fill="#14161f">Sync</text>
+</svg>

@@ -1,7 +1,7 @@
 // Background service worker: owns recording lifecycle, captures screenshots,
 // buffers everything in IndexedDB, and uploads the assembled bundle on stop.
 
-import { kvClear, kvEntriesByPrefix, kvGet, kvPut } from './idb.js';
+import { kvClear, kvCountByPrefix, kvEntriesByPrefix, kvGet, kvPut } from './idb.js';
 import type { CapturedEvent, PortMsg } from './types.js';
 
 interface Rec {
@@ -46,7 +46,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse(await onRetryUpload());
     } else if (msg?.cmd === 'getState') {
       const rec = await getRec();
-      sendResponse({ recording: rec.recording, backendUrl: rec.backendUrl });
+      // Expose already-tracked recording state so the popup can show a live timer,
+      // the captured domain, and step/workflow counts (read-only; no new capability).
+      let appBaseUrl = '';
+      let steps = 0;
+      let workflows = 0;
+      if (rec.recording) {
+        const meta = await kvGet<{ app?: { baseUrl?: string }; markers?: unknown[] }>('meta');
+        appBaseUrl = meta?.app?.baseUrl || '';
+        workflows = (meta?.markers?.length || 0) + 1; // current workflow (1-based)
+        steps = await kvCountByPrefix('event:');
+      }
+      sendResponse({
+        recording: rec.recording,
+        backendUrl: rec.backendUrl,
+        startTime: rec.startTime,
+        appBaseUrl,
+        steps,
+        workflows,
+      });
     } else if (msg?.cmd === 'connect') {
       // From the Studio /connect page (via the content-script bridge): store the minted token
       // + API URL under the same keys the popup already reads.

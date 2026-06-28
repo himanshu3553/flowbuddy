@@ -19,7 +19,7 @@ type Tab = 'install' | 'settings' | 'appearance';
 
 function CodeBlock({ code }: { code: string }) {
   return (
-    <pre className="overflow-x-auto rounded-xl bg-zinc-900 p-4 text-xs leading-relaxed text-zinc-100">
+    <pre className="overflow-x-auto rounded-tile bg-code-bg p-3.5 font-mono text-[11.5px] leading-[1.7] text-code-fg">
       {code}
     </pre>
   );
@@ -31,7 +31,9 @@ function ChecklistItem({ done, label }: { done: boolean; label: string }) {
       <span
         className={cn(
           'flex h-5 w-5 items-center justify-center rounded-full',
-          done ? 'bg-green-600 text-white' : 'border-2 border-muted-foreground/40',
+          done
+            ? 'bg-gradient-to-br from-[#1aa86a] to-[#15935a] text-white'
+            : 'border-2 border-muted-foreground/40',
         )}
       >
         {done ? <Check className="h-3 w-3" /> : null}
@@ -88,16 +90,16 @@ export function CopilotWorkspace({
 
   return (
     <div className="min-w-0 space-y-5">
-      <div className="flex items-center gap-1 rounded-lg border bg-card p-1">
+      <div className="flex items-center gap-[18px] border-b">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              'rounded-md px-3.5 py-1.5 text-sm font-semibold transition-colors',
+              '-mb-px border-b-2 px-0.5 pb-2.5 text-[12.5px] font-semibold transition-colors',
               tab === t.key
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'border-primary text-ink'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
@@ -107,10 +109,10 @@ export function CopilotWorkspace({
 
       {tab === 'install' && (
         <div className="space-y-5">
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Embed snippet</h3>
+                <h3 className="text-[13.5px] font-bold text-ink">Embed snippet</h3>
                 <p className="text-xs text-muted-foreground">
                   Paste once before{' '}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
@@ -123,7 +125,7 @@ export function CopilotWorkspace({
             </div>
             <CodeBlock code={snippet} />
             {widgetIsPlaceholder && (
-              <p className="mt-3 rounded-md border border-dashed bg-muted/30 px-2.5 py-2 text-[11px] text-muted-foreground">
+              <p className="mt-3 rounded-md border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
                 The{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">
                   src
@@ -138,11 +140,11 @@ export function CopilotWorkspace({
             )}
           </section>
 
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-dot" />
               </span>
               <p className="text-sm">
                 Listening for the copilot on{' '}
@@ -174,10 +176,10 @@ export function CopilotWorkspace({
 
       {tab === 'settings' && (
         <div className="space-y-5">
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Public key</h3>
+                <h3 className="text-[13.5px] font-bold text-ink">Public key</h3>
                 <p className="text-xs text-muted-foreground">
                   Safe to expose in your front-end. Rotate any time.
                 </p>
@@ -194,15 +196,15 @@ export function CopilotWorkspace({
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <code className="block flex-1 break-all rounded-lg border bg-muted/40 px-3 py-2 font-mono text-xs">
+              <code className="block flex-1 break-all rounded-control border bg-secondary px-3 py-2 font-mono text-xs">
                 {publicKey}
               </code>
               <CopyButton value={publicKey} variant="outline" />
             </div>
           </section>
 
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <h3 className="text-sm font-semibold">Origin allowlist</h3>
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Origin allowlist</h3>
             <p className="text-xs text-muted-foreground">
               The copilot only runs on origins you list here. One per line —
               leave empty to allow any origin while testing.
@@ -230,8 +232,8 @@ export function CopilotWorkspace({
             </div>
           </section>
 
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <h3 className="text-sm font-semibold">Grounding &amp; trust</h3>
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Grounding &amp; trust</h3>
             <div className="mt-3 divide-y">
               <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
                 <div>
@@ -288,7 +290,7 @@ export function CopilotWorkspace({
                 </div>
               </div>
             </div>
-            <p className="mt-3 rounded-md border border-dashed bg-muted/30 px-2.5 py-2 text-[11px] text-muted-foreground">
+            <p className="mt-3 rounded-md border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
               Cite &amp; decline-threshold are a preview — they don’t persist
               yet.
             </p>
@@ -297,7 +299,7 @@ export function CopilotWorkspace({
       )}
 
       {tab === 'appearance' && (
-        <section className="rounded-xl border bg-card p-8 text-center shadow-sm">
+        <section className="rounded-card border bg-card p-8 text-center shadow-card">
           <p className="text-sm font-medium">Appearance controls coming soon</p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
             Launcher color, position, title and welcome message will be

@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/dashboard/page-header';
 import { ProgressRing } from '@/components/dashboard/progress-ring';
 import { HomeHelpDialogs } from '@/components/dashboard/home-help-dialogs';
 import { HomeSteadyState } from '@/components/dashboard/home-steady-state';
+import { StatusBadge } from '@/components/dashboard/status-badge';
 import {
   Card,
   CardContent,
@@ -136,8 +137,8 @@ export default async function DashboardPage() {
         actions={<HomeHelpDialogs />}
       />
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 md:px-8">
-        <section className="rounded-2xl border bg-card p-6 shadow-sm">
-          <div className="font-mono text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+        <section className="rounded-card border bg-card p-6 shadow-card">
+          <div className="font-mono text-[10.5px] font-bold uppercase tracking-[0.1em] text-faint">
             Get started
           </div>
           <div className="mt-3 flex items-start justify-between gap-4">
@@ -161,19 +162,18 @@ export default async function DashboardPage() {
                 <li
                   key={i}
                   className={cn(
-                    'flex items-center gap-3.5 rounded-xl border p-3.5',
-                    s.done && 'border-green-200 bg-green-50/60',
-                    active &&
-                      'border-primary/40 bg-card shadow-[0_4px_16px_rgba(58,80,221,0.1)]',
-                    locked && 'border-border bg-muted/40 opacity-80',
+                    'flex items-center gap-3.5 rounded-list border p-3.5',
+                    s.done && 'border-success-border bg-success-bg',
+                    active && 'border-brand-200 bg-card shadow-step',
+                    locked && 'border-border bg-[color:var(--paper-2)] opacity-80',
                   )}
                 >
                   <span
                     className={cn(
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold',
-                      s.done && 'bg-green-600 text-white',
+                      s.done && 'bg-gradient-to-br from-[#1aa86a] to-[#15935a] text-white',
                       active && 'border-2 border-primary text-primary',
-                      locked && 'bg-muted text-muted-foreground',
+                      locked && 'bg-secondary text-faint',
                     )}
                   >
                     {s.done ? (
@@ -205,16 +205,12 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                   {s.done && (
-                    <span className="shrink-0 rounded-full border border-green-200 bg-green-100 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-green-700">
+                    <StatusBadge tone="success" dot={false} className="shrink-0">
                       Done
-                    </span>
+                    </StatusBadge>
                   )}
                   {active && (
-                    <Button
-                      asChild
-                      size="sm"
-                      className="shrink-0 bg-gradient-to-b from-[#4a63e8] to-[#3a50dd] text-white shadow-[0_2px_10px_rgba(58,80,221,0.28)] hover:opacity-95"
-                    >
+                    <Button asChild size="sm" className="shrink-0">
                       <Link href={s.cta.href}>{s.cta.label}</Link>
                     </Button>
                   )}

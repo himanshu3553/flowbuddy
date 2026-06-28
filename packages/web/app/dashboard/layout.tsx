@@ -17,12 +17,12 @@ export default async function DashboardLayout({
   if (!ctx) redirect('/signin');
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-canvas">
       <Sidebar
         workspaceName={ctx.workspace.name}
         userEmail={session.user.email ?? ''}
       />
-      <div className="flex min-h-screen flex-col md:pl-60">
+      <div className="flex min-h-screen flex-col md:pl-[230px]">
         {/* Mobile-only top bar; on desktop each page renders its own PageHeader. */}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
           <div className="flex items-center gap-2">

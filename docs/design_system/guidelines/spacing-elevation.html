@@ -1,0 +1,25 @@
+<!-- @dsCard group="Spacing" viewport="700x190" subtitle="Soft, low-contrast lifts on gray paper — indigo tint only under the CTA" name="Elevation & shadows" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:24px;background:var(--paper);font-family:var(--font-sans);color:var(--ink);}
+  .row{display:flex;gap:20px;flex-wrap:wrap;}
+  .item{display:flex;flex-direction:column;align-items:center;gap:9px;}
+  .box{width:120px;height:62px;background:#fff;border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;font:600 11px var(--font-sans);color:var(--text-muted);}
+  .t{font:500 10px var(--font-mono);color:var(--text-muted);text-align:center;}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="item"><div class="box" style="box-shadow:var(--shadow-card);">card</div><div class="t">--shadow-card</div></div>
+    <div class="item"><div class="box" style="box-shadow:var(--shadow-frame);">frame</div><div class="t">--shadow-frame</div></div>
+    <div class="item"><div class="box" style="box-shadow:var(--shadow-dialog);">dialog</div><div class="t">--shadow-dialog</div></div>
+    <div class="item"><div class="box" style="background:var(--primary-gradient);color:#fff;box-shadow:var(--shadow-primary);border:0;">CTA</div><div class="t">--shadow-primary</div></div>
+    <div class="item"><div class="box" style="border:1.5px solid var(--indigo-200);box-shadow:var(--shadow-step);color:var(--primary);">step</div><div class="t">--shadow-step</div></div>
+  </div>
+</body>
+</html>

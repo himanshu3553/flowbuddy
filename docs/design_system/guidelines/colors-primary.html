@@ -1,0 +1,39 @@
+<!-- @dsCard group="Colors" viewport="700x190" subtitle="One accent, used with meaning: brand · primary action · approved/live" name="Indigo — primary" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:18px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .sw{width:96px;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+  .chip{height:54px;}
+  .meta{padding:6px 8px;}
+  .name{font:600 11px/1.2 var(--font-sans);color:var(--ink);}
+  .hex{font:500 10px/1.3 var(--font-mono);color:var(--text-muted);margin-top:2px;}
+  .tile{flex:1;min-width:150px;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;}
+</style>
+</head>
+<body>
+  <div class="row" style="margin-bottom:12px;">
+    <div class="sw"><div class="chip" style="background:var(--indigo-50);"></div><div class="meta"><div class="name">indigo-50</div><div class="hex">#eef0fe</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--indigo-100);"></div><div class="meta"><div class="name">indigo-100</div><div class="hex">#dfe3fc</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--indigo-200);"></div><div class="meta"><div class="name">indigo-200</div><div class="hex">#c3ccfb</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--indigo-400);"></div><div class="meta"><div class="name">indigo-400</div><div class="hex">#4a63e8</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--indigo-500);"></div><div class="meta"><div class="name">indigo-500 ·<br>PRIMARY</div><div class="hex">#3b50e0</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--indigo-600);"></div><div class="meta"><div class="name">indigo-600</div><div class="hex">#3a50dd</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--primary-gradient);"></div><div class="meta"><div class="name">CTA gradient</div><div class="hex">180°</div></div></div>
+  </div>
+  <div class="row">
+    <div class="tile" style="background:var(--indigo-50);border:1px solid var(--indigo-100);">
+      <span style="width:18px;height:18px;border-radius:5px;background:var(--primary);flex:0 0 auto;"></span>
+      <span style="font:600 12px var(--font-sans);color:var(--primary);">Active nav / step tile — bg indigo-50</span>
+    </div>
+    <div class="tile" style="background:var(--primary-gradient);box-shadow:var(--shadow-primary);justify-content:center;">
+      <span style="font:700 12px var(--font-sans);color:#fff;">Primary action — CTA gradient + tinted shadow</span>
+    </div>
+  </div>
+</body>
+</html>

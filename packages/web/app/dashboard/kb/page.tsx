@@ -36,23 +36,20 @@ export default async function KnowledgeBasePage() {
       />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
         {workflows.length === 0 ? (
-          <div className="rounded-2xl border bg-card p-10 text-center shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <div className="rounded-card border bg-card p-10 text-center shadow-card">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-tile border border-brand-100 bg-brand-50 text-primary">
               <BookOpen className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-lg font-bold tracking-tight">
+            <h2 className="mt-4 text-[17px] font-bold tracking-tight text-secondary-foreground">
               Your Knowledge Base is empty
             </h2>
-            <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+            <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
               Record a session and Sync distils it into structured workflows
               here — each ready for a one-click approval to your copilot.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">
               <HowToRecordDialog>
-                <Button
-                  size="sm"
-                  className="bg-gradient-to-b from-[#4a63e8] to-[#3a50dd] text-white shadow-[0_2px_10px_rgba(58,80,221,0.3)] hover:opacity-95"
-                >
+                <Button size="sm">
                   <span className="h-2.5 w-2.5 rounded-full bg-white" />
                   Open recorder
                 </Button>
@@ -63,18 +60,18 @@ export default async function KnowledgeBasePage() {
                 </Button>
               </HowItWorksDialog>
             </div>
-            <div className="mx-auto mt-8 max-w-md rounded-xl border border-dashed bg-muted/30 p-4 text-left opacity-70">
+            <div className="mx-auto mt-8 max-w-md rounded-list border border-dashed bg-[color:var(--paper-2)] p-4 text-left opacity-70">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 font-mono text-[10px] font-bold text-primary">
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-brand-100 bg-brand-50 font-mono text-[10px] font-bold text-primary">
                   WF
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block h-3 w-40 rounded bg-muted-foreground/20" />
                   <span className="mt-2 block h-2.5 w-28 rounded bg-muted-foreground/15" />
                 </span>
-                <span className="h-5 w-9 rounded-full bg-muted-foreground/20" />
+                <span className="h-[22px] w-[38px] rounded-full bg-muted-foreground/20" />
               </div>
-              <p className="mt-3 text-center text-xs text-muted-foreground">
+              <p className="mt-3 text-center font-mono text-[11px] text-faint">
                 ↑ this is what an approved-ready workflow will look like
               </p>
             </div>

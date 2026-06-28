@@ -24,7 +24,7 @@ export function MiniBarChart({
             title={`${d.label}: ${d.answered} answered · ${d.declined} declined`}
           >
             <div
-              className="rounded-t-sm bg-amber-300"
+              className="rounded-t-sm bg-warning"
               style={{ height: `${(d.declined / max) * 100}%` }}
             />
             <div
@@ -64,7 +64,7 @@ export function ChartLegend() {
         answered
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-sm bg-amber-300" />
+        <span className="h-2 w-2 rounded-sm bg-warning" />
         declined
       </span>
     </div>

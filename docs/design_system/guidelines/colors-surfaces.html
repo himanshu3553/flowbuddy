@@ -1,0 +1,32 @@
+<!-- @dsCard group="Colors" viewport="700x180" subtitle="Cards on a sunken canvas; hairlines separate; striped placeholder = media" name="Surfaces, borders & media" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:18px;background:var(--paper);font-family:var(--font-sans);color:var(--ink);}
+  .wrap{display:flex;gap:14px;align-items:stretch;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:14px 16px;flex:1;}
+  .card h4{margin:0 0 4px;font:var(--type-card-title);}
+  .card p{margin:0;font:var(--type-body);color:var(--text-secondary);}
+  .media{width:120px;height:78px;border-radius:8px;background:var(--media-fill);border:1px solid var(--media-border);display:flex;align-items:center;justify-content:center;font:10px var(--font-mono);color:var(--text-faint);flex:0 0 auto;}
+  .label{font:var(--type-micro);letter-spacing:var(--track-micro);color:var(--text-faint);text-transform:uppercase;margin-bottom:8px;}
+</style>
+</head>
+<body>
+  <div class="label">canvas #f6f7f9 · card #fff · hairline #eceef3</div>
+  <div class="wrap">
+    <div class="card">
+      <h4>White card</h4>
+      <p>Sections are white cards floating on the gray paper, separated by 1px hairlines and a soft contact shadow.</p>
+    </div>
+    <div class="card" style="border:1.5px solid var(--indigo-200);box-shadow:var(--shadow-step);">
+      <h4 style="color:var(--primary);">Selected card</h4>
+      <p>An emphasized/active card steps to a 1.5px indigo border and a soft indigo lift.</p>
+    </div>
+    <div class="media">step shot</div>
+  </div>
+</body>
+</html>

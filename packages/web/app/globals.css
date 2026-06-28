@@ -4,26 +4,113 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    /* ════════════════════════════════════════════════════════════════════
+       Sync Studio design tokens — indigo brand (docs/design_system/tokens).
+       Raw brand hexes first (indigo ramp, cool neutrals, low-sat status,
+       gradients, shadows, radii), then the shadcn semantic HSL triplets
+       retuned onto these values.
+       ════════════════════════════════════════════════════════════════════ */
+
+    /* ---- Indigo (brand ramp) ---------------------------------------------- */
+    --indigo-50: #eef0fe; /* active nav · soft button · step tile */
+    --indigo-100: #dfe3fc; /* border on indigo-50 surfaces */
+    --indigo-150: #e6e9fb; /* connectors, faint dividers on tint */
+    --indigo-200: #c3ccfb; /* active card border */
+    --indigo-400: #4a63e8; /* primary gradient — top */
+    --indigo-500: #3b50e0; /* PRIMARY */
+    --indigo-600: #3a50dd; /* primary gradient — bottom */
+    --indigo-700: #2f3fb0; /* pressed primary */
+
+    /* ---- Cool neutrals ---------------------------------------------------- */
+    --paper: #f6f7f9; /* app content canvas */
+    --paper-2: #fafbfc; /* subtle fill: switcher, locked tiles */
+    --gray-100: #eceef3; /* hairline border */
+    --gray-150: #e6e8ee; /* stronger border */
+    --gray-200: #d8dbe4;
+    --gray-300: #b4b8c6; /* faint icon / disabled glyph */
+    --gray-400: #9a9faf; /* faint text */
+    --gray-500: #7a808e; /* muted text */
+    --gray-600: #6b7180; /* secondary text / inactive nav */
+    --gray-700: #3a3f4d; /* strong body */
+    --ink: #14161f; /* headings */
+
+    /* ---- Status — low saturation, always paired with text ----------------- */
+    --success-500: #1aa86a;
+    --success-600: #15935a;
+    --success-dot: #4e8d6e;
+    --success-text: #127249;
+    --success-text-2: #2f6b4f;
+    --success-bg: #f3faf6;
+    --success-bg-2: #eef5f0;
+    --success-border: #cfe9da;
+    --warning-500: #e6a23c;
+    --warning-600: #d98a2b;
+    --warning-dot: #b89030;
+    --warning-text: #8a6d2e;
+    --warning-bg: #f8f2e3;
+    --warning-bg-2: #fbf7ec;
+    --warning-border: #ecdfc2;
+    --danger-500: #cc4a3a; /* record / decline — terracotta */
+    --danger-text: #9c5c4d;
+    --danger-ink: #b06a5a;
+    --danger-bg: #fbf0ed;
+    --danger-bg-2: #fdecea;
+    --danger-border: #f0ddd7;
+
+    /* ---- Dark code surface ------------------------------------------------ */
+    --code-bg: #1f2330;
+    --code-fg: #cfd6e6;
+    --code-chip: #2e3445;
+    --code-border: #3c4252;
+
+    /* ---- Gradients & media placeholder ------------------------------------ */
+    --primary-gradient: linear-gradient(180deg, var(--indigo-400), var(--indigo-600));
+    --primary-gradient-logo: linear-gradient(150deg, var(--indigo-400), var(--indigo-600));
+    --media-fill: repeating-linear-gradient(45deg, #ececec 0 8px, #f6f6f6 8px 16px);
+    --media-border: #e4e4e4;
+
+    /* ---- Shadows / focus -------------------------------------------------- */
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+    --shadow-frame: 0 8px 30px rgba(16, 24, 40, 0.1);
+    --shadow-dialog: 0 30px 80px rgba(16, 24, 40, 0.4);
+    --shadow-widget: 0 8px 26px rgba(40, 50, 90, 0.1);
+    --shadow-primary: 0 2px 10px rgba(58, 80, 221, 0.3);
+    --shadow-step: 0 4px 16px rgba(58, 80, 221, 0.1);
+    --focus-ring: 0 0 0 3px rgba(58, 80, 221, 0.18);
+
+    /* ---- Radii ramp ------------------------------------------------------- */
+    --radius-xs: 6px; /* logo mark, code chips */
+    --radius-sm: 9px; /* buttons, nav items, inputs */
+    --radius-md: 11px; /* step tiles, inner cards */
+    --radius-lg: 13px; /* list tiles */
+    --radius-xl: 16px; /* cards, panels */
+    --radius-2xl: 18px; /* dialogs */
+    --radius-pill: 999px;
+
+    /* ════════ shadcn semantic tokens — retuned onto the brand ════════ */
+    --background: 0 0% 100%; /* body + cards = white */
+    --foreground: 229 22% 10%; /* ink #14161f */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 229 22% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 232 73% 56%; /* #3b50e0 indigo */
-    --primary-foreground: 0 0% 100%; /* white on primary */
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 232 73% 56%; /* indigo focus ring */
+    --popover-foreground: 229 22% 10%;
+    --primary: 232 73% 56%; /* indigo #3b50e0 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 97%; /* paper #f6f7f9 */
+    --secondary-foreground: 224 14% 26%; /* gray-700 */
+    --muted: 220 20% 97%; /* paper */
+    --muted-foreground: 223 9% 46%; /* gray-600 #6b7180 */
+    --accent: 220 20% 97%;
+    --accent-foreground: 224 14% 26%;
+    --destructive: 7 59% 51%; /* terracotta #cc4a3a */
+    --destructive-foreground: 0 0% 100%;
+    --border: 223 23% 94%; /* hairline #eceef3 */
+    --input: 225 19% 92%; /* #e6e8ee */
+    --ring: 232 73% 56%;
     --radius: 0.5rem;
+
+    /* app-shell content canvas (cool paper) */
+    --canvas: 220 20% 97%;
   }
   .dark {
     --background: 0 0% 3.9%;

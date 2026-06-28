@@ -1,0 +1,82 @@
+/* ============================================================================
+   COLORS — Sync Studio (indigo brand)
+   Base palette first, then semantic aliases. Prefer the semantic aliases in
+   product code; reach for a base step only when a semantic token doesn't fit.
+   Tinted brand surfaces (active nav, step tiles, chips) are derived steps of
+   the indigo ramp — no one-off hexes.
+   ============================================================================ */
+:root {
+  /* ---- Indigo (brand / primary) -------------------------------------------- */
+  --indigo-50:  #eef0fe;   /* active nav bg · soft button bg · step tile */
+  --indigo-100: #dfe3fc;   /* border on indigo-50 surfaces */
+  --indigo-150: #e6e9fb;   /* connector lines, faint dividers on tint */
+  --indigo-200: #c3ccfb;   /* active card border · emphasized tint border */
+  --indigo-400: #4a63e8;   /* primary gradient — top stop */
+  --indigo-500: #3b50e0;   /* PRIMARY — solid brand fill, links, active text */
+  --indigo-600: #3a50dd;   /* primary gradient — bottom stop */
+  --indigo-700: #2f3fb0;   /* pressed primary */
+
+  /* ---- Neutrals (cool gray, warm-white paper) ------------------------------ */
+  --white:      #ffffff;
+  --paper:      #f6f7f9;   /* app content canvas */
+  --paper-2:    #fafbfc;   /* subtle fill: workspace switcher, locked tiles */
+  --gray-100:   #eceef3;   /* default hairline border */
+  --gray-150:   #e6e8ee;   /* stronger border / frame edge */
+  --gray-200:   #d8dbe4;
+  --gray-300:   #b4b8c6;   /* faint icon, disabled glyph */
+  --gray-400:   #9a9faf;   /* faint text */
+  --gray-500:   #7a808e;   /* muted text */
+  --gray-600:   #6b7180;   /* secondary text / inactive nav */
+  --gray-700:   #3a3f4d;   /* strong body */
+  --ink:        #14161f;   /* headings / highest-contrast text */
+
+  /* ---- Success / live (green) ---------------------------------------------- */
+  --success-500: #1aa86a;  --success-600: #15935a;
+  --success-dot: #4e8d6e;
+  --success-text:#127249;  --success-text-2:#2f6b4f;
+  --success-bg:  #f3faf6;  --success-bg-2:#eef5f0;
+  --success-border:#cfe9da;
+
+  /* ---- Warning / pending (amber) ------------------------------------------- */
+  --warning-500: #e6a23c;  --warning-600: #d98a2b;
+  --warning-dot: #b89030;
+  --warning-text:#8a6d2e;
+  --warning-bg:  #f8f2e3;  --warning-bg-2:#fbf7ec;
+  --warning-border:#ecdfc2;
+
+  /* ---- Danger / decline / record (terracotta-red) -------------------------- */
+  --danger-500: #cc4a3a;
+  --danger-text:#9c5c4d;   --danger-ink:#b06a5a;
+  --danger-bg:  #fbf0ed;   --danger-bg-2:#fdecea;
+  --danger-border:#f0ddd7;
+
+  /* ---- Code surface (dark) -------------------------------------------------- */
+  --code-bg:    #1f2330;
+  --code-fg:    #cfd6e6;
+  --code-chip:  #2e3445;
+  --code-border:#3c4252;
+
+  /* ---- Semantic aliases (use these in product) ----------------------------- */
+  --primary:            var(--indigo-500);
+  --primary-foreground: var(--white);
+  --primary-gradient:   linear-gradient(180deg, var(--indigo-400), var(--indigo-600));
+  --primary-gradient-logo: linear-gradient(150deg, var(--indigo-400), var(--indigo-600));
+  --ring:               var(--indigo-500);
+
+  --surface:            var(--white);
+  --surface-sunken:     var(--paper);
+  --surface-subtle:     var(--paper-2);
+
+  --border:             var(--gray-100);
+  --border-strong:      var(--gray-150);
+
+  --text-strong:        var(--ink);
+  --text-body:          var(--gray-700);
+  --text-secondary:     var(--gray-600);
+  --text-muted:         var(--gray-500);
+  --text-faint:         var(--gray-400);
+
+  /* media / screen-capture placeholder fill (the striped "media" swatch) */
+  --media-fill: repeating-linear-gradient(45deg, #ececec 0 8px, #f6f6f6 8px 16px);
+  --media-border: #e4e4e4;
+}

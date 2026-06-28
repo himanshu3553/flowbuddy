@@ -1,0 +1,86 @@
+<!-- @dsCard group="Components" viewport="700x660" subtitle="Sidebar · PageHeader · DataRow · ChecklistStep · CoverageGapRow · CodeBlock" name="App shell & lists" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--paper);font-family:var(--font-sans);color:var(--ink);}
+  .group{background:#fff;border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:16px 18px;margin-bottom:14px;}
+  .gl{font:700 9.5px var(--font-mono);letter-spacing:.08em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px;}
+  .stack{display:flex;flex-direction:column;gap:10px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/plain" id="demo">
+  function Mono({children,c}){return <span style={{font:'10px var(--font-mono)',color:c||'var(--text-faint)'}}>{children}</span>;}
+  function Demo(){
+    return (
+      <React.Fragment>
+        <div className="group">
+          <div className="gl">Sidebar + PageHeader</div>
+          <div style={{display:'flex',height:320,border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',overflow:'hidden'}}>
+            <Sidebar active="Knowledge Base" />
+            <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,background:'var(--paper)'}}>
+              <PageHeader title="Knowledge Base" subtitle="Approve workflows for the copilot">
+                <Button variant="secondary" size="sm">Review each</Button>
+                <Button variant="primary" size="sm">Approve all</Button>
+              </PageHeader>
+            </div>
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">ChecklistStep</div>
+          <div className="stack">
+            <ChecklistStep state="done" title="Install the Sync Recorder" desc="Chrome extension · one-click Connect with Sync" statusLabel="DONE" />
+            <ChecklistStep state="active" index={2} title="Record your product" desc="Narrate a real workflow — reset a password…" action={<Button size="sm">Open recorder</Button>} />
+            <ChecklistStep state="locked" index={3} title="Approve workflows for the copilot" desc="One click each — answers only from what you approve" />
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">DataRow</div>
+          <div className="stack">
+            <DataRow media={true} title="Billing & account flows"
+              meta={<Mono>Jun 26 · screen·voice·DOM·events·routes · PII masked</Mono>}
+              trailing={<React.Fragment><span style={{font:'12.5px var(--font-mono)',color:'var(--text-secondary)'}}>08:42</span><StatusBadge tone="success">READY</StatusBadge><span style={{cursor:'pointer',color:'var(--gray-300)',fontSize:15}}>⋯</span></React.Fragment>} />
+            <DataRow highlighted title="Onboarding & first project"
+              meta={<Mono c="var(--warning-text)">distilling…</Mono>}
+              trailing={<StatusBadge tone="pending">PROCESSING</StatusBadge>} />
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">CoverageGapRow</div>
+          <div className="stack">
+            <CoverageGapRow question="How do I export a report to CSV?" meta="asked 14× · no coverage" tone="gap" action={<Button size="sm">Record</Button>} />
+            <CoverageGapRow question="Where do I change my billing email?" meta="asked 6× · recording in progress" status={<StatusBadge tone="pending">RECORDING</StatusBadge>} />
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">CodeBlock</div>
+          <CodeBlock code={'<script src="https://cdn.getsync.app/copilot.js"\n        data-key="pk_live_8f2a…d41"><\/script>'} />
+        </div>
+      </React.Fragment>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+<script>
+(async () => {
+  const files = ['../core/Button.jsx','../core/StatusBadge.jsx','../core/Tag.jsx','Sidebar.jsx','PageHeader.jsx','DataRow.jsx','ChecklistStep.jsx','CodeBlock.jsx','CoverageGapRow.jsx'];
+  try {
+    const srcs = await Promise.all(files.map((f) => fetch(f).then((r) => { if (!r.ok) throw new Error('Failed to load ' + f); return r.text(); })));
+    let combined = srcs.join('\n\n').replace(/^[ \t]*import[^\n]*\n/gm, '').replace(/\bexport\s+/g, '');
+    combined += '\n\n' + document.getElementById('demo').textContent;
+    const { code } = Babel.transform(combined, { presets: [['react', { runtime: 'classic' }]], sourceType: 'script' });
+    const s = document.createElement('script'); s.textContent = code; document.body.appendChild(s);
+  } catch (e) { document.getElementById('root').innerHTML = '<div style="font:12px ui-monospace,monospace;color:#9c5c4d;padding:8px">' + (e && e.message ? e.message : e) + '</div>'; console.error(e); }
+})();
+</script>
+</body>
+</html>

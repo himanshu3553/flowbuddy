@@ -1,0 +1,98 @@
+<!-- @dsCard group="Components" viewport="700x600" subtitle="Button · StatusBadge · Tag · Toggle · MetricCard · ProgressBar" name="Core" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--paper);font-family:var(--font-sans);color:var(--ink);}
+  .group{background:#fff;border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:16px 18px;margin-bottom:14px;}
+  .gl{font:700 9.5px var(--font-mono);letter-spacing:.08em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px;}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .stack{display:flex;flex-direction:column;gap:9px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/plain" id="demo">
+  function Demo(){
+    const [a,setA]=React.useState(true); const [b,setB]=React.useState(false);
+    return (
+      <React.Fragment>
+        <div className="group">
+          <div className="gl">Button</div>
+          <div className="row">
+            <Button variant="primary" icon="fiber_manual_record" iconFill={1}>How to Record</Button>
+            <Button variant="secondary" icon="help">How it works</Button>
+            <Button variant="soft" size="sm">Rotate key</Button>
+            <Button variant="ghost" size="sm">View all</Button>
+            <Button variant="primary" dot>Record</Button>
+            <Button variant="primary" disabled>Disabled</Button>
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">StatusBadge</div>
+          <div className="row">
+            <StatusBadge tone="live">APPROVED · LIVE</StatusBadge>
+            <StatusBadge tone="success" dot>READY</StatusBadge>
+            <StatusBadge tone="pending">PENDING</StatusBadge>
+            <StatusBadge tone="danger">DECLINED</StatusBadge>
+            <StatusBadge tone="neutral">DRAFT</StatusBadge>
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">Tag</div>
+          <div className="row">
+            <Tag>Screen</Tag><Tag>Voice</Tag><Tag>DOM</Tag><Tag>Events</Tag><Tag>Routes</Tag>
+            <Tag tone="brand">/settings/security</Tag><Tag>6 steps</Tag>
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">Toggle</div>
+          <div className="row" style={{gap:18}}>
+            <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{font:'11px var(--font-sans)',color:'var(--text-secondary)'}}>In copilot</span><Toggle checked={a} onChange={setA} /></span>
+            <Toggle checked={b} onChange={setB} />
+            <Toggle checked={true} size="sm" onChange={()=>{}} />
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">MetricCard</div>
+          <div className="row" style={{flexWrap:'nowrap'}}>
+            <MetricCard value="1,284" label="Questions · 7d" />
+            <MetricCard value="86%" label="Answered" />
+            <MetricCard value="72%" label="Helpful" />
+            <MetricCard value="~340" label="Tickets deflected" tone="success" />
+          </div>
+        </div>
+        <div className="group">
+          <div className="gl">ProgressBar</div>
+          <div className="stack">
+            <ProgressBar value={86} label="Answered" valueLabel="86%" />
+            <ProgressBar value={11} tone="danger" label="Honest declines" valueLabel="11%" />
+            <ProgressBar value={72} tone="success" label="Helpful (👍)" valueLabel="72%" />
+          </div>
+        </div>
+      </React.Fragment>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+<script>
+(async () => {
+  const files = ['Button.jsx','StatusBadge.jsx','Tag.jsx','Toggle.jsx','MetricCard.jsx','ProgressBar.jsx'];
+  try {
+    const srcs = await Promise.all(files.map((f) => fetch(f).then((r) => { if (!r.ok) throw new Error('Failed to load ' + f); return r.text(); })));
+    let combined = srcs.join('\n\n').replace(/^[ \t]*import[^\n]*\n/gm, '').replace(/\bexport\s+/g, '');
+    combined += '\n\n' + document.getElementById('demo').textContent;
+    const { code } = Babel.transform(combined, { presets: [['react', { runtime: 'classic' }]], sourceType: 'script' });
+    const s = document.createElement('script'); s.textContent = code; document.body.appendChild(s);
+  } catch (e) { document.getElementById('root').innerHTML = '<div style="font:12px ui-monospace,monospace;color:#9c5c4d;padding:8px">' + (e && e.message ? e.message : e) + '</div>'; console.error(e); }
+})();
+</script>
+</body>
+</html>

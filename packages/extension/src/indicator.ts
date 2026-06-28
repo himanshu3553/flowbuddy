@@ -4,12 +4,12 @@
 
 type ToastKind = 'rec' | 'done' | 'fail' | 'info';
 
-// Aligned with the Sync Studio shadcn/ui neutral palette (destructive red, green-600, near-black).
+// Aligned with the Sync Studio shadcn/ui indigo palette (destructive red, green-600, indigo).
 const BG: Record<ToastKind, string> = {
   rec: '#dc2626',
   done: '#16a34a',
   fail: '#dc2626',
-  info: '#171717',
+  info: '#3b50e0',
 };
 
 let host: HTMLDivElement | null = null;

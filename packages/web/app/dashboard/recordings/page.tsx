@@ -20,10 +20,7 @@ const LAYERS = ['Screen', 'Voice', 'DOM', 'Events', 'Routes'];
 function RecordButton() {
   return (
     <HowToRecordDialog>
-      <Button
-        size="sm"
-        className="bg-gradient-to-b from-[#4a63e8] to-[#3a50dd] text-white shadow-[0_2px_10px_rgba(58,80,221,0.3)] hover:opacity-95"
-      >
+      <Button size="sm">
         <span className="h-2.5 w-2.5 rounded-full bg-white" />
         Record
       </Button>
@@ -68,14 +65,14 @@ export default async function RecordingsPage() {
       />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
         {rows.length === 0 ? (
-          <div className="rounded-2xl border bg-card p-10 text-center shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Video className="h-6 w-6" />
+          <div className="rounded-card border bg-card p-10 text-center shadow-card">
+            <div className="mx-auto flex h-[86px] w-[124px] items-center justify-center rounded-tile border border-[color:var(--media-border)] bg-media font-mono text-[10px] text-faint">
+              recording
             </div>
-            <h2 className="mt-4 text-lg font-bold tracking-tight">
+            <h2 className="mt-[18px] text-[17px] font-bold tracking-tight text-secondary-foreground">
               No recordings yet
             </h2>
-            <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+            <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
               Install the Sync Recorder, click “Connect with Sync,” and narrate
               your way through a real workflow. Sync turns the session into a
               structured Knowledge Base.
@@ -93,13 +90,13 @@ export default async function RecordingsPage() {
               {LAYERS.map((l) => (
                 <span
                   key={l}
-                  className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-primary"
+                  className="rounded-pill border bg-secondary px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground"
                 >
                   {l}
                 </span>
               ))}
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-3 font-mono text-[11px] text-faint">
               Captured in sync · PII masked in your browser before upload
             </p>
           </div>

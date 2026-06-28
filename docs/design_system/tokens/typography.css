@@ -1,0 +1,40 @@
+/* ============================================================================
+   TYPOGRAPHY — Sync Studio
+   Two families: Plus Jakarta Sans (UI) + JetBrains Mono (labels, code, status).
+   The mono face does double duty as the "system / technical" voice — eyebrows,
+   status pills, selectors, routes, metrics units. Display weights run heavy
+   (700–800) with tight negative tracking; mono micro-labels are upcased.
+   ============================================================================ */
+:root {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* weights */
+  --fw-regular: 400;
+  --fw-medium:  500;   /* inactive nav, secondary labels */
+  --fw-semibold:600;   /* body emphasis, list titles, active nav */
+  --fw-bold:    700;   /* card + header titles */
+  --fw-black:   800;   /* page H1, hero, wordmark */
+
+  /* ---- Type ramp (size / line-height / tracking) ---------------------------
+     Tokenized to the values used across the hi-fi Home + Studio screens.      */
+  --type-display:    800 22px/1.15 var(--font-sans);   /* page title / hero    */
+  --type-display-lg: 800 28px/1.1  var(--font-sans);   /* big stat (analytics) */
+  --type-title:      700 16px/1.25 var(--font-sans);   /* header + dialog title*/
+  --type-card-title: 700 14px/1.3  var(--font-sans);   /* card heading         */
+  --type-body-lg:    400 13px/1.55 var(--font-sans);   /* lead paragraph       */
+  --type-body:       400 12.5px/1.5 var(--font-sans);  /* default body         */
+  --type-label:      600 13px/1.2  var(--font-sans);   /* nav, control labels  */
+  --type-meta:       400 11.5px/1.4 var(--font-sans);  /* captions             */
+
+  /* mono voice */
+  --type-eyebrow:    700 10.5px/1.1 var(--font-mono);  /* GET STARTED · UPPER  */
+  --type-micro:      700 9.5px/1.1  var(--font-mono);  /* STEP 1 · status pill */
+  --type-code:       400 11.5px/1.7 var(--font-mono);  /* snippets, selectors  */
+
+  /* tracking */
+  --track-tight:  -0.02em;   /* display / big numerals */
+  --track-snug:   -0.01em;   /* titles */
+  --track-eyebrow: 0.1em;    /* mono uppercase eyebrows */
+  --track-micro:   0.06em;   /* mono micro-labels */
+}

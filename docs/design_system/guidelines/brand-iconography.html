@@ -1,0 +1,46 @@
+<!-- @dsCard group="Brand" viewport="700x210" subtitle="Material Symbols Outlined · FILL 1 = active · mono chars for micro-glyphs" name="Iconography" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .ms{font-family:'Material Symbols Outlined';line-height:1;}
+  .lbl{font:700 9.5px var(--font-mono);letter-spacing:.06em;color:var(--text-faint);text-transform:uppercase;margin:0 0 9px;}
+  .set{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
+  .ic{display:flex;flex-direction:column;align-items:center;gap:6px;width:62px;}
+  .ic .ms{font-size:24px;color:var(--text-secondary);font-variation-settings:'FILL' 0,'opsz' 24;}
+  .ic .name{font:500 9px var(--font-mono);color:var(--text-faint);}
+  .active .ms{color:var(--primary);font-variation-settings:'FILL' 1,'opsz' 24;}
+  .micro{display:flex;gap:18px;align-items:center;}
+  .micro span{font:600 17px var(--font-mono);color:var(--text-secondary);}
+</style>
+</head>
+<body>
+  <div class="lbl">Navigation — FILL 0, active item FILL 1 + indigo</div>
+  <div class="set">
+    <div class="ic active"><span class="ms">home</span><span class="name">home</span></div>
+    <div class="ic"><span class="ms">videocam</span><span class="name">videocam</span></div>
+    <div class="ic"><span class="ms">menu_book</span><span class="name">menu_book</span></div>
+    <div class="ic"><span class="ms">smart_toy</span><span class="name">smart_toy</span></div>
+    <div class="ic"><span class="ms">bar_chart</span><span class="name">bar_chart</span></div>
+    <div class="ic"><span class="ms">settings</span><span class="name">settings</span></div>
+  </div>
+  <div class="lbl">Flow & action glyphs</div>
+  <div class="set">
+    <div class="ic"><span class="ms" style="color:var(--danger-500);font-variation-settings:'FILL' 1,'opsz' 24;">fiber_manual_record</span><span class="name">record</span></div>
+    <div class="ic"><span class="ms">task_alt</span><span class="name">task_alt</span></div>
+    <div class="ic"><span class="ms">code</span><span class="name">code</span></div>
+    <div class="ic"><span class="ms">forum</span><span class="name">forum</span></div>
+    <div class="ic"><span class="ms">autorenew</span><span class="name">autorenew</span></div>
+    <div class="ic"><span class="ms">mic</span><span class="name">mic</span></div>
+    <div class="ic"><span class="ms">cloud_upload</span><span class="name">cloud_upload</span></div>
+    <div class="ic"><span class="ms">lock</span><span class="name">lock</span></div>
+  </div>
+  <div class="lbl">Mono micro-glyphs</div>
+  <div class="micro"><span>▾</span><span>⋯</span><span>×</span><span>→</span><span>▲</span><span>▽</span><span>●</span><span style="font-size:13px;">👍 👎</span></div>
+</body>
+</html>

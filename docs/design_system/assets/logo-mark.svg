@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sync">
+  <defs>
+    <linearGradient id="syncMark" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a63e8"></stop>
+      <stop offset="1" stop-color="#3a50dd"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#syncMark)"></rect>
+  <text x="32" y="33" dy=".35em" text-anchor="middle" font-family="&#39;Plus Jakarta Sans&#39;, system-ui, sans-serif" font-size="38" font-weight="800" fill="#ffffff">S</text>
+</svg>

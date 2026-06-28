@@ -57,13 +57,13 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 
 - **Monorepo:** pnpm + Turborepo
 - **Language:** TypeScript (Node 20+)
-- **Studio:** Next.js 15 + Auth.js (self-hosted, email + password) · **Tailwind CSS + shadcn/ui** (neutral)
+- **Studio:** Next.js 15 + Auth.js (self-hosted, email + password) · **Tailwind CSS + shadcn/ui** (indigo brand · Plus Jakarta Sans + JetBrains Mono — codified in [`docs/design_system/`](docs/design_system/README.md))
 - **API / worker:** Fastify (HTTP) + BullMQ (background jobs)
 - **Database:** Postgres (Prisma)
 - **Queue / cache:** Redis
 - **Object storage:** S3-compatible — MinIO locally, Cloudflare R2 in production
 - **AI:** OpenAI (`whisper-1` transcription · `gpt-4o` segmentation, synthesis, and the copilot answer engine)
-- **Widget / extension:** esbuild bundles
+- **Widget / extension:** esbuild bundles (both on the indigo design system; the widget is Sync-indigo by default and host-rebrandable via `data-sync-accent`)
 - **Deploy target:** Render (Dockerized) + Cloudflare R2
 
 ---
@@ -215,6 +215,7 @@ Start with the roadmap; each doc links onward.
 | [`docs/architecture.md`](docs/architecture.md) | Technical model — the 3 modules, KB schema, data model, decisions |
 | [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog |
 | [`docs/phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules |
+| [`docs/design_system/`](docs/design_system/README.md) | **Design system** — the indigo brand: tokens, components, full Studio UI kit (+ recorder/widget specs). Source of truth for all UI. |
 | [`docs/dev-setup.md`](docs/dev-setup.md) | Local dev / tooling deep-dive (pnpm · Turborepo · docker-compose · Prisma) |
 
 `CLAUDE.md` is a short orientation file for working in this repo with Claude Code.

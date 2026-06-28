@@ -1,0 +1,49 @@
+<!-- @dsCard group="Studio" viewport="1240x840" subtitle="Interactive Studio — navigate, open the help dialogs, flip the approval toggles" name="Studio (interactive)" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sync Studio — UI kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;background:#eceef2;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;padding:24px;}
+  #app{height:calc(100vh - 48px);max-width:1240px;margin:0 auto;}
+  .window{height:100%;background:var(--paper);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-frame);overflow:hidden;display:flex;position:relative;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Source files are fetched, concatenated and transformed once, then injected
+     as a single global <script> so every component shares one scope. -->
+<script>
+(async () => {
+  const files = ['ui.jsx','Home.jsx','Recordings.jsx','KnowledgeBase.jsx','WorkflowDetail.jsx','Copilot.jsx','Analytics.jsx','app.jsx'];
+  try {
+    const srcs = await Promise.all(files.map((f) => fetch(f).then((r) => {
+      if (!r.ok) throw new Error('Failed to load ' + f + ' (' + r.status + ')');
+      return r.text();
+    })));
+    const { code } = Babel.transform(srcs.join('\n\n'), { presets: [['react', { runtime: 'classic' }]], filename: 'studio.jsx' });
+    const s = document.createElement('script');
+    s.textContent = code;
+    document.body.appendChild(s);
+  } catch (err) {
+    document.getElementById('app').innerHTML = '<pre style="padding:24px;font:12px ui-monospace,monospace;color:#9c5c4d;white-space:pre-wrap">' + (err && err.message ? err.message : err) + '</pre>';
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!-- @dsCard group="Colors" viewport="700x210" subtitle="A calm 3-color status system — always paired with text, never color alone" name="Status — success · warning · danger" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:18px;background:#fff;font-family:var(--font-sans);color:var(--ink);}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .col{display:flex;flex-direction:column;gap:9px;}
+  .head{display:flex;align-items:center;gap:8px;font:700 12px var(--font-sans);}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+  .pill{align-self:flex-start;font:var(--type-micro);letter-spacing:var(--track-micro);padding:3px 9px;border-radius:var(--radius-pill);}
+  .surf{border-radius:10px;padding:9px 11px;font:500 11px var(--font-mono);}
+  .hexline{font:500 10px var(--font-mono);color:var(--text-muted);}
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="col">
+      <div class="head"><span class="dot" style="background:var(--success-dot);"></span>Success · live</div>
+      <span class="pill" style="color:var(--success-text);background:var(--success-bg-2);border:1px solid var(--success-border);">APPROVED · LIVE</span>
+      <div class="surf" style="color:var(--success-text-2);background:var(--success-bg);border:1px solid var(--success-border);">Copilot is live</div>
+      <div class="hexline">dot #4e8d6e · text #127249<br>bg #f3faf6 · border #cfe9da</div>
+    </div>
+    <div class="col">
+      <div class="head"><span class="dot" style="background:var(--warning-dot);"></span>Warning · pending</div>
+      <span class="pill" style="color:var(--warning-text);background:var(--warning-bg);border:1px solid var(--warning-border);">PENDING</span>
+      <div class="surf" style="color:var(--warning-text);background:var(--warning-bg-2);border:1px solid var(--warning-border);">5 awaiting approval</div>
+      <div class="hexline">dot #b89030 · text #8a6d2e<br>bg #f8f2e3 · border #ecdfc2</div>
+    </div>
+    <div class="col">
+      <div class="head"><span class="dot" style="background:var(--danger-500);"></span>Danger · decline</div>
+      <span class="pill" style="color:var(--danger-text);background:var(--danger-bg);border:1px solid var(--danger-border);">DECLINED</span>
+      <div class="surf" style="color:var(--danger-text);background:var(--danger-bg);border:1px solid var(--danger-border);">Honest decline · gap logged</div>
+      <div class="hexline">mark #cc4a3a · text #9c5c4d<br>bg #fbf0ed · border #f0ddd7</div>
+    </div>
+  </div>
+</body>
+</html>
