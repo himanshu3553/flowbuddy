@@ -62,6 +62,9 @@ pnpm lint          # lint
 Wipes Postgres (recordings/KB/approvals/users/tokens), MinIO (artifacts), and Redis (queue). **Stop any running api/worker/web dev processes first (Ctrl-C).**
 
 ```bash
+# 0. Stop any dev servers still holding the app ports (web · api · widget demo · prisma studio)
+lsof -ti tcp:3000,tcp:8787,tcp:8080,tcp:5555 | xargs kill 2>/dev/null
+
 # 1. Tear down infra + volumes
 docker compose down -v
 
