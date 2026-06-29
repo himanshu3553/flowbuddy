@@ -1,5 +1,5 @@
 import { build, context } from 'esbuild';
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,7 +20,17 @@ const entryPoints = {
 const STUDIO_URL = process.env.STUDIO_URL || 'http://localhost:3000';
 
 async function copyStatic() {
-  for (const f of ['manifest.json', 'popup.html', 'offscreen.html', 'permission.html']) {
+  // Bake the Studio origin into the connect-bridge content-script `matches`, so the connect token
+  // handshake injects on whatever Studio this build targets (localhost in dev, the deployed Studio
+  // in prod). Same single source of truth — STUDIO_URL — that bakes __STUDIO_URL__ for the popup.
+  const manifest = JSON.parse(await readFile(path.join(__dirname, 'src', 'manifest.json'), 'utf8'));
+  const studioMatch = `${STUDIO_URL.replace(/\/$/, '')}/*`;
+  for (const cs of manifest.content_scripts ?? []) {
+    if ((cs.js ?? []).includes('connect-bridge.js')) cs.matches = [studioMatch];
+  }
+  await writeFile(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+  for (const f of ['popup.html', 'offscreen.html', 'permission.html']) {
     await cp(path.join(__dirname, 'src', f), path.join(outdir, f));
   }
 }
