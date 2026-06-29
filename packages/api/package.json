@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "start:all": "tsx src/all.ts",
+    "start:all": "pnpm --filter @sync/db exec prisma migrate deploy && tsx src/all.ts",
     "worker": "tsx src/worker.ts",
     "worker:dev": "tsx watch src/worker.ts",
     "build": "tsc --noEmit",

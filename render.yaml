@@ -52,7 +52,7 @@ services:
     plan: free
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
-    dockerCommand: sh -c "pnpm --filter @sync/db exec prisma migrate deploy && pnpm --filter @sync/api start:all"
+    dockerCommand: pnpm --filter @sync/api start:all
     envVars:
       - fromGroup: sync-r2
       - { key: PORT, value: 8787 }
