@@ -14,6 +14,31 @@ export async function setCopilotOrigins(originsText: string): Promise<void> {
   revalidatePath('/dashboard/copilot');
 }
 
+/** Appearance (host branding) — persisted so it prefills the UI and bakes into the embed snippet. */
+export async function setCopilotAppearance(input: {
+  accent: string;
+  title: string;
+  greeting: string;
+  position: string;
+}): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const accent = /^#[0-9a-fA-F]{6}$/.test(input.accent.trim()) ? input.accent.trim() : null;
+  const title = input.title.trim().slice(0, 40) || null;
+  const greeting = input.greeting.trim().slice(0, 200) || null;
+  const position = input.position === 'left' ? 'left' : 'right';
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: {
+      copilotAccent: accent,
+      copilotTitle: title,
+      copilotGreeting: greeting,
+      copilotPosition: position,
+    },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
 /** Trust setting — show/hide the "Source: <workflow>" citation chip on grounded answers. */
 export async function setCopilotShowCitations(showCitations: boolean): Promise<void> {
   const ctx = await getCurrentWorkspace();

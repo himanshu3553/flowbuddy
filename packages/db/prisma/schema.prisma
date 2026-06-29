@@ -78,6 +78,11 @@ model Workspace {
   copilotAllowedOrigins String[] @default([])
   // Trust setting: show the "Source: <workflow>" citation chip on grounded answers (default on).
   copilotShowCitations  Boolean  @default(true)
+  // Appearance (host branding) — flows into the embed snippet's data-sync-* attrs (null = widget default).
+  copilotAccent         String?
+  copilotTitle          String?
+  copilotGreeting       String?
+  copilotPosition       String   @default("right")
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]

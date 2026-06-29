@@ -3,8 +3,7 @@ import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { getOrCreateCopilotKey } from '@/lib/copilot-settings';
 import { PageHeader } from '@/components/dashboard/page-header';
-import { CopilotWorkspace } from '@/components/dashboard/copilot-workspace';
-import { WidgetPreview } from '@/components/dashboard/widget-preview';
+import { CopilotConsole } from '@/components/dashboard/copilot-console';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +20,8 @@ export default async function CopilotSettingsPage() {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
-  const { publicKey, allowedOrigins, showCitations } = await getOrCreateCopilotKey(
-    ctx.workspace.id,
-  );
+  const { publicKey, allowedOrigins, showCitations, accent, title, greeting, position } =
+    await getOrCreateCopilotKey(ctx.workspace.id);
   const wsId = ctx.workspace.id;
   const [qTotal, qAnswered, qUp, qDown, recent] = await Promise.all([
     prisma.copilotQuery.count({ where: { workspaceId: wsId } }),
@@ -41,10 +39,6 @@ export default async function CopilotSettingsPage() {
   const apiBase = process.env.SYNC_API_URL || 'http://localhost:8787';
   const widgetSrc =
     process.env.SYNC_WIDGET_URL || 'https://YOUR_WIDGET_HOST/sync-copilot.js';
-  const snippet = `<script src="${widgetSrc}"
-  data-sync-api="${apiBase}"
-  data-sync-key="${publicKey}"
-  data-sync-title="Help"></script>`;
   const primaryOrigin = allowedOrigins[0]
     ? originHost(allowedOrigins[0])
     : 'your site';
@@ -58,20 +52,17 @@ export default async function CopilotSettingsPage() {
         actions={<StatusBadge tone="pending">Not detected</StatusBadge>}
       />
       <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <CopilotWorkspace
-            snippet={snippet}
-            publicKey={publicKey}
-            allowedOrigins={allowedOrigins}
-            primaryOrigin={primaryOrigin}
-            widgetIsPlaceholder={widgetIsPlaceholder}
-            showCitations={showCitations}
-            activity={{ total: qTotal, answeredPct, up: qUp, down: qDown, recent }}
-          />
-          <div className="lg:sticky lg:top-20 lg:self-start">
-            <WidgetPreview />
-          </div>
-        </div>
+        <CopilotConsole
+          apiBase={apiBase}
+          widgetSrc={widgetSrc}
+          publicKey={publicKey}
+          widgetIsPlaceholder={widgetIsPlaceholder}
+          allowedOrigins={allowedOrigins}
+          primaryOrigin={primaryOrigin}
+          showCitations={showCitations}
+          activity={{ total: qTotal, answeredPct, up: qUp, down: qDown, recent }}
+          appearance={{ accent, title, greeting, position }}
+        />
       </div>
     </>
   );

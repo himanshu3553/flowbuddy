@@ -8,10 +8,17 @@ import {
   setCopilotOrigins,
   regenerateCopilotKey,
   setCopilotShowCitations,
+  setCopilotAppearance,
 } from '@/lib/copilot-settings-actions';
+import {
+  ACCENT_PRESETS,
+  COPILOT_DEFAULTS,
+  type CopilotAppearance,
+} from '@/lib/copilot-appearance';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { CopyButton } from '@/components/dashboard/copy-button';
@@ -85,6 +92,8 @@ export function CopilotWorkspace({
   widgetIsPlaceholder = false,
   showCitations = true,
   activity,
+  appearance,
+  onAppearanceChange,
 }: {
   snippet: string;
   publicKey: string;
@@ -99,6 +108,8 @@ export function CopilotWorkspace({
     down: number;
     recent: { id: string; question: string; answered: boolean; feedback: string | null }[];
   };
+  appearance: CopilotAppearance;
+  onAppearanceChange: (next: CopilotAppearance) => void;
 }) {
   const [tab, setTab] = useState<Tab>('activity');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
@@ -132,6 +143,18 @@ export function CopilotWorkspace({
       router.refresh();
     });
   }
+  function saveAppearance() {
+    start(async () => {
+      await setCopilotAppearance(appearance);
+      router.refresh();
+    });
+  }
+
+  const set = (patch: Partial<CopilotAppearance>) =>
+    onAppearanceChange({ ...appearance, ...patch });
+  const resolvedAccent = /^#[0-9a-fA-F]{6}$/.test(appearance.accent.trim())
+    ? appearance.accent.trim()
+    : COPILOT_DEFAULTS.accent;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'activity', label: 'Copilot activity' },
@@ -490,14 +513,116 @@ export function CopilotWorkspace({
       )}
 
       {tab === 'appearance' && (
-        <section className="rounded-card border bg-card p-8 text-center shadow-card">
-          <p className="text-sm font-medium">Appearance controls coming soon</p>
-          <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-            Launcher color, position, title and welcome message will be
-            configurable here. For now the widget uses your indigo brand
-            defaults.
-          </p>
-        </section>
+        <div className="space-y-5">
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Brand color</h3>
+            <p className="text-xs text-muted-foreground">
+              The accent for the launcher, header, and your customers’ messages.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {ACCENT_PRESETS.map((c) => {
+                const active = resolvedAccent.toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => set({ accent: c })}
+                    style={{ backgroundColor: c }}
+                    className={cn(
+                      'h-7 w-7 rounded-full ring-offset-2 ring-offset-card transition',
+                      active
+                        ? 'ring-2 ring-foreground'
+                        : 'ring-1 ring-black/10 hover:ring-black/25',
+                    )}
+                    aria-label={`Use ${c}`}
+                  />
+                );
+              })}
+              <span className="mx-1 h-6 w-px bg-border" />
+              <input
+                type="color"
+                value={resolvedAccent}
+                onChange={(e) => set({ accent: e.target.value })}
+                className="h-8 w-9 shrink-0 cursor-pointer rounded-control border bg-transparent p-1"
+                aria-label="Custom accent color"
+              />
+              <Input
+                value={appearance.accent}
+                onChange={(e) => set({ accent: e.target.value })}
+                placeholder={COPILOT_DEFAULTS.accent}
+                className="h-8 w-28 font-mono text-xs"
+                aria-label="Accent hex"
+              />
+            </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Header title</h3>
+            <p className="text-xs text-muted-foreground">
+              Shown at the top of the copilot panel.
+            </p>
+            <Input
+              value={appearance.title}
+              onChange={(e) => set({ title: e.target.value })}
+              placeholder={COPILOT_DEFAULTS.title}
+              maxLength={40}
+              className="mt-3 text-sm"
+            />
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Greeting</h3>
+            <p className="text-xs text-muted-foreground">
+              The first message customers see when they open the copilot.
+            </p>
+            <Textarea
+              value={appearance.greeting}
+              onChange={(e) => set({ greeting: e.target.value })}
+              placeholder={COPILOT_DEFAULTS.greeting}
+              maxLength={200}
+              rows={2}
+              className="mt-3 text-sm"
+            />
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Launcher position</h3>
+            <p className="text-xs text-muted-foreground">
+              Which corner the copilot button sits in on your site.
+            </p>
+            <div className="mt-3 inline-flex rounded-control border p-0.5">
+              {(['left', 'right'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => set({ position: p })}
+                  className={cn(
+                    'rounded-[7px] px-3.5 py-1 text-xs font-semibold capitalize transition-colors',
+                    appearance.position === p
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={saveAppearance}
+              disabled={pending}
+            >
+              {pending ? 'Saving…' : 'Save appearance'}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Changes preview live; Save bakes them into your embed snippet.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

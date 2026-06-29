@@ -27,7 +27,17 @@ function citationTitles(citations?: Citation[]): string[] {
   return [...new Set((citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
 }
 
-export function WidgetPreview() {
+export function WidgetPreview({
+  accent,
+  title,
+  greeting,
+  position,
+}: {
+  accent: string;
+  title: string;
+  greeting: string;
+  position: 'left' | 'right';
+}) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -75,12 +85,17 @@ export function WidgetPreview() {
       <div className="rounded-[14px] border border-[#e7eafb] bg-[#f4f6fd] p-4">
         <div className="overflow-hidden rounded-[14px] border border-[color:var(--media-border)] bg-white shadow-widget">
           {/* widget header */}
-          <div className="flex items-center gap-2.5 border-b bg-primary px-3.5 py-3 text-white">
+          <div
+            className="flex items-center gap-2.5 border-b px-3.5 py-3 text-white"
+            style={{ backgroundColor: accent }}
+          >
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15">
               <Bot className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-bold leading-tight">Copilot</span>
+              <span className="block truncate text-[13px] font-bold leading-tight">
+                {title}
+              </span>
               <span className="block font-mono text-[10px] text-white/70">
                 grounded in your approved workflows
               </span>
@@ -95,14 +110,15 @@ export function WidgetPreview() {
           >
             {messages.length === 0 && !loading ? (
               <p className="m-auto px-6 text-center text-xs text-faint">
-                How can I help you today?
+                {greeting}
               </p>
             ) : (
               messages.map((m, i) =>
                 m.role === 'user' ? (
                   <div
                     key={i}
-                    className="ml-auto w-fit max-w-[78%] whitespace-pre-wrap break-words rounded-[13px] rounded-br-[4px] bg-primary px-3 py-2 text-xs text-primary-foreground"
+                    className="ml-auto w-fit max-w-[78%] whitespace-pre-wrap break-words rounded-[13px] rounded-br-[4px] px-3 py-2 text-xs text-white"
+                    style={{ backgroundColor: accent }}
                   >
                     {m.content}
                   </div>
@@ -117,9 +133,15 @@ export function WidgetPreview() {
                     {m.content}
                     {!m.decline && !m.error && citationTitles(m.citations).length > 0 && (
                       <div className="mt-2.5 flex items-center gap-2.5">
-                        <span className="inline-flex items-center gap-1.5 rounded-pill border border-brand-100 bg-brand-50 px-2.5 py-[3px]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                          <span className="font-mono text-[10px] text-primary">
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-[3px]"
+                          style={{ borderColor: accent, backgroundColor: `${accent}14` }}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{ backgroundColor: accent }}
+                          />
+                          <span className="font-mono text-[10px]" style={{ color: accent }}>
                             Source: {citationTitles(m.citations).join(' · ')}
                           </span>
                         </span>
@@ -155,12 +177,29 @@ export function WidgetPreview() {
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-white transition-opacity disabled:opacity-40"
+              style={{ backgroundColor: accent }}
               aria-label="Send"
             >
               <ArrowUp className="h-4 w-4" />
             </button>
           </form>
+        </div>
+
+        {/* launcher placement indicator — reflects the chosen side + accent */}
+        <div
+          className={cn(
+            'mt-3 flex',
+            position === 'left' ? 'justify-start' : 'justify-end',
+          )}
+        >
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-full text-base text-white shadow-md"
+            style={{ backgroundColor: accent }}
+            aria-hidden
+          >
+            💬
+          </span>
         </div>
       </div>
     </div>
