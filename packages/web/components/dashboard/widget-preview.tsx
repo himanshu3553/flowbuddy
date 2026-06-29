@@ -7,12 +7,9 @@ import { cn } from '@/lib/utils';
 import { previewCopilotAnswer } from '@/lib/copilot-preview-actions';
 
 /**
- * Live, in-Studio copilot tester (Approach A). Renders the embeddable copilot's chrome (so it looks
- * like what end-users see) but answers through a session-authenticated server action that reuses the
- * real grounding engine — no embed, no public key, and test questions stay out of analytics.
- *
- * Two modes: "Demo" seeds a canned grounded-answer + honest-decline (the trust story at a glance);
- * "Test live" runs the user's own questions against their approved workflows.
+ * Live, in-Studio copilot preview. Renders the embeddable copilot's chrome (so it looks like what
+ * end-users see) but answers through a session-authenticated server action that reuses the real
+ * grounding engine — no embed, no public key, and questions stay out of analytics/coverage gaps.
  */
 
 interface Citation {
@@ -26,36 +23,15 @@ interface Msg {
   error?: boolean;
 }
 
-// Canned conversation shown in Demo mode — a grounded answer (with a source) and an honest decline.
-const DEMO: Msg[] = [
-  { role: 'user', content: 'How do I reset a customer’s password?' },
-  {
-    role: 'assistant',
-    content:
-      'Open the account menu, go to Security, then click Reset password and confirm. They’ll get a reset email.',
-    citations: [{ segmentTitle: 'Reset a password' }],
-  },
-  { role: 'user', content: 'Do you support SAML SSO?' },
-  {
-    role: 'assistant',
-    content:
-      'I don’t have that in my approved sources yet, so I won’t guess. I’ve flagged it for your team to cover.',
-    decline: true,
-  },
-];
-
 function citationTitles(citations?: Citation[]): string[] {
   return [...new Set((citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
 }
 
 export function WidgetPreview() {
-  const [mode, setMode] = useState<'demo' | 'live'>('demo');
-  const [liveMsgs, setLiveMsgs] = useState<Msg[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const messages = mode === 'demo' ? DEMO : liveMsgs;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -67,10 +43,8 @@ export function WidgetPreview() {
     if (!q || loading) return;
     setInput('');
 
-    // First question from Demo mode starts a fresh live conversation (don't carry canned turns in).
-    const base = mode === 'demo' ? [] : liveMsgs;
-    if (mode === 'demo') setMode('live');
-    setLiveMsgs([...base, { role: 'user', content: q }]);
+    const base = messages;
+    setMessages([...base, { role: 'user', content: q }]);
     setLoading(true);
 
     const history = base.filter((m) => !m.error).map((m) => ({ role: m.role, content: m.content }));
@@ -78,10 +52,12 @@ export function WidgetPreview() {
       const res = await previewCopilotAnswer(q, history);
       const reply: Msg = res.covered
         ? { role: 'assistant', content: res.answer ?? '', citations: res.citations }
-        : { role: 'assistant', content: res.reason ?? "I don’t have that in our help content yet.", decline: true };
-      setLiveMsgs((cur) => [...cur, reply]);
+        : res.error
+          ? { role: 'assistant', content: res.reason ?? 'Something went wrong.', error: true }
+          : { role: 'assistant', content: res.reason ?? "I don’t have that in our help content yet.", decline: true };
+      setMessages((cur) => [...cur, reply]);
     } catch {
-      setLiveMsgs((cur) => [
+      setMessages((cur) => [
         ...cur,
         { role: 'assistant', content: 'Could not reach the copilot. Please try again.', error: true },
       ]);
@@ -92,27 +68,8 @@ export function WidgetPreview() {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.05em] text-faint">
-          End-user preview — in your app
-        </span>
-        <div className="flex items-center gap-0.5 rounded-full border bg-secondary p-0.5">
-          {(['demo', 'live'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={cn(
-                'rounded-full px-2.5 py-1 font-mono text-[10px] font-semibold transition-colors',
-                mode === m
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {m === 'demo' ? 'Demo' : 'Test live'}
-            </button>
-          ))}
-        </div>
+      <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.05em] text-faint">
+        Copilot Preview
       </div>
 
       <div className="rounded-[14px] border border-[#e7eafb] bg-[#f4f6fd] p-4">
@@ -138,7 +95,7 @@ export function WidgetPreview() {
           >
             {messages.length === 0 && !loading ? (
               <p className="m-auto px-6 text-center text-xs text-faint">
-                Hi! Ask me anything about this product — I answer only from your approved workflows.
+                How can I help you today?
               </p>
             ) : (
               messages.map((m, i) =>
@@ -206,9 +163,7 @@ export function WidgetPreview() {
           </form>
         </div>
         <p className="mt-3 text-center font-mono text-[10px] text-[#8b93b4]">
-          {mode === 'live'
-            ? 'live · grounded in approved KB · not logged to analytics'
-            : 'context-aware · cites sources · declines honestly'}
+          live · grounded in approved KB · not logged to analytics
         </p>
       </div>
     </div>
