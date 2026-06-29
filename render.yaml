@@ -1,82 +1,99 @@
 # Render Blueprint — the ONLY Render-specific file (app code stays host-agnostic).
-# Copilot-first Version 1, Phase 1: api (answer endpoint) + worker (synthesis) + web (Studio).
-# Portal/articles = Phase 2 (not deployed). Blobs = Cloudflare R2 (S3-compatible).
+# Copilot-first Version 1, Phase 1: api (answer endpoint) + worker (synthesis) + web (Studio)
+# + widget (static host for sync-copilot.js). Portal/articles = Phase 2 (not deployed).
+# Blobs = Cloudflare R2 (S3-compatible). All services on paid Starter — always-on (no cold
+# starts on the customer-facing copilot) + a persistent Postgres (no free 90-day expiry).
 #
-# ⚠️ P1-M4 — this blueprint is prepared but NOT yet deploy-verified. Before first deploy:
-#   1. Create the R2 bucket + API token; set the R2_* + OPENAI_API_KEY secrets in Render.
-#   2. Set AUTH_SECRET (openssl rand -hex 32) and AUTH_URL (the deployed web URL).
-#   3. Apply DB migrations: `prisma migrate deploy` (preDeployCommand on sync-api below).
-#   4. Host the widget bundle (packages/widget/dist/sync-copilot.js) and set SYNC_WIDGET_URL.
-#   5. Add the deployed Studio origin to the extension manifest + set STUDIO_URL/SYNC_API_URL.
+# ⚠️ P1-M4 — before first deploy:
+#   1. Pre-create the R2 bucket (sync-artifacts) + an Object Read&Write API token. Fill the
+#      `sync-r2` env group (R2_ENDPOINT/ACCESS_KEY_ID/SECRET_ACCESS_KEY/BUCKET) + OPENAI_API_KEY.
+#      Pre-creating the bucket means the api's HeadBucket succeeds — an object-scoped token is enough.
+#   2. Set AUTH_SECRET (openssl rand -hex 32). Service URLs are deterministic from the names,
+#      so set on sync-web: AUTH_URL = https://sync-web.onrender.com,
+#      SYNC_API_URL = https://sync-api.onrender.com (PUBLIC — baked into the embed snippet),
+#      SYNC_WIDGET_URL = https://sync-widget.onrender.com/sync-copilot.js.
+#   3. Migrations apply automatically (sync-api preDeployCommand → prisma migrate deploy).
+#   4. Post-deploy: rebuild the extension with STUDIO_URL=https://sync-web.onrender.com.
 
 databases:
   - name: sync-db
-    plan: free
+    plan: basic_256mb # smallest paid (persistent); bump if the KB grows
     databaseName: sync
     user: sync
+
+# Shared object-storage (R2) credentials — entered ONCE here, referenced by api/worker/web
+# via `fromGroup: sync-r2` so the same secret can't drift between services.
+envVarGroups:
+  - name: sync-r2
+    envVars:
+      - { key: R2_ENDPOINT, sync: false } # https://<accountid>.r2.cloudflarestorage.com
+      - { key: R2_REGION, value: auto }
+      - { key: R2_ACCESS_KEY_ID, sync: false }
+      - { key: R2_SECRET_ACCESS_KEY, sync: false }
+      - { key: R2_BUCKET, sync: false } # sync-artifacts (pre-created)
 
 services:
   - type: keyvalue
     name: sync-redis
-    plan: free
+    plan: starter
     ipAllowList: [] # only reachable from Render services
 
   # --- API: copilot answer endpoint + recorder ingestion ---
   - type: web
     name: sync-api
     runtime: docker
+    plan: starter
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
     preDeployCommand: pnpm --filter @sync/db exec prisma migrate deploy
     envVars:
+      - fromGroup: sync-r2
       - { key: PORT, value: 8787 }
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
       - { key: TRANSCRIBE_MODEL, value: whisper-1 }
       - { key: SYNTH_MODEL, value: gpt-4o }
-      - { key: R2_ENDPOINT, sync: false }
-      - { key: R2_REGION, value: auto }
-      - { key: R2_ACCESS_KEY_ID, sync: false }
-      - { key: R2_SECRET_ACCESS_KEY, sync: false }
-      - { key: R2_BUCKET, sync: false }
 
   # --- Worker: synthesis (capture → KB). Same image, different command. ---
   - type: worker
     name: sync-worker
     runtime: docker
+    plan: starter
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
     dockerCommand: pnpm --filter @sync/api worker
     envVars:
+      - fromGroup: sync-r2
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
       - { key: TRANSCRIBE_MODEL, value: whisper-1 }
       - { key: SYNTH_MODEL, value: gpt-4o }
-      - { key: R2_ENDPOINT, sync: false }
-      - { key: R2_REGION, value: auto }
-      - { key: R2_ACCESS_KEY_ID, sync: false }
-      - { key: R2_SECRET_ACCESS_KEY, sync: false }
-      - { key: R2_BUCKET, sync: false }
 
   # --- Studio (Next.js): approve workflows, copilot settings, analytics ---
   - type: web
     name: sync-web
     runtime: docker
+    plan: starter
     dockerfilePath: ./packages/web/Dockerfile
     dockerContext: .
     envVars:
+      - fromGroup: sync-r2
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       - { key: AUTH_SECRET, sync: false }
-      - { key: AUTH_URL, sync: false } # the deployed web URL
+      - { key: AUTH_URL, sync: false } # the deployed web URL (https://sync-web.onrender.com)
       - { key: AUTH_TRUST_HOST, value: true }
-      - { key: SYNC_API_URL, fromService: { name: sync-api, type: web, property: hostport } }
-      - { key: SYNC_WIDGET_URL, sync: false } # where sync-copilot.js is hosted
-      - { key: R2_ENDPOINT, sync: false }
-      - { key: R2_REGION, value: auto }
-      - { key: R2_ACCESS_KEY_ID, sync: false }
-      - { key: R2_SECRET_ACCESS_KEY, sync: false }
-      - { key: R2_BUCKET, sync: false }
+      # PUBLIC api URL — this value is baked into the browser embed snippet (data-sync-api) and
+      # the extension connect payload, so it CANNOT be the internal hostport. Set manually.
+      - { key: SYNC_API_URL, sync: false } # https://sync-api.onrender.com
+      - { key: SYNC_WIDGET_URL, sync: false } # https://sync-widget.onrender.com/sync-copilot.js
+
+  # --- Widget host: serves the embeddable sync-copilot.js bundle (static site, free) ---
+  - type: web
+    name: sync-widget
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @sync/widget build
+    staticPublishPath: packages/widget/dist
 
   # (Phase 2 — deferred: a sync-portal web service for the public help site.)
