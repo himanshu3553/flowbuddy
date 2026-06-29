@@ -22,7 +22,7 @@ const cfg = {
   apiBase: (script?.dataset.syncApi || g.apiBase || 'http://localhost:8787').replace(/\/+$/, ''),
   key: script?.dataset.syncKey || g.key || '',
   title: script?.dataset.syncTitle || g.title || 'Ask AI',
-  greeting: script?.dataset.syncGreeting || g.greeting || 'Hi! Ask me anything about this product.',
+  greeting: script?.dataset.syncGreeting || g.greeting || 'How can I help you today?',
   accent: script?.dataset.syncAccent || g.accent || '',
   position: (script?.dataset.syncPosition || g.position || 'right').toLowerCase(),
 };
