@@ -10,8 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { CreateToken } from '../create-token';
-
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
@@ -40,20 +38,6 @@ export default async function SettingsPage() {
               <span className="text-muted-foreground">Account</span>
               <span className="font-medium">{session.user.email}</span>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Extension API token</CardTitle>
-            <CardDescription>
-              Generate a token and paste it into the Sync Recorder extension.
-              (The extension&apos;s &ldquo;Connect&rdquo; button does this for
-              you automatically.)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CreateToken />
           </CardContent>
         </Card>
       </div>

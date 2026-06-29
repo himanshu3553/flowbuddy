@@ -2,10 +2,8 @@
 
 import { AuthError } from 'next-auth';
 import { z } from 'zod';
-import { prisma } from '@sync/db';
-import { auth, signIn, signOut } from '@/auth';
+import { signIn, signOut } from '@/auth';
 import { createUserWithWorkspace } from '@/lib/workspace';
-import { createApiToken } from '@/lib/tokens';
 
 const creds = z.object({
   email: z.string().email(),
@@ -39,14 +37,4 @@ export async function signInAction(_prev: string | undefined, formData: FormData
 
 export async function signOutAction(): Promise<void> {
   await signOut({ redirectTo: '/signin' });
-}
-
-export async function createTokenAction(): Promise<{ token?: string; error?: string }> {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return { error: 'Not authenticated.' };
-  const ws = await prisma.workspace.findFirst({ where: { ownerId: userId } });
-  if (!ws) return { error: 'No workspace found.' };
-  const token = await createApiToken(ws.id);
-  return { token };
 }
