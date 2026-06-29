@@ -82,7 +82,7 @@ export function WidgetPreview() {
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-bold leading-tight">Copilot</span>
               <span className="block font-mono text-[10px] text-white/70">
-                grounded in your approved docs
+                grounded in your approved workflows
               </span>
             </span>
             <span className="text-white/70">×</span>
@@ -162,9 +162,6 @@ export function WidgetPreview() {
             </button>
           </form>
         </div>
-        <p className="mt-3 text-center font-mono text-[10px] text-[#8b93b4]">
-          live · grounded in approved KB · not logged to analytics
-        </p>
       </div>
     </div>
   );
