@@ -26,6 +26,8 @@ export interface PreviewResult {
   answer: string | null;
   citations: { segmentTitle: string | null }[];
   reason: string | null;
+  /** A system/config failure (bad key, model error) — distinct from an honest content decline. */
+  error?: boolean;
 }
 
 type ApprovedRow = Awaited<ReturnType<typeof listApprovedItems>>[number];
@@ -79,7 +81,16 @@ export async function previewCopilotAnswer(
   if (!q) throw new Error('question is required');
 
   const apiKey = process.env.OPENAI_API_KEY || '';
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured for the web app');
+  if (!apiKey) {
+    // Config gap, not a content decline — surface it clearly instead of throwing a blanket 500.
+    return {
+      covered: false,
+      answer: null,
+      citations: [],
+      reason: 'The copilot isn’t configured on the server yet — set OPENAI_API_KEY on the Studio service.',
+      error: true,
+    };
+  }
   const model = process.env.SYNTH_MODEL || 'gpt-4o';
 
   const approved = await listApprovedItems(ctx.workspace.id);
@@ -92,13 +103,25 @@ export async function previewCopilotAnswer(
     };
   }
 
-  const result = await answerFromKB({
-    question: q,
-    history: sanitizeHistory(history),
-    items: shortlist(approved, q),
-    apiKey,
-    model,
-  });
+  let result;
+  try {
+    result = await answerFromKB({
+      question: q,
+      history: sanitizeHistory(history),
+      items: shortlist(approved, q),
+      apiKey,
+      model,
+    });
+  } catch (e) {
+    console.error('[copilot-preview] answerFromKB failed:', e);
+    return {
+      covered: false,
+      answer: null,
+      citations: [],
+      reason: 'The copilot ran into an error reaching the model. Check the Studio server logs.',
+      error: true,
+    };
+  }
 
   if (!result.covered) {
     return { covered: false, answer: null, citations: [], reason: result.reason };

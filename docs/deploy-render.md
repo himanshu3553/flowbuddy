@@ -91,7 +91,7 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `R2_ACCESS_KEY_ID` | `sync-r2` group | R2 token access key |
 | `R2_SECRET_ACCESS_KEY` | `sync-r2` group | R2 token secret |
 | `R2_BUCKET` | `sync-r2` group | `sync-artifacts` |
-| `OPENAI_API_KEY` | **`sync-api`** | your `sk-…` |
+| `OPENAI_API_KEY` | **`sync-api`** + **`sync-web`** | your `sk-…` (api = synthesis; web = the in-Studio copilot tester) |
 | `AUTH_SECRET` | `sync-web` | output of step 4 |
 | `AUTH_URL` | `sync-web` | the real `sync-web` URL (see step 8) |
 | `SYNC_API_URL` | `sync-web` | the real `sync-api` URL (see step 8) |
@@ -188,6 +188,7 @@ reverts to localhost — the committed `src/manifest.json` stays localhost so lo
 | `AggregateError [ECONNREFUSED] … 127.0.0.1:9000` | `R2_ENDPOINT` unset → API defaults to local MinIO; `ensureBucket()` runs at **boot** | Set the `sync-r2` group (R2_ENDPOINT/keys/bucket) and redeploy `sync-api` |
 | `[auth][error] MissingSecret: Please define a 'secret'` (signup/signin) | `AUTH_SECRET` unset (pages still render — it's GET-only) | Set `AUTH_SECRET` on `sync-web`; also set `AUTH_URL` to the real URL |
 | `[worker] failed …: 401 You didn't provide an API key` | `OPENAI_API_KEY` unset on `sync-api` (API boots fine; only synthesis needs it) | Set `OPENAI_API_KEY` on `sync-api`; **re-record** (failed jobs don't auto-retry — `attempts=1`, no reprocess route) |
+| `500` on the Copilot page "Test live" (POST `/dashboard/copilot`) | `OPENAI_API_KEY` unset on **`sync-web`** — the in-Studio copilot tester calls OpenAI from the web process | Set `OPENAI_API_KEY` on `sync-web` and redeploy |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
 | `Eviction policy is allkeys-lru … should be "noeviction"` | Free Key Value default eviction (BullMQ prefers `noeviction`) | Non-fatal for testing; set `maxmemoryPolicy: noeviction` if you want it clean |
@@ -219,7 +220,7 @@ To run always-on and reliable, edit `render.yaml`:
 ```
 sync-r2 group : R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
 sync-api      : OPENAI_API_KEY
-sync-web      : AUTH_SECRET, AUTH_URL, SYNC_API_URL, SYNC_WIDGET_URL
+sync-web      : OPENAI_API_KEY, AUTH_SECRET, AUTH_URL, SYNC_API_URL, SYNC_WIDGET_URL
 ```
 
 Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`,

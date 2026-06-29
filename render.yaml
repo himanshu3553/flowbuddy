@@ -75,6 +75,10 @@ services:
       - { key: AUTH_SECRET, sync: false }
       - { key: AUTH_URL, sync: false } # the deployed web URL (https://sync-web.onrender.com)
       - { key: AUTH_TRUST_HOST, value: true }
+      # The in-Studio copilot TESTER (Copilot page "Test live") answers via a server action that calls
+      # OpenAI from THIS web process — so the model creds live here too, not only on sync-api.
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: SYNTH_MODEL, value: gpt-4o }
       # PUBLIC api URL — baked into the browser embed snippet (data-sync-api) + extension payload.
       - { key: SYNC_API_URL, sync: false } # https://sync-api.onrender.com
       - { key: SYNC_WIDGET_URL, sync: false } # https://sync-widget.onrender.com/sync-copilot.js
