@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, RefreshCw } from 'lucide-react';
+import { Check, Code2, RefreshCw } from 'lucide-react';
 
 import {
   setCopilotOrigins,
@@ -15,8 +15,17 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { CopyButton } from '@/components/dashboard/copy-button';
+import { StatusBadge } from '@/components/dashboard/status-badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 
-type Tab = 'install' | 'settings' | 'appearance';
+type Tab = 'activity' | 'install' | 'settings' | 'appearance';
 
 function CodeBlock({ code }: { code: string }) {
   return (
@@ -44,6 +53,30 @@ function ChecklistItem({ done, label }: { done: boolean; label: string }) {
   );
 }
 
+function Step({
+  n,
+  title,
+  children,
+}: {
+  n: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-bold text-primary">
+        {n}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          {children}
+        </p>
+      </div>
+    </li>
+  );
+}
+
 export function CopilotWorkspace({
   snippet,
   publicKey,
@@ -51,6 +84,7 @@ export function CopilotWorkspace({
   primaryOrigin,
   widgetIsPlaceholder = false,
   showCitations = true,
+  activity,
 }: {
   snippet: string;
   publicKey: string;
@@ -58,8 +92,15 @@ export function CopilotWorkspace({
   primaryOrigin: string;
   widgetIsPlaceholder?: boolean;
   showCitations?: boolean;
+  activity: {
+    total: number;
+    answeredPct: number;
+    up: number;
+    down: number;
+    recent: { id: string; question: string; answered: boolean; feedback: string | null }[];
+  };
 }) {
-  const [tab, setTab] = useState<Tab>('install');
+  const [tab, setTab] = useState<Tab>('activity');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
   const [cite, setCite] = useState(showCitations);
   const [pending, start] = useTransition();
@@ -92,10 +133,33 @@ export function CopilotWorkspace({
   }
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: 'activity', label: 'Copilot activity' },
     { key: 'install', label: 'Install' },
     { key: 'settings', label: 'Settings' },
     { key: 'appearance', label: 'Appearance' },
   ];
+
+  // Sample index.html for the "Show an example" dialog. The snippet is indented to sit inside
+  // <body> and split out so the dialog can highlight exactly where it goes. (Template literals are
+  // flush-left on purpose — leading source whitespace would otherwise become part of the output.)
+  const indentedSnippet = snippet
+    .split('\n')
+    .map((l) => '    ' + l)
+    .join('\n');
+  const exampleHead = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello World</title>
+  </head>
+  <body>
+    <h1>Hello, world! 👋</h1>
+    <p>Welcome to my app.</p>
+
+`;
+  const exampleSnippet = `    <!-- Sync copilot — paste right before </body> -->\n${indentedSnippet}`;
+  const exampleTail = `\n  </body>\n</html>`;
 
   return (
     <div className="min-w-0 space-y-5">
@@ -115,6 +179,53 @@ export function CopilotWorkspace({
           </button>
         ))}
       </div>
+
+      {tab === 'activity' &&
+        (activity.total === 0 ? (
+          <section className="rounded-card border bg-card p-10 text-center shadow-card">
+            <h3 className="text-[17px] font-bold tracking-tight text-secondary-foreground">
+              No activity yet
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+              Once the copilot is installed in your product, end-user questions
+              and feedback show up here — and questions it can’t answer become
+              “record this next” coverage gaps.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-5"
+              onClick={() => setTab('install')}
+            >
+              Install the copilot
+            </Button>
+          </section>
+        ) : (
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Copilot activity</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {activity.total} question(s) · {activity.answeredPct}% answered ·
+              👍 {activity.up} · 👎 {activity.down}
+            </p>
+            <ul className="mt-3 divide-y">
+              {activity.recent.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 py-2">
+                  <StatusBadge tone={r.answered ? 'success' : 'danger'} dot={false}>
+                    {r.answered ? 'Answered' : 'Declined'}
+                  </StatusBadge>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {r.question}
+                  </span>
+                  {r.feedback && (
+                    <span className="text-sm">
+                      {r.feedback === 'up' ? '👍' : '👎'}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
 
       {tab === 'install' && (
         <div className="space-y-5">
@@ -147,6 +258,82 @@ export function CopilotWorkspace({
                 with this key.
               </p>
             )}
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">
+              How to embed the snippet
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              A one-time paste — no SDK or build step.
+            </p>
+            <ol className="mt-4 space-y-3">
+              <Step n={1} title="Copy the snippet">
+                Use <span className="font-medium">Copy snippet</span> above — it
+                copies the full{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                  &lt;script&gt;
+                </code>{' '}
+                tag with your public key already baked in.
+              </Step>
+              <Step n={2} title="Open your site’s base template">
+                The layout that renders on every page — e.g. your root layout,
+                base HTML file, or a shared footer partial.
+              </Step>
+              <Step n={3} title="Paste it before the closing body tag">
+                Drop the snippet in just before{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                  &lt;/body&gt;
+                </code>{' '}
+                so it loads on every page. That’s the whole install.
+              </Step>
+              <Step n={4} title="Allow your site’s origin">
+                In the{' '}
+                <button
+                  type="button"
+                  onClick={() => setTab('settings')}
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Settings
+                </button>{' '}
+                tab, add your site’s URL to the origin allowlist so the copilot
+                may run there. (Leave it empty while testing.)
+              </Step>
+              <Step n={5} title="Deploy & reload">
+                Publish your site and refresh — the copilot launcher appears in
+                the corner. Use <span className="font-medium">Recheck</span>{' '}
+                below to confirm it’s detected.
+              </Step>
+            </ol>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="mt-4">
+                  <Code2 className="h-4 w-4" />
+                  Show an example
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Example — index.html</DialogTitle>
+                  <DialogDescription>
+                    A minimal page with the copilot embedded. The highlighted
+                    lines are your snippet — paste them right before the closing{' '}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                      &lt;/body&gt;
+                    </code>{' '}
+                    tag.
+                  </DialogDescription>
+                </DialogHeader>
+                <pre className="overflow-x-auto rounded-tile bg-code-bg p-4 font-mono text-[11.5px] leading-[1.7] text-code-fg">
+                  {exampleHead}
+                  <span className="rounded bg-primary/25 ring-1 ring-primary/40">
+                    {exampleSnippet}
+                  </span>
+                  {exampleTail}
+                </pre>
+              </DialogContent>
+            </Dialog>
           </section>
 
           <section className="rounded-card border bg-card p-5 shadow-card">

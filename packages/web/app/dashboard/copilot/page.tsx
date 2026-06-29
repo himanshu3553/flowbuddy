@@ -5,12 +5,6 @@ import { getOrCreateCopilotKey } from '@/lib/copilot-settings';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { CopilotWorkspace } from '@/components/dashboard/copilot-workspace';
 import { WidgetPreview } from '@/components/dashboard/widget-preview';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 
 export const dynamic = 'force-dynamic';
@@ -72,53 +66,12 @@ export default async function CopilotSettingsPage() {
             primaryOrigin={primaryOrigin}
             widgetIsPlaceholder={widgetIsPlaceholder}
             showCitations={showCitations}
+            activity={{ total: qTotal, answeredPct, up: qUp, down: qDown, recent }}
           />
           <div className="lg:sticky lg:top-20 lg:self-start">
             <WidgetPreview />
           </div>
         </div>
-
-        <Card className="mt-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Copilot activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {qTotal === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No questions yet. Once embedded, end-user questions + feedback
-                show here — and uncovered questions become “record this next”
-                coverage gaps.
-              </p>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  {qTotal} question(s) · {answeredPct}% answered · 👍 {qUp} · 👎{' '}
-                  {qDown}
-                </p>
-                <ul className="mt-3 divide-y">
-                  {recent.map((r) => (
-                    <li key={r.id} className="flex items-center gap-3 py-2">
-                      <StatusBadge
-                        tone={r.answered ? 'success' : 'danger'}
-                        dot={false}
-                      >
-                        {r.answered ? 'Answered' : 'Declined'}
-                      </StatusBadge>
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {r.question}
-                      </span>
-                      {r.feedback && (
-                        <span className="text-sm">
-                          {r.feedback === 'up' ? '👍' : '👎'}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </>
   );
