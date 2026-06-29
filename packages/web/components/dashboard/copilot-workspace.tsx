@@ -209,24 +209,58 @@ export function CopilotWorkspace({
 
       {tab === 'activity' &&
         (activity.total === 0 ? (
-          <section className="rounded-card border bg-card p-10 text-center shadow-card">
-            <h3 className="text-[17px] font-bold tracking-tight text-secondary-foreground">
-              No activity yet
-            </h3>
-            <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-              Once the copilot is installed in your product, end-user questions
-              and feedback show up here — and questions it can’t answer become
-              “record this next” coverage gaps.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="mt-5"
-              onClick={() => setTab('install')}
-            >
-              Install the copilot
-            </Button>
-          </section>
+          <div className="space-y-5">
+            <section className="rounded-card border bg-card p-10 text-center shadow-card">
+              <h3 className="text-[17px] font-bold tracking-tight text-secondary-foreground">
+                No activity yet
+              </h3>
+              <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+                Once the copilot is installed in your product, end-user
+                questions and feedback show up here — and questions it can’t
+                answer become “record this next” coverage gaps.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-5"
+                onClick={() => setTab('install')}
+              >
+                Install the copilot
+              </Button>
+            </section>
+
+            <section className="rounded-card border bg-card p-5 shadow-card">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-dot" />
+                </span>
+                <p className="text-sm">
+                  Listening for the copilot on{' '}
+                  <span className="font-semibold">{primaryOrigin}</span>… not
+                  detected yet.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => router.refresh()}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Recheck
+                </Button>
+              </div>
+              <ul className="mt-4 space-y-2.5">
+                <ChecklistItem done label="Public key ready" />
+                <ChecklistItem done={false} label="Snippet pasted" />
+                <ChecklistItem
+                  done={allowedOrigins.length > 0}
+                  label="Origin allowlisted"
+                />
+              </ul>
+            </section>
+          </div>
         ) : (
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">Copilot activity</h3>
@@ -259,7 +293,7 @@ export function CopilotWorkspace({
           <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-[13.5px] font-bold text-ink">Embed snippet</h3>
+                <h3 className="text-[13.5px] font-bold text-ink">Embed Copilot snippet</h3>
                 <p className="text-xs text-muted-foreground">
                   Paste once before{' '}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
@@ -292,10 +326,10 @@ export function CopilotWorkspace({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-[13.5px] font-bold text-ink">
-                    How to embed the snippet
+                    How to embed the copilot snippet
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    A one-time paste — no SDK or build step.
+                    Go live in 5 minutes
                   </p>
                 </div>
                 <DialogTrigger asChild>
@@ -371,38 +405,6 @@ export function CopilotWorkspace({
               </pre>
             </DialogContent>
           </Dialog>
-
-          <section className="rounded-card border bg-card p-5 shadow-card">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-dot" />
-              </span>
-              <p className="text-sm">
-                Listening for the copilot on{' '}
-                <span className="font-semibold">{primaryOrigin}</span>… not
-                detected yet.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="ml-auto"
-                onClick={() => router.refresh()}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Recheck
-              </Button>
-            </div>
-            <ul className="mt-4 space-y-2.5">
-              <ChecklistItem done label="Public key ready" />
-              <ChecklistItem
-                done={allowedOrigins.length > 0}
-                label="Origin allowlisted"
-              />
-              <ChecklistItem done={false} label="Snippet pasted" />
-            </ul>
-          </section>
         </div>
       )}
 
