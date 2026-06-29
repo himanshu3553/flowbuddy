@@ -213,11 +213,31 @@ model CopilotQuery {
   question    String
   answered    Boolean // true = covered/answered, false = declined
   feedback    String? // up | down | null (thumbs from the widget)
+  contextPath String? // P1-M8: host-app path the end-user was on when they asked (e.g. "/settings")
   createdAt   DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  citations QueryCitation[]
 
   @@index([workspaceId])
+}
+
+model QueryCitation {
+  // Analytics: one row per workflow the copilot CITED to answer a question. Powers
+  // "Top workflows by citations" (group by sourceId+segmentIndex). Cascades from the
+  // parent CopilotQuery (which cascades from Workspace), so workspace delete cleans up.
+  id           String   @id @default(cuid())
+  queryId      String
+  workspaceId  String // denormalized for direct per-workspace aggregation (cf. KnowledgeItem)
+  sourceId     String // KnowledgeSource the cited workflow belongs to
+  segmentIndex Int? // the workflow within that source (KnowledgeItem.segmentIndex)
+  segmentTitle String? // snapshot of the workflow title at answer time (display)
+  createdAt    DateTime @default(now())
+
+  query CopilotQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([queryId])
 }
 
 model Step {

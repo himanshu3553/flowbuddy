@@ -108,7 +108,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   const items = await retrieveApprovedKBItems(workspaceId, question, { contextPath });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
-    const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false }, select: { id: true } });
+    const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false, contextPath }, select: { id: true } });
     return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.', queryId: q.id };
   }
 
@@ -122,9 +122,27 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     model: config.synthModel,
   });
 
-  // P1-M10: log the Q&A (analytics + the thumbs-feedback target).
+  // P1-M10: log the Q&A (analytics + the thumbs-feedback target). On a grounded answer,
+  // persist the cited workflows too (powers Analytics "Top workflows by citations").
   const logged = await prisma.copilotQuery.create({
-    data: { workspaceId, question, answered: result.covered },
+    data: {
+      workspaceId,
+      question,
+      answered: result.covered,
+      contextPath,
+      ...(result.covered && result.citations.length > 0
+        ? {
+            citations: {
+              create: result.citations.map((c) => ({
+                workspaceId,
+                sourceId: c.sourceId,
+                segmentIndex: c.segmentIndex,
+                segmentTitle: c.segmentTitle,
+              })),
+            },
+          }
+        : {}),
+    },
     select: { id: true },
   });
 

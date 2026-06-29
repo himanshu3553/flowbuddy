@@ -7,9 +7,11 @@ import type { DayBucket } from '@/lib/copilot-metrics';
 export function MiniBarChart({
   data,
   height = 120,
+  emptyLabel = 'No questions in the last 7 days yet.',
 }: {
   data: DayBucket[];
   height?: number;
+  emptyLabel?: string;
 }) {
   const max = Math.max(1, ...data.map((d) => d.answered + d.declined));
   const empty = data.every((d) => d.answered + d.declined === 0);
@@ -49,7 +51,7 @@ export function MiniBarChart({
       </div>
       {empty && (
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          No questions in the last 7 days yet.
+          {emptyLabel}
         </p>
       )}
     </div>
