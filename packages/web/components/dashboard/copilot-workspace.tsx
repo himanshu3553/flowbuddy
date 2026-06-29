@@ -7,6 +7,7 @@ import { Check, RefreshCw } from 'lucide-react';
 import {
   setCopilotOrigins,
   regenerateCopilotKey,
+  setCopilotShowCitations,
 } from '@/lib/copilot-settings-actions';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -49,23 +50,31 @@ export function CopilotWorkspace({
   allowedOrigins,
   primaryOrigin,
   widgetIsPlaceholder = false,
+  showCitations = true,
 }: {
   snippet: string;
   publicKey: string;
   allowedOrigins: string[];
   primaryOrigin: string;
   widgetIsPlaceholder?: boolean;
+  showCitations?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>('install');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
-  const [cite, setCite] = useState(true);
-  const [threshold, setThreshold] = useState(50);
+  const [cite, setCite] = useState(showCitations);
   const [pending, start] = useTransition();
   const router = useRouter();
 
   function saveOrigins() {
     start(async () => {
       await setCopilotOrigins(origins);
+      router.refresh();
+    });
+  }
+  function toggleCite(value: boolean) {
+    setCite(value); // optimistic
+    start(async () => {
+      await setCopilotShowCitations(value);
       router.refresh();
     });
   }
@@ -251,7 +260,7 @@ export function CopilotWorkspace({
                   <Switch checked disabled aria-label="Answer only from approved workflows (locked on)" />
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-4 py-3">
+              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
                 <div>
                   <p className="text-sm font-medium">Cite the workflow used</p>
                   <p className="text-xs text-muted-foreground">
@@ -260,40 +269,12 @@ export function CopilotWorkspace({
                 </div>
                 <Switch
                   checked={cite}
-                  onCheckedChange={setCite}
+                  onCheckedChange={toggleCite}
+                  disabled={pending}
                   aria-label="Cite the workflow used"
                 />
               </div>
-              <div className="py-3 last:pb-0">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm font-medium">Decline threshold</p>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {threshold < 34
-                      ? 'answer more'
-                      : threshold > 66
-                        ? 'decline more'
-                        : 'balanced'}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={threshold}
-                  onChange={(e) => setThreshold(Number(e.target.value))}
-                  className="mt-2 w-full accent-primary"
-                  aria-label="Decline threshold"
-                />
-                <div className="mt-1 flex justify-between text-[10.5px] text-muted-foreground">
-                  <span>answer more</span>
-                  <span>decline more (safer)</span>
-                </div>
-              </div>
             </div>
-            <p className="mt-3 rounded-md border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-              Cite &amp; decline-threshold are a preview — they don’t persist
-              yet.
-            </p>
           </section>
         </div>
       )}

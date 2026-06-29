@@ -76,6 +76,8 @@ model Workspace {
   // recorder ApiToken) + an origin allowlist (empty = allow any, for dev).
   copilotPublicKey      String?  @unique
   copilotAllowedOrigins String[] @default([])
+  // Trust setting: show the "Source: <workflow>" citation chip on grounded answers (default on).
+  copilotShowCitations  Boolean  @default(true)
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]

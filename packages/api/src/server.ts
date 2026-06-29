@@ -117,6 +117,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     history: sanitizeHistory(body.history),
     items,
     context: { path: contextPath },
+    showCitations: auth.showCitations,
     apiKey: config.openaiApiKey,
     model: config.synthModel,
   });

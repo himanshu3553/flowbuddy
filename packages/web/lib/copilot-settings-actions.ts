@@ -14,6 +14,17 @@ export async function setCopilotOrigins(originsText: string): Promise<void> {
   revalidatePath('/dashboard/copilot');
 }
 
+/** Trust setting — show/hide the "Source: <workflow>" citation chip on grounded answers. */
+export async function setCopilotShowCitations(showCitations: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { copilotShowCitations: showCitations },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
 /** Rotate the public embeddable key (invalidates the old one immediately). */
 export async function regenerateCopilotKey(): Promise<void> {
   const ctx = await getCurrentWorkspace();

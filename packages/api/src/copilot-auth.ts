@@ -7,7 +7,7 @@ import { prisma } from '@sync/db';
  */
 
 export type CopilotAuthResult =
-  | { ok: true; workspaceId: string }
+  | { ok: true; workspaceId: string; showCitations: boolean }
   | { ok: false; status: number; error: string };
 
 /** Resolve a public embeddable key → workspace, enforcing the origin allowlist (empty = allow any). */
@@ -20,7 +20,7 @@ export async function resolveCopilotKey(
 
   const ws = await prisma.workspace.findUnique({
     where: { copilotPublicKey: k },
-    select: { id: true, copilotAllowedOrigins: true },
+    select: { id: true, copilotAllowedOrigins: true, copilotShowCitations: true },
   });
   if (!ws) return { ok: false, status: 401, error: 'invalid copilot key' };
 
@@ -30,7 +30,7 @@ export async function resolveCopilotKey(
   if (allow.length > 0 && origin && !allow.includes(origin)) {
     return { ok: false, status: 403, error: 'origin not allowed' };
   }
-  return { ok: true, workspaceId: ws.id };
+  return { ok: true, workspaceId: ws.id, showCitations: ws.copilotShowCitations };
 }
 
 /** In-memory fixed-window rate limiter, per key. MVP — production would back this with Redis. */

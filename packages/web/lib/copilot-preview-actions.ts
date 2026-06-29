@@ -109,6 +109,7 @@ export async function previewCopilotAnswer(
       question: q,
       history: sanitizeHistory(history),
       items: shortlist(approved, q),
+      showCitations: ctx.workspace.copilotShowCitations,
       apiKey,
       model,
     });

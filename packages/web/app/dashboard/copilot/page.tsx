@@ -27,7 +27,7 @@ export default async function CopilotSettingsPage() {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
-  const { publicKey, allowedOrigins } = await getOrCreateCopilotKey(
+  const { publicKey, allowedOrigins, showCitations } = await getOrCreateCopilotKey(
     ctx.workspace.id,
   );
   const wsId = ctx.workspace.id;
@@ -71,6 +71,7 @@ export default async function CopilotSettingsPage() {
             allowedOrigins={allowedOrigins}
             primaryOrigin={primaryOrigin}
             widgetIsPlaceholder={widgetIsPlaceholder}
+            showCitations={showCitations}
           />
           <div className="lg:sticky lg:top-20 lg:self-start">
             <WidgetPreview />

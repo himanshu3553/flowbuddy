@@ -64,6 +64,7 @@ export async function answerFromKB(input: {
   history?: CopilotTurn[];
   items: CopilotKBItem[];
   context?: { path?: string | null }; // P1-M8: where the end-user is in the host app
+  showCitations?: boolean; // trust setting (default true): emit citation chips on grounded answers
   apiKey: string;
   model: string;
 }): Promise<CopilotAnswer> {
@@ -119,5 +120,6 @@ export async function answerFromKB(input: {
       citations.push({ itemId: it.id, sourceId: it.sourceId, segmentIndex: it.segmentIndex, segmentTitle: it.segmentTitle });
     }
   }
-  return { covered: true, answer: a.answer, citations };
+  // Citations are gated by the workspace trust setting (default on).
+  return { covered: true, answer: a.answer, citations: input.showCitations === false ? [] : citations };
 }
