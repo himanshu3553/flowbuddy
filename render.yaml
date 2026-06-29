@@ -1,28 +1,34 @@
 # Render Blueprint — the ONLY Render-specific file (app code stays host-agnostic).
-# Copilot-first Version 1, Phase 1: api (answer endpoint) + worker (synthesis) + web (Studio)
-# + widget (static host for sync-copilot.js). Portal/articles = Phase 2 (not deployed).
-# Blobs = Cloudflare R2 (S3-compatible). All services on paid Starter — always-on (no cold
-# starts on the customer-facing copilot) + a persistent Postgres (no free 90-day expiry).
+# Copilot-first Version 1, Phase 1. THIS IS THE FREE / TESTING configuration ($0/mo):
+#   sync-api (Fastify API + synthesis worker in ONE web service) + sync-web (Studio) +
+#   sync-widget (static) + free Postgres + free Key Value.
 #
-# ⚠️ P1-M4 — before first deploy:
-#   1. Pre-create the R2 bucket (sync-artifacts) + an Object Read&Write API token. Fill the
-#      `sync-r2` env group (R2_ENDPOINT/ACCESS_KEY_ID/SECRET_ACCESS_KEY/BUCKET) + OPENAI_API_KEY.
-#      Pre-creating the bucket means the api's HeadBucket succeeds — an object-scoped token is enough.
-#   2. Set AUTH_SECRET (openssl rand -hex 32). Service URLs are deterministic from the names,
-#      so set on sync-web: AUTH_URL = https://sync-web.onrender.com,
-#      SYNC_API_URL = https://sync-api.onrender.com (PUBLIC — baked into the embed snippet),
-#      SYNC_WIDGET_URL = https://sync-widget.onrender.com/sync-copilot.js.
-#   3. Migrations apply automatically (sync-api preDeployCommand → prisma migrate deploy).
-#   4. Post-deploy: rebuild the extension with STUDIO_URL=https://sync-web.onrender.com.
+# Why the worker is folded into the api: Render background workers are PAID-only, so for a $0
+# deploy the synthesis worker runs INSIDE the api web service via `start:all` (src/all.ts boots
+# both the Fastify server and the BullMQ worker in one process).
+#
+# ⚠️ FREE-TIER CAVEATS (fine for testing, NOT production):
+#   - Free Postgres is DELETED 30 days after creation (14-day grace) — recreate when it lapses.
+#   - Free Key Value (Redis) has NO persistence — a restart drops queued synthesis jobs.
+#   - Free web services SPIN DOWN after ~15 min idle (~1 min cold start). The embedded worker only
+#     runs while the api is awake — a recorder upload wakes it, then synthesis proceeds.
+#   - 750 free instance-hours/month per workspace (shared); idle/spun-down services don't consume them.
+#
+# ➜ TO GO PRODUCTION (always-on, reliable): split the worker back into its own `type: worker`
+#   service (dockerCommand: pnpm --filter @sync/api worker; api back to plain `start`), move the
+#   migration to a preDeployCommand, and change every free plan to paid (Postgres -> basic-256mb,
+#   web/worker/keyvalue -> starter). The standalone-worker blueprint is in git history (commit 3488326).
+#
+# Before first deploy: pre-create the R2 bucket + an Object R/W token; fill the sync-r2 group +
+# OPENAI_API_KEY; set AUTH_SECRET + the *.onrender.com URLs on sync-web (see the secrets table in chat).
 
 databases:
   - name: sync-db
-    plan: basic-256mb # smallest paid (persistent); bump if the KB grows
+    plan: free # ⚠️ deleted 30 days after creation — testing only
     databaseName: sync
     user: sync
 
-# Shared object-storage (R2) credentials — entered ONCE here, referenced by api/worker/web
-# via `fromGroup: sync-r2` so the same secret can't drift between services.
+# Shared object-storage (R2) credentials — entered ONCE here, referenced by api + web.
 envVarGroups:
   - name: sync-r2
     envVars:
@@ -35,36 +41,21 @@ envVarGroups:
 services:
   - type: keyvalue
     name: sync-redis
-    plan: starter
+    plan: free # ⚠️ no persistence — queued jobs are lost on restart
     ipAllowList: [] # only reachable from Render services
 
-  # --- API: copilot answer endpoint + recorder ingestion ---
+  # --- API + synthesis worker in ONE free web service ---
+  # Runs DB migrations (idempotent) then boots Fastify + the BullMQ worker via start:all.
   - type: web
     name: sync-api
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
-    preDeployCommand: pnpm --filter @sync/db exec prisma migrate deploy
+    dockerCommand: sh -c "pnpm --filter @sync/db exec prisma migrate deploy && pnpm --filter @sync/api start:all"
     envVars:
       - fromGroup: sync-r2
       - { key: PORT, value: 8787 }
-      - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
-      - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
-      - { key: OPENAI_API_KEY, sync: false }
-      - { key: TRANSCRIBE_MODEL, value: whisper-1 }
-      - { key: SYNTH_MODEL, value: gpt-4o }
-
-  # --- Worker: synthesis (capture → KB). Same image, different command. ---
-  - type: worker
-    name: sync-worker
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./packages/api/Dockerfile
-    dockerContext: .
-    dockerCommand: pnpm --filter @sync/api worker
-    envVars:
-      - fromGroup: sync-r2
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
@@ -75,7 +66,7 @@ services:
   - type: web
     name: sync-web
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./packages/web/Dockerfile
     dockerContext: .
     envVars:
@@ -84,8 +75,7 @@ services:
       - { key: AUTH_SECRET, sync: false }
       - { key: AUTH_URL, sync: false } # the deployed web URL (https://sync-web.onrender.com)
       - { key: AUTH_TRUST_HOST, value: true }
-      # PUBLIC api URL — this value is baked into the browser embed snippet (data-sync-api) and
-      # the extension connect payload, so it CANNOT be the internal hostport. Set manually.
+      # PUBLIC api URL — baked into the browser embed snippet (data-sync-api) + extension payload.
       - { key: SYNC_API_URL, sync: false } # https://sync-api.onrender.com
       - { key: SYNC_WIDGET_URL, sync: false } # https://sync-widget.onrender.com/sync-copilot.js
 
