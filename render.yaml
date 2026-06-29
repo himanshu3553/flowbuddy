@@ -17,7 +17,7 @@
 
 databases:
   - name: sync-db
-    plan: basic_256mb # smallest paid (persistent); bump if the KB grows
+    plan: basic-256mb # smallest paid (persistent); bump if the KB grows
     databaseName: sync
     user: sync
 
