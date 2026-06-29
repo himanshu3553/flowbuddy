@@ -23,6 +23,13 @@ export const CSS = `
   transition: opacity .15s ease;
 }
 .sc-launcher:hover { opacity: .9; }
+.sc-launcher.sc-launcher-pill {
+  width: auto; height: auto; border-radius: 999px; padding: 13px 20px;
+  font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap;
+}
+.sc-launcher.sc-launcher-outline {
+  background: transparent; color: var(--sc-accent); border: 2px solid var(--sc-accent);
+}
 .sc-panel {
   position: fixed; right: var(--sc-right); left: var(--sc-left); bottom: 20px; z-index: 2147483000;
   width: 370px; max-width: calc(100vw - 32px); height: 540px; max-height: calc(100vh - 40px);

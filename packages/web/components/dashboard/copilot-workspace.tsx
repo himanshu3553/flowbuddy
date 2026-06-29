@@ -13,6 +13,7 @@ import {
 import {
   ACCENT_PRESETS,
   COPILOT_DEFAULTS,
+  LAUNCHER_STYLES,
   type CopilotAppearance,
 } from '@/lib/copilot-appearance';
 import { cn } from '@/lib/utils';
@@ -609,6 +610,49 @@ export function CopilotWorkspace({
                 </button>
               ))}
             </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Launcher</h3>
+            <p className="text-xs text-muted-foreground">
+              The button customers click to open the copilot — see it live in
+              the preview.
+            </p>
+            <div className="mt-3 inline-flex rounded-control border p-0.5">
+              {LAUNCHER_STYLES.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => set({ launcherStyle: opt.value })}
+                  className={cn(
+                    'rounded-[7px] px-3 py-1 text-xs font-semibold transition-colors',
+                    appearance.launcherStyle === opt.value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {appearance.launcherStyle !== 'icon' && (
+              <div className="mt-3">
+                <Label
+                  htmlFor="launcher-text"
+                  className="text-xs text-muted-foreground"
+                >
+                  Button text
+                </Label>
+                <Input
+                  id="launcher-text"
+                  value={appearance.launcherText}
+                  onChange={(e) => set({ launcherText: e.target.value })}
+                  placeholder={COPILOT_DEFAULTS.launcherText}
+                  maxLength={30}
+                  className="mt-1 text-sm"
+                />
+              </div>
+            )}
           </section>
 
           <div className="flex flex-wrap items-center gap-3">

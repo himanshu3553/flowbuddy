@@ -20,6 +20,8 @@ export async function setCopilotAppearance(input: {
   title: string;
   greeting: string;
   position: string;
+  launcherStyle: string;
+  launcherText: string;
 }): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
@@ -27,6 +29,11 @@ export async function setCopilotAppearance(input: {
   const title = input.title.trim().slice(0, 40) || null;
   const greeting = input.greeting.trim().slice(0, 200) || null;
   const position = input.position === 'left' ? 'left' : 'right';
+  const launcherStyle =
+    input.launcherStyle === 'text' || input.launcherStyle === 'text-outline'
+      ? input.launcherStyle
+      : 'icon';
+  const launcherText = input.launcherText.trim().slice(0, 30) || null;
   await prisma.workspace.update({
     where: { id: ctx.workspace.id },
     data: {
@@ -34,6 +41,8 @@ export async function setCopilotAppearance(input: {
       copilotTitle: title,
       copilotGreeting: greeting,
       copilotPosition: position,
+      copilotLauncherStyle: launcherStyle,
+      copilotLauncherText: launcherText,
     },
   });
   revalidatePath('/dashboard/copilot');

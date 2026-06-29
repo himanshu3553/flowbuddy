@@ -10,6 +10,8 @@ export interface CopilotSettings {
   title: string;
   greeting: string;
   position: 'left' | 'right';
+  launcherStyle: 'icon' | 'text' | 'text-outline';
+  launcherText: string;
 }
 
 /** P1-M9 — return the workspace's public embeddable key (minting one on first use) + trust/appearance settings. */
@@ -22,6 +24,8 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     copilotTitle: true,
     copilotGreeting: true,
     copilotPosition: true,
+    copilotLauncherStyle: true,
+    copilotLauncherText: true,
   } as const;
   const found = await prisma.workspace.findUnique({ where: { id: workspaceId }, select });
   const ws = found?.copilotPublicKey
@@ -39,5 +43,10 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     title: ws.copilotTitle ?? '',
     greeting: ws.copilotGreeting ?? '',
     position: ws.copilotPosition === 'left' ? 'left' : 'right',
+    launcherStyle:
+      ws.copilotLauncherStyle === 'text' || ws.copilotLauncherStyle === 'text-outline'
+        ? ws.copilotLauncherStyle
+        : 'icon',
+    launcherText: ws.copilotLauncherText ?? '',
   };
 }

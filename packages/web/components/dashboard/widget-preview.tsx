@@ -32,11 +32,15 @@ export function WidgetPreview({
   title,
   greeting,
   position,
+  launcherStyle,
+  launcherText,
 }: {
   accent: string;
   title: string;
   greeting: string;
   position: 'left' | 'right';
+  launcherStyle: 'icon' | 'text' | 'text-outline';
+  launcherText: string;
 }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -186,20 +190,36 @@ export function WidgetPreview({
           </form>
         </div>
 
-        {/* launcher placement indicator — reflects the chosen side + accent */}
+        {/* launcher indicator — reflects style (icon / text / outline), accent + side */}
         <div
           className={cn(
             'mt-3 flex',
             position === 'left' ? 'justify-start' : 'justify-end',
           )}
         >
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-full text-base text-white shadow-md"
-            style={{ backgroundColor: accent }}
-            aria-hidden
-          >
-            💬
-          </span>
+          {launcherStyle === 'icon' ? (
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full text-base text-white shadow-md"
+              style={{ backgroundColor: accent }}
+              aria-hidden
+            >
+              💬
+            </span>
+          ) : launcherStyle === 'text-outline' ? (
+            <span
+              className="rounded-full border-2 bg-transparent px-4 py-2 text-xs font-semibold shadow-sm"
+              style={{ borderColor: accent, color: accent }}
+            >
+              {launcherText}
+            </span>
+          ) : (
+            <span
+              className="rounded-full px-4 py-2 text-xs font-semibold text-white shadow-md"
+              style={{ backgroundColor: accent }}
+            >
+              {launcherText}
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -25,6 +25,9 @@ const cfg = {
   greeting: script?.dataset.syncGreeting || g.greeting || 'How can I help you today?',
   accent: script?.dataset.syncAccent || g.accent || '',
   position: (script?.dataset.syncPosition || g.position || 'right').toLowerCase(),
+  // Launcher look: 'icon' (chat bubble, default), 'text' (filled pill), or 'text-outline' (bordered pill).
+  launcher: (script?.dataset.syncLauncher || g.launcher || 'icon').toLowerCase(),
+  launcherText: script?.dataset.syncLauncherText || g.launcherText || 'Ask me anything',
 };
 
 const messages: Msg[] = [];
@@ -51,7 +54,12 @@ const styleEl = document.createElement('style');
 styleEl.textContent = CSS;
 root.appendChild(styleEl);
 
-const launcher = el('button', 'sc-launcher', '💬');
+const launcherIsText = cfg.launcher === 'text' || cfg.launcher === 'text-outline';
+const launcher = el('button', 'sc-launcher', launcherIsText ? cfg.launcherText : '💬');
+if (launcherIsText) {
+  launcher.classList.add('sc-launcher-pill');
+  if (cfg.launcher === 'text-outline') launcher.classList.add('sc-launcher-outline');
+}
 launcher.setAttribute('aria-label', 'Open help copilot');
 
 const panel = el('div', 'sc-panel');

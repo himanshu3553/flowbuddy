@@ -20,8 +20,17 @@ export default async function CopilotSettingsPage() {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
-  const { publicKey, allowedOrigins, showCitations, accent, title, greeting, position } =
-    await getOrCreateCopilotKey(ctx.workspace.id);
+  const {
+    publicKey,
+    allowedOrigins,
+    showCitations,
+    accent,
+    title,
+    greeting,
+    position,
+    launcherStyle,
+    launcherText,
+  } = await getOrCreateCopilotKey(ctx.workspace.id);
   const wsId = ctx.workspace.id;
   const [qTotal, qAnswered, qUp, qDown, recent] = await Promise.all([
     prisma.copilotQuery.count({ where: { workspaceId: wsId } }),
@@ -61,7 +70,7 @@ export default async function CopilotSettingsPage() {
           primaryOrigin={primaryOrigin}
           showCitations={showCitations}
           activity={{ total: qTotal, answeredPct, up: qUp, down: qDown, recent }}
-          appearance={{ accent, title, greeting, position }}
+          appearance={{ accent, title, greeting, position, launcherStyle, launcherText }}
         />
       </div>
     </>

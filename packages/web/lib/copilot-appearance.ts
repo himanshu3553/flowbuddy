@@ -5,11 +5,16 @@
  * "preview == snippet == embed". An empty stored value means "use the widget default".
  */
 
+/** Launcher button look on the host page: chat bubble icon, a filled text pill, or a bordered pill. */
+export type LauncherStyle = 'icon' | 'text' | 'text-outline';
+
 export interface CopilotAppearance {
   accent: string; // hex like #3b50e0; '' = default
   title: string; // '' = default
   greeting: string; // '' = default
   position: 'left' | 'right';
+  launcherStyle: LauncherStyle;
+  launcherText: string; // '' = default ("Ask me anything"); used for text/text-outline
 }
 
 export const COPILOT_DEFAULTS = {
@@ -17,7 +22,15 @@ export const COPILOT_DEFAULTS = {
   title: 'Ask AI', // widget data-sync-title fallback
   greeting: 'How can I help you today?', // widget data-sync-greeting fallback
   position: 'right' as const,
+  launcherStyle: 'icon' as LauncherStyle,
+  launcherText: 'Ask me anything', // widget data-sync-launcher-text fallback
 };
+
+export const LAUNCHER_STYLES: { value: LauncherStyle; label: string }[] = [
+  { value: 'icon', label: 'Icon' },
+  { value: 'text', label: 'Text' },
+  { value: 'text-outline', label: 'Outline' },
+];
 
 export const ACCENT_PRESETS = [
   '#3b50e0', // indigo (default)
@@ -39,6 +52,11 @@ export function resolveAppearance(a: CopilotAppearance) {
     title: a.title.trim() || COPILOT_DEFAULTS.title,
     greeting: a.greeting.trim() || COPILOT_DEFAULTS.greeting,
     position: a.position === 'left' ? ('left' as const) : ('right' as const),
+    launcherStyle:
+      a.launcherStyle === 'text' || a.launcherStyle === 'text-outline'
+        ? a.launcherStyle
+        : COPILOT_DEFAULTS.launcherStyle,
+    launcherText: a.launcherText.trim() || COPILOT_DEFAULTS.launcherText,
   };
 }
 
@@ -65,5 +83,10 @@ export function buildSnippet(opts: {
   if (greeting) lines.push(`  data-sync-greeting="${greeting}"`);
   if (HEX.test(accent)) lines.push(`  data-sync-accent="${accent}"`);
   if (appearance.position === 'left') lines.push(`  data-sync-position="left"`);
+  if (appearance.launcherStyle === 'text' || appearance.launcherStyle === 'text-outline') {
+    lines.push(`  data-sync-launcher="${appearance.launcherStyle}"`);
+    const launcherText = appearance.launcherText.trim();
+    if (launcherText) lines.push(`  data-sync-launcher-text="${launcherText}"`);
+  }
   return lines.join('\n') + '></script>';
 }

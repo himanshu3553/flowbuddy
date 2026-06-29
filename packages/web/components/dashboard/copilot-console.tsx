@@ -65,6 +65,8 @@ export function CopilotConsole({
           title={resolved.title}
           greeting={resolved.greeting}
           position={resolved.position}
+          launcherStyle={resolved.launcherStyle}
+          launcherText={resolved.launcherText}
         />
       </div>
     </div>

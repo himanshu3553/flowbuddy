@@ -83,6 +83,8 @@ model Workspace {
   copilotTitle          String?
   copilotGreeting       String?
   copilotPosition       String   @default("right")
+  copilotLauncherStyle  String   @default("icon") // icon | text | text-outline
+  copilotLauncherText   String?
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]
