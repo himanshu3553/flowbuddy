@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Code2, RefreshCw } from 'lucide-react';
+import { Check, Code2, Eye, EyeOff, RefreshCw } from 'lucide-react';
 
 import {
   setCopilotOrigins,
@@ -103,6 +103,7 @@ export function CopilotWorkspace({
   const [tab, setTab] = useState<Tab>('activity');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
   const [cite, setCite] = useState(showCitations);
+  const [showKey, setShowKey] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -160,6 +161,9 @@ export function CopilotWorkspace({
 `;
   const exampleSnippet = `    <!-- Sync copilot — paste right before </body> -->\n${indentedSnippet}`;
   const exampleTail = `\n  </body>\n</html>`;
+
+  // Public key, masked by default (keep the recognizable prefix, hide the secret-ish tail).
+  const maskedKey = publicKey.slice(0, 3) + '•'.repeat(24);
 
   return (
     <div className="min-w-0 space-y-5">
@@ -260,81 +264,90 @@ export function CopilotWorkspace({
             )}
           </section>
 
-          <section className="rounded-card border bg-card p-5 shadow-card">
-            <h3 className="text-[13.5px] font-bold text-ink">
-              How to embed the snippet
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              A one-time paste — no SDK or build step.
-            </p>
-            <ol className="mt-4 space-y-3">
-              <Step n={1} title="Copy the snippet">
-                Use <span className="font-medium">Copy snippet</span> above — it
-                copies the full{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
-                  &lt;script&gt;
-                </code>{' '}
-                tag with your public key already baked in.
-              </Step>
-              <Step n={2} title="Open your site’s base template">
-                The layout that renders on every page — e.g. your root layout,
-                base HTML file, or a shared footer partial.
-              </Step>
-              <Step n={3} title="Paste it before the closing body tag">
-                Drop the snippet in just before{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
-                  &lt;/body&gt;
-                </code>{' '}
-                so it loads on every page. That’s the whole install.
-              </Step>
-              <Step n={4} title="Allow your site’s origin">
-                In the{' '}
-                <button
-                  type="button"
-                  onClick={() => setTab('settings')}
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                >
-                  Settings
-                </button>{' '}
-                tab, add your site’s URL to the origin allowlist so the copilot
-                may run there. (Leave it empty while testing.)
-              </Step>
-              <Step n={5} title="Deploy & reload">
-                Publish your site and refresh — the copilot launcher appears in
-                the corner. Use <span className="font-medium">Recheck</span>{' '}
-                below to confirm it’s detected.
-              </Step>
-            </ol>
+          <Dialog>
+            <section className="rounded-card border bg-card p-5 shadow-card">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[13.5px] font-bold text-ink">
+                    How to embed the snippet
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    A one-time paste — no SDK or build step.
+                  </p>
+                </div>
+                <DialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                  >
+                    <Code2 className="h-4 w-4" />
+                    Show an example
+                  </Button>
+                </DialogTrigger>
+              </div>
+              <ol className="mt-4 space-y-3">
+                <Step n={1} title="Copy the snippet">
+                  Use <span className="font-medium">Copy snippet</span> above — it
+                  copies the full{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                    &lt;script&gt;
+                  </code>{' '}
+                  tag with your public key already baked in.
+                </Step>
+                <Step n={2} title="Open your site’s base template">
+                  The layout that renders on every page — e.g. your root layout,
+                  base HTML file, or a shared footer partial.
+                </Step>
+                <Step n={3} title="Paste it before the closing body tag">
+                  Drop the snippet in just before{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                    &lt;/body&gt;
+                  </code>{' '}
+                  so it loads on every page. That’s the whole install.
+                </Step>
+                <Step n={4} title="Allow your site’s origin">
+                  In the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setTab('settings')}
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    Settings
+                  </button>{' '}
+                  tab, add your site’s URL to the origin allowlist so the copilot
+                  may run there. (Leave it empty while testing.)
+                </Step>
+                <Step n={5} title="Deploy & reload">
+                  Publish your site and refresh — the copilot launcher appears in
+                  the corner. Use <span className="font-medium">Recheck</span>{' '}
+                  below to confirm it’s detected.
+                </Step>
+              </ol>
+            </section>
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="mt-4">
-                  <Code2 className="h-4 w-4" />
-                  Show an example
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
-                <DialogHeader>
-                  <DialogTitle>Example — index.html</DialogTitle>
-                  <DialogDescription>
-                    A minimal page with the copilot embedded. The highlighted
-                    lines are your snippet — paste them right before the closing{' '}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
-                      &lt;/body&gt;
-                    </code>{' '}
-                    tag.
-                  </DialogDescription>
-                </DialogHeader>
-                <pre className="overflow-x-auto rounded-tile bg-code-bg p-4 font-mono text-[11.5px] leading-[1.7] text-code-fg">
-                  {exampleHead}
-                  <span className="rounded bg-primary/25 ring-1 ring-primary/40">
-                    {exampleSnippet}
-                  </span>
-                  {exampleTail}
-                </pre>
-              </DialogContent>
-            </Dialog>
-          </section>
+            <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Example — index.html</DialogTitle>
+                <DialogDescription>
+                  A minimal page with the copilot embedded. The highlighted lines
+                  are your snippet — paste them right before the closing{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                    &lt;/body&gt;
+                  </code>{' '}
+                  tag.
+                </DialogDescription>
+              </DialogHeader>
+              <pre className="overflow-x-auto rounded-tile bg-code-bg p-4 font-mono text-[11.5px] leading-[1.7] text-code-fg">
+                {exampleHead}
+                <span className="rounded bg-primary/25 ring-1 ring-primary/40">
+                  {exampleSnippet}
+                </span>
+                {exampleTail}
+              </pre>
+            </DialogContent>
+          </Dialog>
 
           <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="flex items-center gap-2">
@@ -373,62 +386,6 @@ export function CopilotWorkspace({
       {tab === 'settings' && (
         <div className="space-y-5">
           <section className="rounded-card border bg-card p-5 shadow-card">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-[13.5px] font-bold text-ink">Public key</h3>
-                <p className="text-xs text-muted-foreground">
-                  Safe to expose in your front-end. Rotate any time.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={rotate}
-                disabled={pending}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Rotate key
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <code className="block flex-1 break-all rounded-control border bg-secondary px-3 py-2 font-mono text-xs">
-                {publicKey}
-              </code>
-              <CopyButton value={publicKey} variant="outline" />
-            </div>
-          </section>
-
-          <section className="rounded-card border bg-card p-5 shadow-card">
-            <h3 className="text-[13.5px] font-bold text-ink">Origin allowlist</h3>
-            <p className="text-xs text-muted-foreground">
-              The copilot only runs on origins you list here. One per line —
-              leave empty to allow any origin while testing.
-            </p>
-            <div className="mt-3 space-y-2">
-              <Label htmlFor="origins" className="sr-only">
-                Allowed origins
-              </Label>
-              <Textarea
-                id="origins"
-                value={origins}
-                onChange={(e) => setOrigins(e.target.value)}
-                placeholder={'https://app.yourcompany.com\nhttps://www.yourcompany.com'}
-                rows={4}
-                className="font-mono text-xs"
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={saveOrigins}
-                disabled={pending}
-              >
-                {pending ? 'Saving…' : 'Save origins'}
-              </Button>
-            </div>
-          </section>
-
-          <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">Grounding &amp; trust</h3>
             <div className="mt-3 divide-y">
               <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
@@ -461,6 +418,72 @@ export function CopilotWorkspace({
                   aria-label="Cite the workflow used"
                 />
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <div className="mb-3">
+              <h3 className="text-[13.5px] font-bold text-ink">Public key</h3>
+              <p className="text-xs text-muted-foreground">
+                Safe to expose in your front-end. Rotate any time.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="block flex-1 break-all rounded-control border bg-secondary px-3 py-2 font-mono text-xs">
+                {showKey ? publicKey : maskedKey}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowKey((s) => !s)}
+                aria-label={showKey ? 'Hide public key' : 'Show public key'}
+              >
+                {showKey ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={rotate}
+                disabled={pending}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Rotate key
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Origin allowlist</h3>
+            <p className="text-xs text-muted-foreground">
+              The copilot only runs on origins you list here. One per line —
+              leave empty to allow any origin while testing.
+            </p>
+            <div className="mt-3 space-y-2">
+              <Label htmlFor="origins" className="sr-only">
+                Allowed origins
+              </Label>
+              <Textarea
+                id="origins"
+                value={origins}
+                onChange={(e) => setOrigins(e.target.value)}
+                placeholder={'https://app.yourcompany.com\nhttps://www.yourcompany.com'}
+                rows={4}
+                className="font-mono text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={saveOrigins}
+                disabled={pending}
+              >
+                {pending ? 'Saving…' : 'Save origins'}
+              </Button>
             </div>
           </section>
         </div>
