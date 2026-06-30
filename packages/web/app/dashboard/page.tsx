@@ -8,6 +8,7 @@ import { getCurrentWorkspace } from '@/lib/session';
 import { resolveCoverageGap } from '@/lib/copilot-actions';
 import { listCandidates } from '@/lib/candidates';
 import { getCopilotMetrics } from '@/lib/copilot-metrics';
+import { getEmbedStatus } from '@/lib/embed-status';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { ProgressRing } from '@/components/dashboard/progress-ring';
 import { HomeHelpDialogs } from '@/components/dashboard/home-help-dialogs';
@@ -31,6 +32,7 @@ export default async function DashboardPage() {
   const ctx = await getCurrentWorkspace();
   if (!session?.user || !ctx) redirect('/signin');
   const wsId = ctx.workspace.id;
+  const isEmbedded = getEmbedStatus(ctx.workspace).detected;
 
   const [
     tokenCount,
@@ -84,7 +86,7 @@ export default async function DashboardPage() {
       cta: { label: 'Review & approve', href: '/dashboard/recordings' },
     },
     {
-      done: queryCount > 0,
+      done: isEmbedded,
       title: 'Embed the copilot',
       desc: 'Paste one snippet into your product — go live for your customers',
       cta: { label: 'Get snippet', href: '/dashboard/copilot' },
@@ -93,7 +95,7 @@ export default async function DashboardPage() {
   const doneCount = steps.filter((s) => s.done).length;
   const activeIndex = steps.findIndex((s) => !s.done);
 
-  const showSteady = queryCount > 0 || approvalCount > 0;
+  const showSteady = queryCount > 0 || approvalCount > 0 || isEmbedded;
   const pendingApprovals = candidates.filter((c) => !c.copilotApproved).length;
 
   if (showSteady) {
@@ -122,7 +124,7 @@ export default async function DashboardPage() {
               answered: r.answered,
               feedback: r.feedback,
             }))}
-            isEmbedded={queryCount > 0}
+            isEmbedded={isEmbedded}
           />
         </div>
       </>

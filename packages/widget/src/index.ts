@@ -165,6 +165,17 @@ form.addEventListener('submit', (e) => {
   void ask(q);
 });
 
-function mount(): void { document.body.appendChild(host); render(); }
+// Embed-detection heartbeat: tell the API the snippet loaded so the Studio shows real "live"
+// status (best-effort, fire-and-forget — never blocks or surfaces errors to the host page).
+function pingSeen(): void {
+  if (!cfg.key) return;
+  void fetch(`${cfg.apiBase}/v1/copilot/seen`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Sync-Key': cfg.key },
+    keepalive: true,
+  }).catch(() => { /* best-effort */ });
+}
+
+function mount(): void { document.body.appendChild(host); render(); pingSeen(); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
 else mount();

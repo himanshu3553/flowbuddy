@@ -16,6 +16,7 @@ import {
   LAUNCHER_STYLES,
   type CopilotAppearance,
 } from '@/lib/copilot-appearance';
+import type { EmbedStatus } from '@/lib/embed-status';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -93,6 +94,7 @@ export function CopilotWorkspace({
   widgetIsPlaceholder = false,
   showCitations = true,
   activity,
+  detection,
   appearance,
   onAppearanceChange,
 }: {
@@ -104,11 +106,13 @@ export function CopilotWorkspace({
   showCitations?: boolean;
   activity: {
     total: number;
+    window: number;
     answeredPct: number;
     up: number;
     down: number;
     recent: { id: string; question: string; answered: boolean; feedback: string | null }[];
   };
+  detection: EmbedStatus;
   appearance: CopilotAppearance;
   onAppearanceChange: (next: CopilotAppearance) => void;
 }) {
@@ -232,14 +236,35 @@ export function CopilotWorkspace({
 
             <section className="rounded-card border bg-card p-5 shadow-card">
               <div className="flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-dot" />
-                </span>
+                {detection.detected ? (
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-success-dot" />
+                ) : (
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-dot" />
+                  </span>
+                )}
                 <p className="text-sm">
-                  Listening for the copilot on{' '}
-                  <span className="font-semibold">{primaryOrigin}</span>… not
-                  detected yet.
+                  {detection.detected ? (
+                    <>
+                      Copilot detected on{' '}
+                      <span className="font-semibold">
+                        {detection.origin ?? primaryOrigin}
+                      </span>
+                      {detection.lastSeenLabel ? (
+                        <span className="text-muted-foreground">
+                          {' '}
+                          · last seen {detection.lastSeenLabel}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      Listening for the copilot on{' '}
+                      <span className="font-semibold">{primaryOrigin}</span>… not
+                      detected yet.
+                    </>
+                  )}
                 </p>
                 <Button
                   type="button"
@@ -254,7 +279,7 @@ export function CopilotWorkspace({
               </div>
               <ul className="mt-4 space-y-2.5">
                 <ChecklistItem done label="Public key ready" />
-                <ChecklistItem done={false} label="Snippet pasted" />
+                <ChecklistItem done={detection.detected} label="Snippet pasted" />
                 <ChecklistItem
                   done={allowedOrigins.length > 0}
                   label="Origin allowlisted"
@@ -266,8 +291,14 @@ export function CopilotWorkspace({
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">Copilot activity</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {activity.total} question(s) · {activity.answeredPct}% answered ·
-              👍 {activity.up} · 👎 {activity.down}
+              {activity.window}{' '}
+              {activity.window === 1 ? 'question' : 'questions'} in the last 7
+              days · {activity.answeredPct}% answered · 👍 {activity.up} · 👎{' '}
+              {activity.down}
+            </p>
+            <p className="mt-0.5 text-xs text-faint">
+              {activity.total} all-time · same 7-day numbers as Home &amp;
+              Analytics
             </p>
             <ul className="mt-3 divide-y">
               {activity.recent.map((r) => (

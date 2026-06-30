@@ -85,6 +85,10 @@ model Workspace {
   copilotPosition       String   @default("right")
   copilotLauncherStyle  String   @default("icon") // icon | text | text-outline
   copilotLauncherText   String?
+  // Embed detection: the widget pings a heartbeat on mount, so the Studio can show real "live /
+  // detected" status (vs. inferring it from query traffic). Null = never seen the snippet load.
+  widgetLastSeenAt      DateTime?
+  widgetLastSeenOrigin  String?
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]

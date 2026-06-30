@@ -9,7 +9,7 @@ import { ensureBucket, putObject, sessionKey } from './storage';
 import { synthesisQueue } from './queue';
 import { answerFromKB } from '@sync/synthesis';
 import { retrieveApprovedKBItems, sanitizeHistory } from './copilot';
-import { resolveCopilotKey, checkRateLimit } from './copilot-auth';
+import { resolveCopilotKey, checkRateLimit, recordWidgetSeen } from './copilot-auth';
 
 const app = Fastify({ logger: true });
 
@@ -97,6 +97,9 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
   if (!checkRateLimit(key ?? '')) return reply.code(429).send({ error: 'rate limit exceeded — slow down' });
   const workspaceId = auth.workspaceId;
+  // A valid authed call from an allowed origin = the widget is live; confirm embed detection here too
+  // (throttled, shared with the /seen ping) so usage alone keeps "copilot live" accurate.
+  await recordWidgetSeen(key ?? '', workspaceId, req.headers.origin as string | undefined);
 
   const body = (req.body ?? {}) as { question?: string; history?: unknown; context?: { path?: string } };
   const question = (body.question ?? '').trim();
@@ -177,6 +180,21 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
     data: { feedback },
   });
   if (updated.count === 0) return reply.code(404).send({ error: 'query not found' });
+  return { ok: true };
+});
+
+/**
+ * Embed-detection heartbeat — the widget pings this on mount so the Studio can show real "copilot
+ * detected / live" status without waiting for a question. Auth = the public key + origin allowlist
+ * (same as /answer); DB writes are throttled per key so busy hosts don't hammer the workspace row.
+ */
+app.post('/v1/copilot/seen', async (req, reply) => {
+  const key = req.headers['x-sync-key'] as string | undefined;
+  const origin = req.headers.origin as string | undefined;
+  const auth = await resolveCopilotKey(key, origin);
+  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+
+  await recordWidgetSeen(key ?? '', auth.workspaceId, origin);
   return { ok: true };
 });
 

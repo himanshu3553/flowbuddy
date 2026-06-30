@@ -9,6 +9,7 @@ import {
   resolveAppearance,
   type CopilotAppearance,
 } from '@/lib/copilot-appearance';
+import type { EmbedStatus } from '@/lib/embed-status';
 
 /**
  * Client shell for the Copilot page. Owns the live appearance state so the controls (Appearance tab,
@@ -24,6 +25,7 @@ export function CopilotConsole({
   primaryOrigin,
   showCitations,
   activity,
+  detection,
   appearance: initialAppearance,
 }: {
   apiBase: string;
@@ -35,11 +37,13 @@ export function CopilotConsole({
   showCitations: boolean;
   activity: {
     total: number;
+    window: number;
     answeredPct: number;
     up: number;
     down: number;
     recent: { id: string; question: string; answered: boolean; feedback: string | null }[];
   };
+  detection: EmbedStatus;
   appearance: CopilotAppearance;
 }) {
   const [appearance, setAppearance] = useState<CopilotAppearance>(initialAppearance);
@@ -56,6 +60,7 @@ export function CopilotConsole({
         widgetIsPlaceholder={widgetIsPlaceholder}
         showCitations={showCitations}
         activity={activity}
+        detection={detection}
         appearance={appearance}
         onAppearanceChange={setAppearance}
       />

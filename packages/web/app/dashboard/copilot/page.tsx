@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { getOrCreateCopilotKey } from '@/lib/copilot-settings';
+import { getCopilotMetrics } from '@/lib/copilot-metrics';
+import { getEmbedStatus } from '@/lib/embed-status';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { CopilotConsole } from '@/components/dashboard/copilot-console';
 import { StatusBadge } from '@/components/dashboard/status-badge';
@@ -32,18 +34,17 @@ export default async function CopilotSettingsPage() {
     launcherText,
   } = await getOrCreateCopilotKey(ctx.workspace.id);
   const wsId = ctx.workspace.id;
-  const [qTotal, qAnswered, qUp, qDown, recent] = await Promise.all([
-    prisma.copilotQuery.count({ where: { workspaceId: wsId } }),
-    prisma.copilotQuery.count({ where: { workspaceId: wsId, answered: true } }),
-    prisma.copilotQuery.count({ where: { workspaceId: wsId, feedback: 'up' } }),
-    prisma.copilotQuery.count({ where: { workspaceId: wsId, feedback: 'down' } }),
+  // Use the SAME shared metrics source as Home + Analytics so the answer-quality numbers match
+  // across all three surfaces (7-day window); `total` is the all-time count for the lifetime stat
+  // and the first-question gate. (`recent` is this tab's own latest-activity list.)
+  const [metrics, recent] = await Promise.all([
+    getCopilotMetrics(wsId),
     prisma.copilotQuery.findMany({
       where: { workspaceId: wsId },
       orderBy: { createdAt: 'desc' },
       take: 8,
     }),
   ]);
-  const answeredPct = qTotal ? Math.round((qAnswered / qTotal) * 100) : 0;
 
   const apiBase = process.env.SYNC_API_URL || 'http://localhost:8787';
   const widgetSrc =
@@ -53,12 +54,20 @@ export default async function CopilotSettingsPage() {
     : 'your site';
   const widgetIsPlaceholder = widgetSrc.includes('YOUR_WIDGET_HOST');
 
+  const detection = getEmbedStatus(ctx.workspace);
+
   return (
     <>
       <PageHeader
         title="Copilot"
         subtitle="Install the copilot in your product — it answers only from approved workflows."
-        actions={<StatusBadge tone="pending">Not detected</StatusBadge>}
+        actions={
+          detection.detected ? (
+            <StatusBadge tone="success">Detected</StatusBadge>
+          ) : (
+            <StatusBadge tone="pending">Not detected</StatusBadge>
+          )
+        }
       />
       <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
         <CopilotConsole
@@ -69,7 +78,15 @@ export default async function CopilotSettingsPage() {
           allowedOrigins={allowedOrigins}
           primaryOrigin={primaryOrigin}
           showCitations={showCitations}
-          activity={{ total: qTotal, answeredPct, up: qUp, down: qDown, recent }}
+          activity={{
+            total: metrics.total,
+            window: metrics.window,
+            answeredPct: metrics.answeredPct,
+            up: metrics.up,
+            down: metrics.down,
+            recent,
+          }}
+          detection={detection}
           appearance={{ accent, title, greeting, position, launcherStyle, launcherText }}
         />
       </div>

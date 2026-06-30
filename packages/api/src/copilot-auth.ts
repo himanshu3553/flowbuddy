@@ -53,3 +53,36 @@ export function checkRateLimit(key: string, now: number = Date.now()): boolean {
 export function __resetRateLimit(): void {
   buckets.clear();
 }
+
+/**
+ * Throttle the embed-detection heartbeat: the widget pings on every page load (and every answered
+ * question stamps too), but we only need to touch the DB occasionally to keep "last seen" fresh.
+ * Returns true at most once per window per key. In-memory (resets on restart — at worst one extra
+ * write); good enough for a freshness signal.
+ */
+const SEEN_WINDOW_MS = 5 * 60_000;
+const seenAt = new Map<string, number>();
+
+function shouldRecordSeen(key: string, now: number = Date.now()): boolean {
+  const last = seenAt.get(key);
+  if (last !== undefined && now - last < SEEN_WINDOW_MS) return false;
+  seenAt.set(key, now);
+  return true;
+}
+
+/**
+ * Stamp the workspace's embed-detection heartbeat. Called from BOTH the widget's mount ping (/seen)
+ * and any answered question (/answer), so "copilot live" is confirmed by real usage too — not only
+ * by a ping a privacy blocker might drop. Throttled per key so busy hosts don't hammer the row.
+ */
+export async function recordWidgetSeen(
+  key: string,
+  workspaceId: string,
+  origin: string | undefined,
+): Promise<void> {
+  if (!shouldRecordSeen(key)) return;
+  await prisma.workspace.update({
+    where: { id: workspaceId },
+    data: { widgetLastSeenAt: new Date(), widgetLastSeenOrigin: origin ?? null },
+  });
+}
