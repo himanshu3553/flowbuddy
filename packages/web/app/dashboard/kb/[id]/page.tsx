@@ -1,11 +1,12 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { CheckCircle2, ChevronLeft } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
-import { listCandidates } from '@/lib/candidates';
-import { CopilotApprovalPanel } from '../../copilot-approval-panel';
+import { relativeTime } from '@/lib/recordings';
+import { getWorkflowCopilotStats } from '@/lib/analytics';
 import { PageHeader } from '@/components/dashboard/page-header';
 import {
   Card,
@@ -27,12 +28,15 @@ type StepData = {
   screenshotFile?: string | null;
 };
 
-export default async function KbSourcePage({
+export default async function KbWorkflowPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ wf?: string }>;
 }) {
   const { id } = await params;
+  const { wf } = await searchParams;
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
@@ -44,19 +48,29 @@ export default async function KbSourcePage({
   });
   if (!source) notFound();
 
-  const candidates = await listCandidates(ctx.workspace.id, source.id);
-  const transcript =
-    (source.transcript as { text?: string; segments?: unknown[] } | null) ??
-    null;
+  // This page is WORKFLOW-scoped: the URL is the recording (sourceId), `?wf` selects the workflow
+  // (segmentIndex) within it. Default to the recording's first workflow when `?wf` is absent/invalid.
+  const segments = [
+    ...new Set(
+      source.items
+        .map((it) => it.segmentIndex)
+        .filter((s): s is number => s != null),
+    ),
+  ].sort((a, b) => a - b);
+  const wfNum = Number(wf);
+  const selected: number | null =
+    Number.isInteger(wfNum) && segments.includes(wfNum)
+      ? wfNum
+      : segments[0] ?? null;
+
+  const segmentItems = source.items.filter((it) => it.segmentIndex === selected);
 
   const items = await Promise.all(
-    source.items.map(async (it) => {
+    segmentItems.map(async (it) => {
       const d = (it.data as unknown as StepData) ?? {};
       return {
         id: it.id,
         orderIndex: it.orderIndex,
-        segmentIndex: it.segmentIndex,
-        segmentTitle: it.segmentTitle,
         instruction: d.instruction ?? it.text, // distilled instruction; fall back to searchable text
         detail: d.detail ?? '',
         narration: d.narration ?? null,
@@ -68,33 +82,47 @@ export default async function KbSourcePage({
     }),
   );
 
-  // Group items by the workflow segment they belong to (Path 2 — persisted grouping).
-  const groups: { key: string; title: string; items: typeof items }[] = [];
-  for (const it of items) {
-    const key = it.segmentIndex == null ? 'ungrouped' : String(it.segmentIndex);
-    let g = groups.find((x) => x.key === key);
-    if (!g) {
-      g = {
-        key,
-        title:
-          it.segmentTitle ??
-          (it.segmentIndex == null
-            ? 'Other / ungrouped'
-            : `Workflow ${it.segmentIndex + 1}`),
-        items: [],
-      };
-      groups.push(g);
-    }
-    g.items.push(it);
-  }
-
+  const workflowTitle =
+    segmentItems.find((it) => it.segmentTitle)?.segmentTitle ??
+    (selected == null ? 'Ungrouped steps' : `Workflow ${selected + 1}`);
+  const recordingName = source.title || source.appBaseUrl || 'Recording';
   const ready = source.status === 'ready' || source.status === 'done';
+
+  const stats =
+    selected != null
+      ? await getWorkflowCopilotStats(ctx.workspace.id, source.id, selected)
+      : null;
+
+  const feedbackValue: ReactNode =
+    stats && stats.helpfulUp + stats.helpfulDown > 0 ? (
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-success-text">
+          <ThumbsUp className="h-3 w-3" />
+          {stats.helpfulUp}
+        </span>
+        <span className="inline-flex items-center gap-1 text-danger-text">
+          <ThumbsDown className="h-3 w-3" />
+          {stats.helpfulDown}
+        </span>
+      </span>
+    ) : (
+      '—'
+    );
+
+  const statRows: { label: string; value: ReactNode }[] = [
+    { label: 'Cited by copilot', value: stats && stats.citedCount > 0 ? `${stats.citedCount}×` : '—' },
+    {
+      label: 'Last cited',
+      value: stats?.lastCitedAt ? relativeTime(stats.lastCitedAt) : '—',
+    },
+    { label: 'Helpful', value: feedbackValue },
+  ];
 
   return (
     <>
       <PageHeader
-        title={source.appBaseUrl || 'Recording'}
-        subtitle={`${source.kind} · ${items.length} steps · ${groups.length} workflow(s)`}
+        title={workflowTitle}
+        subtitle={`${items.length} step${items.length === 1 ? '' : 's'} · from “${recordingName}”`}
         actions={<StatusBadge status={source.status} />}
       />
       <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-8">
@@ -106,56 +134,41 @@ export default async function KbSourcePage({
           Knowledge Base
         </Link>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Approve workflows for the copilot
-            </CardTitle>
-            <CardDescription>
-              Approval is one click on a workflow — not authoring an article. The
-              copilot answers only from what you approve here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {candidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {ready
-                  ? 'No workflows found in this recording.'
-                  : 'Knowledge Base is still building — workflows appear once it is ready.'}
-              </p>
-            ) : (
-              <CopilotApprovalPanel candidates={candidates} />
-            )}
-          </CardContent>
-        </Card>
-
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-5">
             <div>
               <h2 className="text-base font-semibold tracking-tight">
-                Steps by workflow
+                Workflow steps
               </h2>
               <p className="text-sm text-muted-foreground">
-                The clean, grounded steps — screenshot, instruction, route and
-                narration — grouped by workflow.
+                The clean, grounded steps the copilot grounds on — screenshot,
+                instruction, route and narration.
               </p>
             </div>
 
-            {groups.map((group) => (
-              <Card key={group.key}>
+            {items.length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  {ready
+                    ? 'This workflow has no steps.'
+                    : 'Knowledge Base is still building — steps appear once it is ready.'}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-bold text-primary">
                       WF
                     </span>
-                    {group.title}
+                    {workflowTitle}
                     <span className="font-normal text-muted-foreground">
-                      · {group.items.length} steps
+                      · {items.length} steps
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-0 divide-y">
-                  {group.items.map((it) => (
+                  {items.map((it) => (
                     <div
                       key={it.id}
                       className="grid grid-cols-1 gap-4 py-4 first:pt-0 sm:grid-cols-[minmax(0,1fr)_180px]"
@@ -171,9 +184,7 @@ export default async function KbSourcePage({
                             </span>
                           )}
                         </div>
-                        <p className="mt-2 text-sm font-medium">
-                          {it.instruction}
-                        </p>
+                        <p className="mt-2 text-sm font-medium">{it.instruction}</p>
                         {it.detail && (
                           <p className="mt-1 text-sm text-muted-foreground">
                             {it.detail}
@@ -204,7 +215,7 @@ export default async function KbSourcePage({
                   ))}
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
 
           <aside className="min-w-0 space-y-5 lg:sticky lg:top-20 lg:self-start">
@@ -212,28 +223,25 @@ export default async function KbSourcePage({
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Used by the copilot</CardTitle>
                 <CardDescription className="text-xs">
-                  How this recording appears as a source when the copilot
-                  answers.
+                  How often this workflow has answered an end-user question.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5">
                 <div className="inline-flex items-center gap-1.5 rounded-pill border border-brand-100 bg-brand-50 px-2.5 py-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                   <span className="truncate font-mono text-[10.5px] text-primary">
-                    Source: {source.appBaseUrl || 'Recording'}
+                    Source: {workflowTitle}
                   </span>
                 </div>
-                {[
-                  ['Cited by copilot', '—'],
-                  ['Last cited', '—'],
-                  ['Helpful', '—'],
-                ].map(([k, v]) => (
+                {statRows.map((row) => (
                   <div
-                    key={k}
+                    key={row.label}
                     className="flex items-center justify-between text-xs"
                   >
-                    <span className="text-muted-foreground">{k}</span>
-                    <span className="font-mono font-semibold text-ink">{v}</span>
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className="font-mono font-semibold text-ink">
+                      {row.value}
+                    </span>
                   </div>
                 ))}
                 {ready ? (
@@ -245,28 +253,6 @@ export default async function KbSourcePage({
                   <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
                     Still building — not yet citable.
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Transcript</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {transcript?.text ? (
-                  <details className="text-sm">
-                    <summary className="cursor-pointer text-xs text-muted-foreground">
-                      {transcript.segments?.length ?? 0} segments — expand
-                    </summary>
-                    <p className="mt-3 whitespace-pre-wrap text-xs leading-relaxed">
-                      {transcript.text}
-                    </p>
-                  </details>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    No transcript (no narration captured).
-                  </p>
                 )}
               </CardContent>
             </Card>

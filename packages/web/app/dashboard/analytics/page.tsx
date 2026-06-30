@@ -198,7 +198,11 @@ export default async function AnalyticsPage({
                       className="flex items-center gap-2.5"
                     >
                       <Link
-                        href={`/dashboard/kb/${w.sourceId}`}
+                        href={
+                          w.segmentIndex != null
+                            ? `/dashboard/kb/${w.sourceId}?wf=${w.segmentIndex}`
+                            : `/dashboard/kb/${w.sourceId}`
+                        }
                         className="min-w-0 flex-1 truncate text-[12.5px] text-secondary-foreground hover:text-primary hover:underline"
                         title={w.title}
                       >

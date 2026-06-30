@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { setCopilotApproval } from '@/lib/copilot-actions';
+import { setCopilotApproval, setCopilotApprovalsBulk } from '@/lib/copilot-actions';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -82,14 +82,13 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     setBusyKey('all');
     start(async () => {
       try {
-        for (const w of pendingRows) {
-          await setCopilotApproval({
+        await setCopilotApprovalsBulk(
+          pendingRows.map((w) => ({
             sourceId: w.sourceId,
             segmentIndex: w.segmentIndex,
             segmentTitle: w.segmentTitle,
-            approved: true,
-          });
-        }
+          })),
+        );
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to approve all');
@@ -187,7 +186,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <Link
-                    href={`/dashboard/kb/${w.sourceId}`}
+                    href={`/dashboard/kb/${w.sourceId}?wf=${w.segmentIndex}`}
                     className="block truncate text-[13.5px] font-semibold text-ink hover:text-primary hover:underline"
                   >
                     {w.segmentTitle}

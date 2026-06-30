@@ -92,6 +92,8 @@ export default async function RecordingDetailPage({
     .sort((a, b) => a.t - b.t);
 
   const candidates = await listCandidates(ws, id);
+  const transcript =
+    (source.transcript as { text?: string; segments?: unknown[] } | null) ?? null;
   const title = source.title || source.appBaseUrl || 'Recording';
   const app = manifest?.app;
   const recordedBy = source.createdBy?.name || source.createdBy?.email || '—';
@@ -285,11 +287,33 @@ export default async function RecordingDetailPage({
                       : 'Workflows appear once processing finishes.'}
                 </p>
                 <Button asChild variant="soft" size="sm" className="w-full">
-                  <Link href={`/dashboard/kb/${source.id}`}>
+                  <Link href="/dashboard/kb">
                     Review &amp; approve workflows
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Transcript</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {transcript?.text ? (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">
+                      {transcript.segments?.length ?? 0} segments — expand
+                    </summary>
+                    <p className="mt-3 whitespace-pre-wrap text-xs leading-relaxed">
+                      {transcript.text}
+                    </p>
+                  </details>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No transcript (no narration captured).
+                  </p>
+                )}
               </CardContent>
             </Card>
           </aside>

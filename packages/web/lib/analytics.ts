@@ -74,6 +74,45 @@ export async function getTopWorkflowsByCitations(
   return [...map.values()].sort((a, b) => b.count - a.count).slice(0, take);
 }
 
+export interface WorkflowCopilotStats {
+  citedCount: number;
+  lastCitedAt: Date | null;
+  helpfulUp: number;
+  helpfulDown: number;
+}
+
+/**
+ * Per-workflow copilot usage for the (workflow-scoped) KB detail page: how often THIS workflow
+ * `(sourceId, segmentIndex)` was cited in an answer, when it was last cited, and the 👍/👎 tally
+ * of the end-user questions it helped answer (feedback lives on the parent CopilotQuery). All-time
+ * (not windowed) — this is a per-workflow scorecard, not the dated Analytics view.
+ */
+export async function getWorkflowCopilotStats(
+  workspaceId: string,
+  sourceId: string,
+  segmentIndex: number,
+): Promise<WorkflowCopilotStats> {
+  const citations = await prisma.queryCitation.findMany({
+    where: { workspaceId, sourceId, segmentIndex },
+    select: { createdAt: true, query: { select: { feedback: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  let helpfulUp = 0;
+  let helpfulDown = 0;
+  for (const c of citations) {
+    if (c.query?.feedback === 'up') helpfulUp++;
+    else if (c.query?.feedback === 'down') helpfulDown++;
+  }
+
+  return {
+    citedCount: citations.length,
+    lastCitedAt: citations[0]?.createdAt ?? null,
+    helpfulUp,
+    helpfulDown,
+  };
+}
+
 export interface GapWithCount {
   id: string;
   prompt: string;
