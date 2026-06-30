@@ -76,6 +76,14 @@ export default function SignUpPage() {
             </CardFooter>
           </form>
         </Card>
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          <Link
+            href="/privacy"
+            className="underline-offset-4 hover:text-ink hover:underline"
+          >
+            Privacy Policy
+          </Link>
+        </p>
       </div>
     </div>
   );
