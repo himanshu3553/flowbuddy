@@ -68,6 +68,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     } else if (msg?.cmd === 'discard') {
       await onDiscard();
       sendResponse({ ok: true });
+    } else if (msg?.cmd === 'ackResult') {
+      // The popup has shown the last upload outcome — clear it (and the toolbar badge) so it's a
+      // one-time notification, not a sticky state that survives reopens/reloads.
+      const rec = await getRec();
+      await chrome.storage.local.remove('lastUpload');
+      if (!rec.recording) await setBadge(null);
+      sendResponse({ ok: true });
     } else if (msg?.cmd === 'getState') {
       const rec = await getRec();
       // Expose tracked recording state so the popup can show a live (pause-aware) timer, the

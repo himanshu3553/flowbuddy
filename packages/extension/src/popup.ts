@@ -24,6 +24,7 @@ let recWorkflowStartedAt = 0;
 let ticker: number | null = null;
 let statePoller: number | null = null;
 let uploadPoller: number | null = null;
+let statusTimer: number | null = null; // auto-dismiss for the success notification
 
 // mic meter
 let meterCtx: AudioContext | null = null;
@@ -82,6 +83,7 @@ function stopLoops(): void {
   if (ticker != null) { clearInterval(ticker); ticker = null; }
   if (statePoller != null) { clearInterval(statePoller); statePoller = null; }
   if (uploadPoller != null) { clearInterval(uploadPoller); uploadPoller = null; }
+  if (statusTimer != null) { clearTimeout(statusTimer); statusTimer = null; }
   stopMeter();
 }
 
@@ -93,12 +95,28 @@ function enterIdle(lastUpload?: Upload): void {
   $('connEmail').textContent = email ? `Connected as ${email}` : 'Connected';
   $('orgAvatar').textContent = (org.trim()[0] || 'S').toUpperCase();
   renderRecent(lastUpload);
-  // Upload outcome surfaces in the bottom status bar (green success / red error) — never on the page.
-  if (lastUpload?.ok) setStatusBar('ok', 'Uploaded', 'processing in Sync');
-  else if (lastUpload && !lastUpload.ok) setStatusBar('error', 'Error', lastUpload.error || 'Upload failed.');
-  else setStatusBar(null);
+  // The upload outcome is a ONE-TIME notification: show it, then clear it from storage + the toolbar
+  // badge so it never persists across popup opens / extension reloads. Success also auto-dismisses.
+  if (lastUpload?.ok) {
+    setStatusBar('ok', 'Uploaded', 'processing in Sync');
+    acknowledgeResult();
+    statusTimer = setTimeout(() => {
+      setStatusBar(null);
+      renderRecent(undefined);
+    }, 5000) as unknown as number;
+  } else if (lastUpload && !lastUpload.ok) {
+    setStatusBar('error', 'Error', lastUpload.error || 'Upload failed.');
+    acknowledgeResult();
+  } else {
+    setStatusBar(null);
+  }
   void refreshMic();
   setState('idle');
+}
+
+/** Clear the stored upload result + toolbar badge so the outcome shows once and doesn't linger. */
+function acknowledgeResult(): void {
+  void send({ cmd: 'ackResult' });
 }
 
 function setStatusBar(kind: 'ok' | 'error' | null, label = '', message = ''): void {
