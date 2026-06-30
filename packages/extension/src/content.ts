@@ -2,10 +2,10 @@
 // and post-action settle, streaming them to the background over a long-lived port.
 
 import type { AppMeta, CapturedEvent, EventTarget, PortMsg, Route } from './types.js';
-import { showToast } from './indicator.js';
 
 let recording = false;
 let startTime = 0;
+let pausedTotal = 0; // ms paused before the current active span (active-time base for event t)
 let port: chrome.runtime.Port | null = null;
 let postWatcher: { observer: MutationObserver; timer: number; hard: number } | null = null;
 
@@ -15,16 +15,14 @@ const DOM_CAP = 400_000;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.cmd === 'startCapture') {
-    startCapture(msg.startTime as number);
+    startCapture(msg.startTime as number, (msg.pausedTotal as number) || 0);
     sendResponse?.({ ok: true });
   } else if (msg?.cmd === 'stopCapture') {
     stopCapture();
     sendResponse?.({ ok: true });
   } else if (msg?.cmd === 'setStatus') {
-    // Brief, non-blocking toast for the upload outcome. The "uploading" interim state is shown
-    // on the extension (badge + popup), so we only toast the terminal result here.
-    if (msg.phase === 'done') showToast('✓ Uploaded — processing in Sync', 'done', 3000);
-    else if (msg.phase === 'failed') showToast(`✗ ${msg.message || 'Recording failed'}`, 'fail', 7000);
+    // Upload outcomes are shown ONLY inside the extension popup (its bottom status bar / retry
+    // screen). Nothing — success or error — is ever rendered on the recorded page.
     sendResponse?.({ ok: true });
   }
   // Respond synchronously — do NOT keep the channel open (avoids the
@@ -32,10 +30,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
-function startCapture(t0: number): void {
+function startCapture(t0: number, pausedBase = 0): void {
   if (recording) return;
   recording = true;
   startTime = t0 || Date.now();
+  // Active-time base: ms spent paused before this (re)arm, so event timestamps exclude paused spans
+  // and stay aligned with the (also-paused) narration. 0 for an unpaused recording (identical to old).
+  pausedTotal = pausedBase;
   port = chrome.runtime.connect({ name: 'capture' });
   send({ kind: 'appMeta', meta: appMeta() });
   patchHistory();
@@ -44,8 +45,7 @@ function startCapture(t0: number): void {
   addEventListener('submit', onSubmit, true);
   addEventListener('keydown', onKeydown, true);
   addEventListener('popstate', onNav, true);
-  // Brief, non-blocking confirmation; the persistent REC state is shown on the extension itself.
-  showToast('● Recording started', 'rec', 2000);
+  // No on-page confirmation — the recording state lives entirely on the extension (icon + popup).
 }
 
 function stopCapture(): void {
@@ -108,7 +108,7 @@ function onNav(): void {
 function emit(type: string, el: Element, value?: string): void {
   const event: CapturedEvent = {
     id: crypto.randomUUID(),
-    t: Date.now() - startTime,
+    t: Date.now() - startTime - pausedTotal,
     type,
     target: buildTarget(el),
     value,

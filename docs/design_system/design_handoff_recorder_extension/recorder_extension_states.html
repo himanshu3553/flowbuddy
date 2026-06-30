@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sync Recorder — Extension states (design reference)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     Sync Recorder — Chrome popup, four states (F10–F13)
+     Design reference for developer handoff. Faithful reproduction
+     of the wireframe frames, rendered with the canonical Sync
+     brand fonts. Exact px / hex values documented in README.md.
+     Popup native size: 360px wide.
+     ============================================================ */
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    /* brand */
+    --primary:        #3a5bd9;   /* canonical token: --indigo-500 #3b50e0 */
+    --primary-border: #c9d3f7;
+    --primary-tint:   #f4f6ff;
+    --primary-tint-bd:#e0e5fb;
+
+    /* status */
+    --rec:        #cc4a3a;       /* record red — token --danger-500 */
+    --rec-ink:    #a23d30;
+    --rec-bg:     #fef6f4;
+    --live:       #4e8d6e;       /* token --success-dot */
+    --warn:       #b89030;       /* token --warning-dot */
+    --warn-bg:    #fbf7ec;       /* token --warning-bg-2 */
+    --warn-bd:    #ecdfc2;       /* token --warning-border */
+    --warn-ink:   #6a5a30;
+
+    /* neutrals */
+    --ink:        #1c1c1c;
+    --text-2:     #2a2a2a;
+    --text-3:     #4a4a4a;
+    --text-mut:   #8a8a8a;
+    --text-faint: #aaaaaa;
+    --card-bd:    #d8d8d8;
+    --hair:       #f0f0f0;
+    --hair-2:     #f2f2f2;
+    --chip-bg:    #f4f4f4;
+    --chip-bd:    #e6e6e6;
+    --code-ink:   #1f2330;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #e9ebef;
+    font-family: var(--font-sans);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 48px 80px;
+  }
+
+  .page-head { max-width: 1180px; margin: 0 auto 40px; }
+  .eyebrow {
+    font: 700 11px/1 var(--font-mono);
+    letter-spacing: .14em;
+    color: var(--primary);
+    text-transform: uppercase;
+  }
+  .page-title {
+    font: 800 30px/1.1 var(--font-sans);
+    letter-spacing: -.02em;
+    color: var(--ink);
+    margin: 12px 0 8px;
+  }
+  .page-sub {
+    font: 400 14px/1.6 var(--font-sans);
+    color: #5a6070;
+    max-width: 640px;
+  }
+
+  .rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px 36px;
+    align-items: flex-start;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  .frame { width: 360px; }
+  .frame-label {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    margin-bottom: 12px;
+  }
+  .frame-id {
+    font: 600 11px/1 var(--font-mono);
+    letter-spacing: .04em;
+    color: var(--primary);
+  }
+  .frame-name {
+    font: 600 13px/1 var(--font-sans);
+    color: #3a3f4d;
+  }
+  .frame-caption {
+    font: 400 12px/1.55 var(--font-sans);
+    color: #6b7180;
+    margin-top: 12px;
+  }
+
+  /* ---- popup shell ---- */
+  .popup {
+    background: #fff;
+    border: 1px solid var(--card-bd);
+    border-radius: 14px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.10);
+    overflow: hidden;
+  }
+  .popup-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .logo-mark { width: 20px; height: 20px; border-radius: 6px; background: var(--primary); flex: 0 0 auto; }
+  .head-title { font: 700 13px var(--font-sans); color: var(--ink); }
+  .gear { margin-left: auto; font: 13px var(--font-sans); color: #c4c4c4; }
+  .popup-body { padding: 14px; }
+
+  .mono { font-family: var(--font-mono); }
+  .micro { font: 700 9.5px/1.1 var(--font-mono); letter-spacing: .03em; color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+  <header class="page-head">
+    <div class="eyebrow">Sync · Studio — Section 06</div>
+    <h1 class="page-title">Recorder Extension — Chrome popup</h1>
+    <p class="page-sub">The capture surface. Four core states for the Sync Recorder browser action: idle → recording → uploading, plus the interrupted-upload recovery path. Each popup renders at a native width of 360px. Values, copy, and token mappings are documented in <strong>README.md</strong>.</p>
+  </header>
+
+  <div class="rail">
+
+    <!-- ============ F10 · IDLE / READY ============ -->
+    <section class="frame">
+      <div class="frame-label"><span class="frame-id">F10</span><span class="frame-name">Idle / ready</span></div>
+      <div class="popup">
+        <header class="popup-head">
+          <div class="logo-mark"></div>
+          <div class="head-title">Sync Recorder</div>
+          <div class="gear">⚙</div>
+        </header>
+        <div class="popup-body">
+          <!-- org / connection row -->
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #ececec;border-radius:9px;margin-bottom:14px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#e0e0e0;flex:0 0 auto;"></div>
+            <div style="flex:1;">
+              <div style="font:600 12px var(--font-sans);color:var(--text-2);">Acme Inc.</div>
+              <div style="font:10px var(--font-mono);color:#a4a4a4;">Connected as Fiona</div>
+            </div>
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--live);"></span>
+          </div>
+          <!-- primary CTA -->
+          <button style="width:100%;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:13px;font:700 13.5px var(--font-sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:13px;">
+            <span style="width:11px;height:11px;border-radius:50%;background:#fff;"></span>Start recording
+          </button>
+          <!-- PII toggle -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--hair-2);">
+            <div style="font:12px var(--font-sans);color:var(--text-3);">Mask PII before upload</div>
+            <div style="width:34px;height:20px;border-radius:10px;background:var(--primary);position:relative;">
+              <div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;right:2px;"></div>
+            </div>
+          </div>
+          <!-- captures -->
+          <div class="micro" style="margin:10px 0 7px;">CAPTURES</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <span style="font:600 10px var(--font-mono);color:#7a7a7a;background:var(--chip-bg);border:1px solid var(--chip-bd);border-radius:999px;padding:3px 9px;">Screen</span>
+            <span style="font:600 10px var(--font-mono);color:#7a7a7a;background:var(--chip-bg);border:1px solid var(--chip-bd);border-radius:999px;padding:3px 9px;">Voice</span>
+            <span style="font:600 10px var(--font-mono);color:#7a7a7a;background:var(--chip-bg);border:1px solid var(--chip-bd);border-radius:999px;padding:3px 9px;">DOM</span>
+            <span style="font:600 10px var(--font-mono);color:#7a7a7a;background:var(--chip-bg);border:1px solid var(--chip-bd);border-radius:999px;padding:3px 9px;">Events</span>
+            <span style="font:600 10px var(--font-mono);color:#7a7a7a;background:var(--chip-bg);border:1px solid var(--chip-bd);border-radius:999px;padding:3px 9px;">Routes</span>
+          </div>
+          <!-- recent -->
+          <div class="micro" style="margin-top:13px;">RECENT</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:7px;">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--live);"></span>
+            <div style="flex:1;font:11.5px var(--font-sans);color:#5a5a5a;">Billing &amp; account flows</div>
+            <div style="font:10px var(--font-mono);color:#b0b0b0;">uploaded</div>
+          </div>
+        </div>
+      </div>
+      <p class="frame-caption">Default state when the popup opens and an org is connected. Primary action is <strong>Start recording</strong>. PII masking is on by default; capture scope (Screen / Voice / DOM / Events / Routes) is shown read-only.</p>
+    </section>
+
+    <!-- ============ F11 · RECORDING ============ -->
+    <section class="frame">
+      <div class="frame-label"><span class="frame-id">F11</span><span class="frame-name">Recording + mark workflow</span></div>
+      <div class="popup">
+        <header class="popup-head" style="background:var(--rec-bg);">
+          <span style="width:11px;height:11px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 3px rgba(204,74,58,.18);"></span>
+          <div style="font:700 12.5px var(--font-mono);color:var(--rec-ink);letter-spacing:.04em;">REC · 02:14</div>
+          <div style="margin-left:auto;font:10px var(--font-mono);color:#b07a72;">app.acme.com</div>
+        </header>
+        <div class="popup-body">
+          <div class="micro" style="margin-bottom:7px;">CURRENT WORKFLOW</div>
+          <div style="border:1px solid var(--primary-tint-bd);background:var(--primary-tint);border-radius:10px;padding:11px 13px;margin-bottom:11px;">
+            <div style="font:700 13px var(--font-sans);color:var(--ink);">Workflow 2 · Reset a password</div>
+            <div style="font:10px var(--font-mono);color:#8b93b4;margin-top:3px;">started 0:41 ago · 6 steps captured</div>
+          </div>
+          <button style="width:100%;background:#fff;color:var(--primary);border:1.5px solid var(--primary-border);border-radius:9px;padding:10px;font:700 12.5px var(--font-sans);cursor:pointer;margin-bottom:12px;">+ Mark new workflow</button>
+          <!-- mic meter -->
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
+            <div style="font:10px var(--font-mono);color:var(--text-faint);">MIC</div>
+            <div style="flex:1;display:flex;align-items:center;gap:3px;height:18px;">
+              <div style="flex:1;height:40%;background:#cdd5f2;border-radius:2px;"></div>
+              <div style="flex:1;height:75%;background:var(--primary);border-radius:2px;"></div>
+              <div style="flex:1;height:55%;background:var(--primary);border-radius:2px;"></div>
+              <div style="flex:1;height:90%;background:var(--primary);border-radius:2px;"></div>
+              <div style="flex:1;height:48%;background:#cdd5f2;border-radius:2px;"></div>
+              <div style="flex:1;height:65%;background:var(--primary);border-radius:2px;"></div>
+              <div style="flex:1;height:35%;background:#cdd5f2;border-radius:2px;"></div>
+            </div>
+          </div>
+          <!-- actions -->
+          <div style="display:flex;gap:9px;">
+            <button style="flex:1;background:#fff;color:#555;border:1px solid #d6d6d6;border-radius:9px;padding:11px;font:600 12.5px var(--font-sans);cursor:pointer;">Pause</button>
+            <button style="flex:1;background:var(--code-ink);color:#fff;border:none;border-radius:9px;padding:11px;font:700 12.5px var(--font-sans);cursor:pointer;">Stop &amp; upload</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:12px;justify-content:center;">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--live);"></span>
+            <div style="font:10px var(--font-mono);color:#9a9a9a;">PII masked · survives page navigation</div>
+          </div>
+        </div>
+      </div>
+      <p class="frame-caption">Active capture. Header turns into a live <strong>REC</strong> timer on a warm tint with the current domain. The builder segments the session into workflows via <strong>+ Mark new workflow</strong>; a live mic meter confirms audio. Stop &amp; upload ends the session.</p>
+    </section>
+
+    <!-- ============ F12 · UPLOADING ============ -->
+    <section class="frame">
+      <div class="frame-label"><span class="frame-id">F12</span><span class="frame-name">Uploading</span></div>
+      <div class="popup">
+        <header class="popup-head">
+          <div class="logo-mark"></div>
+          <div class="head-title">Sync Recorder</div>
+          <div class="gear">⚙</div>
+        </header>
+        <div class="popup-body">
+          <div style="text-align:center;padding:8px 0 14px;">
+            <div style="width:46px;height:46px;border-radius:50%;border:3px solid #eef1fd;border-top-color:var(--primary);margin:0 auto 12px;"></div>
+            <div style="font:700 14px var(--font-sans);color:var(--ink);">Recording complete</div>
+            <div style="font:11.5px var(--font-sans);color:var(--text-mut);margin-top:3px;">12:10 · 5 workflows · narration saved</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font:11px var(--font-mono);color:var(--text-mut);margin-bottom:6px;">
+            <span>Uploading securely…</span><span style="color:var(--primary);">64%</span>
+          </div>
+          <div style="height:7px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:13px;">
+            <div style="width:64%;height:100%;background:var(--primary);border-radius:4px;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid #ececec;border-radius:9px;padding:10px 12px;">
+            <span style="font:13px var(--font-sans);color:var(--primary);">↻</span>
+            <div style="font:11px/1.45 var(--font-sans);color:var(--text-mut);">Keep this open — uploads resume automatically if your connection drops.</div>
+          </div>
+          <div style="font:10px var(--font-mono);color:var(--text-faint);text-align:center;margin-top:12px;">Then Studio distils it into your Knowledge Base</div>
+        </div>
+      </div>
+      <p class="frame-caption">Post-stop summary with a secure-upload progress bar. Reassures that the capture is complete and the connection is recoverable. On 100% the popup hands off to Studio for distillation.</p>
+    </section>
+
+    <!-- ============ F13 · UPLOAD INTERRUPTED ============ -->
+    <section class="frame">
+      <div class="frame-label"><span class="frame-id">F13</span><span class="frame-name">Upload interrupted (retry)</span></div>
+      <div class="popup">
+        <header class="popup-head">
+          <div class="logo-mark"></div>
+          <div class="head-title">Sync Recorder</div>
+          <div class="gear">⚙</div>
+        </header>
+        <div class="popup-body">
+          <div style="display:flex;align-items:center;gap:11px;border:1px solid var(--warn-bd);background:var(--warn-bg);border-radius:10px;padding:12px 13px;margin-bottom:13px;">
+            <span style="font:18px var(--font-sans);color:var(--warn);flex:0 0 auto;">⚠</span>
+            <div>
+              <div style="font:700 12.5px var(--font-sans);color:var(--warn-ink);">Upload interrupted</div>
+              <div style="font:11px/1.45 var(--font-sans);color:#8a7a4e;margin-top:2px;">Your narration is safe — nothing is lost.</div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font:11px var(--font-mono);color:var(--text-mut);margin-bottom:6px;">
+            <span>Uploaded</span><span>3 of 5 workflows</span>
+          </div>
+          <div style="height:7px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:14px;">
+            <div style="width:60%;height:100%;background:var(--warn);border-radius:4px;"></div>
+          </div>
+          <button style="width:100%;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:12px;font:700 13px var(--font-sans);cursor:pointer;margin-bottom:9px;">Retry upload</button>
+          <button style="width:100%;background:#fff;color:#666;border:1px solid #d6d6d6;border-radius:10px;padding:11px;font:600 12.5px var(--font-sans);cursor:pointer;">Resume later</button>
+          <div style="font:10px var(--font-mono);color:var(--text-faint);text-align:center;margin-top:11px;">Retries automatically when you're back online</div>
+        </div>
+      </div>
+      <p class="frame-caption">Recovery path when the upload drops. Amber warning (not an error — data is safe), partial progress, and a clear <strong>Retry upload</strong> primary with a <strong>Resume later</strong> escape. Auto-retries on reconnect.</p>
+    </section>
+
+  </div>
+
+</body>
+</html>

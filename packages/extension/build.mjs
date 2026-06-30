@@ -38,6 +38,12 @@ async function copyStatic() {
   await cp(path.join(__dirname, 'src', 'icons'), path.join(outdir, 'icons'), {
     recursive: true,
   });
+
+  // Bundled brand fonts (Plus Jakarta Sans + JetBrains Mono, latin subset) — @font-face'd locally
+  // in popup.html since MV3 CSP blocks the Google Fonts CDN inside the popup.
+  await cp(path.join(__dirname, 'src', 'fonts'), path.join(outdir, 'fonts'), {
+    recursive: true,
+  });
 }
 
 const common = {

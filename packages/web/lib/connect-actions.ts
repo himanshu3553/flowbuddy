@@ -8,6 +8,7 @@ export interface ConnectPayload {
   token: string;
   apiBaseUrl: string;
   email: string;
+  org: string;
 }
 
 /**
@@ -27,5 +28,8 @@ export async function connectExtension(): Promise<
 
   const token = await createApiToken(ws.id, 'Sync Recorder extension');
   const apiBaseUrl = process.env.SYNC_API_URL || 'http://localhost:8787';
-  return { ok: true, payload: { token, apiBaseUrl, email: session.user?.email ?? '' } };
+  return {
+    ok: true,
+    payload: { token, apiBaseUrl, email: session.user?.email ?? '', org: ws.name },
+  };
 }

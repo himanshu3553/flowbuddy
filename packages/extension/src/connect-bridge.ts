@@ -13,14 +13,14 @@ function announce(): void {
 window.addEventListener('message', (e) => {
   // Same-window, same-origin messages from the trusted Studio page only.
   if (e.source !== window || e.origin !== location.origin) return;
-  const d = e.data as { source?: string; type?: string; token?: string; apiBaseUrl?: string; email?: string } | null;
+  const d = e.data as { source?: string; type?: string; token?: string; apiBaseUrl?: string; email?: string; org?: string } | null;
   if (!d || d.source !== PAGE) return;
 
   if (d.type === 'ping') {
     announce();
   } else if (d.type === 'connect' && d.token) {
     chrome.runtime.sendMessage(
-      { cmd: 'connect', token: d.token, backendUrl: d.apiBaseUrl, email: d.email },
+      { cmd: 'connect', token: d.token, backendUrl: d.apiBaseUrl, email: d.email, org: d.org },
       () => {
         void chrome.runtime.lastError;
         window.postMessage({ source: EXT, type: 'connected' }, location.origin);
