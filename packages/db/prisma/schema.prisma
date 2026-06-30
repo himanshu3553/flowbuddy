@@ -117,6 +117,7 @@ model KnowledgeSource {
   createdById String
   kind        String   @default("workflow") // workflow | narration | video
   status      String   @default("uploaded") // uploaded | processing | ready | done | error  (ready = KB built + segmented, candidates available, no articles yet)
+  title       String? // founder-given label for the recording (null = fall back to appBaseUrl)
   appBaseUrl  String?
   manifest    Json // raw capture manifest (events, markers, meta)
   transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval

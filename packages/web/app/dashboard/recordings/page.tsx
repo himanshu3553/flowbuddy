@@ -1,10 +1,16 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ExternalLink, Video } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { listCandidates } from '@/lib/candidates';
+import { signedUrl, sessionObjectKey } from '@/lib/storage';
+import {
+  asManifest,
+  deriveRecordingMeta,
+  relativeTime,
+} from '@/lib/recordings';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Button } from '@/components/ui/button';
 import { HowToRecordDialog } from '@/components/dashboard/home-help-dialogs';
@@ -36,6 +42,16 @@ export default async function RecordingsPage() {
     prisma.knowledgeSource.findMany({
       where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        kind: true,
+        status: true,
+        appBaseUrl: true,
+        error: true,
+        createdAt: true,
+        manifest: true,
+      },
     }),
     listCandidates(ctx.workspace.id),
   ]);
@@ -44,17 +60,37 @@ export default async function RecordingsPage() {
   for (const c of candidates)
     wfBySource.set(c.sourceId, (wfBySource.get(c.sourceId) ?? 0) + 1);
 
-  const rows: RecordingRow[] = sessions.map((s) => ({
-    id: s.id,
-    title: s.appBaseUrl || '(unknown app)',
-    kind: s.kind,
-    date: s.createdAt.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
+  const rows: RecordingRow[] = await Promise.all(
+    sessions.map(async (s) => {
+      const meta = deriveRecordingMeta(asManifest(s.manifest));
+      const thumbUrl = meta.firstShotRel
+        ? await signedUrl(
+            sessionObjectKey(ctx.workspace.id, s.id, meta.firstShotRel),
+          )
+        : null;
+      return {
+        id: s.id,
+        title: s.title || s.appBaseUrl || '(unknown app)',
+        appUrl: s.appBaseUrl,
+        rawTitle: s.title,
+        kind: s.kind,
+        date: s.createdAt.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        }),
+        recordedAgo: relativeTime(s.createdAt),
+        status: s.status,
+        error: s.error,
+        workflowCount: wfBySource.get(s.id) ?? 0,
+        durationMs: meta.durationMs,
+        eventCount: meta.eventCount,
+        screenshotCount: meta.screenshotCount,
+        hasAudio: meta.hasAudio,
+        layers: meta.layers,
+        thumbUrl,
+      };
     }),
-    status: s.status,
-    workflowCount: wfBySource.get(s.id) ?? 0,
-  }));
+  );
 
   return (
     <>

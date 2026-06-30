@@ -1,4 +1,9 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3 = new S3Client({
@@ -21,6 +26,28 @@ export function signedUrl(key: string, expiresIn = 3600): Promise<string> {
 /** Object key for a session artifact (mirrors the api's `workspaces/<ws>/sessions/<id>/<rel>` layout). */
 export function sessionObjectKey(workspaceId: string, sessionId: string, rel: string): string {
   return `workspaces/${workspaceId}/sessions/${sessionId}/${rel}`;
+}
+
+/** Delete every stored object for one recording (screenshots, audio, DOM snapshots) under its
+ *  session prefix. Called when a recording is deleted so nothing is orphaned in object storage. */
+export async function deleteSessionPrefix(workspaceId: string, sessionId: string): Promise<void> {
+  const prefix = `workspaces/${workspaceId}/sessions/${sessionId}/`;
+  let token: string | undefined;
+  do {
+    const listed = await s3.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+    );
+    const keys = (listed.Contents ?? []).map((o) => o.Key).filter((k): k is string => !!k);
+    if (keys.length > 0) {
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (token);
 }
 
 /** An `ArtifactReader` (relPath → Buffer) for synthesis to fetch a session's screenshots from

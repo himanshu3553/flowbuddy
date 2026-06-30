@@ -2,53 +2,45 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Clock, Search, Volume2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { formatDuration } from '@/lib/recordings';
 import { Input } from '@/components/ui/input';
 import { StatusBadge, type StatusTone } from '@/components/dashboard/status-badge';
+import { RecordingManageMenu } from '@/components/dashboard/recording-manage';
 
 export interface RecordingRow {
   id: string;
   title: string;
+  /** The founder-set title (null = none), passed to the rename dialog. */
+  rawTitle: string | null;
+  appUrl: string | null;
   kind: string;
   date: string;
+  recordedAgo: string;
   status: string;
+  error: string | null;
   workflowCount: number;
+  durationMs: number;
+  eventCount: number;
+  screenshotCount: number;
+  hasAudio: boolean;
+  layers: string[];
+  thumbUrl: string | null;
 }
 
-type Filter = 'all' | 'ready' | 'processing';
+type Filter = 'all' | 'ready' | 'processing' | 'failed';
 
 const READY = ['ready', 'done'];
 const PROCESSING = ['uploaded', 'processing'];
 
-function statusMeta(status: string, date: string) {
+function statusMeta(status: string) {
   if (READY.includes(status))
-    return {
-      label: 'Ready',
-      tone: 'success' as StatusTone,
-      meta: `${date} · screen·voice·DOM·events·routes · PII masked`,
-      metaTone: 'muted' as const,
-      processing: false,
-      failed: false,
-    };
+    return { label: 'Ready', tone: 'success' as StatusTone, processing: false, failed: false };
   if (PROCESSING.includes(status))
-    return {
-      label: 'Processing',
-      tone: 'pending' as StatusTone,
-      meta: 'distilling…',
-      metaTone: 'muted' as const,
-      processing: true,
-      failed: false,
-    };
-  return {
-    label: 'Failed',
-    tone: 'danger' as StatusTone,
-    meta: `${date} · upload interrupted — narration preserved`,
-    metaTone: 'danger' as const,
-    processing: false,
-    failed: true,
-  };
+    return { label: 'Processing', tone: 'pending' as StatusTone, processing: true, failed: false };
+  return { label: 'Failed', tone: 'danger' as StatusTone, processing: false, failed: true };
 }
 
 export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
@@ -60,6 +52,8 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
       all: rows.length,
       ready: rows.filter((r) => READY.includes(r.status)).length,
       processing: rows.filter((r) => PROCESSING.includes(r.status)).length,
+      failed: rows.filter((r) => !READY.includes(r.status) && !PROCESSING.includes(r.status))
+        .length,
     }),
     [rows],
   );
@@ -67,7 +61,15 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
   const visible = rows.filter((r) => {
     if (filter === 'ready' && !READY.includes(r.status)) return false;
     if (filter === 'processing' && !PROCESSING.includes(r.status)) return false;
-    if (q && !`${r.title} ${r.kind}`.toLowerCase().includes(q.toLowerCase()))
+    if (
+      filter === 'failed' &&
+      (READY.includes(r.status) || PROCESSING.includes(r.status))
+    )
+      return false;
+    if (
+      q &&
+      !`${r.title} ${r.appUrl ?? ''} ${r.kind}`.toLowerCase().includes(q.toLowerCase())
+    )
       return false;
     return true;
   });
@@ -76,6 +78,7 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
     { key: 'all', label: 'All', n: counts.all },
     { key: 'ready', label: 'Ready', n: counts.ready },
     { key: 'processing', label: 'Processing', n: counts.processing },
+    { key: 'failed', label: 'Failed', n: counts.failed },
   ];
 
   return (
@@ -116,48 +119,89 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
       ) : (
         <ul className="space-y-2.5">
           {visible.map((r) => {
-            const s = statusMeta(r.status, r.date);
+            const s = statusMeta(r.status);
             return (
-              <li key={r.id}>
+              <li
+                key={r.id}
+                className={cn(
+                  'group flex items-center gap-3.5 rounded-list border bg-card px-[15px] py-[13px] transition-shadow hover:shadow-card',
+                  s.processing && 'border-brand-200 shadow-step',
+                )}
+              >
+                {/* Thumbnail */}
                 <Link
-                  href={`/dashboard/kb/${r.id}`}
-                  className={cn(
-                    'flex items-center gap-3.5 rounded-list border bg-card px-[15px] py-[13px] transition-shadow hover:shadow-card',
-                    s.processing && 'border-brand-200 shadow-step',
-                  )}
+                  href={`/dashboard/recordings/${r.id}`}
+                  className="relative h-[38px] w-14 shrink-0 overflow-hidden rounded-md border border-[color:var(--media-border)] bg-media"
                 >
-                  <span className="h-[38px] w-14 shrink-0 rounded-md border border-[color:var(--media-border)] bg-media" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-ink">
-                      {r.title}
-                    </span>
-                    {s.processing ? (
-                      <span className="mt-1.5 block h-1 w-40 max-w-full overflow-hidden rounded-full bg-[color:var(--gray-100)]">
-                        <span className="block h-full w-2/3 rounded-full bg-warning-dot" />
-                      </span>
-                    ) : (
-                      <span
-                        className={cn(
-                          'mt-0.5 block truncate font-mono text-[10px]',
-                          s.metaTone === 'danger' ? 'text-danger-ink' : 'text-faint',
-                        )}
-                      >
-                        {s.meta}
-                      </span>
-                    )}
-                  </span>
-                  <span className="hidden w-[84px] shrink-0 text-[12.5px] sm:block">
-                    {s.failed ? (
-                      <span className="font-semibold text-primary">Retry upload</span>
-                    ) : s.processing ? (
-                      <span className="text-faint">distilling…</span>
-                    ) : (
-                      <span className="text-ink">{r.workflowCount} extracted</span>
-                    )}
-                  </span>
-                  <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                  {r.thumbUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={r.thumbUrl}
+                      alt=""
+                      className="h-full w-full object-cover object-top"
+                    />
+                  ) : null}
                 </Link>
+
+                {/* Main */}
+                <Link
+                  href={`/dashboard/recordings/${r.id}`}
+                  className="min-w-0 flex-1"
+                >
+                  <span className="block truncate text-[13.5px] font-semibold text-ink">
+                    {r.title}
+                  </span>
+                  {s.processing ? (
+                    <span className="mt-1.5 block h-1 w-40 max-w-full overflow-hidden rounded-full bg-[color:var(--gray-100)]">
+                      <span className="block h-full w-2/3 rounded-full bg-warning-dot" />
+                    </span>
+                  ) : s.failed ? (
+                    <span className="mt-0.5 block truncate font-mono text-[10px] text-danger-ink">
+                      {r.error
+                        ? `failed — ${r.error}`
+                        : 'failed — capture incomplete'}
+                    </span>
+                  ) : (
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px] text-faint">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatDuration(r.durationMs)}
+                      </span>
+                      <span>{r.eventCount} actions</span>
+                      <span>{r.screenshotCount} shots</span>
+                      {r.hasAudio && (
+                        <span className="inline-flex items-center gap-1">
+                          <Volume2 className="h-3 w-3" />
+                          voice
+                        </span>
+                      )}
+                      <span>{r.recordedAgo}</span>
+                    </span>
+                  )}
+                </Link>
+
+                {/* Right rail */}
+                <span className="hidden w-[92px] shrink-0 text-right text-[12.5px] sm:block">
+                  {s.failed ? (
+                    <span className="text-faint">—</span>
+                  ) : s.processing ? (
+                    <span className="text-faint">distilling…</span>
+                  ) : r.workflowCount > 0 ? (
+                    <span className="text-ink">
+                      {r.workflowCount} workflow{r.workflowCount === 1 ? '' : 's'}
+                    </span>
+                  ) : (
+                    <span className="text-faint">no workflows</span>
+                  )}
+                </span>
+                <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
+                <ChevronRight className="hidden h-4 w-4 shrink-0 text-faint sm:block" />
+                <RecordingManageMenu
+                  id={r.id}
+                  currentTitle={r.rawTitle}
+                  appUrl={r.appUrl}
+                  status={r.status}
+                />
               </li>
             );
           })}

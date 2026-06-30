@@ -1,0 +1,173 @@
+'use client';
+
+import * as React from 'react';
+import { useRouter } from 'next/navigation';
+import { MoreHorizontal, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+
+import {
+  deleteRecording,
+  renameRecording,
+  reprocessRecording,
+} from '@/lib/recording-actions';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+
+export function RecordingManageMenu({
+  id,
+  currentTitle,
+  appUrl,
+  status,
+  redirectOnDelete = false,
+}: {
+  id: string;
+  /** The founder-set title (null = none yet). */
+  currentTitle: string | null;
+  appUrl: string | null;
+  status: string;
+  /** Detail page → jump back to the list after delete; list → just revalidate. */
+  redirectOnDelete?: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+  const [renameOpen, setRenameOpen] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [name, setName] = React.useState(currentTitle ?? '');
+  const failed = status === 'error';
+
+  function doRename() {
+    startTransition(async () => {
+      await renameRecording(id, name);
+      setRenameOpen(false);
+      router.refresh();
+    });
+  }
+
+  function doReprocess() {
+    startTransition(async () => {
+      await reprocessRecording(id);
+      router.refresh();
+    });
+  }
+
+  function doDelete() {
+    startTransition(async () => {
+      await deleteRecording(id);
+      setDeleteOpen(false);
+      if (redirectOnDelete) router.push('/dashboard/recordings');
+      else router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label="Manage recording"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              setName(currentTitle ?? '');
+              setRenameOpen(true);
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => doReprocess()}>
+            <RefreshCw className="h-4 w-4" />
+            {failed ? 'Re-process (retry)' : 'Re-process'}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-danger focus:bg-danger-bg focus:text-danger"
+            onSelect={(e) => {
+              e.preventDefault();
+              setDeleteOpen(true);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Rename */}
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename recording</DialogTitle>
+            <DialogDescription>
+              A clear name helps when you’ve recorded the same app many times.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={appUrl || 'e.g. Invite a teammate'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') doRename();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={doRename} disabled={pending}>
+              {pending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete this recording?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the recording, its captured screenshots and
+              narration audio, and any workflows distilled from it. This can’t be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={doDelete}
+              disabled={pending}
+            >
+              {pending ? 'Deleting…' : 'Delete recording'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
