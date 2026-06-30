@@ -14,6 +14,10 @@ const connection: ConnectionOptions = {
   port: Number(url.port || '6379'),
   username: url.username || undefined,
   password: url.password || undefined,
+  // Fail fast instead of buffering commands forever when Redis is unreachable — a stalled
+  // enqueue must never hang the server action (which would freeze the Studio UI).
+  connectTimeout: 4000,
+  maxRetriesPerRequest: 2,
   ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
 };
 
@@ -22,7 +26,13 @@ const g = globalThis as unknown as { __syncSynthesisQueue?: Queue };
 const synthesisQueue = g.__syncSynthesisQueue ?? new Queue(SYNTHESIS_QUEUE, { connection });
 if (process.env.NODE_ENV !== 'production') g.__syncSynthesisQueue = synthesisQueue;
 
-/** Re-enqueue a recording for synthesis (re-process / retry). */
+/** Re-enqueue a recording for synthesis (re-process / retry). Bounded so a Redis hiccup can't
+ *  hang the request — the caller treats failure as best-effort. */
 export async function enqueueSynthesis(job: SynthesisJob): Promise<void> {
-  await synthesisQueue.add('synthesize', job);
+  await Promise.race([
+    synthesisQueue.add('synthesize', job),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('enqueueSynthesis timed out')), 5000),
+    ),
+  ]);
 }

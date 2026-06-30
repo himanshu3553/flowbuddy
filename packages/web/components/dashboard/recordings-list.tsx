@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Clock, Search, Volume2 } from 'lucide-react';
+import { Clock, Search, Volume2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { formatDuration, recordingStatusBadge } from '@/lib/recordings';
@@ -197,7 +197,6 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
                   )}
                 </span>
                 <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
-                <ChevronRight className="hidden h-4 w-4 shrink-0 text-faint sm:block" />
                 <RecordingManageMenu
                   id={r.id}
                   currentTitle={r.rawTitle}

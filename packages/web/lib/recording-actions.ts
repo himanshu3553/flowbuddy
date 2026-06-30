@@ -44,11 +44,19 @@ export async function deleteRecording(id: string): Promise<void> {
 /** Re-run a recording through synthesis (retry a failure / regenerate workflows). */
 export async function reprocessRecording(id: string): Promise<void> {
   const { workspaceId } = await ownRecording(id);
+  // Flip status + revalidate FIRST so the UI reflects "Processing" immediately and the action
+  // returns promptly — the enqueue is best-effort and must not block or hang the response.
   await prisma.knowledgeSource.update({
     where: { id },
     data: { status: 'uploaded', error: null },
   });
-  await enqueueSynthesis({ sessionId: id, workspaceId });
   revalidatePath('/dashboard/recordings');
   revalidatePath(`/dashboard/recordings/${id}`);
+  try {
+    await enqueueSynthesis({ sessionId: id, workspaceId });
+  } catch (err) {
+    // Redis/worker may be down in local dev — the recording is marked Processing; the job is
+    // picked up once the worker is running. Don't fail the whole action over this.
+    console.error('[reprocess] failed to enqueue synthesis job', err);
+  }
 }

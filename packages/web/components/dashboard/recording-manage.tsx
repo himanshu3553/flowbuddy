@@ -68,10 +68,15 @@ export function RecordingManageMenu({
   function doReprocess() {
     setToast({ text: 'Re-processing recording…', busy: true });
     startTransition(async () => {
-      await reprocessRecording(id);
-      router.refresh();
-      setToast({ text: 'Queued for re-processing', busy: false });
-      setTimeout(() => setToast(null), 3500);
+      try {
+        await reprocessRecording(id);
+        setToast({ text: 'Queued for re-processing', busy: false });
+      } catch {
+        setToast({ text: 'Couldn’t re-process — please try again', busy: false });
+      } finally {
+        router.refresh();
+        setTimeout(() => setToast(null), 3500);
+      }
     });
   }
 
@@ -106,7 +111,14 @@ export function RecordingManageMenu({
             <Pencil className="h-4 w-4" />
             Rename
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => doReprocess()}>
+          <DropdownMenuItem
+            onSelect={() => {
+              // Defer until the menu has fully closed so Radix restores `pointer-events` on
+              // <body>; running the action + router.refresh() synchronously here can leave the
+              // page frozen (no clicks) because the closing overlay never clears that style.
+              setTimeout(doReprocess, 0);
+            }}
+          >
             <RefreshCw className="h-4 w-4" />
             {failed ? 'Re-process (retry)' : 'Re-process'}
           </DropdownMenuItem>
