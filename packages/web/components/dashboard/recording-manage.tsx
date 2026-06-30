@@ -2,7 +2,14 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 
 import {
   deleteRecording,
@@ -47,6 +54,7 @@ export function RecordingManageMenu({
   const [renameOpen, setRenameOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [name, setName] = React.useState(currentTitle ?? '');
+  const [toast, setToast] = React.useState<{ text: string; busy: boolean } | null>(null);
   const failed = status === 'error';
 
   function doRename() {
@@ -58,9 +66,12 @@ export function RecordingManageMenu({
   }
 
   function doReprocess() {
+    setToast({ text: 'Re-processing recording…', busy: true });
     startTransition(async () => {
       await reprocessRecording(id);
       router.refresh();
+      setToast({ text: 'Queued for re-processing', busy: false });
+      setTimeout(() => setToast(null), 3500);
     });
   }
 
@@ -168,6 +179,21 @@ export function RecordingManageMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Re-process feedback */}
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-5 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2.5 text-[13px] font-medium text-ink shadow-dialog"
+        >
+          {toast.busy ? (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-success-text" />
+          )}
+          {toast.text}
+        </div>
+      )}
     </>
   );
 }

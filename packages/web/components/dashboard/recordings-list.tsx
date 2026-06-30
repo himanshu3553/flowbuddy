@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { ChevronRight, Clock, Search, Volume2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { formatDuration } from '@/lib/recordings';
+import { formatDuration, recordingStatusBadge } from '@/lib/recordings';
 import { Input } from '@/components/ui/input';
-import { StatusBadge, type StatusTone } from '@/components/dashboard/status-badge';
+import { StatusBadge } from '@/components/dashboard/status-badge';
 import { RecordingManageMenu } from '@/components/dashboard/recording-manage';
 
 export interface RecordingRow {
@@ -36,11 +36,13 @@ const READY = ['ready', 'done'];
 const PROCESSING = ['uploaded', 'processing'];
 
 function statusMeta(status: string) {
-  if (READY.includes(status))
-    return { label: 'Ready', tone: 'success' as StatusTone, processing: false, failed: false };
-  if (PROCESSING.includes(status))
-    return { label: 'Processing', tone: 'pending' as StatusTone, processing: true, failed: false };
-  return { label: 'Failed', tone: 'danger' as StatusTone, processing: false, failed: true };
+  const { label, tone } = recordingStatusBadge(status);
+  return {
+    label,
+    tone,
+    processing: PROCESSING.includes(status),
+    failed: !READY.includes(status) && !PROCESSING.includes(status),
+  };
 }
 
 export function RecordingsList({ rows }: { rows: RecordingRow[] }) {

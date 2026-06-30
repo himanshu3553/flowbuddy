@@ -112,6 +112,16 @@ export function timelineEvents(manifest: SessionManifest | null): TimelineEvent[
   });
 }
 
+/** Bucket a raw KnowledgeSource status into the three labels the UI shows everywhere. */
+export function recordingStatusBadge(
+  status: string,
+): { label: 'Ready' | 'Processing' | 'Failed'; tone: 'success' | 'pending' | 'danger' } {
+  if (status === 'ready' || status === 'done') return { label: 'Ready', tone: 'success' };
+  if (status === 'uploaded' || status === 'processing')
+    return { label: 'Processing', tone: 'pending' };
+  return { label: 'Failed', tone: 'danger' };
+}
+
 /** Format a ms duration as "1:23" (or "0:05"). */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));

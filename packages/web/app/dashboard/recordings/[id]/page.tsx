@@ -22,6 +22,7 @@ import {
   deriveRecordingMeta,
   timelineEvents,
   formatDuration,
+  recordingStatusBadge,
 } from '@/lib/recordings';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { StatusBadge } from '@/components/dashboard/status-badge';
@@ -96,6 +97,7 @@ export default async function RecordingDetailPage({
   const recordedBy = source.createdBy?.name || source.createdBy?.email || '—';
   const failed = source.status === 'error';
   const hasReplay = frames.length > 0 || !!audioUrl;
+  const st = recordingStatusBadge(source.status);
 
   const summary: [string, string][] = [
     ['App', source.appBaseUrl || '—'],
@@ -120,7 +122,7 @@ export default async function RecordingDetailPage({
         subtitle={`${source.kind} · ${meta.eventCount} actions · ${formatDuration(meta.durationMs)}`}
         actions={
           <div className="flex items-center gap-2">
-            <StatusBadge status={source.status} />
+            <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
             <RecordingManageMenu
               id={source.id}
               currentTitle={source.title}
