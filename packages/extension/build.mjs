@@ -33,6 +33,11 @@ async function copyStatic() {
   for (const f of ['popup.html', 'offscreen.html', 'permission.html']) {
     await cp(path.join(__dirname, 'src', f), path.join(outdir, f));
   }
+
+  // Toolbar + store icons (referenced by manifest.icons / action.default_icon).
+  await cp(path.join(__dirname, 'src', 'icons'), path.join(outdir, 'icons'), {
+    recursive: true,
+  });
 }
 
 const common = {

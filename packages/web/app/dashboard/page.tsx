@@ -66,30 +66,39 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  // Chrome Web Store listing for the Sync Recorder. When set, the install CTA
+  // opens the store ("Add to Chrome"); until the extension is published it
+  // falls back to Settings (where the token + load-unpacked steps live).
+  const extensionStoreUrl = process.env.SYNC_EXTENSION_URL?.trim();
+
   const steps = [
     {
       done: tokenCount > 0,
       title: 'Install the Sync Recorder',
       desc: 'Chrome extension · one-click “Connect with Sync”',
-      cta: { label: 'Get token', href: '/dashboard/settings' },
+      cta: {
+        label: 'Install Chrome Extension',
+        href: extensionStoreUrl || '/dashboard/settings',
+        external: Boolean(extensionStoreUrl),
+      },
     },
     {
       done: readyCount > 0,
       title: 'Record your product',
       desc: 'Narrate a real workflow — “reset a password… now upgrade a plan…”',
-      cta: { label: 'Open recorder', href: '/dashboard/recordings' },
+      cta: { label: 'Open recorder', href: '/dashboard/recordings', external: false },
     },
     {
       done: approvalCount > 0,
       title: 'Approve workflows for the copilot',
       desc: 'One click each — the copilot answers only from what you approve',
-      cta: { label: 'Review & approve', href: '/dashboard/recordings' },
+      cta: { label: 'Review & approve', href: '/dashboard/recordings', external: false },
     },
     {
       done: isEmbedded,
       title: 'Embed the copilot',
       desc: 'Paste one snippet into your product — go live for your customers',
-      cta: { label: 'Get snippet', href: '/dashboard/copilot' },
+      cta: { label: 'Get snippet', href: '/dashboard/copilot', external: false },
     },
   ];
   const doneCount = steps.filter((s) => s.done).length;
@@ -213,7 +222,17 @@ export default async function DashboardPage() {
                   )}
                   {active && (
                     <Button asChild size="sm" className="shrink-0">
-                      <Link href={s.cta.href}>{s.cta.label}</Link>
+                      {s.cta.external ? (
+                        <a
+                          href={s.cta.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {s.cta.label}
+                        </a>
+                      ) : (
+                        <Link href={s.cta.href}>{s.cta.label}</Link>
+                      )}
                     </Button>
                   )}
                 </li>
