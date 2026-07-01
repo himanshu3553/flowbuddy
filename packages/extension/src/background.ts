@@ -508,11 +508,11 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   await setUploadProgress(0);
   let res: Response;
   try {
-    // Streamed body gives real byte-progress, but Chrome only allows a streaming request body over
-    // HTTP/2 (TLS) — plaintext localhost is HTTP/1.1, where it throws. So only stream over https.
+    // Streamed body gives byte-progress (capped at 90% + a "finishing" tail — see streamingUpload),
+    // but Chrome only allows a streaming request body over HTTP/2 (TLS); plaintext localhost is
+    // HTTP/1.1, where it throws. So only stream over https.
     res = url.startsWith('https:')
-      ? await streamingUpload(url, rec.token, parts, (sent, total) =>
-          void setUploadProgress(total ? Math.round((sent / total) * 100) : 0))
+      ? await streamingUpload(url, rec.token, parts, (pct) => void setUploadProgress(pct))
       : await plainUpload();
   } catch {
     // Streaming failed (e.g. the host didn't negotiate HTTP/2) — fall back to the plain POST.
@@ -561,16 +561,21 @@ interface Part {
 }
 
 /**
- * Stream a multipart/form-data body to the API so we can report REAL upload progress. MV3 service
- * workers have no XMLHttpRequest, and plain `fetch(FormData)` exposes no upload events — so we hand
- * `fetch` a ReadableStream and count bytes as they're pulled. It's pull-based: the browser pulls the
- * next chunk only as the socket drains, so "bytes pulled" tracks "bytes sent". Needs `duplex: 'half'`.
+ * Stream a multipart/form-data body to the API and report progress. MV3 service workers have no
+ * XMLHttpRequest, and plain `fetch(FormData)` exposes no upload events — so we hand `fetch` a
+ * ReadableStream and count bytes as they're pulled. Two honesty caveats drive the mapping:
+ *  - "bytes pulled" = bytes handed to the browser's send buffer, which races ahead of the wire, so
+ *    we cap byte-progress at 90% (never let enqueuing alone claim "done").
+ *  - after the last byte we still await the server receiving + processing the body, so we emit a
+ *    FINISHING sentinel (-2) for that tail. 100% is reserved for the server's success response.
+ * Needs `duplex: 'half'` (Chrome only allows a streaming request body over HTTP/2).
  */
+const FINISHING = -2;
 async function streamingUpload(
   url: string,
   token: string | undefined,
   parts: Part[],
-  onProgress: (sent: number, total: number) => void,
+  report: (pct: number) => void,
 ): Promise<Response> {
   const enc = new TextEncoder();
   const CRLF = '\r\n';
@@ -616,11 +621,13 @@ async function streamingUpload(
       const { done, value } = await iter.next();
       if (done) {
         controller.close();
+        report(FINISHING); // all bytes handed off — now the server receives + processes the tail
         return;
       }
       controller.enqueue(value);
       sent += value.byteLength;
-      onProgress(sent, total);
+      // Cap at 90%: enqueuing outruns the wire, and the server-processing tail is still ahead.
+      report(total ? Math.round((sent / total) * 90) : 0);
     },
   });
 

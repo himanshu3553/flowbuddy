@@ -213,13 +213,21 @@ function enterUploading(): void {
 function setUploadUI(pct: number): void {
   const fill = $('upFill');
   const track = fill.parentElement as HTMLElement;
-  if (pct < 0) {
+  if (pct === -2) {
+    // Finishing — all bytes sent; the server is receiving + processing before it responds.
+    track.classList.add('indeterminate');
+    $('upLabel').textContent = 'Finishing…';
+    $('upPct').textContent = '';
+    fill.style.width = '';
+  } else if (pct < 0) {
     // Indeterminate (HTTP/1.1 fallback — no byte progress available).
     track.classList.add('indeterminate');
+    $('upLabel').textContent = 'Uploading securely…';
     $('upPct').textContent = '…';
     fill.style.width = '';
   } else {
     track.classList.remove('indeterminate');
+    $('upLabel').textContent = 'Uploading securely…';
     $('upPct').textContent = `${pct}%`;
     fill.style.width = `${pct}%`;
   }
