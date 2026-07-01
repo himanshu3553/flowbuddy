@@ -108,17 +108,30 @@ public widget key and connect token.
 ✅ **PASS:** you land in the empty Studio (Home dashboard, no recordings).
 
 ### 5.2 Re-connect the extension
-The old connect token is gone. If your prod build is still installed, just click **Connect**. If you
-need to (re)build it pointed at prod:
+The old connect token is gone. If your prod build is still installed, just click **Connect**.
 
-```bash
-STUDIO_URL=https://sync-web-uir8.onrender.com pnpm --filter @sync/extension build
-```
+**Which Studio the extension talks to is baked at build time via `STUDIO_URL`** — one build targets one
+Studio. Pick the build for what you're testing against:
+
+| Testing against | Build command | What gets baked |
+|---|---|---|
+| **Local** (docker-compose) | `pnpm --filter @sync/extension build` *(default `http://localhost:3000`)* | connect-bridge `matches` + popup links → **localhost**; handshake carries the local API (`http://localhost:8787`) |
+| **Render** (this dev deploy) | `STUDIO_URL=https://sync-web-uir8.onrender.com pnpm --filter @sync/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `SYNC_API_URL` |
 
 Then `chrome://extensions` → **Reload** / **Load unpacked** → `packages/extension/dist` → **Connect**
-(opens `…/connect`, relays the token + prod API URL into the extension).
+(opens `…/connect`, relaying the token + API URL into the extension).
 
-✅ **PASS:** the extension popup shows **Connected**.
+Notes when switching targets:
+- **The upload API URL is _not_ baked** — the extension receives it from the connect handshake (the
+  Studio's `SYNC_API_URL`). So a Render build uploads to the prod API; a localhost build to `:8787`.
+- **Rebuild _and_ reconnect when you switch.** A localhost build only injects its connect bridge on
+  `localhost:3000`, so it can't connect through the Render `/connect` page (and vice-versa); the old
+  token won't match either. Rebuild → **Reload** the extension → **Connect** again.
+- **Upload progress differs by transport:** Render serves HTTP/2 → the popup shows a real determinate
+  **%**; local dev is HTTP/1.1 → an **indeterminate** bar (Chrome only allows a streamed request body
+  over HTTP/2). Both upload fine — only the progress UI differs.
+
+✅ **PASS:** the extension popup shows **Connected** (to the Studio you built against).
 
 ### 5.3 Record a workflow
 Record a **narrated** workflow → it uploads to the prod API → the embedded worker synthesizes it.
