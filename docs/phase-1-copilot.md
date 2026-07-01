@@ -2,7 +2,7 @@
 
 > **Phase 1 is the copilot, end-to-end — and it ships as the Version 1 release.** A SaaS records its product, **approves workflows for the copilot**, drops a `<script>` into its app, and its end-users get a chat widget that answers **grounded only in approved Knowledge Base content**, with citations and honest declines. **Decoupled** from the human-facing portal/articles (those are [Phase 2](phase-2-portal.md)). This doc is the build plan, the acceptance spec, and the as-built record in one place.
 
-- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `https://sync-web-uir8.onrender.com`; reset/test guide → [`render-reset-and-test.md`](render-reset-and-test.md)). Remaining Phase-1 work: the **P1-M3 pgvector retrieval upgrade**, the **P1-M11 capture-reliability backlog** (§8 — R9 multi-tab, R4/R8/R7/…; the **R1 cross-origin re-arm defect is now fixed**), and **P1-M12 PII Cut 2** (deferred to Phase 2).
+- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `https://sync-web-uir8.onrender.com`; reset/test guide → [`render-reset-and-test.md`](render-reset-and-test.md)). Remaining Phase-1 work: the **P1-M3 pgvector retrieval upgrade**, the **P1-M11 capture-reliability backlog** (§8 — R8 iframe, R4, R7, R10, R5, R12/R13; **R1 cross-origin + R9 multi-tab now shipped**), and **P1-M12 PII Cut 2** (deferred to Phase 2).
 - **Last updated:** 2026-07-01 · **Branch:** `dev`
 - **Companion docs:** why copilot-first → [`product.md`](product.md) §5 · roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · Phase 2 by-products → [`phase-2-portal.md`](phase-2-portal.md) · local dev → [`dev-setup.md`](dev-setup.md)
 - **Grounding (Stage A):** the copilot grounds on **approved-KB** (`KnowledgeItem`s behind a per-workflow approval flag), **not** published articles. **Stage B** (also cite a published article when one exists) is **deferred**. *(These grounding "Stages" are within Phase 1 — not the product Phases 1/2/3.)*
@@ -79,7 +79,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 | Embed identity | Per-workspace **public embeddable key** (`pk_…`, safe in client HTML), distinct from the recorder's secret token; **origin allowlist** (empty = any) + **rate limit** (per key). |
 | Widget | Single `<script>` → shadow-DOM chat (launcher + panel); no host-framework lock-in; config via `data-sync-*` attrs. |
 | Redaction | Client-side **before upload**; mask password/email/tel, sensitive `autocomplete`, card/CVV/SSN-like patterns, and host-marked `data-sync-redact`. Server backstop → backlog. |
-| Recording scope | Single tab; survives same-tab navigations (R1); upload retry on failure (R2). |
+| Recording scope | Primary tab **+ tabs opened from it** (R9 Option A, 2026-07-02); survives same-tab navigations incl. **cross-origin** (R1); upload retry on failure (R2). |
 | Deploy | Render (Dockerized: api + worker + web) + Cloudflare R2; **executed last**, after the copilot works locally. |
 | Workspace | Single-user = single-workspace in V1; multi-seat/roles later. Browser: Chrome-only (MV3). Beta: free, invite-only. |
 
@@ -103,7 +103,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 
 **PII redaction by default (P1-M12 core)** — before upload, masks `password` values/regions (never captured), plus `email`/`tel`, sensitive `autocomplete` (cc-*, current/new-password, one-time-code), card/CVV/SSN/secret/token field patterns, and any host-marked **`data-sync-redact`** field. *(Backlog: §8.)*
 
-**Known limits (Phase 1):** single active tab — **new tabs / popups lose capture** (R9); top frame only (iframe UIs surfaced as a zero-event failure, not silent); screenshot/DOM **pixel** PII redaction (Cut 2) deferred to Phase 2. *(Same-tab cross-origin navigation is now captured — R1 pull-based self-arm, 2026-07-01.)*
+**Known limits (Phase 1):** a tab opened **manually** (not *from* the recording tab) isn't followed (R9 Option B not built); **top frame only** (iframe UIs surfaced as a zero-event failure, not silent — R8); screenshot/DOM **pixel** PII redaction (Cut 2) deferred to Phase 2. *(Now captured (2026-07): same-tab **cross-origin** navigation — R1 — and **new tabs / popups opened from** the recording tab — R9 Option A.)*
 
 ### 4.2 Knowledge Base — Module 2
 **One cumulative KB per workspace** (not per recording) — every recording compounds into the same KB; each item links to both its source recording (provenance) and its workspace.
@@ -152,7 +152,7 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 | **P1-M8** | **Context API** | widget reports host route; copilot biases to "where the user is"; degrades gracefully | ✅ **built** 2026-06-23 |
 | **P1-M9** | **Embed auth & tenant scoping** | public key + origin allowlist; scoped, rate-limited; end-user sessions | ✅ **built** 2026-06-23 — 401/403/429 verified |
 | **P1-M10** | **Feedback loop & analytics** | every Q&A logged + thumbs; Studio surfaces top questions + coverage gaps | ✅ **built** 2026-06-23 |
-| **P1-M11** | **Capture reliability** | no recording the user made is silently lost (nav/upload/audio) | 🔄 **core** (R1/R2/R3) 2026-06-23 + **R6 mic-meter, Pause/Resume & R1 cross-origin re-arm (pull self-arm) shipped 2026-07-01**; R4/R8-iframe/R9-multi-tab/R7 → §8 backlog |
+| **P1-M11** | **Capture reliability** | no recording the user made is silently lost (nav/upload/audio) | 🔄 **core** (R1/R2/R3) + **R6, Pause/Resume, R1 cross-origin re-arm (2026-07-01) & R9 multi-tab Option A (2026-07-02) shipped**; R8-iframe/R4/R7/R10/R5/R12/R13 → §8 backlog |
 | **P1-M12** | **PII redaction** | passwords never captured; values masked by default before upload; copilot-facing text scrubbed server-side | 🔄 client masking 2026-06-23 + **server text-scrub (Cut 1) 2026-06-26**; screenshot OCR/blur (Cut 2) → Phase 2 (§8) |
 
 **Package layout:** `packages/api` (Fastify ingestion + copilot routes + the BullMQ worker), `packages/synthesis` (the shared `answerFromKB` engine + capture synthesis), `packages/widget` (the embeddable copilot, esbuild), `packages/web` (Studio: approval toggle, copilot settings, analytics), plus `shared`/`db`/`extension`.
@@ -223,7 +223,7 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 
 **B. Coverage** *(capture more app types — backlog)*
 - **R8 — iframe / cross-frame capture** — **L.** Content scripts are `all_frames:false`, so iframe UIs (Stripe, embedded editors, chat widgets) capture nothing. **Fix:** `all_frames:true`, coordinate per-frame events with the top frame (frame id + offset), populate `target.frame_path`, resolve bbox/screenshot coords across the chain (cross-origin frames are constrained — prioritize same-origin).
-- **R9 — Multi-tab / popup workflows** — **L.** Capture is bound to one `tabId`; OAuth popups / "open in new tab" / any **new tab or window** lose capture (**distinct from R1**, which is *same-tab* navigation). **Fix:** follow tabs opened from the recording tab (`openerTabId`), tracking a **set** of tab IDs and merging their events; or detect + cleanly message the limit (no silent loss).
+- **R9 — Multi-tab / popup workflows** *(✅ shipped 2026-07-02 — Option A)* — **L.** Capture was bound to one `tabId`; OAuth popups / "open in new tab" lost capture (**distinct from R1**, same-tab nav). **Fix (shipped):** `Rec.tabIds` tracks a **set** of session tabs; `tabs.onCreated` + `openerTabId` **adopts tabs opened FROM a recording tab** (Option A — never unrelated tabs), which self-arm via the `hello` handshake (R1); `hello` / re-arm / stop / pause / resume span the whole set; screenshots use the **event tab's `windowId`** (multi-window / popup safe); closed tabs pruned via `tabs.onRemoved`. *(Option B — follow any tab you manually switch to — not built; that's the remaining known limit.)*
 - **R10 — Scroll / hover / richer keyboard** — **M.** Only click/change/submit/Enter/popstate are handled. **Fix:** a debounced scroll event, optional hover capture for menus, a small shortcut allowlist — kept semantic/low-noise.
 
 **C. Recorder UX & segmentation** *(ride-along — backlog)*
