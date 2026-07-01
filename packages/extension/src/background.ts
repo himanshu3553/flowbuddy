@@ -47,7 +47,7 @@ async function setRec(rec: Rec): Promise<void> {
 
 // ---- popup + offscreen messages ----
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (msg?.cmd === 'start') {
       sendResponse(await onStart(msg.backendUrl, msg.token));
@@ -75,6 +75,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       await chrome.storage.local.remove('lastUpload');
       if (!rec.recording) await setBadge(null);
       sendResponse({ ok: true });
+    } else if (msg?.cmd === 'hello') {
+      // A freshly loaded page asking "is this tab mid-recording?" — the deterministic PULL-based
+      // re-arm after a full-page navigation (esp. cross-origin, where the push-based re-arm raced).
+      // Answered authoritatively from the sender's own tab id.
+      const rec = await getRec();
+      const tabId = sender.tab?.id;
+      if (rec.recording && !rec.paused && tabId != null && rec.tabId === tabId) {
+        sendResponse({ record: true, startTime: rec.startTime, pausedTotal: rec.pausedTotal || 0 });
+      } else {
+        sendResponse({ record: false });
+      }
     } else if (msg?.cmd === 'getState') {
       const rec = await getRec();
       // Expose tracked recording state so the popup can show a live (pause-aware) timer, the

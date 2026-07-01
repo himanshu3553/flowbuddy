@@ -30,6 +30,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
+// On load (every page, any origin), ask the background whether THIS tab is mid-recording and
+// self-arm if so. This is the deterministic re-arm after a full-page navigation — it doesn't rely
+// on the background pushing `startCapture` at exactly the right moment, which raced on cross-origin
+// hops (e.g. scribe.com → scribehow.com/signin in the same tab) and silently dropped capture.
+chrome.runtime.sendMessage({ cmd: 'hello' }, (resp) => {
+  void chrome.runtime.lastError; // no receiver (SW asleep mid-teardown) — harmless
+  if (resp?.record) startCapture(resp.startTime as number, (resp.pausedTotal as number) || 0);
+});
+
 function startCapture(t0: number, pausedBase = 0): void {
   if (recording) return;
   recording = true;
