@@ -17,11 +17,32 @@ interface Rec {
   pausedAt?: number; // epoch ms the current pause began (0/undefined while running)
   pausedTotal?: number; // accumulated paused ms across completed pauses
   stopping?: boolean;
-  tabId?: number;
+  tabId?: number; // the primary (initial) recording tab
+  tabIds?: number[]; // R9 — all tabs in the session: the primary + tabs opened FROM it (Option A)
   windowId?: number;
   startTime: number;
   backendUrl: string;
   token?: string;
+}
+
+/** All tabs the session is capturing (primary + adopted child tabs). */
+function recordingTabs(rec: Rec): number[] {
+  if (rec.tabIds && rec.tabIds.length) return rec.tabIds;
+  return rec.tabId != null ? [rec.tabId] : [];
+}
+
+/** (Re)arm a tab's content script — message it, injecting content.js first if it isn't there. */
+async function armTab(tabId: number, arm: object): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, arm);
+  } catch {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+      await chrome.tabs.sendMessage(tabId, arm);
+    } catch (e) {
+      console.warn('[arm] could not arm tab', tabId, e);
+    }
+  }
 }
 
 const idToKey = new Map<string, string>();
@@ -81,7 +102,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Answered authoritatively from the sender's own tab id.
       const rec = await getRec();
       const tabId = sender.tab?.id;
-      if (rec.recording && !rec.paused && tabId != null && rec.tabId === tabId) {
+      if (rec.recording && !rec.paused && tabId != null && recordingTabs(rec).includes(tabId)) {
         sendResponse({ record: true, startTime: rec.startTime, pausedTotal: rec.pausedTotal || 0 });
       } else {
         sendResponse({ record: false });
@@ -160,38 +181,56 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'capture') return;
+  // The event's own tab/window — so screenshots capture the tab the user acted in, even when the
+  // session spans multiple tabs/windows (R9), not always the primary window.
+  const windowId = port.sender?.tab?.windowId;
   port.onMessage.addListener((msg: PortMsg) => {
-    handlePortMsg(msg).catch((e) => console.error('port msg error', e));
+    handlePortMsg(msg, windowId).catch((e) => console.error('port msg error', e));
   });
 });
 
-// R1 — survive full-page navigations: when the recording tab finishes navigating, re-arm the
-// freshly-loaded content script with the ORIGINAL startTime so the event timeline stays continuous
-// (a hard nav destroys the old content script, which would otherwise silently stop capture).
+// R1 — survive full-page navigations: when a recording tab finishes navigating, re-arm the
+// freshly-loaded content script with the ORIGINAL startTime so the event timeline stays continuous.
+// (Backup to the content script's own `hello` self-arm; the `if (recording) return` guard dedupes.)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
   rearmIfRecording(tabId).catch((e) => console.warn('[rearm]', e));
 });
 
-async function rearmIfRecording(tabId: number): Promise<void> {
-  const rec = await getRec();
-  if (!rec.recording || rec.paused || rec.tabId !== tabId) return;
-  const arm = { cmd: 'startCapture', startTime: rec.startTime, pausedTotal: rec.pausedTotal || 0 };
-  try {
-    await chrome.tabs.sendMessage(tabId, arm);
-  } catch {
-    try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-      await chrome.tabs.sendMessage(tabId, arm);
-    } catch (e) {
-      console.warn('[rearm] could not re-arm after navigation', e);
-    }
-  }
-}
+// R9 (Option A) — follow tabs opened FROM a recording tab (Sign-in-in-a-new-tab, OAuth popups).
+// Adopt into the session's tab set; the new tab self-arms via its `hello` once its page loads.
+chrome.tabs.onCreated.addListener((tab) => {
+  adoptTabIfChild(tab).catch((e) => console.warn('[adopt]', e));
+});
+chrome.tabs.onRemoved.addListener((tabId) => {
+  pruneTab(tabId).catch(() => {});
+});
 
-async function handlePortMsg(msg: PortMsg): Promise<void> {
+async function adoptTabIfChild(tab: chrome.tabs.Tab): Promise<void> {
+  if (tab.id == null || tab.openerTabId == null) return;
   const rec = await getRec();
   if (!rec.recording) return;
+  const set = recordingTabs(rec);
+  if (set.includes(tab.id) || !set.includes(tab.openerTabId)) return; // only children of a recording tab
+  await setRec({ ...rec, tabIds: [...set, tab.id] });
+}
+
+async function pruneTab(tabId: number): Promise<void> {
+  const rec = await getRec();
+  if (!rec.recording || !rec.tabIds?.includes(tabId)) return;
+  await setRec({ ...rec, tabIds: rec.tabIds.filter((id) => id !== tabId) });
+}
+
+async function rearmIfRecording(tabId: number): Promise<void> {
+  const rec = await getRec();
+  if (!rec.recording || rec.paused || !recordingTabs(rec).includes(tabId)) return;
+  await armTab(tabId, { cmd: 'startCapture', startTime: rec.startTime, pausedTotal: rec.pausedTotal || 0 });
+}
+
+async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
+  const rec = await getRec();
+  if (!rec.recording) return;
+  const shotWindow = windowId ?? rec.windowId; // the tab/window the event came from (R9)
 
   if (msg.kind === 'appMeta') {
     const meta = (await kvGet<any>('meta')) || { markers: [] };
@@ -203,7 +242,7 @@ async function handlePortMsg(msg: PortMsg): Promise<void> {
   if (msg.kind === 'event') {
     const ev = msg.event;
     // screenshot
-    const shot = await captureShot(rec.windowId);
+    const shot = await captureShot(shotWindow);
     if (shot && ev.screenshot?.file) {
       await kvPut('shot:' + ev.screenshot.file, shot);
     } else {
@@ -225,7 +264,7 @@ async function handlePortMsg(msg: PortMsg): Promise<void> {
     if (!ev) return;
     const shotFile = `shots/${msg.eventId}-post.png`;
     const domFile = `dom/${msg.eventId}-post.html`;
-    const shot = await captureShot(rec.windowId);
+    const shot = await captureShot(shotWindow);
     if (shot) await kvPut('shot:' + shotFile, shot);
     await kvPut('dom:' + domFile, msg.domHtml);
     ev.postAction = {
@@ -303,7 +342,7 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
   await setBadge(null);
   const startTime = Date.now();
   await kvPut('meta', { createdAt: new Date().toISOString(), startTime, app: null, markers: [] });
-  await setRec({ recording: true, tabId: tab.id, windowId: tab.windowId, startTime, backendUrl, token });
+  await setRec({ recording: true, tabId: tab.id, tabIds: [tab.id], windowId: tab.windowId, startTime, backendUrl, token });
 
   await ensureOffscreen();
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'startAudio' }).catch(() => {});
@@ -329,10 +368,8 @@ async function onStop(): Promise<void> {
   await setRec({ ...rec, recording: false, stopping: true });
 
   await setBadge('up');
-  if (rec.tabId) {
-    chrome.tabs.sendMessage(rec.tabId, { cmd: 'stopCapture' }).catch(() => {});
-    await notifyTab(rec.tabId, { cmd: 'setStatus', phase: 'uploading' });
-  }
+  for (const id of recordingTabs(rec)) chrome.tabs.sendMessage(id, { cmd: 'stopCapture' }).catch(() => {});
+  await notifyTab(rec.tabId, { cmd: 'setStatus', phase: 'uploading' });
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stopAudio' }).catch(() => {});
 
   // Fallback: if the offscreen audio never reports back, finalize without it. Generous (R3) so
@@ -357,7 +394,7 @@ async function onPause(): Promise<void> {
   const rec = await getRec();
   if (!rec.recording || rec.paused) return;
   await setRec({ ...rec, paused: true, pausedAt: Date.now() });
-  if (rec.tabId) chrome.tabs.sendMessage(rec.tabId, { cmd: 'stopCapture' }).catch(() => {});
+  for (const id of recordingTabs(rec)) chrome.tabs.sendMessage(id, { cmd: 'stopCapture' }).catch(() => {});
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'pauseAudio' }).catch(() => {});
   await setBadge('pause');
 }
@@ -369,19 +406,8 @@ async function onResume(): Promise<void> {
   const pausedSpan = rec.pausedAt ? Date.now() - rec.pausedAt : 0;
   const pausedTotal = (rec.pausedTotal || 0) + pausedSpan;
   await setRec({ ...rec, paused: false, pausedAt: 0, pausedTotal });
-  if (rec.tabId != null) {
-    const arm = { cmd: 'startCapture', startTime: rec.startTime, pausedTotal };
-    try {
-      await chrome.tabs.sendMessage(rec.tabId, arm);
-    } catch {
-      try {
-        await chrome.scripting.executeScript({ target: { tabId: rec.tabId }, files: ['content.js'] });
-        await chrome.tabs.sendMessage(rec.tabId, arm);
-      } catch (e) {
-        console.warn('[resume] could not re-arm capture', e);
-      }
-    }
-  }
+  const arm = { cmd: 'startCapture', startTime: rec.startTime, pausedTotal };
+  for (const id of recordingTabs(rec)) await armTab(id, arm);
   chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'resumeAudio' }).catch(() => {});
   await setBadge('rec');
 }
