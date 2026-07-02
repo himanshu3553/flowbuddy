@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-06-27 · **Branch:** `copilot`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-02 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -14,7 +14,7 @@
 ```
 VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 │
-├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟨🟨🟩🟩🟩🟩🟩🟩🟨🟨   9 done · 4 in progress
+├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟨🟩🟩🟩🟩🟩🟩🟩🟨🟨   10 done · 3 in progress
 ├─ PHASE 2 · Help Portal & Articles (frozen)    🟩🟩🟩⬜⬜⬜⬜               3 done · 4 draft
 └─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
 
@@ -46,7 +46,7 @@ VERSION 2 — Additional capture modalities (later) ⬜⬜                      
 
 | Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
 |---|:---:|:---:|:---:|:---:|
-| **Phase 1 — Copilot** | 13 | **9** | 4 | 0 |
+| **Phase 1 — Copilot** | 13 | **10** | 3 | 0 |
 | **Phase 2 — Portal & Articles** | 7 | **3** | 0 | 4 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
 | **Version 2 — Modalities** | 2 | 0 | 0 | 2 |
@@ -73,14 +73,14 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending | M7 (+ M11 retrieval) |
-| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | 🔄 **In Progress** — Dockerfiles + `render.yaml` ready; deploy needs your Render/R2 accounts; **executed last** | M8 |
+| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `sync-web-uir8.onrender.com` | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
 | **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ **Done** | C3 |
 | **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ **Done** | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ **Done** | C5 |
 | **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ **Done** | C6 |
-| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — core R1/R2/R3 done; R4 / iframe / multi-tab → backlog | M9 (+ R1–R13) |
+| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — R1/R2/R3/R6 + Pause/Resume + R1 cross-origin re-arm + R9 multi-tab + R8 iframe + R4 SW-eviction resilience shipped; R7/R10/R5/R12/R13 → backlog | M9 (+ R1–R13) |
 | **P1-M12** | **PII redaction** — client masking + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking + **server text-scrub (Cut 1)** done; screenshot OCR/blur (Cut 2) → **Phase 2** | M10 |
 
 **Build order (locked 2026-06-22, deploy last):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. The whole copilot is built & verified **locally** (docker-compose) first; pgvector retrieval folds into P1-M3 when answer quality needs it.
@@ -139,7 +139,7 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 | **M5** public portal | old Phase 1a | **P2-M2** | ✅ built → removed, returns Phase 2 |
 | **M6.1** curated generation | old Phase 1a | **P2-M1** | ✅ |
 | **M7** prompt-to-article / engine | old Phase 1a | P1-M3 (engine) + P2-M1 (article path) | ✅ |
-| **M8** cloud deploy | old Phase 1a | P1-M4 | 🔄 config ready |
+| **M8** cloud deploy | old Phase 1a | P1-M4 | ✅ deployed (Render + R2) |
 | **M9** capture reliability (incl. R1–R13) | old Phase 1b | P1-M11 | 🔄 core |
 | **M10** PII redaction (incl. R11) | old Phase 1b | P1-M12 | 🔄 core |
 | **M11** search | old Phase 1b | P1-M3 (retrieval) + **P2-M3** (UI) | 🔄 / 📝 |
@@ -153,13 +153,13 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 
 ## 7. What's left to ship Version 1
 
-Only **Phase 1** gates the Version 1 release. Remaining work, in build order:
+Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
-1. 🔄 **P1-M11 / P1-M12** — release-hardening; the deferred items (iframe/multi-tab capture; PII Cut 2 = screenshot OCR/blur, moved to Phase 2) are not release-blocking. **P1-M12 Cut 1 (copilot answer-path PII scrub) is done.**
-2. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
-3. 🔄 **P1-M4 — Cloud deploy (FINAL step)** — config is ready; the actual deploy is gated on **your Render + Cloudflare R2 accounts + secrets**.
+1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + **R4 SW-eviction resilience** are **shipped**, leaving **R7** (on-page control bar), **R10** (scroll/hover/keyboard), **R5** (marker hotkey/labels), **R12** (screenshot timing/cost), **R13** (ranked selectors — mostly a Phase-3 enabler).
+2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Phase 2** — not release-blocking.
+3. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
 
-> Everything else in Phase 1 is ✅. The whole copilot is built & verified **locally** (docker-compose); cloud deploy is the last step — and when Phase 1's definition-of-done is met post-deploy, **that is the Version 1 release.**
+> Everything else in Phase 1 is ✅ and **P1-M4 cloud deploy is done**. Phase 1's definition-of-done is met post-deploy — **that is the Version 1 release**; the items above are follow-on quality/robustness work.
 
 ---
 

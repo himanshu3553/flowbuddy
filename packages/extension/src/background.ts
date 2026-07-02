@@ -228,6 +228,9 @@ async function rearmIfRecording(tabId: number): Promise<void> {
 }
 
 async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
+  // R4 — the keepalive heartbeat carries no payload; simply receiving it has already reset the
+  // worker's idle timer, which is the whole point. Nothing else to do.
+  if (msg.kind === 'keepalive') return;
   const rec = await getRec();
   if (!rec.recording || rec.paused) return; // drop anything that leaks in from a not-yet-paused frame
   const shotWindow = windowId ?? rec.windowId; // the tab/window the event came from (R9)
@@ -729,8 +732,9 @@ function startRecBlink(): void {
   stopRecBlink();
   let on = true;
   setActionIcon('rec-on');
-  // The content script's long-lived capture port keeps the worker alive during recording, so this
-  // interval ticks; if the worker is ever evicted, the icon just freezes on a (still-red) frame.
+  // The content script's R4 keepalive ping keeps the worker warm during recording, so this interval
+  // ticks; if the worker is evicted anyway, the reconnect/keepalive wakes it within ~20s and the
+  // startup handler below re-establishes the blink.
   iconTimer = setInterval(() => {
     on = !on;
     setActionIcon(on ? 'rec-on' : 'rec-off');

@@ -9,6 +9,16 @@ let pausedTotal = 0; // ms paused before the current active span (active-time ba
 let port: chrome.runtime.Port | null = null;
 let postWatcher: { observer: MutationObserver; timer: number; hard: number } | null = null;
 
+// R4 — service-worker-eviction resilience. In MV3 the background can be evicted after ~30s idle
+// (e.g. a stretch of quiet narration with no interaction), which silently drops the capture port
+// and loses every event sent afterwards. Two defenses: (1) a keepalive ping resets the idle timer
+// so the worker stays warm while recording; (2) captured messages are buffered in `outbox` and the
+// port reconnects on demand, so nothing is lost even if the worker is evicted anyway.
+const outbox: PortMsg[] = [];
+let keepAlive: ReturnType<typeof setInterval> | null = null;
+const KEEPALIVE_MS = 20_000; // < the ~30s MV3 idle timeout
+const OUTBOX_CAP = 2000; // bound memory if the worker stays down abnormally long (shouldn't happen)
+
 const SETTLE_QUIET_MS = 500;
 const SETTLE_MAX_MS = 3000;
 const DOM_CAP = 400_000;
@@ -46,10 +56,12 @@ function startCapture(t0: number, pausedBase = 0): void {
   // Active-time base: ms spent paused before this (re)arm, so event timestamps exclude paused spans
   // and stay aligned with the (also-paused) narration. 0 for an unpaused recording (identical to old).
   pausedTotal = pausedBase;
-  port = chrome.runtime.connect({ name: 'capture' });
+  ensurePort();
+  flush(); // deliver anything left buffered from a previous span (normally empty)
   // Only the TOP frame owns the session's app metadata (origin, viewport). With all_frames capture
   // (R8), a sub-frame must NOT clobber it with the iframe's origin/size.
   if (window === window.top) send({ kind: 'appMeta', meta: appMeta() });
+  startKeepAlive();
   patchHistory();
   addEventListener('click', onClick, true);
   addEventListener('change', onChange, true);
@@ -68,16 +80,75 @@ function stopCapture(): void {
   removeEventListener('keydown', onKeydown, true);
   removeEventListener('popstate', onNav, true);
   clearWatcher();
+  stopKeepAlive();
+  flush(); // best-effort: drain any buffered events before we drop the port
   port?.disconnect();
   port = null;
 }
 
-function send(msg: PortMsg): void {
+// ---- port lifecycle (R4: reconnect + buffer so an evicted worker never loses events) ----
+
+/** Return a live capture port, (re)connecting if the previous one was dropped by a worker eviction. */
+function ensurePort(): chrome.runtime.Port | null {
+  if (port) return port;
   try {
-    port?.postMessage(msg);
+    const p = chrome.runtime.connect({ name: 'capture' });
+    p.onDisconnect.addListener(() => {
+      // The worker was evicted (or the extension reloaded) — drop the dead port. The next send()
+      // reconnects and flushes the outbox, so captured events queued in the gap are not lost.
+      if (port === p) port = null;
+    });
+    port = p;
+    return p;
   } catch {
-    /* port closed */
+    // Extension context invalidated (reload/update mid-recording) — keep buffering; a later page
+    // load re-injects a fresh content script that self-arms via `hello`.
+    return null;
   }
+}
+
+/**
+ * Drain the outbox in order over a live port. If a post fails on a stale port (the worker was
+ * evicted but `onDisconnect` hasn't fired yet), reconnect and retry within this call — so the event
+ * (and the screenshot the background takes on receipt) lands now, not one interaction later. Bounded
+ * so an unrecoverable context (extension reloaded) can't spin; the buffer is kept for a later flush.
+ */
+function flush(): void {
+  let reconnects = 0;
+  while (outbox.length) {
+    const p = ensurePort();
+    if (!p) return; // can't connect right now — keep the buffer, retry on the next send/keepalive
+    try {
+      p.postMessage(outbox[0]);
+      outbox.shift();
+    } catch {
+      port = null; // stale/dead port — drop it so ensurePort() reconnects on the next iteration
+      if (++reconnects > 3) return;
+    }
+  }
+}
+
+function send(msg: PortMsg): void {
+  outbox.push(msg);
+  if (outbox.length > OUTBOX_CAP) outbox.shift(); // safety valve — drop the oldest if unbounded
+  flush();
+}
+
+function startKeepAlive(): void {
+  stopKeepAlive();
+  // One heartbeat per tab is enough — only the top frame pings (sub-frames still reconnect on send).
+  if (window !== window.top) return;
+  keepAlive = setInterval(() => {
+    if (!recording) return;
+    flush(); // deliver any buffered events + ensure the port is live
+    // A periodic port message resets the MV3 idle timer so the worker isn't evicted mid-recording.
+    // Best-effort (not buffered): if it fails, onDisconnect nulls the port and the next send reconnects.
+    try { port?.postMessage({ kind: 'keepalive' }); } catch { port = null; }
+  }, KEEPALIVE_MS);
+}
+
+function stopKeepAlive(): void {
+  if (keepAlive != null) { clearInterval(keepAlive); keepAlive = null; }
 }
 
 // ---- event handlers ----

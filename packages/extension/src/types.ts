@@ -62,4 +62,7 @@ export interface PortPostActionMsg {
   settleReason: string;
 }
 export interface PortAppMetaMsg { kind: 'appMeta'; meta: AppMeta; }
-export type PortMsg = PortEventMsg | PortPostActionMsg | PortAppMetaMsg;
+// R4 — a heartbeat with no payload: resets the MV3 idle timer so the service worker isn't evicted
+// mid-recording during quiet narration. The background receives it and does nothing else.
+export interface PortKeepAliveMsg { kind: 'keepalive'; }
+export type PortMsg = PortEventMsg | PortPostActionMsg | PortAppMetaMsg | PortKeepAliveMsg;
