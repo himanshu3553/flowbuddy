@@ -41,6 +41,25 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
+// Render a SAFE minimal-markdown subset for assistant answers (the model returns markdown). HTML is
+// escaped FIRST, then only **bold** / `code` are introduced — so nothing in the answer can inject
+// markup into the host page. Line breaks are handled by CSS (`white-space: pre-wrap`).
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'));
+}
+function mdToHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+function bubbleEl(m: Msg): HTMLDivElement {
+  const b = document.createElement('div');
+  b.className = 'sc-bubble';
+  if (m.role === 'assistant') b.innerHTML = mdToHtml(m.content);
+  else b.textContent = m.content; // user input is never treated as markdown
+  return b;
+}
+
 const host = el('div');
 host.id = 'sync-copilot-root';
 // Host theming (optional) — applied as inline CSS vars that inherit into the shadow tree.
@@ -91,7 +110,7 @@ function render(): void {
   if (messages.length === 0) list.appendChild(el('div', 'sc-greeting', cfg.greeting));
   for (const m of messages) {
     const row = el('div', `sc-msg sc-${m.role}${m.decline ? ' sc-decline' : ''}${m.error ? ' sc-error' : ''}`);
-    row.appendChild(el('div', 'sc-bubble', m.content));
+    row.appendChild(bubbleEl(m));
     const titles = [...new Set((m.citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
     if (titles.length) row.appendChild(el('div', 'sc-cites', 'From: ' + titles.join(' · ')));
     if (m.role === 'assistant' && !m.error && m.queryId) {

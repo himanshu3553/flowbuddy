@@ -51,6 +51,8 @@ export const CSS = `
 .sc-user { align-self: flex-end; align-items: flex-end; }
 .sc-assistant { align-self: flex-start; align-items: flex-start; }
 .sc-bubble { padding: 9px 12px; border-radius: 13px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+.sc-bubble strong { font-weight: 600; }
+.sc-bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 5px; }
 .sc-user .sc-bubble { background: var(--sc-accent); color: var(--sc-accent-fg); border-bottom-right-radius: 4px; }
 .sc-assistant .sc-bubble { background: var(--sc-surface); color: var(--sc-fg); border: 1px solid var(--sc-border); border-bottom-left-radius: 4px; }
 .sc-decline .sc-bubble { background: #fbf0ed; border-color: #f0ddd7; color: #9c5c4d; }
