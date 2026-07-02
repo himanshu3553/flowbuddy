@@ -47,7 +47,9 @@ function startCapture(t0: number, pausedBase = 0): void {
   // and stay aligned with the (also-paused) narration. 0 for an unpaused recording (identical to old).
   pausedTotal = pausedBase;
   port = chrome.runtime.connect({ name: 'capture' });
-  send({ kind: 'appMeta', meta: appMeta() });
+  // Only the TOP frame owns the session's app metadata (origin, viewport). With all_frames capture
+  // (R8), a sub-frame must NOT clobber it with the iframe's origin/size.
+  if (window === window.top) send({ kind: 'appMeta', meta: appMeta() });
   patchHistory();
   addEventListener('click', onClick, true);
   addEventListener('change', onChange, true);
@@ -209,7 +211,7 @@ function maskValue(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElemen
 
 function buildTarget(el: Element): EventTarget {
   const r = el.getBoundingClientRect();
-  return {
+  const target: EventTarget = {
     role: el.getAttribute('role') || implicitRole(el),
     accessibleName: accessibleName(el),
     text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120),
@@ -217,8 +219,44 @@ function buildTarget(el: Element): EventTarget {
     attributes: pickAttrs(el),
     cssPath: cssPath(el),
     xpath: xpath(el),
-    bbox: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
   };
+  // R8 — translate the element bbox into TOP-document viewport coords so it lines up with the
+  // full-tab screenshot. Resolvable for a same-origin frame chain; for a cross-origin frame the
+  // offset is unknown, so we omit bbox (no wrong highlight) — the screenshot still shows the pixels.
+  const inFrame = window !== window.top;
+  const off = inFrame ? frameOffset() : { x: 0, y: 0 };
+  if (off) {
+    target.bbox = { x: Math.round(r.x + off.x), y: Math.round(r.y + off.y), w: Math.round(r.width), h: Math.round(r.height) };
+  }
+  if (inFrame) {
+    try { target.framePath = location.href.slice(0, 300); } catch { /* opaque origin */ }
+  }
+  return target;
+}
+
+/**
+ * The offset (in TOP-document viewport pixels) of THIS frame's viewport origin — sum each ancestor
+ * iframe element's position up the chain. Returns null at the first cross-origin boundary, where
+ * `frameElement` is inaccessible and the offset can't be resolved.
+ */
+function frameOffset(): { x: number; y: number } | null {
+  let x = 0;
+  let y = 0;
+  let win: Window = window;
+  while (win !== win.top) {
+    let fe: Element | null;
+    try {
+      fe = win.frameElement;
+    } catch {
+      return null; // cross-origin ancestor — offset unknowable from here
+    }
+    if (!fe) return null;
+    const rect = fe.getBoundingClientRect();
+    x += rect.left;
+    y += rect.top;
+    win = win.parent;
+  }
+  return { x, y };
 }
 
 function pickAttrs(el: Element): Record<string, string> {

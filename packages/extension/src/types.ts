@@ -11,6 +11,7 @@ export interface EventTarget {
   cssPath?: string;
   xpath?: string;
   bbox?: Bbox;
+  framePath?: string; // R8 — the sub-frame URL an event came from (top-frame events omit this)
 }
 
 export interface Route { url: string; path: string; hash: string; title: string; }

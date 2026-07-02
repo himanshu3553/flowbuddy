@@ -229,7 +229,7 @@ async function rearmIfRecording(tabId: number): Promise<void> {
 
 async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
   const rec = await getRec();
-  if (!rec.recording) return;
+  if (!rec.recording || rec.paused) return; // drop anything that leaks in from a not-yet-paused frame
   const shotWindow = windowId ?? rec.windowId; // the tab/window the event came from (R9)
 
   if (msg.kind === 'appMeta') {
