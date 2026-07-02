@@ -172,6 +172,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const rec = await getRec();
       if (rec.stopping) await finalize();
       sendResponse({ ok: true });
+    } else if (msg?.type === 'micLevel') {
+      // R7 — relay the offscreen recorder's live mic level to the on-page control bar (top frame of
+      // each recording tab). Best-effort; a tab without the bar simply ignores it.
+      const rec = await getRec();
+      if (rec.recording && !rec.paused) {
+        for (const id of recordingTabs(rec)) {
+          chrome.tabs.sendMessage(id, { cmd: 'micLevel', level: msg.level }, { frameId: 0 }).catch(() => {});
+        }
+      }
+      sendResponse({ ok: true });
     }
   })();
   return true; // async sendResponse

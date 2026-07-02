@@ -80,7 +80,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ **Done** | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ **Done** | C5 |
 | **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ **Done** | C6 |
-| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — R1/R2/R3/R6 + Pause/Resume + R1 cross-origin re-arm + R9 multi-tab + R8 iframe + R4 SW-eviction resilience shipped; R7/R10/R5/R12/R13 → backlog | M9 (+ R1–R13) |
+| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — R1/R2/R3/R6 + Pause/Resume + R1 cross-origin re-arm + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar shipped; R10/R5/R12/R13 → backlog | M9 (+ R1–R13) |
 | **P1-M12** | **PII redaction** — client masking + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking + **server text-scrub (Cut 1)** done; screenshot OCR/blur (Cut 2) → **Phase 2** | M10 |
 
 **Build order (locked 2026-06-22, deploy last):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. The whole copilot is built & verified **locally** (docker-compose) first; pgvector retrieval folds into P1-M3 when answer quality needs it.
@@ -155,7 +155,7 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 
 Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
-1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + **R4 SW-eviction resilience** are **shipped**, leaving **R7** (on-page control bar), **R10** (scroll/hover/keyboard), **R5** (marker hotkey/labels), **R12** (screenshot timing/cost), **R13** (ranked selectors — mostly a Phase-3 enabler).
+1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + **R7 on-page control bar** are **shipped**, leaving **R10** (scroll/hover/keyboard), **R5** (marker hotkey/labels), **R12** (screenshot timing/cost), **R13** (ranked selectors — mostly a Phase-3 enabler).
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Phase 2** — not release-blocking.
 3. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
 

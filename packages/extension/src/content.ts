@@ -1,6 +1,7 @@
 // Content script: captures interaction events, element semantics, DOM snapshots,
 // and post-action settle, streaming them to the background over a long-lived port.
 
+import { ensureControlBar, isControlBarEvent, setMicLevel } from './controlbar.js';
 import type { AppMeta, CapturedEvent, EventTarget, PortMsg, Route } from './types.js';
 
 let recording = false;
@@ -34,6 +35,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // Upload outcomes are shown ONLY inside the extension popup (its bottom status bar / retry
     // screen). Nothing — success or error — is ever rendered on the recorded page.
     sendResponse?.({ ok: true });
+  } else if (msg?.cmd === 'micLevel') {
+    // R7 — live mic level pushed from the offscreen recorder (top-frame control bar only).
+    setMicLevel(Number(msg.level) || 0);
+    sendResponse?.({ ok: true });
   }
   // Respond synchronously — do NOT keep the channel open (avoids the
   // "message channel closed / bfcache" warnings on navigation).
@@ -60,7 +65,10 @@ function startCapture(t0: number, pausedBase = 0): void {
   flush(); // deliver anything left buffered from a previous span (normally empty)
   // Only the TOP frame owns the session's app metadata (origin, viewport). With all_frames capture
   // (R8), a sub-frame must NOT clobber it with the iframe's origin/size.
-  if (window === window.top) send({ kind: 'appMeta', meta: appMeta() });
+  if (window === window.top) {
+    send({ kind: 'appMeta', meta: appMeta() });
+    ensureControlBar(); // R7 — on-page Stop/Pause/Mark + live status (top frame only, idempotent)
+  }
   startKeepAlive();
   patchHistory();
   addEventListener('click', onClick, true);
@@ -154,6 +162,7 @@ function stopKeepAlive(): void {
 // ---- event handlers ----
 
 function onClick(e: Event): void {
+  if (isControlBarEvent(e)) return; // R7 — never capture clicks on our own on-page control bar
   const el = resolveTarget(e.target as Element | null);
   if (!el) return;
   emit('click', el);
@@ -161,12 +170,14 @@ function onClick(e: Event): void {
 }
 
 function onChange(e: Event): void {
+  if (isControlBarEvent(e)) return;
   const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
   if (!el || !('value' in el)) return;
   emit('input', el, maskValue(el));
 }
 
 function onSubmit(e: Event): void {
+  if (isControlBarEvent(e)) return;
   const el = e.target as Element | null;
   if (!el) return;
   emit('submit', el);
@@ -175,6 +186,7 @@ function onSubmit(e: Event): void {
 
 function onKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Enter') return;
+  if (isControlBarEvent(e)) return;
   const el = e.target as Element | null;
   if (!el) return;
   emit('keydown', el, 'Enter');
