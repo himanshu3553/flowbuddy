@@ -45,6 +45,7 @@ export type CaptureEventType =
   | 'submit'
   | 'nav'
   | 'scroll'
+  | 'hover'
   | 'keydown'
   | 'marker';
 

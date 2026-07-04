@@ -76,6 +76,9 @@ function startCapture(t0: number, pausedBase = 0): void {
   addEventListener('submit', onSubmit, true);
   addEventListener('keydown', onKeydown, true);
   addEventListener('popstate', onNav, true);
+  // R10 — richer capture: debounced page scroll + menu-hover (passive, low-noise; see the handlers).
+  addEventListener('scroll', onScroll, { capture: true, passive: true });
+  addEventListener('mouseover', onMouseOver, true);
   // No on-page confirmation — the recording state lives entirely on the extension (icon + popup).
 }
 
@@ -87,6 +90,9 @@ function stopCapture(): void {
   removeEventListener('submit', onSubmit, true);
   removeEventListener('keydown', onKeydown, true);
   removeEventListener('popstate', onNav, true);
+  removeEventListener('scroll', onScroll, true);
+  removeEventListener('mouseover', onMouseOver, true);
+  clearScrollHover();
   clearWatcher();
   stopKeepAlive();
   flush(); // best-effort: drain any buffered events before we drop the port
@@ -184,13 +190,18 @@ function onSubmit(e: Event): void {
   schedulePostAction();
 }
 
+// R10 — richer keyboard: Enter/Escape bare + app-command modifier combos (Cmd+K, Ctrl+S, …). Plain
+// typing is already covered by `input`; clipboard/undo and lone modifiers are noise, so they're dropped.
 function onKeydown(e: KeyboardEvent): void {
-  if (e.key !== 'Enter') return;
   if (isControlBarEvent(e)) return;
-  const el = e.target as Element | null;
+  const combo = shortcutCombo(e);
+  if (!combo) return;
+  const el = (e.target as Element | null) || document.body;
   if (!el) return;
-  emit('keydown', el, 'Enter');
-  schedulePostAction();
+  emit('keydown', el, combo);
+  // Enter and command shortcuts usually change state (submit / run a command) — settle for a post-action.
+  // Escape typically just dismisses, so keep it light (no post-action).
+  if (combo !== 'Escape') schedulePostAction();
 }
 
 function onNav(): void {
@@ -199,12 +210,95 @@ function onNav(): void {
   schedulePostAction();
 }
 
+const EDIT_KEYS = new Set(['a', 'c', 'v', 'x', 'z', 'y']); // clipboard/select-all/undo — editing, not a command
+
+/** The semantic keyboard action for an event, or null to ignore it (plain typing, lone modifiers, edits). */
+function shortcutCombo(e: KeyboardEvent): string | null {
+  const key = e.key;
+  if (['Shift', 'Meta', 'Control', 'Alt'].includes(key)) return null; // a lone modifier press
+  const hasPrimary = e.metaKey || e.ctrlKey;
+  const hasMod = hasPrimary || e.altKey;
+  if (!hasMod) return key === 'Enter' || key === 'Escape' ? key : null; // bare: only Enter/Escape
+  // A primary-modifier editing shortcut (Cmd/Ctrl + A/C/V/X/Z/Y, no other modifier) is field noise.
+  if (hasPrimary && !e.altKey && !e.shiftKey && EDIT_KEYS.has(key.toLowerCase())) return null;
+  const parts: string[] = [];
+  if (e.metaKey) parts.push('Meta');
+  if (e.ctrlKey) parts.push('Control');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  parts.push(key.length === 1 ? key.toUpperCase() : key);
+  return parts.join('+');
+}
+
+// R10 — debounced page scroll: emit ONE event per settled, significant page-level scroll (reveals
+// content for the copilot's screenshot). Inner scrollable containers are ignored to stay low-noise.
+let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+let lastScrollY = 0;
+const SCROLL_IDLE_MS = 450;
+const SCROLL_MIN_FRAC = 0.35; // ignore scrolls smaller than this fraction of the viewport height
+
+function onScroll(e: Event): void {
+  const t = e.target;
+  // Only the page/document scroll — not a nested scrollable div (keeps the signal meaningful + sparse).
+  if (t !== document && t !== document.scrollingElement && t !== document.documentElement && t !== document.body) return;
+  if (scrollTimer != null) clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(emitScrollIfSignificant, SCROLL_IDLE_MS);
+}
+
+function emitScrollIfSignificant(): void {
+  scrollTimer = null;
+  const y = window.scrollY || document.documentElement.scrollTop || 0;
+  const vh = window.innerHeight || 1;
+  if (Math.abs(y - lastScrollY) < vh * SCROLL_MIN_FRAC) return; // too small to be a deliberate scroll
+  lastScrollY = y;
+  const doc = document.documentElement;
+  const max = Math.max(1, doc.scrollHeight - vh);
+  const pct = Math.round(Math.min(100, (y / max) * 100));
+  emitEvent('scroll', { tag: 'document', accessibleName: (document.title || '').slice(0, 120) }, `${pct}%`);
+}
+
+// R10 — hover that opens a menu: dwell on an `aria-haspopup` trigger reveals a submenu (a real step).
+// Conservative by design — only popup triggers, a dwell, a still-hovering check, and repeat-suppression.
+let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+let lastHoverKey = '';
+let lastHoverT = 0;
+const HOVER_DWELL_MS = 450;
+const HOVER_REPEAT_MS = 4000;
+
+function onMouseOver(e: Event): void {
+  if (isControlBarEvent(e)) return;
+  const trigger = (e.target as Element | null)?.closest('[aria-haspopup]');
+  if (!trigger) return;
+  if (hoverTimer != null) clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => {
+    hoverTimer = null;
+    if (!trigger.matches(':hover')) return; // moved away before the dwell — not a deliberate hover
+    const key = (trigger as HTMLElement).id || trigger.getAttribute('aria-label') || (trigger.textContent || '').trim().slice(0, 60);
+    const now = Date.now();
+    if (key && key === lastHoverKey && now - lastHoverT < HOVER_REPEAT_MS) return; // just captured this one
+    lastHoverKey = key;
+    lastHoverT = now;
+    emit('hover', trigger); // the revealed menu is already on-screen for the screenshot; no post-action
+  }, HOVER_DWELL_MS);
+}
+
+function clearScrollHover(): void {
+  if (scrollTimer != null) { clearTimeout(scrollTimer); scrollTimer = null; }
+  if (hoverTimer != null) { clearTimeout(hoverTimer); hoverTimer = null; }
+  lastScrollY = 0;
+  lastHoverKey = '';
+}
+
 function emit(type: string, el: Element, value?: string): void {
+  emitEvent(type, buildTarget(el), value);
+}
+
+function emitEvent(type: string, target: EventTarget, value?: string): void {
   const event: CapturedEvent = {
     id: crypto.randomUUID(),
     t: Date.now() - startTime - pausedTotal,
     type,
-    target: buildTarget(el),
+    target,
     value,
     route: buildRoute(),
     screenshot: { file: '' }, // filled by background after captureVisibleTab

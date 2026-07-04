@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sync Recorder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Capture a narrated product session and upload it to Sync for KB synthesis.",
   "permissions": ["activeTab", "tabs", "scripting", "storage", "offscreen"],
   "host_permissions": ["<all_urls>"],
