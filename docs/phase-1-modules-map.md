@@ -79,7 +79,7 @@ flowchart TB
 
 | Module / role | Package(s) | Key files | Responsible for |
 |---|---|---|---|
-| **M1 · Capture** | `extension` | `content.ts`, `background.ts`, `offscreen.ts`, `idb.ts` | Record the session bundle (events + DOM + screenshots + audio), client-side PII mask, reliable upload |
+| **M1 · Capture** | `extension` | `content.ts`, `background.ts`, `offscreen.ts`, `controlbar.ts`, `idb.ts` | Record the session bundle (events + DOM + screenshots + audio), client-side PII mask, on-page control bar, reliable upload |
 | **Ingestion** | `api` | `server.ts`, `storage.ts`, `queue.ts` | Receive upload → store artifacts (S3/R2) → write `KnowledgeSource` → enqueue worker job |
 | **M2 · Knowledge Base** | `api` (worker) + `synthesis` | `worker.ts`; `index.ts`, `transcribe.ts`, `align.ts`, `segment.ts`, `redact.ts` | Transcribe → normalize to `KnowledgeItem`s → server PII scrub → segment into workflows → `ready` |
 | **The KB store** | `db` | `schema.prisma` | One cumulative KB per workspace; `KnowledgeSource` + `KnowledgeItem` + index |
@@ -100,7 +100,7 @@ flowchart TB
 | **P1-M1** Recorder / capture | **M1 · Capture** (extension) |
 | **P1-M2** Knowledge Base | **M2 · KB** (worker + synthesis) → the KB store |
 | **P1-M3** Retrieval & grounding engine | **Retrieval & grounding engine** (`answerFromKB`) |
-| **P1-M4** Cloud deploy | _config-ready; wraps all boxes (Render + R2), executed last_ |
+| **P1-M4** Cloud deploy | ✅ **deployed** — Render (api + worker + web) + R2; dev at `sync-web-uir8.onrender.com` |
 | **P1-M5** Approval gate | **Trust gate — Approval** |
 | **P1-M6** Answer endpoint | **Copilot API** `/v1/copilot/answer` |
 | **P1-M7** Widget & SDK | **Widget** |

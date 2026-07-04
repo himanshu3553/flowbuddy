@@ -28,26 +28,29 @@ MV3 extensions are several cooperating contexts. Each file is one context:
 | File | Context | Job |
 |---|---|---|
 | [`background.ts`](../../packages/extension/src/background.ts) | Service worker | **The brain.** Owns recording lifecycle, takes screenshots, buffers to IndexedDB, assembles + uploads the bundle. |
-| [`content.ts`](../../packages/extension/src/content.ts) | Content script (injected into the recorded page) | Listens for DOM events, builds the element fingerprint, serializes DOM, runs the post-action settle watcher. |
-| [`offscreen.ts`](../../packages/extension/src/offscreen.ts) | Offscreen document | Records the microphone (service workers can't call `getUserMedia`). |
+| [`content.ts`](../../packages/extension/src/content.ts) | Content script (injected into the recorded page, **all frames** — R8) | Listens for DOM events, builds the element fingerprint, serializes DOM, runs the post-action settle watcher, **buffers events + reconnects the capture port (R4)**, and (top frame) **mounts the on-page control bar**. |
+| [`controlbar.ts`](../../packages/extension/src/controlbar.ts) | (imported into `content.ts`, top frame only) | **R7 — the on-page floating control bar** (timer, step/workflow count, live mic meter, ⚑ Mark / Pause·Resume / Stop). |
+| [`offscreen.ts`](../../packages/extension/src/offscreen.ts) | Offscreen document | Records the microphone (service workers can't call `getUserMedia`); also **samples the mic level** and broadcasts it for the control-bar meter (R7). |
 | [`idb.ts`](../../packages/extension/src/idb.ts) | (shared by background) | A tiny IndexedDB key/value store — the crash-safe buffer. |
-| [`popup.ts`](../../packages/extension/src/popup.ts) | Popup | The 4-state UI (idle · recording · uploading · retry). |
+| [`popup.ts`](../../packages/extension/src/popup.ts) | Popup | The state-machine UI (**disconnected · idle · recording[/paused] · uploading · retry**) with a live mic meter, timer, and step/workflow counts. |
 | [`connect-bridge.ts`](../../packages/extension/src/connect-bridge.ts) | Content script on the **Studio** origin only | Relays the token handshake from Studio to the extension. |
-| [`indicator.ts`](../../packages/extension/src/indicator.ts) | (injected helper) | The on-page toast ("● Recording started", "✓ Uploaded"). |
 | [`permission.ts`](../../packages/extension/src/permission.ts) | A dedicated tab | One-time microphone permission grant. |
+| [`indicator.ts`](../../packages/extension/src/indicator.ts) | (legacy, **unused**) | The old on-page toast — **removed 2026-07-01**; nothing passive is drawn on the page anymore (the R7 control bar is the only on-page surface). File kept dormant in-tree. |
 
-These talk over three Chrome messaging channels: **`chrome.runtime` messages** (popup ↔ background,
+These talk over four Chrome messaging channels: **`chrome.runtime` messages** (popup ↔ background,
 offscreen ↔ background), a **long-lived `chrome.runtime.connect` port** named `capture` (content →
-background, the high-volume event stream), and **`chrome.tabs.sendMessage`** (background → content,
-for start/stop/status).
+background, the high-volume event stream — with a **keepalive ping + reconnect** so an evicted worker
+never drops it, R4), and **`chrome.tabs.sendMessage`** (background → content, for start/stop/status,
+and the **`micLevel`** relay that feeds the control-bar meter into the top frame — R7).
 
 ---
 
 ## 3. Inputs / Outputs
 
-- **Input:** the operator's clicks/typing/navigation in the active tab, their microphone, and an
-  optional "new workflow" marker hotkey. Plus a stored **recorder token + API URL** (from the connect
-  handshake).
+- **Input:** the operator's clicks/typing/navigation/scroll in the active tab (and tabs opened from it
+  — R9), their microphone, and a **"new workflow" marker** dropped from the popup or the on-page
+  control bar (a marker *hotkey* is R5 — deferred). Plus a stored **recorder token + API URL** (from
+  the connect handshake).
 - **Output:** an HTTP `POST /v1/sessions` carrying:
   - the `manifest` (a `SessionManifest` JSON),
   - `audio.webm` (if narration was captured),
@@ -61,15 +64,34 @@ for start/stop/status).
 ### 4.1 The session clock
 
 On start, the background records `startTime = Date.now()` and stores it in `chrome.storage.session`.
-**Every event's `t` is `Date.now() - startTime`** — a millisecond offset from session start. This
-single clock is what later lets the KB align narration to events by timestamp window. The clock is
-preserved across page navigations (see §4.6 R1) so the timeline never resets mid-recording.
+**Every event's `t` is `Date.now() - startTime - pausedTotal`** — a millisecond offset from session
+start measured in **active time**, so paused spans are excluded and events stay aligned with the
+(also-paused) narration (Pause/Resume, §4.6). With zero pauses `pausedTotal` is 0 — identical to the
+old `Date.now() - startTime`. This single clock is what later lets the KB align narration to events by
+timestamp window. The clock is preserved across page navigations (see §4.6 R1) so the timeline never
+resets mid-recording.
 
 ### 4.2 What the content script captures (the DOM fingerprint)
 
 The content script ([`content.ts`](../../packages/extension/src/content.ts)) attaches **capture-phase**
-listeners for `click`, `change` (→ `input`), `submit`, `keydown` (Enter only), and `popstate`, and it
-**monkey-patches `history.pushState`/`replaceState`** so SPA route changes also emit a `nav` event.
+listeners for `click`, `change` (→ `input`), `submit`, `keydown`, `popstate`, and (R10) `scroll` +
+`mouseover`, and it **monkey-patches `history.pushState`/`replaceState`** so SPA route changes also
+emit a `nav` event. It runs in **all frames** (R8): sub-frame events translate their `bbox` into
+top-document coordinates (cross-origin frames omit `bbox`) and record a `framePath`.
+
+**Richer interactions (R10), kept low-noise so distillation isn't flooded:**
+- **`scroll`** — debounced (450 ms), **page-level only**, emitted once per settle and only when the
+  delta clears **35 % of the viewport**; a minimal (bbox-free) target so the screenshot shows the
+  revealed viewport, scroll depth in `value`.
+- **`hover`** — a `mouseover` on an **`aria-haspopup`** trigger, dwell-gated (450 ms) + a `:hover`
+  re-check + 4 s repeat-suppression → captures a menu-reveal, highlighting the trigger.
+- **`keydown`** — bare **Enter/Escape** plus **app-command modifier combos** (Cmd+K, Ctrl+S…) as a
+  normalized `value`; plain typing (that's `input`), lone modifiers, and clipboard/undo edits are
+  dropped.
+
+The content script's own **on-page control bar** (R7) is real page DOM, so its clicks are filtered out
+of capture — any event whose `composedPath()` contains the bar host is ignored (a capture-phase
+`stopPropagation` fires too late).
 
 For each event it resolves the *meaningful* target — `resolveTarget` walks up to the nearest
 `a,button,[role=button],input,select,textarea,label,[onclick],…` ancestor, so clicking the icon
@@ -141,9 +163,13 @@ workflow's final step.
 
 | Rule | Problem | Mechanism |
 |---|---|---|
-| **R1 — survive full-page navs** | A hard navigation destroys the content script, silently stopping capture. | `chrome.tabs.onUpdated` (status `complete`) → `rearmIfRecording` re-sends `startCapture` with the **original `startTime`** (re-injecting `content.js` if needed). Timeline stays continuous. |
+| **R1 — survive full-page navs (incl. cross-origin)** | A hard navigation re-injects a fresh content script that nothing re-armed, silently stopping capture; the push-based re-arm raced on cross-origin hops. | **Pull-based:** every freshly loaded page sends the background a `hello`; the background answers from `sender.tab.id` + the stored `rec` (`startTime`, `pausedTotal`) so the page **self-arms deterministically** on any origin. `chrome.tabs.onUpdated` (status `complete`) → `rearmIfRecording` is kept as a **backup** push. Timeline stays continuous. |
+| **R4 — survive service-worker eviction (MV3)** | During quiet narration the MV3 worker is evicted after ~30 s idle, dropping the `capture` port; events after it are lost while audio keeps going. | **Keepalive:** the top frame pings the port every **20 s** to reset the idle timer. **Reconnect + buffer:** events flow through an in-memory `outbox`; `flush()` reconnects on a dead port (waking a fresh worker — state lives in `chrome.storage.session`, `idToKey` rebuilds from IDB) and retries in-place so the event + its screenshot land immediately. |
 | **R2 — never lose a recording to a network blip** | A failed upload could discard the buffer. | The IndexedDB buffer is **only cleared on upload success**. On failure, `lastUpload` is marked `retryable` and the popup shows a **Retry** that re-runs `assembleAndUpload` from the still-intact buffer. |
-| **R3 — don't drop narration by finalizing early** | The offscreen audio may take time to stop/encode/flush on long recordings. | On stop, a **generous 30 s fallback** finalizes without audio only if the offscreen doc never reports back; normally finalize is triggered by the `audioData` message. |
+| **R3 — don't drop narration by finalizing early** | The offscreen audio may take time to stop/encode/flush on long recordings. | On stop, a **generous 30 s fallback** finalizes without audio only if the offscreen doc never reports back; normally finalize is triggered by the `audioData` message. The fallback timer is tracked + cancelled so a stale timer can't finalize a later session. |
+| **R8 — iframe capture** | Content scripts were top-frame only, so iframe UIs (Stripe, embedded editors) captured nothing. | `all_frames:true`; each frame self-arms via the `hello` handshake; `bbox` is translated to top-document coords (cross-origin frames omit it) and `framePath` recorded; `appMeta` stays gated to the top frame. |
+| **R9 — multi-tab / popups (Option A)** | Capture was bound to one `tabId`; OAuth popups / "open in new tab" lost capture. | `Rec.tabIds` is a **set**; `tabs.onCreated` + `openerTabId` **adopts tabs opened FROM a recording tab**; stop/pause/resume/hello span the set; screenshots use the event tab's `windowId`; closed tabs pruned. |
+| **Pause / Resume** | The operator needs to pause for a sensitive screen or a break. | Pause detaches page listeners + `MediaRecorder.pause()` + freezes the timer; event `t` is **active-time** (`pausedTotal`) so audio and events stay aligned. Reachable from the popup and the on-page control bar. |
 | **Zero-event guard** | A session with no captured events is useless and would confuse the KB. | `assembleAndUpload` rejects an empty event list with a helpful message ("Click elements directly… avoid full-page reloads…"). Version 1 is workflow-only; a zero-event session stays rejected. |
 
 ### 4.7 Audio (offscreen document)
@@ -153,7 +179,11 @@ Service workers can't use `getUserMedia`, so the background spins up an **offscr
 `MediaRecorder` (`audio/webm;codecs=opus` preferred), and on stop converts the blob to a **data URL**
 sent back as an `audioData` message. The background stores it under `audio` in IndexedDB and — if the
 session is `stopping` — that message is what triggers `finalize()`. If the mic fails at start, the
-offscreen doc immediately reports `null` audio so recording proceeds silently.
+offscreen doc immediately reports `null` audio so recording proceeds silently. **Pause/Resume** calls
+`MediaRecorder.pause()`/`resume()` (paused spans are excluded from the encoded audio + reported
+duration, matching the active-time event clock). A **second `AnalyserNode`** on the same stream (no
+extra `getUserMedia`) samples the mic level ~8×/s and broadcasts `micLevel` → the background relays it
+to the recording tab's top frame for the **control-bar meter** (R7).
 
 ### 4.8 Assemble & upload
 
@@ -166,23 +196,33 @@ offscreen doc immediately reports `null` audio so recording proceeds silently.
    multipart strips directories from filenames, the path must ride on the field name so the server can
    reconstruct the object key.
 4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>`.
-5. Map the response to a single result object; drive the badge/popup/on-page toast off it.
+5. Map the response to a single result object; drive the toolbar **badge + popup** off it (no on-page
+   toast — the popup's one-time status bar is the only outcome surface).
 
-### 4.9 The popup state machine
+### 4.9 The popup state machine + the on-page control bar
 
-[`popup.ts`](../../packages/extension/src/popup.ts) is a 4-state view driven by `body.dataset.state`:
+[`popup.ts`](../../packages/extension/src/popup.ts) is a state view driven by `body.dataset.state`:
 
 ```
-disconnected ──connect handshake──▶ idle ──Start──▶ recording ──Stop──▶ uploading ──▶ idle
-                                      ▲                                                  │
-                                      └───────────────── Retry ◀── retry ◀── upload fails┘
+disconnected ──connect handshake──▶ idle ──Start──▶ recording[⇄ paused] ──Stop──▶ uploading ──▶ idle
+                                      ▲                                                          │
+                                      └───────────────── Retry ◀── retry ◀── upload fails────────┘
 ```
 
-During **recording** it shows *real* data read from the background's `getState`: a live `REC` timer
-(off `startTime`), the captured **domain**, and **step / workflow counts** (steps =
-`event:` key count; workflows = markers + 1), polled every 2 s. The toolbar **badge** is a parallel
-state machine: `REC` (red) → `↑` (uploading) → `✓` / `!`. *(Mic level, Pause, and upload-% are
-visual placeholders with no backing capability yet.)*
+During **recording** it shows *real* data read from the background's `getState`: a live pause-aware
+`REC`/`PAUSED` timer, the captured **domain**, and **step / workflow counts** (steps = `event:` key
+count in the current workflow; workflows = markers + 1), polled every 2 s. The mic meter, Pause/Resume,
+and determinate upload-% are all **real** now (formerly placeholders): the meter is a WebAudio
+`AnalyserNode` off the popup's own `getUserMedia`, and upload-% comes from a streamed HTTP/2 body
+(indeterminate fallback on HTTP/1.1). The toolbar **badge** is a parallel state machine: `REC` (red) →
+`↑` (uploading) → `✓` / `!`, with a **blinking red-dot action icon** while recording.
+
+**R7 — the on-page control bar** ([`controlbar.ts`](../../packages/extension/src/controlbar.ts)) is a
+parallel control surface mounted in the recorded page's **top frame** so Stop/Pause/Mark and live
+status (timer, step count, mic meter) are reachable without opening the popup. It reads the same
+`getState` and sends the same background commands; it **survives Pause** and **re-appears after a
+full-page nav** (its state is polled, not tied to the per-frame capture), unmounts when the session
+ends, and is draggable. It does not replace the popup.
 
 ### 4.10 Getting connected (the token handshake)
 
@@ -215,11 +255,13 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 - **`captureVisibleTab` fails** (e.g. tab not focused) → that event's screenshot is dropped
   (`ev.screenshot = undefined`) but the event itself is kept; distillation tolerates missing frames.
 - **Recording an internal/extension page** → blocked at start (`chrome://`, `about:`, etc.).
-- **iframes** → cross-origin iframes are **not** captured (the content script lives in the top
-  document). This is a known capture gap; some steps then get reconstructed from narration with missing
-  screenshots. Tracked under P1-M11 backlog.
-- **Worker killed mid-recording** → the IndexedDB buffer survives; the next event re-reads `rec` state
-  from `chrome.storage.session` and continues.
+- **iframes** → **captured** (R8, `all_frames:true`). Same-origin frames get a correct top-document
+  `bbox`; **cross-origin** frames capture the event + screenshot but **omit `bbox`** (the offset is
+  unknowable across the boundary — no wrong highlight). `framePath` records the sub-frame.
+- **Worker killed mid-recording** → no data loss (R4): the 20 s keepalive normally keeps the worker
+  warm, and if it's evicted anyway the content script **buffers events and reconnects the port** on the
+  next send (waking a fresh worker that re-reads `rec` from `chrome.storage.session`); the IndexedDB
+  buffer survives regardless.
 
 ---
 

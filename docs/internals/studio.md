@@ -134,8 +134,10 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `CopilotApproval`, `CopilotQuery`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status` |
-| **API service / object storage / Redis** | — (Studio talks only to Postgres) | — |
+| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `CopilotApproval`, `CopilotQuery`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status`, **`KnowledgeSource`** (recording **rename `title` / delete / re-process** → status) |
+| **Object storage (R2/MinIO)** | — | **deletes** a recording's artifact prefix on delete (`lib/storage` `deleteSessionPrefix`) |
+| **Redis / BullMQ** | — | **enqueues re-process jobs** onto the same synthesis queue the worker consumes (`lib/queue.ts` — lazy, best-effort, no API hop) |
+| **API service** | — | — (Studio is a privileged server — it talks to Postgres/Redis/storage **directly**, never through the API) |
 
 ---
 

@@ -62,6 +62,7 @@ erDiagram
     KnowledgeSource ||--o{ CopilotApproval : "approved workflows"
     KnowledgeSource {
         string status "uploaded→processing→ready|error"
+        string title "founder rename (null → appBaseUrl)"
         json manifest "the raw capture (events, markers, app)"
         json transcript "persisted, redacted { text, segments[] }"
     }
@@ -77,7 +78,8 @@ erDiagram
 
 - **`KnowledgeSource`** = one recording. The Prisma model is `KnowledgeSource` but the **table is kept
   as `RecSession`** via `@@map` so historical data survives the rename. `manifest` is the whole raw
-  capture; `transcript` is added by the worker; `status` is the lifecycle state machine.
+  capture; `transcript` is added by the worker; `status` is the lifecycle state machine; `title` is the
+  founder's optional rename (null falls back to `appBaseUrl`), settable from the Recordings page.
 - **`KnowledgeItem`** = one **distilled step**. `data` holds the
   [`DistilledStep`](../../packages/synthesis/src/distill.ts)
   (`instruction, detail, route, narration, screenshotFile, bbox`). `segmentIndex`/`segmentTitle` group

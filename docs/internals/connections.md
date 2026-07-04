@@ -122,7 +122,8 @@ Why two API keys instead of one? Because they protect different things from diff
 
 The **Studio session** is a third thing entirely: it authorizes the operator to *configure* the
 workspace — mint recorder tokens, mint the embed key, and flip approvals. It never touches the API
-service; Studio talks to Postgres directly via server actions.
+service; its server actions hit Postgres directly (and, for recordings management, Redis + object
+storage).
 
 ### The connect handshake (how the recorder gets its token)
 
@@ -282,8 +283,10 @@ forged credential resolving to the wrong workspace, which none of the three reso
 
 - **The copilot never writes to the KB.** It only reads approved items and writes analytics
   (`CopilotQuery`, `CoverageGap`). Knowledge flows one way.
-- **Studio never calls the API service.** It reads/writes Postgres directly via server actions. The
-  API service is for the recorder and the widget only.
+- **Studio never calls the API service.** It reads/writes **Postgres** directly via server actions —
+  and, for recordings management, **enqueues re-process jobs to Redis** (`lib/queue.ts`) and **deletes
+  artifacts from object storage** (`deleteSessionPrefix`) directly too. All of it **bypasses** the API
+  service, which is for the recorder and the widget only.
 - **The worker never talks to the widget or Studio.** It's a pure queue consumer; its only output is
   Postgres rows. Surfaces discover its work by reading `status`.
 - **Phase-2 article authoring is parked.** The synthesis engine still contains `buildKB` (raw 1:1

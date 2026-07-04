@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-02 · **Branch:** `dev`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-03 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---

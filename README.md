@@ -198,7 +198,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Project status
 
-**Phase 1 (the copilot) is code-complete and verified locally** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). The only remaining step is **cloud deploy (P1-M4)** — Docker + `render.yaml` are ready; the deploy itself is gated on Render + Cloudflare R2 accounts.
+**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). Remaining Phase-1 work is discretionary: the **P1-M3 pgvector retrieval upgrade** and the **P1-M11 capture-reliability backlog** (R12/R13; R5 deferred); **P1-M12 Cut 2** (screenshot/DOM pixel PII) is deferred to Phase 2.
 
 **Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — its engine is **parked dormant in-tree** and its Studio UI was removed for the copilot release ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
 
