@@ -16,17 +16,26 @@ const entryPoints = {
   permission: 'src/permission.ts',
 };
 
-// Studio base URL is baked at build time (dev default; override with STUDIO_URL for prod builds).
-const STUDIO_URL = process.env.STUDIO_URL || 'http://localhost:3000';
+// Studio base URL(s), baked at build time. Comma-separated: the FIRST is the primary — the popup's
+// "Connect with Sync" opens it — and ALL of them get the connect-bridge content script, so ONE
+// artifact (e.g. the Web Store build) can complete the connect handshake against the deployed
+// Studio AND a local dev Studio. Dev default: localhost only.
+//   prod build: STUDIO_URL="https://<deployed-studio>,http://localhost:3000" pnpm build
+const STUDIO_URLS = (process.env.STUDIO_URL || 'http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+const STUDIO_URL = STUDIO_URLS[0];
 
 async function copyStatic() {
-  // Bake the Studio origin into the connect-bridge content-script `matches`, so the connect token
-  // handshake injects on whatever Studio this build targets (localhost in dev, the deployed Studio
-  // in prod). Same single source of truth — STUDIO_URL — that bakes __STUDIO_URL__ for the popup.
+  // Bake the Studio origin(s) into the connect-bridge content-script `matches`, so the connect
+  // token handshake injects on every Studio this build targets. Same single source of truth —
+  // STUDIO_URL(S) — whose first entry bakes __STUDIO_URL__ for the popup.
   const manifest = JSON.parse(await readFile(path.join(__dirname, 'src', 'manifest.json'), 'utf8'));
-  const studioMatch = `${STUDIO_URL.replace(/\/$/, '')}/*`;
   for (const cs of manifest.content_scripts ?? []) {
-    if ((cs.js ?? []).includes('connect-bridge.js')) cs.matches = [studioMatch];
+    if ((cs.js ?? []).includes('connect-bridge.js')) {
+      cs.matches = STUDIO_URLS.map((u) => `${u}/*`);
+    }
   }
   await writeFile(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
