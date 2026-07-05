@@ -1,10 +1,12 @@
 # Phase 1 — End-to-End Review & Recommendations
 
-> **What this is.** A from-scratch, end-to-end review of everything built for Phase 1 (all 7 packages + docs + deploy config), done at the "Phase 1 development complete" checkpoint before deciding what to do next. **Recommendations only — nothing in this doc has been applied.**
+> **What this is.** A from-scratch, end-to-end review of everything built for Phase 1 (all 7 packages + docs + deploy config), done at the "Phase 1 development complete" checkpoint before deciding what to do next. **Recommendations only** — findings are annotated ✅ inline as they land, so this doc doubles as the remediation tracker.
 >
-> - **Reviewed:** 2026-07-03 · branch `dev` (incl. the uncommitted R10 / queue-hardening / render.yaml changes)
+> - **Reviewed:** 2026-07-03 · branch `dev` (incl. the then-uncommitted R10 / queue-hardening / render.yaml changes)
 > - **Verified during review:** `pnpm typecheck` ✅ green · `pnpm build` ✅ green (all packages)
 > - **Priorities:** **P0** = fix before any external user touches the deployed copilot · **P1** = fix before/while starting the next phase · **P2** = backlog, schedule deliberately
+
+**Landed since the review (as of 2026-07-05):** the §5 in-flight batch is fully committed (R10 `328fd88`, Studio queue-hardening + render.yaml `6e174be`); **R12 screenshot timing/cost shipped** (`0c56d4b` — JPEG, pointerdown pre-click capture, bbox↔scroll re-validation; affects §4.12) with a **KB step-screenshot lightbox + bbox highlight** in the Studio (`ff35c24`); two full doc-sync passes landed (`3819dd0`, `33cc2fd` — closes §6.4; `render-reset-and-test.md` merged into `e2e-testing.md` Level 2). §6.3's missing doc-map rows and the §6.1/§6.2 stale data-shape comments were fixed 2026-07-05. Everything in §2 (P0) and §3 (P1) remains **open**.
 
 ---
 
@@ -34,7 +36,7 @@ Jobs run with default `attempts: 1`. Any transient failure (OpenAI 429/timeout, 
 **Fix:** (a) `attempts: 3` + exponential backoff on enqueue (the worker is already idempotent — it delete+recreates items, and approvals survive by design); (b) surface age: a source `uploaded/processing` for > ~15 min should render as "Stalled — re-process" in the Recordings UI (the re-process action already exists and covers recovery).
 
 ### 2.3 The API process has no `error` listeners on its queue/worker → crashable
-The uncommitted [web/lib/queue.ts](../packages/web/lib/queue.ts) change adds an `on('error')` handler *for exactly this reason* (an emitted `'error'` with no listener throws and can take the process down) — but the **API producer** (`api/src/queue.ts`) and the **Worker** (`api/src/worker.ts` has `on('failed')` but not `on('error')`) still have none. On the free tier these run in the *same process as the public API* (`all.ts`), so a Redis hiccup can crash the copilot.
+The [web/lib/queue.ts](../packages/web/lib/queue.ts) hardening (committed 2026-07-04, `6e174be`) adds an `on('error')` handler *for exactly this reason* (an emitted `'error'` with no listener throws and can take the process down) — but the **API producer** (`api/src/queue.ts`) and the **Worker** (`api/src/worker.ts` has `on('failed')` but not `on('error')`) still have none. On the free tier these run in the *same process as the public API* (`all.ts`), so a Redis hiccup can crash the copilot.
 **Fix:** mirror the web hardening: `synthesisQueue.on('error', …)` + `worker.on('error', …)` (throttled log).
 
 ### 2.4 Unbounded question size + no output cap → token-cost abuse
@@ -113,14 +115,16 @@ The API/worker log with `console.log` + Fastify's default logger; there's no err
 | 9 | widget a11y | Panel lacks `role="dialog"`/focus management; thumbs buttons lack labels | Backlog item for the widget |
 | 10 | [server.ts](../packages/api/src/server.ts) | CORS is a blanket `*` on all routes incl. token-authed ingestion | Fine (auth is header-based) — add a comment stating it's deliberate, or scope the header to `/v1/copilot/*` |
 | 11 | [analytics page](../packages/web/app/dashboard/analytics/page.tsx) | "Tickets deflected ≈ answered" proxy — already flagged with ≈ | Keep; replace when a real deflection metric exists (analytics backlog) |
-| 12 | R12 (existing backlog) | Multi-tab screenshots: `captureVisibleTab(windowId)` shoots the *active* tab of that window — an event from a background adopted tab can screenshot the wrong tab | Fold into the R12 screenshot-timing work |
+| 12 | R12 (existing backlog) | Multi-tab screenshots: `captureVisibleTab(windowId)` shoots the *active* tab of that window — an event from a background adopted tab can screenshot the wrong tab | **Still open** — R12 shipped 2026-07-05 (`0c56d4b`) *without* this; track it with the parked "R12 follow-ups" in phase-1-copilot.md §8 (the `tabCapture`-stream rebuild would solve it) |
 | 13 | Capture gap (known) | Full-page-nav form flows can lose late `change`/post-action data (documented in [internals/recorder-capture.md](internals/recorder-capture.md)) | Promote to a numbered backlog item (R14) so it stops living only in memory/internals — candidate fix: flush field values on `submit` + a `pagehide` flush |
 
 ---
 
-## 5. The uncommitted work on `dev` (reviewed — commit it)
+## 5. The uncommitted work on `dev` (reviewed — commit it) — ✅ done 2026-07-04
 
-The working tree holds three logical changes; all reviewed, all sound:
+*(All three changes below were committed: R10 as `328fd88`, the queue hardening + render.yaml as `6e174be`. Kept for the record.)*
+
+The working tree held three logical changes; all reviewed, all sound:
 
 1. **R10 richer capture** (`content.ts`, `shared/capture.ts` + doc updates) — well-scoped: debounced significant page scroll, dwell-gated `aria-haspopup` hover, normalized shortcut combos with an edit-key denylist. Listener add/remove pairs match (incl. the `{capture:true}` removal), timers are cleaned in `clearScrollHover`, and downstream tolerates the new types (`type` is a free string end-to-end). The only follow-up is the `typed:` prompt nit (§4.1).
 2. **Studio queue hardening** (`web/lib/queue.ts`) — lazy Queue creation, error listener, retry backoff: exactly right, and it *exposes* that the API side lacks the same protections (§2.3).
@@ -134,10 +138,10 @@ Recommendation: commit this batch as-is (respecting your commit-then-push conven
 
 Docs are in excellent sync overall; these are the only drifts found:
 
-1. **[schema.prisma](../packages/db/prisma/schema.prisma) `KnowledgeItem.data` comment** still says `step: { event, narration }` — the shape has been `{ instruction, detail, route, narration, screenshotFile, bbox }` since 2026-06-27. (architecture.md documents it correctly; the schema comment is the stray.)
-2. **[synthesis/src/index.ts](../packages/synthesis/src/index.ts) `StepItemData` / `decodeStepData`** — the doc comment says "as the worker writes it", which is no longer true; it decodes the *legacy* shape and is consumed only by parked Phase-2 code. Add a `// PARKED — Phase 2` banner (matching the convention) or fold it into the parked files.
-3. **Doc maps don't list the deploy doc.** `deploy-render.md` exists and is referenced from phase-1-copilot.md, but neither [roadmap.md](roadmap.md) §8 nor the CLAUDE.md doc table lists it. *(2026-07-04: `render-reset-and-test.md` was merged into `e2e-testing.md` as its Level-2 section, so only `deploy-render.md` remains unlisted.)*
-4. **internals/** — after the R10 commit, `internals/recorder-capture.md` (and the capture-contract table in `connections.md` if it enumerates event types) should get the three new event types; the internals set predates R10 and "follows the code".
+1. ✅ **[schema.prisma](../packages/db/prisma/schema.prisma) `KnowledgeItem.data` comment** *(fixed 2026-07-05)* — said `step: { event, narration }`; now documents the distilled shape `{ instruction, detail, route, narration, screenshotFile, bbox }` (with the legacy shape noted for pre-distillation rows).
+2. ✅ **[synthesis/src/index.ts](../packages/synthesis/src/index.ts) `StepItemData` / `decodeStepData`** *(fixed 2026-07-05)* — the section now carries a PARKED (Phase-2 article engine only) banner stating the worker no longer writes this shape, that it decodes the LEGACY `{ event, narration }` payload, and pointing at the phase-2-portal.md §6 re-sourcing note.
+3. ✅ **Doc maps don't list the deploy doc** *(resolved 2026-07-05)*. `deploy-render.md` existed but wasn't listed in [roadmap.md](roadmap.md) §8 or the CLAUDE.md doc table. *(2026-07-04: `render-reset-and-test.md` was merged into `e2e-testing.md` as its Level-2 section; 2026-07-05: `deploy-render.md` + this review doc were added to both doc maps and the README table.)*
+4. ✅ **internals/** *(resolved 2026-07-04/05)* — `33cc2fd` brought `internals/recorder-capture.md` + `connections.md` current with R4/R7/R8/R9/R10 (+ the R12 commit updated them again for JPEG/pre-click).
 5. **e2e-testing.md** — optionally add a Part covering R10 events (scroll/hover/shortcut appear in the KB) and the widget feedback → analytics loop; the plan currently ends at analytics basics.
 
 ---
@@ -146,7 +150,7 @@ Docs are in excellent sync overall; these are the only drifts found:
 
 A realistic ordering that front-loads risk reduction without blocking product momentum:
 
-1. **Commit the in-flight batch** (§5) + the two one-line doc/comment fixes (§6.1–6.2).
+1. ~~**Commit the in-flight batch** (§5) + the two one-line doc/comment fixes (§6.1–6.2)~~ *(✅ done — batch 2026-07-04, comment fixes 2026-07-05)*.
 2. **"Public-surface hardening" PR** — all of P0 §2.1–2.6 (queue retention/retries/error-listeners/shutdown, caps + max_tokens, rate-limit all copilot routes, streamed ingestion). Small diffs, mostly config-level; one E2E pass (e2e-testing.md Parts 6–11) to verify.
 3. **"Trust-surface" PR** — origin-allowlist normalization + the Studio warning (§2.7), recorder-token rotation (§3.5), KB-page honesty reword (§4.5).
 4. **Retrieval consolidation** (§3.1/3.2) — one shared module in `@sync/synthesis`; deliberately *before* pgvector so the upgrade has a single landing spot.

@@ -141,7 +141,7 @@ model KnowledgeItem {
   kind         String // step | topic
   orderIndex   Int
   text         String // searchable content (keyword/LLM index now; embeddings later)
-  data         Json // step: { event, narration } ; topic: { spanText, startMs, endMs }
+  data         Json // step: { instruction, detail, route, narration, screenshotFile, bbox } (distilled — 2026-06-27; legacy pre-distillation rows: { event, narration }) ; topic: { spanText, startMs, endMs }
   segmentIndex Int? // workflow this item belongs to (Path 2 — persisted segmentation, promoted toward Option C)
   segmentTitle String?
   createdAt    DateTime @default(now())

@@ -198,7 +198,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Project status
 
-**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). Remaining Phase-1 work is discretionary: the **P1-M3 pgvector retrieval upgrade** and the **P1-M11 capture-reliability backlog** (R12/R13; R5 deferred); **P1-M12 Cut 2** (screenshot/DOM pixel PII) is deferred to Phase 2.
+**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). Remaining Phase-1 work is discretionary: the **P1-M3 pgvector retrieval upgrade** and the **P1-M11 capture-reliability backlog** (R13; R5 deferred — R12 screenshot timing/cost shipped); **P1-M12 Cut 2** (screenshot/DOM pixel PII) is deferred to Phase 2.
 
 **Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — its engine is **parked dormant in-tree** and its Studio UI was removed for the copilot release ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
 
@@ -216,6 +216,8 @@ Start with the roadmap; each doc links onward.
 | [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog |
 | [`docs/phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules |
 | [`docs/design_system/`](docs/design_system/README.md) | **Design system** — the indigo brand: tokens, components, full Studio UI kit (+ recorder/widget specs). Source of truth for all UI. |
+| [`docs/e2e-testing.md`](docs/e2e-testing.md) | Manual E2E test plan — 3 levels: local · dev/Render (incl. data reset) · prod (placeholder) |
+| [`docs/deploy-render.md`](docs/deploy-render.md) | Render deploy guide — blueprint walkthrough, gotchas, going-to-production deltas |
 | [`docs/dev-setup.md`](docs/dev-setup.md) | Local dev / tooling deep-dive (pnpm · Turborepo · docker-compose · Prisma) |
 
 `CLAUDE.md` is a short orientation file for working in this repo with Claude Code.
@@ -224,7 +226,7 @@ Start with the roadmap; each doc links onward.
 
 ## Deployment
 
-Production targets **Render** (Dockerized: api + worker + Studio) + **Cloudflare R2** for blobs. A `render.yaml` blueprint and per-service Dockerfiles are prepared. The deploy is the final step of Phase 1 and needs your Render + R2 accounts/secrets — see [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) §5 (P1-M4).
+The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + a static widget host) + **Cloudflare R2** for blobs, driven by the [`render.yaml`](render.yaml) blueprint — currently the **free/testing** configuration (spin-down + non-persistent Redis caveats are documented in the blueprint). Step-by-step deploy guide (every gotcha from the first real deploy, plus the going-to-production deltas): [`docs/deploy-render.md`](docs/deploy-render.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
 
 ---
 

@@ -210,16 +210,21 @@ export async function generateArticleForSegment(input: GenerateArticleInput): Pr
   return article ?? { title: input.title, tags: [], routes: [], preconditions: [], steps: [] };
 }
 
-// ---------- KB persistence helpers (Module 2 ⇄ DB) ----------
+// ---------- KB persistence helpers — PARKED (Phase-2 article engine only) ----------
+// The worker NO LONGER writes this shape: since KB step distillation (2026-06-27),
+// `KnowledgeItem.data` holds a `DistilledStep` ({ instruction, detail, route, narration,
+// screenshotFile, bbox }) and raw events live only in `KnowledgeSource.manifest`. These decode the
+// LEGACY `{ event, narration }` shape and are consumed only by the parked Phase-2 article engine
+// (web/lib/generate-actions.ts, prompt-actions.ts) — which must re-source raw events from the
+// manifest when Phase 2 resumes. See docs/phase-2-portal.md §6.
 
-/** Shape of `KnowledgeItem.data` for a `step` item, as the worker writes it. */
+/** LEGACY shape of `KnowledgeItem.data` for a `step` item (pre-distillation rows only). */
 export interface StepItemData {
   event: CapturedEvent;
   narration: string | null;
 }
 
-/** Safely decode a `KnowledgeItem.data` JSON value (Prisma `Json`) into its typed step payload.
- *  Centralizes the cast so callers (worker, Studio actions) don't repeat `as unknown as {...}`. */
+/** Decode a LEGACY `KnowledgeItem.data` JSON value into its typed step payload. PARKED — Phase 2. */
 export function decodeStepData(data: unknown): StepItemData {
   const d = (data ?? {}) as Partial<StepItemData>;
   return { event: d.event as CapturedEvent, narration: d.narration ?? null };
