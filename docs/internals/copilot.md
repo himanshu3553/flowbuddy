@@ -2,7 +2,7 @@
 
 > **Module:** the copilot routes on the Fastify service
 > ([`server.ts`](../../packages/api/src/server.ts)) plus
-> [`copilot.ts`](../../packages/api/src/copilot.ts) (retrieval),
+> [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (retrieval — SHARED with the Studio preview),
 > [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) (embed auth), and
 > [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) (the grounded answer).
 > **Role:** the primary product — answer an end-user's question **only** from **approved** KB, with
@@ -25,9 +25,9 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`copilot.ts`](../../packages/api/src/copilot.ts) | **What** — retrieve approved KB items + keyword/route shortlist; sanitize history. |
-| [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline. |
-| [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/v1/copilot/feedback` routes that wire the three together and log analytics. |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + keyword/route shortlist; sanitize history. **The single enforcement seam** — the API routes *and* the Studio preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call the same functions (Prisma client injected, so `@sync/synthesis` stays DB-free). |
+| [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
+| [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
 
 ---
 
@@ -68,25 +68,29 @@ flowchart TD
 - **Origin allowlist:** if `copilotAllowedOrigins` is non-empty **and** the browser sent an `Origin`,
   the origin must be in the list (else `403`). An **empty list = allow any** (dev default).
   Server-to-server callers send no `Origin` and aren't blocked here (a page can't spoof "no origin").
-- **Rate limit:** `checkRateLimit(key)` — an in-memory **fixed window of 30 requests / 60 s per key**.
-  MVP-grade; production would back it with Redis. Over-limit → `429`.
+- **Rate limit:** `checkRateLimit(bucket)` — an in-memory **fixed window of 30 requests / 60 s**.
+  MVP-grade; production would back it with Redis. Over-limit → `429`. **All three copilot routes**
+  go through one shared `copilotGate` (server.ts) — `/answer` keeps the bare key as its bucket,
+  `/feedback` and `/seen` get per-route buckets (`feedback:key`, `seen:key`) so a chatty host page
+  pinging `/seen` can't starve real questions.
 
 These two functions are the **public-facing security boundary**; they're distinct from the secret
 recorder-token auth used by ingestion. See [connections.md](connections.md) §3.
 
-### 4.2 Retrieval — the no-leak enforcement seam ([`copilot.ts`](../../packages/api/src/copilot.ts))
+### 4.2 Retrieval — the no-leak enforcement seam ([`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts))
 
-`retrieveApprovedKBItems(workspaceId, question, { contextPath })` is **the single point that keeps the
-copilot grounded only in approved-KB**:
+`retrieveApprovedKBItems(db, workspaceId, question, { contextPath })` is **the single point that keeps
+the copilot grounded only in approved-KB** — one implementation, two callers (the public answer route
+and the Studio preview), with the Prisma client injected so `@sync/synthesis` stays DB-free:
 
 1. **Load the approval set.** Fetch `CopilotApproval` rows for the workspace → a `Set` of
    `"sourceId:segmentIndex"` keys. **If empty, return `[]` immediately** (an un-provisioned copilot).
 2. **Fetch candidate items.** All `KnowledgeItem`s for the workspace with a non-null `segmentIndex`,
    ordered by `(sourceId, segmentIndex, orderIndex)`.
 3. **Filter to approved.** Keep only items whose `(sourceId, segmentIndex)` is in the approved set.
-   *This is the gate.* It **mirrors** Studio's
-   [`listApprovedItems`](../../packages/web/lib/copilot-approvals.ts) — the same predicate enforced in
-   two places. Any new copilot read path must use this filter or no-leak breaks.
+   *This is the gate* — and since the 2026-07-06 consolidation it exists **once**: the Studio
+   preview's former mirror (`listApprovedItems` in `copilot-approvals.ts`) was retired and both
+   surfaces call this function. Any new copilot read path must go through it or no-leak breaks.
 4. **Keyword shortlist.** Tokenize the question (lowercase, drop stop-words and ≤2-char tokens), score
    each item by **term-overlap count** against its `text`.
 5. **Context boost (P1-M8).** If a `contextPath` was sent (the host page the user is on) and an item's
@@ -98,7 +102,9 @@ copilot grounded only in approved-KB**:
    miss pre-declining.
 
 > Retrieval is **keyword-first** today. Swapping in **pgvector embeddings** is the planned P1-M3
-> upgrade and slots in at exactly this step — the rest of the module is unaffected.
+> upgrade and slots in at exactly this step — now with exactly one landing spot (this module); the
+> rest of the pipeline is unaffected. Trigger guidance lives in the module header (~1–2k items, or
+> decline-rate rising on covered topics).
 
 `sanitizeHistory` also lives here: it accepts only well-formed `user`/`assistant` turns from the
 untrusted request body, keeps the **last 10**, and clips each to **4000 chars**.
@@ -129,8 +135,10 @@ segmentTitle`), deduped. A response that isn't `covered` or has no `answer` beco
 
 ### 4.4 The route handler — wiring + analytics ([`server.ts`](../../packages/api/src/server.ts))
 
-`/v1/copilot/answer` orchestrates: auth → rate-limit → retrieve → (zero-items shortcut) → `answerFromKB`
-→ **log + respond**:
+`/v1/copilot/answer` orchestrates: gate (auth + rate-limit) → input caps → retrieve → (zero-items
+shortcut) → `answerFromKB` → **log + respond**. Input caps (cost ceiling — the key is public):
+**question ≤ 2000 chars** (`400` above it; the widget input additionally caps at 400 via
+`maxlength`), `context.path` clipped to 512.
 
 - **Zero approved items** → log `CopilotQuery(answered: false)` and return a distinct reason ("this
   copilot has no approved help content yet") — *not* a coverage gap (nothing was asked-but-missing;
@@ -163,7 +171,9 @@ It **never writes the KB** — knowledge flows one way (see [connections.md](con
 - **No approved workflows** → friendly "no approved help content yet" (covered:false), logged but **not**
   a coverage gap.
 - **`OPENAI_API_KEY` unset** → `500` before any LLM call.
-- **LLM returns unparseable JSON** → treated as a clean decline ("couldn't find an answer").
+- **LLM returns unparseable JSON** (including output truncated at `max_completion_tokens`) → treated
+  as a clean decline ("couldn't find an answer").
+- **Oversized question** (> 2000 chars) → `400` before retrieval or any LLM spend.
 - **Leaked embed key** → bounded by the origin allowlist + the 30/60s rate limit; it can only read
   *approved* answers, never write or read raw KB.
 - **Context path that matches nothing** → no boost; retrieval still returns by keyword score.

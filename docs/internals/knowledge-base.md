@@ -89,6 +89,12 @@ narration).
 The transcript is then run through **`redactTranscript`** *before* anything else uses it, so every
 narration span derived from it is already PII-clean (see §5).
 
+**Degradation (2026-07-06, review §3.3):** a transcription **failure** (Whisper rejects files
+> 25 MB — roughly 25–40 min of narration — or a transient API error) no longer kills the job.
+`buildWorkflowKB` catches it, builds **transcript-less** (steps from captured actions, no narration
+attribution), and returns a `warning` string; the worker persists it on the source (see §6) so the
+recording lands `ready` with a visible notice instead of `error` discarding good capture.
+
 ### Stage 2 — Align narration ([`align.ts`](../../packages/synthesis/src/align.ts))
 
 People narrate *around* the action they're describing — usually slightly before, sometimes during. So
@@ -217,10 +223,15 @@ After `buildWorkflowKB` returns, the worker, in one job:
      field),
    - `segmentIndex` / `segmentTitle` = the workflow coordinate + goal title,
    - `data` = the full `DistilledStep` (instruction, detail, route, narration, screenshotFile, bbox).
-4. Sets `status = ready, error = null`.
+4. Sets `status = ready` — with `error = null` on a clean build, or `error = <warning>` when the
+   build **degraded** (e.g. narration failed to transcribe, §3.3): the recording is still usable,
+   and the Studio detail page renders the warning as an amber "Processed with a warning" notice,
+   not a failure.
 
-On any thrown error the whole thing is caught: `status = error` with the message, and the job re-throws
-so BullMQ records the failure.
+On any thrown error the whole thing is caught and the job re-throws so BullMQ records the failure —
+but since jobs run with `attempts: 3` (exponential backoff), the worker marks `status = error` **only
+on the final attempt** (`attemptsMade + 1 < opts.attempts` = a retry is coming; the source stays
+`processing` so the UI doesn't flash Failed→Ready across a retry).
 
 > **Why delete-and-recreate?** It makes reprocessing a recording a clean, deterministic rebuild — no
 > diffing, no stale rows. The cost is that a per-item flag would be wiped, which is exactly why

@@ -245,6 +245,14 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 > If you wiped data (Part 2), the demo's old `data-sync-key` is stale — refresh it from the Copilot page.
 
+> **Embedding in your own test app instead of the bundled demo?** The snippet the Studio's Install
+> tab shows uses `SYNC_WIDGET_URL` for its `src` — unset locally it renders the placeholder
+> `https://YOUR_WIDGET_HOST/sync-copilot.js`, which silently fails to load (**no launcher at all**).
+> Either set `SYNC_WIDGET_URL=http://localhost:8080/dist/sync-copilot.js` in `packages/web/.env`
+> (restart Studio) so the copied snippet just works, or point `src` there by hand. In a React/Next
+> app, a `<script>` tag inside JSX does **not** execute — put the snippet in the HTML shell
+> (`index.html`) or use `next/script`.
+
 ---
 
 ## 11. Analytics & coverage gaps (the feedback loop)

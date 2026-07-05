@@ -152,7 +152,7 @@ The persisted step keeps **no raw-event log** — but it does carry **one curate
 
 | Consumer | Today | Change |
 |---|---|---|
-| [`api/src/copilot.ts`](../packages/api/src/copilot.ts#L45) (retrieval) | route from `data.event.route.path`; `text`; `data.narration` | read `data.route` + `text` (now clean) + `data.narration` — small shape update |
+| retrieval — now [`synthesis/src/retrieval.ts`](../packages/synthesis/src/retrieval.ts) *(was `api/src/copilot.ts`; consolidated 2026-07-06)* | route from `data.event.route.path`; `text`; `data.narration` | read `data.route` + `text` (now clean) + `data.narration` — small shape update |
 | [`synthesis/src/copilot.ts`](../packages/synthesis/src/copilot.ts) (answer) | uses `text` + `narration` | unchanged (cleaner inputs) |
 | [`web/.../kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx) (KB panel) | renders raw items + per-event `data.event.screenshot.file` | render **distilled steps**: `instruction`, `detail`, attributed `narration`, and the **one curated `data.screenshotFile`** per step. Drop the raw-item rendering. Relabel "Knowledge items by workflow" → "Steps". (`bbox` highlight overlay = later.) |
 | Approval (`CopilotApproval`) | keyed by `(sourceId, segmentIndex)` | **unaffected** — still per-workflow |
@@ -179,7 +179,7 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 > **Parked Phase-2 impact (record for resume):** the parked article engine ([`generate-actions.ts`](../packages/web/lib/generate-actions.ts), [`prompt-actions.ts`](../packages/web/lib/prompt-actions.ts)) reads raw events from `KnowledgeItem.data.event`, which **new recordings no longer store**. When Phase 2 resumes it must source raw events from `KnowledgeSource.manifest` instead. Not fixed now (don't touch parked code).
 
 ### Phase 4 — Update consumers ✅ done (2026-06-26) — closes the Phase-3 half-state
-- **Built:** [`api/src/copilot.ts`](../packages/api/src/copilot.ts) route-boost now reads `data.route` (with an `event.route.path` fallback for any pre-distillation rows). The Studio KB page ([`kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx)) now reads the distilled shape (`instruction`/`detail`/`narration`/`route`/`screenshotFile`), renders "Step N" with the curated screenshot, and is relabelled "Steps by workflow" (counts say "steps"). The answer engine needed no change (reads `text` + `narration`).
+- **Built:** the retrieval route-boost now reads `data.route` (with an `event.route.path` fallback for any pre-distillation rows) — built in `api/src/copilot.ts`, since **consolidated into [`synthesis/src/retrieval.ts`](../packages/synthesis/src/retrieval.ts)** (2026-07-06, same logic). The Studio KB page ([`kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx)) now reads the distilled shape (`instruction`/`detail`/`narration`/`route`/`screenshotFile`), renders "Step N" with the curated screenshot, and is relabelled "Steps by workflow" (counts say "steps"). The answer engine needed no change (reads `text` + `narration`).
 - **DoD (met):** KB page renders clean steps + curated screenshots from the new shape; route-boost reads `data.route`; full repo `pnpm typecheck` green. Flag 1 (half-state) is closed.
 
 ### Phase 5 — End-to-end verification ✅ done (2026-06-27)
@@ -226,7 +226,7 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 **Edit:**
 - `packages/synthesis/src/index.ts` — orchestration (`buildWorkflowKB`), exports
 - `packages/api/src/worker.ts` — persist distilled steps
-- `packages/api/src/copilot.ts` — `data.route` shape
+- `packages/api/src/copilot.ts` — `data.route` shape *(since consolidated into `packages/synthesis/src/retrieval.ts`, 2026-07-06)*
 - `packages/web/app/dashboard/kb/[id]/page.tsx` — render distilled steps (instruction/detail/narration + curated `screenshotFile`), drop raw-item rendering, relabel panel
 
 **Unchanged:** capture contract (shared), Prisma schema (no migration), approval, answer engine ([`synthesis/copilot.ts`](../packages/synthesis/src/copilot.ts)).

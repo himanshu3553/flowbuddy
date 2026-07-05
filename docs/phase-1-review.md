@@ -6,7 +6,9 @@
 > - **Verified during review:** `pnpm typecheck` ✅ green · `pnpm build` ✅ green (all packages)
 > - **Priorities:** **P0** = fix before any external user touches the deployed copilot · **P1** = fix before/while starting the next phase · **P2** = backlog, schedule deliberately
 
-**Landed since the review (as of 2026-07-05):** the §5 in-flight batch is fully committed (R10 `328fd88`, Studio queue-hardening + render.yaml `6e174be`); **R12 screenshot timing/cost shipped** (`0c56d4b` — JPEG, pointerdown pre-click capture, bbox↔scroll re-validation; affects §4.12) with a **KB step-screenshot lightbox + bbox highlight** in the Studio (`ff35c24`); two full doc-sync passes landed (`3819dd0`, `33cc2fd` — closes §6.4; `render-reset-and-test.md` merged into `e2e-testing.md` Level 2). §6.3's missing doc-map rows and the §6.1/§6.2 stale data-shape comments were fixed 2026-07-05. Everything in §2 (P0) and §3 (P1) remains **open**.
+**Landed since the review (as of 2026-07-05):** the §5 in-flight batch is fully committed (R10 `328fd88`, Studio queue-hardening + render.yaml `6e174be`); **R12 screenshot timing/cost shipped** (`0c56d4b` — JPEG, pointerdown pre-click capture, bbox↔scroll re-validation; affects §4.12) with a **KB step-screenshot lightbox + bbox highlight** in the Studio (`ff35c24`); two full doc-sync passes landed (`3819dd0`, `33cc2fd` — closes §6.4; `render-reset-and-test.md` merged into `e2e-testing.md` Level 2). §6.3's missing doc-map rows and the §6.1/§6.2 stale data-shape comments were fixed 2026-07-05.
+
+**Remediation landed 2026-07-06 (`1bba47b` on `dev`, user-verified E2E):** ✅ **all of P0 §2.1–2.6**, ✅ **§2.7** (origin normalization + Studio warning), ✅ **§3.1/3.2** (retrieval consolidated into `@sync/synthesis` `retrieval.ts`; `api/src/copilot.ts` deleted, `listApprovedItems` retired), ✅ **§3.3** (transcription degrades, not fails), ✅ **§3.4** (graceful shutdown), ✅ **§4.5** (KB-page honesty reword) — plus a new `KnowledgeSource.updatedAt` column (migration) powering the §2.2 "Stalled" surface. ⏸️ **§3.5 deferred** (built then reverted — see §3.5). **Still open:** §2.8 (production deploy — gated on the first external embed), §3.6–3.9, §4 nits (minus 4.5), §6.5.
 
 ---
 
@@ -27,31 +29,31 @@ Nothing found blocks the "Phase 1 done" claim. The findings below are about **ha
 
 These are all on the public, unauthenticated-ish surface (the copilot endpoints + ingestion) or affect data durability. Small fixes, high leverage.
 
-### 2.1 BullMQ jobs are never cleaned up → Redis fills up and dies
+### 2.1 BullMQ jobs are never cleaned up → Redis fills up and dies — ✅ fixed 2026-07-06 (`1bba47b`)
 Neither producer ([api/src/queue.ts](../packages/api/src/queue.ts), [web/lib/queue.ts](../packages/web/lib/queue.ts)) nor the worker sets `removeOnComplete` / `removeOnFail`, so **every completed/failed job is kept in Redis forever**. On Render's free Key Value (25 MB, no persistence) this is a slow-motion outage.
 **Fix:** `defaultJobOptions: { removeOnComplete: { count: 100 }, removeOnFail: { count: 500 } }` on the Queue(s).
 
-### 2.2 No retry on synthesis jobs; no "stuck" recovery
+### 2.2 No retry on synthesis jobs; no "stuck" recovery — ✅ fixed 2026-07-06 (`1bba47b`: attempts:3 + backoff; final-attempt-only error mark; "Stalled — re-process" surface via new `KnowledgeSource.updatedAt`)
 Jobs run with default `attempts: 1`. Any transient failure (OpenAI 429/timeout, R2 blip) permanently lands the recording in `status: error`; a Redis loss while `processing` leaves it stuck in a state the UI renders as "Processing" forever ([recordings.ts](../packages/web/lib/recordings.ts) maps `uploaded|processing` → Processing with no age limit).
 **Fix:** (a) `attempts: 3` + exponential backoff on enqueue (the worker is already idempotent — it delete+recreates items, and approvals survive by design); (b) surface age: a source `uploaded/processing` for > ~15 min should render as "Stalled — re-process" in the Recordings UI (the re-process action already exists and covers recovery).
 
-### 2.3 The API process has no `error` listeners on its queue/worker → crashable
+### 2.3 The API process has no `error` listeners on its queue/worker → crashable — ✅ fixed 2026-07-06 (`1bba47b`)
 The [web/lib/queue.ts](../packages/web/lib/queue.ts) hardening (committed 2026-07-04, `6e174be`) adds an `on('error')` handler *for exactly this reason* (an emitted `'error'` with no listener throws and can take the process down) — but the **API producer** (`api/src/queue.ts`) and the **Worker** (`api/src/worker.ts` has `on('failed')` but not `on('error')`) still have none. On the free tier these run in the *same process as the public API* (`all.ts`), so a Redis hiccup can crash the copilot.
 **Fix:** mirror the web hardening: `synthesisQueue.on('error', …)` + `worker.on('error', …)` (throttled log).
 
-### 2.4 Unbounded question size + no output cap → token-cost abuse
+### 2.4 Unbounded question size + no output cap → token-cost abuse — ✅ cheap fix done 2026-07-06 (`1bba47b`: 2000-char cap + widget maxlength, max_completion_tokens 700, temperature 0.2); per-workspace budget counter → backlog
 `/v1/copilot/answer` trims but never caps `question`; `answerFromKB` sets no `max_tokens` and no `temperature`. History is capped (10 × 4000 chars) but the question itself can be megabytes, multiplied by 24 KB items per call. Anyone with the public key (it's in the host page source) can run this 30×/min indefinitely — there's no spend ceiling anywhere.
 **Fix (cheap):** cap `question` (~2,000 chars, 400 in the widget input via `maxlength`), set `max_tokens` (~700) and an explicit low `temperature` in `answerFromKB` (segment/distill already pin `0`), and reject absurd bodies early. **Fix (proper, can be P1):** a per-workspace daily budget counter + log OpenAI `usage` tokens per query (one extra column on `CopilotQuery` — also unlocks real cost analytics later).
 
-### 2.5 Rate limiting covers only `/answer`
+### 2.5 Rate limiting covers only `/answer` — ✅ fixed 2026-07-06 (`1bba47b`: shared copilotGate, per-route buckets)
 `/v1/copilot/feedback` and `/v1/copilot/seen` skip `checkRateLimit` — both are DB-writing endpoints reachable with just the public key. Feedback is also a blind write path (`queryId` cuids are hard to guess, so impact is low, but it's free spam).
 **Fix:** apply the same limiter to all three copilot routes (one shared preHandler).
 
-### 2.6 Ingestion buffers whole uploads in memory
+### 2.6 Ingestion buffers whole uploads in memory — ✅ fixed 2026-07-06 (`1bba47b`: streamed via lib-storage + 500 MB bundle cap + orphan cleanup on reject)
 `/v1/sessions` does `await part.toBuffer()` per file with `fileSize: 300 MB, files: 10 000` — a large (or malicious: the recorder token isn't the only thing that can hit this endpoint) bundle is fully materialized in RAM on a 512 MB instance, alongside the copilot serving traffic.
 **Fix:** stream parts to storage (`@aws-sdk/lib-storage` `Upload` accepts a stream), and add a total-bundle cap. Also worth noting: if the manifest fails validation, files already streamed are orphaned in R2 — either validate the manifest part first (require it as the first field) or delete the prefix on reject.
 
-### 2.7 Empty origin allowlist = open copilot, silently
+### 2.7 Empty origin allowlist = open copilot, silently — ✅ fixed 2026-07-06 (`1bba47b`: normalize-on-save to Origin-header form + live-widget warning banner; empty-list dev default kept)
 `copilotAllowedOrigins: []` means "allow any origin" (deliberate dev default), and nothing in the Studio pushes owners to set it before going live — so the realistic steady state is *every* workspace running an unlocked endpoint + a public key visible in page source.
 **Fix:** keep the dev semantics, but (a) show a prominent "origin allowlist not set — your copilot will answer from any website" warning on the Copilot page once the widget is detected live, and (b) normalize entries on save (`setCopilotOrigins` currently stores whatever string the user typed; `https://app.acme.com/` with a trailing slash or a bare `app.acme.com` will never match the browser's `Origin` header — parse with `new URL()` and store `origin` exactly).
 
@@ -62,25 +64,26 @@ Already documented in [render.yaml](../render.yaml) — but worth restating as a
 
 ## 3. P1 — architectural debts to pay before building more on top
 
-### 3.1 Retrieval is implemented twice — collapse to one module
+### 3.1 Retrieval is implemented twice — collapse to one module — ✅ done 2026-07-06 (`1bba47b`: `@sync/synthesis` retrieval.ts; api/src/copilot.ts deleted; listApprovedItems retired; preview gains the route-boost)
 [api/src/copilot.ts](../packages/api/src/copilot.ts) and [web/lib/copilot-preview-actions.ts](../packages/web/lib/copilot-preview-actions.ts) each carry their own copy of the STOP list, the keyword shortlist, and `sanitizeHistory`, held together by "this MUST mirror" comments (and they've already drifted: the preview lacks the route-boost). The *no-leak guarantee* — the most important invariant in the product — currently has **two** enforcement implementations (`retrieveApprovedKBItems` in the API, `listApprovedItems` in web).
 **Recommendation:** extract a single `retrieval.ts` into `@sync/synthesis` (it already owns the KB item types): `shortlistItems(items, question, opts)` + `sanitizeHistory` + one approved-items query helper that takes a Prisma client. API and Studio preview both call it. This also gives pgvector (P1-M3) exactly one place to land.
 
-### 3.2 Per-question retrieval is O(entire workspace KB)
+### 3.2 Per-question retrieval is O(entire workspace KB) — 🔄 folded into the 3.1 module 2026-07-06; pgvector trigger documented in retrieval.ts (SQL-side approval join = optional intermediate, not done)
 `retrieveApprovedKBItems` loads **all** segment-tagged `KnowledgeItem`s for the workspace on every question, then filters in JS against the approvals set. Fine today; degrades linearly with recordings.
 **Recommendation:** no code change yet — but define the pgvector trigger concretely (e.g. "when a workspace exceeds ~1–2k items or when decline-rate on covered topics rises"), and in the meantime the approval filter can move into SQL (join `CopilotApproval` on `(sourceId, segmentIndex)`) as a cheap intermediate. Fold into the 3.1 module.
 
-### 3.3 Long recordings will fail transcription — and take the whole job down
+### 3.3 Long recordings will fail transcription — and take the whole job down — ✅ fixed 2026-07-06 (`1bba47b`: degrades to transcript-less build, warning surfaced on the source, still `ready`)
 `transcribe()` sends the entire `audio.webm` to Whisper; OpenAI rejects files > 25 MB (roughly ~25–40 min of opus). The throw propagates and the recording lands in `error`, discarding perfectly good event capture.
 **Recommendation:** wrap transcription in a try/catch that degrades to an empty transcript (the pipeline already works transcript-less — narration just isn't attributed), and record a visible warning on the source (e.g. `error: 'narration too long to transcribe'` while still `ready`). Chunked transcription can come later.
 
-### 3.4 Graceful shutdown
+### 3.4 Graceful shutdown — ✅ done 2026-07-06 (`1bba47b`: SIGTERM/SIGINT in api + worker, all.ts-safe)
 No SIGTERM/SIGINT handling anywhere; every deploy hard-kills in-flight synthesis (stalled-job recovery then depends on Redis surviving, which on the free tier it doesn't).
 **Recommendation:** `process.on('SIGTERM', …)` → `await worker.close()` + `app.close()` in `api` (both entrypoints). ~10 lines.
 
-### 3.5 Recorder token lifecycle
+### 3.5 Recorder token lifecycle — ⏸️ deferred 2026-07-06 (user decision)
 `connectExtension` mints a **new** `ApiToken` on every connect and nothing ever revokes old ones; there's no token list/revoke UI. One stolen laptop = permanent silent upload access.
 **Recommendation:** on connect, delete previous tokens with the same label (`'Sync Recorder extension'`) so reconnecting rotates rather than accumulates; longer-term, a Settings section listing tokens (label, created, last-used) with revoke.
+**Status:** last-one-wins rotation was built 2026-07-06 and **reverted the same day** — it silently kills every other install (record on laptop 1 → connect on laptop 2 → laptop 1's next upload 401s), which breaks a legitimate two-machine workflow and was judged overkill for the single-founder Phase 1. Current behavior (mint-per-connect, no revocation) is intentional for now. **Revisit at the multi-seat / pre-beta stage (alongside §3.6 auth hardening):** build it properly then as **per-device tokens** (rotation scoped to the reconnecting device) + the **token-management UI** (list with label/created/last-used + per-token revoke) as one piece.
 
 ### 3.6 Studio auth hardening (before real customers, not before Phase 2)
 Credentials auth has no sign-in rate limit / lockout, signup is open on the deployed Studio, and there's no password reset or email verification. Acceptable for a dev deploy; not for onboarding a real SaaS.
@@ -108,7 +111,7 @@ The API/worker log with `console.log` + Fastify's default logger; there's no err
 | 2 | [content.ts](../packages/extension/src/content.ts) `onScroll` | Only page-level scrolls are captured; many SPAs scroll an inner container (`<main overflow:auto>`), so R10 scroll silently no-ops there | Documented tradeoff — consider extending to the largest scrollable ancestor later; note it in the R10 as-built |
 | 3 | [clean.ts](../packages/synthesis/src/clean.ts) rule 2 | An **Enter**-keydown that submits a form isn't merged with the following `submit` (rule only merges `click`+`submit`) | Extend rule 2 to `keydown(Enter)`+`submit` |
 | 4 | [copilot.ts (synthesis)](../packages/synthesis/src/copilot.ts) | No `temperature` on the answer call (defaults to 1.0) while every other LLM call pins 0 | Set ~0.2–0.3 for consistent answers |
-| 5 | [kb/[id]/page.tsx](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx) | "Selectors healthy · grounded and ready to cite" is a hardcoded claim — no selector-health signal exists (R13 unbuilt) | Reword to something derivable ("Approved · N steps · screenshots present") |
+| 5 | [kb/[id]/page.tsx](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx) | ✅ **fixed 2026-07-06** (`1bba47b`) — was a hardcoded claim | Now three derivable states: Approved (real `CopilotApproval` lookup) · Not approved yet · Still building |
 | 6 | [analytics.ts](../packages/web/lib/analytics.ts) `getCoverageGapsRanked` | "asked N×" counts declined queries **all-time** while the page is range-filtered; gap↔question match is exact-string | Window the count to the selected range; fuzzy/normalized matching is backlog |
 | 7 | [copilot-metrics.ts](../packages/web/lib/copilot-metrics.ts) | Day bucketing uses server-local midnight (UTC on Render) — days shift for non-UTC founders | Note it; per-workspace TZ is a later feature |
 | 8 | [widget/src/index.ts](../packages/widget/src/index.ts) | `history` sent to the API grows unboundedly over a long chat (server slices to 10 anyway); input has no `maxlength` | Slice client-side (last 10) + `maxlength` (pairs with 2.4) |
@@ -151,10 +154,10 @@ Docs are in excellent sync overall; these are the only drifts found:
 A realistic ordering that front-loads risk reduction without blocking product momentum:
 
 1. ~~**Commit the in-flight batch** (§5) + the two one-line doc/comment fixes (§6.1–6.2)~~ *(✅ done — batch 2026-07-04, comment fixes 2026-07-05)*.
-2. **"Public-surface hardening" PR** — all of P0 §2.1–2.6 (queue retention/retries/error-listeners/shutdown, caps + max_tokens, rate-limit all copilot routes, streamed ingestion). Small diffs, mostly config-level; one E2E pass (e2e-testing.md Parts 6–11) to verify.
-3. **"Trust-surface" PR** — origin-allowlist normalization + the Studio warning (§2.7), recorder-token rotation (§3.5), KB-page honesty reword (§4.5).
-4. **Retrieval consolidation** (§3.1/3.2) — one shared module in `@sync/synthesis`; deliberately *before* pgvector so the upgrade has a single landing spot.
-5. **Thin test layer** (§3.9) + transcription degradation (§3.3) + observability minimum (§3.8).
+2. ~~**"Public-surface hardening" PR** — all of P0 §2.1–2.6~~ *(✅ done 2026-07-06, `1bba47b`, user-verified E2E)*.
+3. ~~**"Trust-surface" PR** — origin-allowlist normalization + the Studio warning (§2.7), KB-page honesty reword (§4.5)~~ *(✅ done 2026-07-06, `1bba47b`)*; ~~recorder-token rotation (§3.5)~~ *(deferred — see §3.5)*.
+4. ~~**Retrieval consolidation** (§3.1/3.2)~~ *(✅ done 2026-07-06, `1bba47b`)*.
+5. **Thin test layer** (§3.9) + ~~transcription degradation (§3.3)~~ *(✅ done 2026-07-06)* + observability minimum (§3.8).
 6. **Production deploy plan** (§2.8) — executed whenever the first external embed is scheduled, not before.
 7. Then proceed to whatever's next (Phase 2 resume / pgvector / analytics backlog) on a clean foundation.
 

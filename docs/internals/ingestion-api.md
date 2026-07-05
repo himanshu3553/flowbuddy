@@ -78,18 +78,22 @@ flowchart TD
 
 Key mechanics worth understanding:
 
-- **Streaming, not buffering-all.** Parts are consumed with `for await (const part of req.parts())`.
-  File parts are streamed straight to object storage one at a time (`part.toBuffer()` →
-  `putObject`), so a 300 MB bundle never has to fit in one allocation.
+- **True streaming, no per-file buffering.** Parts are consumed with `for await (const part of
+  req.parts())` and each file part is **piped** to object storage (`part.file` → `putObjectStream`,
+  an `@aws-sdk/lib-storage` multipart `Upload` behind a byte-counting `Transform`), so no file is
+  ever materialized in RAM — this process also serves the public copilot on a 512 MB instance.
+  A **500 MB total-bundle cap** (checked between files, per-file `fileSize` limit still applies)
+  and a per-file truncation check return `413`; any rejected/failed upload **deletes the session
+  prefix** so nothing is orphaned in storage.
 - **The field-name-is-the-path trick.** `const rel = part.fieldname || part.filename`. The recorder
   put the relative path (`shots/<id>.jpg`) on the field *name* precisely because multipart strips
   directories from filenames. The server uses it verbatim (after sanitization) as the object key
   suffix. This is the matching half of the recorder's upload step.
-- **Validation happens after storage.** Artifacts are written as they stream; the manifest is parsed
-  from its field, then validated with the **zod** `sessionManifestSchema`
+- **Validation happens after storage — with cleanup.** Artifacts are written as they stream; the
+  manifest is parsed from its field, then validated with the **zod** `sessionManifestSchema`
   ([`schemas.ts`](../../packages/shared/src/schemas.ts)). An invalid manifest returns `400` with the
-  first five issues. *(Orphaned artifacts from a rejected manifest are harmless — they're never
-  referenced by a row and could be GC'd later.)*
+  first five issues **and deletes the already-streamed artifacts** (`deleteSessionPrefix`) — no
+  orphans.
 - **The `KnowledgeSource` row is the recording's identity.** It stores the **whole manifest as JSON**
   (`manifest` column), `appBaseUrl`, `status: "uploaded"`, and the owning workspace/user. The worker
   re-reads the manifest from here, not from the upload.
@@ -128,6 +132,20 @@ user/pass, TLS for `rediss:`) are passed — not a pre-built client — so BullM
 workers need. The producer (API) and consumer ([worker](knowledge-base.md)) share only this queue
 name and the `{ sessionId, workspaceId }` shape.
 
+Hardening (2026-07-06, review §2.1–2.3 — mirrored by the Studio producer
+[`web/lib/queue.ts`](../../packages/web/lib/queue.ts)):
+
+- **`defaultJobOptions`:** `attempts: 3` with exponential backoff (5 s base) — transient
+  OpenAI/storage failures retry instead of permanently failing the recording (the worker is
+  idempotent) — and bounded retention (`removeOnComplete: 100`, `removeOnFail: 500`) so finished
+  jobs can't fill Redis (25 MB on the free tier).
+- **A throttled `on('error')` listener** (one log line / 30 s) — an emitted `'error'` with no
+  listener is an unhandled EventEmitter throw that could take down the process serving the public
+  copilot.
+- **Graceful shutdown:** SIGTERM/SIGINT close the Fastify app, the queue's Redis connection, and
+  the Prisma pool, then let the process drain (unref'd failsafe exit); the worker's own handler
+  waits for the in-flight job. Safe when both run in one process (`all.ts`).
+
 ### 4.6 Status polling (`GET /v1/sessions/:id`)
 
 Re-auths the token, fetches the source **scoped to the caller's workspace** (`findFirst({ id,
@@ -150,14 +168,18 @@ directly.
 ## 6. Failure modes & edge cases
 
 - **Bad/missing token** → `401`, nothing stored or enqueued.
-- **Malformed manifest** → `400` with zod issues; **no row, no job** (but streamed artifacts may have
-  landed — orphaned, harmless).
-- **Object-storage write fails mid-stream** → the request throws and 500s; no row/job, so the recorder
-  treats it as a failed upload and keeps its buffer for retry (R2).
+- **Malformed manifest** → `400` with zod issues; **no row, no job**, and the streamed artifacts are
+  **cleaned up** (session prefix deleted).
+- **Oversized bundle / truncated file** → `413`, artifacts cleaned up, no row/job; the recorder keeps
+  its buffer for retry (R2).
+- **Object-storage write fails mid-stream** → the request 500s after best-effort cleanup; no row/job,
+  so the recorder treats it as a failed upload and keeps its buffer for retry (R2).
 - **OpenAI / processing problems** are **not** this module's concern — it returns success the moment
-  the row + job exist. Processing failures surface later as `status=error` on the source.
-- **Crash between row-create and enqueue** (rare) would leave a source stuck in `uploaded`. There's no
-  reaper today; a re-upload or manual re-enqueue is the recovery.
+  the row + job exist. Processing failures retry (attempts: 3) and only then surface as
+  `status=error` on the source.
+- **Crash between row-create and enqueue** (rare) would leave a source stuck in `uploaded`. The
+  Recordings UI now surfaces this: >15 min without progress renders as **"Stalled — re-process"**
+  (driven by `KnowledgeSource.updatedAt`), and the existing re-process action recovers it.
 
 ---
 

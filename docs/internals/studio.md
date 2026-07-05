@@ -103,8 +103,11 @@ delete-and-recreate of items — the rationale is in [knowledge-base.md](knowled
 [connections.md](connections.md) §5.
 
 The read side, [`copilot-approvals.ts`](../../packages/web/lib/copilot-approvals.ts), provides
-`approvedSegmentKeys` / `listApprovedWorkflows` / `listApprovedItems` — the last **mirrors** the API's
-retrieval filter so both enforce the same predicate.
+`approvedSegmentKeys` / `listApprovedWorkflows` — Studio-UI bookkeeping only (candidate lists,
+counts). The retrieval-side enforcement moved to the shared
+[`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (2026-07-06); the old
+`listApprovedItems` mirror was retired, and the Studio copilot tester now calls the exact function
+the public API uses.
 
 ### 4.5 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 

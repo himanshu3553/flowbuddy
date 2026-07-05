@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-05 · **Branch:** `dev`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-06 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -153,7 +153,7 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 
 ## 7. What's left to ship Version 1
 
-Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
+Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`phase-1-review.md`](phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@sync/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
 1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + **R12 screenshot timing/cost** are **shipped**, leaving **R13** (ranked selectors — mostly a Phase-3 enabler). **R5** (marker hotkey/labels) is **deferred** — build TBD (markers are already droppable from the popup + the R7 bar).
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Phase 2** — not release-blocking.

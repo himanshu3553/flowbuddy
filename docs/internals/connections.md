@@ -225,12 +225,13 @@ came from (`sourceId`) and which workflow within that source (`segmentIndex`, a 
 assigned at distill time). Those coordinates survive a rebuild; the item rows under them are
 disposable.
 
-This is enforced at exactly **one seam**: retrieval
-([`copilot.ts → retrieveApprovedKBItems`](../../packages/api/src/copilot.ts)) filters items through
-the approved-key set, mirroring Studio's
-[`copilot-approvals.ts → listApprovedItems`](../../packages/web/lib/copilot-approvals.ts). If you
-ever add a second path that reads the KB for the copilot, it **must** go through the same filter or
-the no-leak guarantee breaks.
+This is enforced at exactly **one seam** — and since the 2026-07-06 consolidation, one
+*implementation*: [`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
+filters items through the approved-key set, and **both** the public answer route and the Studio
+preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call that
+same function (the old Studio mirror `listApprovedItems` was retired). If you ever add a second path
+that reads the KB for the copilot, it **must** go through this function or the no-leak guarantee
+breaks.
 
 ```mermaid
 flowchart LR
