@@ -169,7 +169,7 @@ Then each model step is *resolved* into the persisted `DistilledStep`:
 | `route` | model's `route`, else the key event's `route.path` |
 | `narration` | the **unique** narration across the step's source events, joined + redacted (`stepNarration`) |
 | `screenshotFile` | **frame rule C** — the key event's *action* screenshot by default; the **post/result** screenshot for the workflow's **last (outcome) step** ("you landed here") |
-| `bbox` | the key event's element rect — this powers the deferred element highlight on the screenshot |
+| `bbox` | the key event's element rect — powers the element highlight on the screenshot (**rendered in Studio's KB detail page** as a lightbox overlay, scaled to viewport fractions) |
 
 **Fallbacks & guards:** if the model returns zero steps, distillation falls back to **one step per
 cleaned event** (never lose a workflow). Observability logs warn when a workflow sheds most of its

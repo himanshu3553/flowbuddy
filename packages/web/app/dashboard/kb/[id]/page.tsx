@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/dashboard/status-badge';
+import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ type StepData = {
   route?: string;
   narration?: string | null;
   screenshotFile?: string | null;
+  bbox?: { x: number; y: number; w: number; h: number } | null; // clicked element rect (viewport px)
 };
 
 export default async function KbWorkflowPage({
@@ -65,6 +67,12 @@ export default async function KbWorkflowPage({
 
   const segmentItems = source.items.filter((it) => it.segmentIndex === selected);
 
+  // Capture-time viewport (from the raw manifest) — lets the client scale each bbox into a
+  // DPR-independent highlight on the screenshot. Absent on very old recordings → no highlight.
+  const viewport =
+    (source.manifest as { app?: { viewport?: { w: number; h: number } } } | null)?.app?.viewport ??
+    null;
+
   const items = await Promise.all(
     segmentItems.map(async (it) => {
       const d = (it.data as unknown as StepData) ?? {};
@@ -75,6 +83,7 @@ export default async function KbWorkflowPage({
         detail: d.detail ?? '',
         narration: d.narration ?? null,
         route: d.route ?? '',
+        bbox: d.bbox ?? null,
         screenshotUrl: d.screenshotFile
           ? await signedUrl(sessionObjectKey(ctx.workspace.id, source.id, d.screenshotFile))
           : null,
@@ -197,19 +206,14 @@ export default async function KbWorkflowPage({
                         )}
                       </div>
                       {it.screenshotUrl && (
-                        <a
-                          href={it.screenshotUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={it.screenshotUrl}
-                            alt={`Step ${it.orderIndex + 1}`}
-                            className="w-full rounded-lg border"
-                          />
-                        </a>
+                        <StepScreenshot
+                          url={it.screenshotUrl}
+                          alt={`Step ${it.orderIndex + 1}`}
+                          stepNumber={it.orderIndex + 1}
+                          instruction={it.instruction}
+                          bbox={it.bbox}
+                          viewport={viewport}
+                        />
                       )}
                     </div>
                   ))}
