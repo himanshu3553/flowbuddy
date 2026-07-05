@@ -424,13 +424,15 @@ public widget key and connect token.
 ### D5.2 Re-connect the extension
 The old connect token is gone. If your prod build is still installed, just click **Connect**.
 
-**Which Studio the extension talks to is baked at build time via `STUDIO_URL`** — one build targets one
-Studio. Pick the build for what you're testing against:
+**Which Studio the extension talks to is baked at build time via `STUDIO_URL`** — since `ffa11a2` it
+takes a comma-separated list (first = primary, the popup's Connect target; all entries get the
+connect bridge), so one build can cover both. Pick the build for what you're testing against:
 
 | Testing against | Build command | What gets baked |
 |---|---|---|
 | **Local** (docker-compose) | `pnpm --filter @sync/extension build` *(default `http://localhost:3000`)* | connect-bridge `matches` + popup links → **localhost**; handshake carries the local API (`http://localhost:8787`) |
 | **Render** (this dev deploy) | `STUDIO_URL=https://sync-web-uir8.onrender.com pnpm --filter @sync/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `SYNC_API_URL` |
+| **Both** (the Web Store artifact, v0.2.1+) | `STUDIO_URL="https://sync-web-uir8.onrender.com,http://localhost:3000" pnpm --filter @sync/extension build` | popup → **Render**; connect bridge on **both** origins — a store install can also connect to a local Studio |
 
 Then `chrome://extensions` → **Reload** / **Load unpacked** → `packages/extension/dist` → **Connect**
 (opens `…/connect`, relaying the token + API URL into the extension).

@@ -146,16 +146,25 @@ public URL, so:
 
 The Chrome extension is **not** deployed to Render — you build it locally pointed at your prod Studio. A
 single env var (`STUDIO_URL`) bakes both the popup links (`__STUDIO_URL__`) and the connect-bridge
-content-script `matches` (handled in [`packages/extension/build.mjs`](../packages/extension/build.mjs)):
+content-script `matches` (handled in [`packages/extension/build.mjs`](../packages/extension/build.mjs)).
+**Since `ffa11a2` it accepts a comma-separated list** — the FIRST entry is the primary (what the popup
+opens); ALL entries get the connect bridge, so one artifact connects against prod *and* local dev:
 
 ```bash
-STUDIO_URL=https://<your-sync-web-url> pnpm --filter @sync/extension build
+STUDIO_URL="https://<your-sync-web-url>,http://localhost:3000" pnpm --filter @sync/extension build
 ```
 
 Then `chrome://extensions` → **Load unpacked** → `packages/extension/dist` (or **Reload** if already loaded).
 Click **Connect** — it opens `<your-sync-web-url>/connect`, relays the token + prod API URL into the
 extension, and shows as connected. *(Plain `pnpm --filter @sync/extension build` with no `STUDIO_URL`
 reverts to localhost — the committed `src/manifest.json` stays localhost so local dev is unaffected.)*
+
+**Chrome Web Store (published 2026-07-06):** v0.1.0 is live and v0.2.1 (the first prod-targeted build:
+`https://sync-web-uir8.onrender.com` + localhost) is submitted for review — 0.1.0/0.2.0 were dev builds
+whose bridge only matched localhost, so store installs couldn't connect to the deployed Studio. The
+store zip is built from `dist/` (`cd dist && zip -r ../sync-recorder-<version>.zip .`). ⚠️ The baked
+Studio URL is part of the store artifact — moving to a custom domain later means a rebuild +
+resubmission (add the new domain to the list; keep the old one during the transition).
 
 ---
 
