@@ -17,6 +17,10 @@ export { promptToArticle } from './prompt';
 export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './prompt';
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
+// P1-M5/M6 — the SINGLE retrieval + approved-KB enforcement seam (api answer route + Studio
+// preview both call it; pgvector lands here). See retrieval.ts.
+export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retrieval';
+export type { RetrievalDb, RetrievableKBItem, ShortlistOpts } from './retrieval';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/kb-step-distillation.md
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
@@ -106,6 +110,9 @@ export interface DistilledWorkflow {
 export interface WorkflowKB {
   transcript: Transcript;
   workflows: DistilledWorkflow[];
+  /** Non-fatal build degradation (e.g. narration failed to transcribe) — the worker surfaces it
+   *  on the source while the recording still lands `ready`. Null = clean build. */
+  warning: string | null;
 }
 
 /** Build the copilot KB for one recording: a persistable transcript + clean steps grouped by workflow.
@@ -114,14 +121,25 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
   const openai = new OpenAI({ apiKey: input.apiKey });
 
   // 1. Transcribe (PII-scrubbed) + align narration to the RAW events (alignment needs raw timestamps).
-  const transcript = redactTranscript(
-    await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
-  );
+  // A transcription failure (Whisper's 25 MB cap on long recordings, a transient API error) must
+  // NOT kill the job and discard perfectly good event capture — the whole pipeline works
+  // transcript-less (narration just isn't attributed), so degrade and surface a warning instead.
+  let transcript: Transcript = { text: '', segments: [] };
+  let warning: string | null = null;
+  try {
+    transcript = redactTranscript(
+      await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
+    );
+  } catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
+    warning = `Narration could not be transcribed (${msg}) — steps were built from the captured actions without voice-over context.`;
+    console.warn(`[transcribe] degraded to transcript-less build: ${msg}`);
+  }
   const narration = alignNarration(input.manifest.events, transcript);
 
   // 2. Deterministic cleanup (B) — collapse mechanical dupes / redundant events.
   const cleaned = cleanEvents(input.manifest.events);
-  if (cleaned.length === 0) return { transcript, workflows: [] };
+  if (cleaned.length === 0) return { transcript, workflows: [], warning };
 
   // 3. Segment the cleaned events into coherent workflows (one task = one workflow).
   const segments = await segment(
@@ -165,7 +183,7 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     workflows.push({ segmentIndex: workflows.length, title: seg.title, steps });
   }
 
-  return { transcript, workflows };
+  return { transcript, workflows, warning };
 }
 
 // ---------- Module 2 (cont.): segment the KB into workflow candidates ----------

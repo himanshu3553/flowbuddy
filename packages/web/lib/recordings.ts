@@ -112,13 +112,28 @@ export function timelineEvents(manifest: SessionManifest | null): TimelineEvent[
   });
 }
 
-/** Bucket a raw KnowledgeSource status into the three labels the UI shows everywhere. */
+/** A recording sitting in uploaded/processing longer than this has lost its job (Redis wipe,
+ *  worker crash between retries) — surface it as "Stalled" so the owner reaches for Re-process
+ *  instead of watching a progress bar forever. Normal synthesis completes in a few minutes. */
+export const STALLED_AFTER_MS = 15 * 60_000;
+
+/** Stalled = still "in flight" but untouched for STALLED_AFTER_MS. `updatedAt` (not createdAt)
+ *  so a just-re-processed old recording counts from the status flip, not from upload day. */
+export function isRecordingStalled(status: string, updatedAt: Date, now: number = Date.now()): boolean {
+  return (
+    (status === 'uploaded' || status === 'processing') &&
+    now - updatedAt.getTime() > STALLED_AFTER_MS
+  );
+}
+
+/** Bucket a raw KnowledgeSource status into the labels the UI shows everywhere. */
 export function recordingStatusBadge(
   status: string,
-): { label: 'Ready' | 'Processing' | 'Failed'; tone: 'success' | 'pending' | 'danger' } {
+  opts: { stalled?: boolean } = {},
+): { label: 'Ready' | 'Processing' | 'Failed' | 'Stalled'; tone: 'success' | 'pending' | 'danger' } {
   if (status === 'ready' || status === 'done') return { label: 'Ready', tone: 'success' };
   if (status === 'uploaded' || status === 'processing')
-    return { label: 'Processing', tone: 'pending' };
+    return opts.stalled ? { label: 'Stalled', tone: 'danger' } : { label: 'Processing', tone: 'pending' };
   return { label: 'Failed', tone: 'danger' };
 }
 

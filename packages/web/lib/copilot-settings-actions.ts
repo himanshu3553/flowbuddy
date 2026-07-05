@@ -5,13 +5,44 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@sync/db';
 import { getCurrentWorkspace } from '@/lib/session';
 
-/** P1-M9 — set the copilot origin allowlist (newline/comma separated). Empty = allow any origin. */
-export async function setCopilotOrigins(originsText: string): Promise<void> {
+export interface SaveOriginsResult {
+  /** What was actually saved — normalized to exact `scheme://host[:port]` Origin-header form. */
+  origins: string[];
+  /** Entries that couldn't be parsed as an origin (NOT saved) — surfaced to the user. */
+  rejected: string[];
+}
+
+/**
+ * P1-M9 — set the copilot origin allowlist (newline/comma separated). Empty = allow any origin.
+ * Entries are NORMALIZED to the exact string browsers send as the `Origin` header — the API
+ * compares with strict equality, so `https://app.acme.com/` (trailing slash) or a bare
+ * `app.acme.com` as typed would never match and the owner would believe they're locked down
+ * when they aren't. Bare domains assume https; paths/slashes are stripped via `new URL().origin`.
+ */
+export async function setCopilotOrigins(originsText: string): Promise<SaveOriginsResult> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
-  const origins = [...new Set(originsText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean))];
+  const origins: string[] = [];
+  const rejected: string[] = [];
+  for (const raw of originsText.split(/[\n,]/)) {
+    const entry = raw.trim();
+    if (!entry) continue;
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(entry) ? entry : `https://${entry}`;
+    try {
+      const url = new URL(withScheme);
+      // Only http(s) pages can embed the widget; anything else has no matchable Origin.
+      if (!/^https?:$/.test(url.protocol) || !url.hostname || url.origin === 'null') {
+        rejected.push(entry);
+      } else if (!origins.includes(url.origin)) {
+        origins.push(url.origin);
+      }
+    } catch {
+      rejected.push(entry);
+    }
+  }
   await prisma.workspace.update({ where: { id: ctx.workspace.id }, data: { copilotAllowedOrigins: origins } });
   revalidatePath('/dashboard/copilot');
+  return { origins, rejected };
 }
 
 /** Appearance (host branding) — persisted so it prefills the UI and bakes into the embed snippet. */

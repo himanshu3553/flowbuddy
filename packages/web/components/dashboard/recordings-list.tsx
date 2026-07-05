@@ -20,6 +20,8 @@ export interface RecordingRow {
   date: string;
   recordedAgo: string;
   status: string;
+  /** In flight (uploaded/processing) but untouched for too long — the job was likely lost. */
+  stalled: boolean;
   error: string | null;
   workflowCount: number;
   durationMs: number;
@@ -35,12 +37,13 @@ type Filter = 'all' | 'ready' | 'processing' | 'failed';
 const READY = ['ready', 'done'];
 const PROCESSING = ['uploaded', 'processing'];
 
-function statusMeta(status: string) {
-  const { label, tone } = recordingStatusBadge(status);
+function statusMeta(status: string, stalled: boolean) {
+  const { label, tone } = recordingStatusBadge(status, { stalled });
   return {
     label,
     tone,
-    processing: PROCESSING.includes(status),
+    processing: PROCESSING.includes(status) && !stalled,
+    stalled: PROCESSING.includes(status) && stalled,
     failed: !READY.includes(status) && !PROCESSING.includes(status),
   };
 }
@@ -121,7 +124,7 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
       ) : (
         <ul className="space-y-2.5">
           {visible.map((r) => {
-            const s = statusMeta(r.status);
+            const s = statusMeta(r.status, r.stalled);
             return (
               <li
                 key={r.id}
@@ -153,7 +156,11 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
                   <span className="block truncate text-[13.5px] font-semibold text-ink">
                     {r.title}
                   </span>
-                  {s.processing ? (
+                  {s.stalled ? (
+                    <span className="mt-0.5 block truncate font-mono text-[10px] text-danger-ink">
+                      stalled — pick “Re-process” from the ⋯ menu
+                    </span>
+                  ) : s.processing ? (
                     <span className="mt-1.5 block h-1 w-40 max-w-full overflow-hidden rounded-full bg-[color:var(--gray-100)]">
                       <span className="block h-full w-2/3 rounded-full bg-warning-dot" />
                     </span>
@@ -184,7 +191,7 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
 
                 {/* Right rail */}
                 <span className="hidden w-[92px] shrink-0 text-right text-[12.5px] sm:block">
-                  {s.failed ? (
+                  {s.failed || s.stalled ? (
                     <span className="text-faint">—</span>
                   ) : s.processing ? (
                     <span className="text-faint">distilling…</span>

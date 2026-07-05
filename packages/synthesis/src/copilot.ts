@@ -98,6 +98,11 @@ export async function answerFromKB(input: {
     model: input.model,
     messages,
     response_format: { type: 'json_schema', json_schema: schema as never },
+    // Cost ceiling: the answer endpoint is public (rate-limited but key-in-page-source), so cap
+    // output tokens — a truncated JSON parses as a decline, which is the graceful failure mode.
+    // Low temperature for consistent answers (segment/distill pin 0; a touch of warmth is fine here).
+    max_completion_tokens: 700,
+    temperature: 0.2,
   });
 
   let a: { covered?: boolean; reason?: string; answer?: string; citedItemIds?: string[] };

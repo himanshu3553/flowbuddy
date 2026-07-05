@@ -123,6 +123,7 @@ model KnowledgeSource {
   transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval
   error       String?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt // last touch (status flips included) — drives the "stalled processing" surface
 
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy        User              @relation(fields: [createdById], references: [id])

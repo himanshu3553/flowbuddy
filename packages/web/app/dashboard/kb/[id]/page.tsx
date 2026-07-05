@@ -102,6 +102,16 @@ export default async function KbWorkflowPage({
       ? await getWorkflowCopilotStats(ctx.workspace.id, source.id, selected)
       : null;
 
+  // Approval state (the P1-M5 trust gate) — the copilot only cites APPROVED workflows, so the
+  // status box below must not claim citability without it.
+  const approved =
+    selected != null &&
+    (await prisma.copilotApproval.findFirst({
+      where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
+      select: { id: true },
+    })) != null;
+  const shotCount = items.filter((it) => it.screenshotUrl).length;
+
   const feedbackValue: ReactNode =
     stats && stats.helpfulUp + stats.helpfulDown > 0 ? (
       <span className="inline-flex items-center gap-2">
@@ -248,10 +258,21 @@ export default async function KbWorkflowPage({
                     </span>
                   </div>
                 ))}
-                {ready ? (
+                {/* Only derivable facts here — no invented health signals (selector checks don't
+                    exist yet, R13), and "citable" is only true once the trust gate approved it. */}
+                {ready && approved ? (
                   <div className="flex items-center gap-2 rounded-control border border-success-border bg-success-bg px-2.5 py-2 text-[11px] text-success-text2">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-success-dot" />
-                    Selectors healthy · grounded and ready to cite.
+                    Approved for the copilot · {items.length} step{items.length === 1 ? '' : 's'} ·{' '}
+                    {shotCount === items.length
+                      ? 'screenshots on every step'
+                      : `screenshots on ${shotCount} of ${items.length} steps`}
+                    .
+                  </div>
+                ) : ready ? (
+                  <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
+                    Not approved yet — the copilot won’t cite this workflow until you approve it
+                    in the Knowledge Base.
                   </div>
                 ) : (
                   <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">

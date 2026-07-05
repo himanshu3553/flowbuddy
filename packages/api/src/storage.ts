@@ -4,7 +4,11 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { Transform, type Readable } from 'node:stream';
 import type { ArtifactReader } from '@sync/synthesis';
 import { config } from './config';
 
@@ -34,6 +38,49 @@ export async function putObject(key: string, body: Buffer, contentType?: string)
   await s3.send(
     new PutObjectCommand({ Bucket: config.r2.bucket, Key: key, Body: body, ContentType: contentType }),
   );
+}
+
+/**
+ * Stream a multipart file part straight to object storage WITHOUT materializing it in RAM
+ * (ingestion runs on a 512 MB instance next to the public copilot). Returns the byte count so the
+ * caller can enforce a total-bundle cap. `Upload` handles multipart chunking for unknown lengths.
+ */
+export async function putObjectStream(key: string, body: Readable, contentType?: string): Promise<number> {
+  let bytes = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      bytes += chunk.length;
+      cb(null, chunk);
+    },
+  });
+  const upload = new Upload({
+    client: s3,
+    params: { Bucket: config.r2.bucket, Key: key, Body: body.pipe(counter), ContentType: contentType },
+  });
+  await upload.done();
+  return bytes;
+}
+
+/** Delete every stored object under one session's prefix — used to clean up a rejected/failed
+ *  upload so nothing is orphaned in R2. Mirrors web/lib/storage.ts `deleteSessionPrefix`. */
+export async function deleteSessionPrefix(workspaceId: string, sessionId: string): Promise<void> {
+  const prefix = `workspaces/${workspaceId}/sessions/${sessionId}/`;
+  let token: string | undefined;
+  do {
+    const listed = await s3.send(
+      new ListObjectsV2Command({ Bucket: config.r2.bucket, Prefix: prefix, ContinuationToken: token }),
+    );
+    const keys = (listed.Contents ?? []).map((o) => o.Key).filter((k): k is string => !!k);
+    if (keys.length > 0) {
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: config.r2.bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (token);
 }
 
 /** An `ArtifactReader` bound to one session — reads bundle files (screenshots, audio) from

@@ -1,14 +1,15 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@sync/db';
 import { sessionManifestSchema } from '@sync/shared';
 import { config } from './config';
 import { authWorkspace } from './auth';
-import { ensureBucket, putObject, sessionKey } from './storage';
+import { ensureBucket, putObjectStream, deleteSessionPrefix, sessionKey } from './storage';
 import { synthesisQueue } from './queue';
-import { answerFromKB } from '@sync/synthesis';
-import { retrieveApprovedKBItems, sanitizeHistory } from './copilot';
+// Retrieval + history sanitizing come from the SHARED @sync/synthesis seam (P1-M5 no-leak) —
+// the Studio preview uses the same functions, so both surfaces answer identically.
+import { answerFromKB, retrieveApprovedKBItems, sanitizeHistory } from '@sync/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen } from './copilot-auth';
 
 const app = Fastify({ logger: true });
@@ -27,11 +28,17 @@ await app.register(multipart, {
 
 app.get('/healthz', async () => ({ ok: true }));
 
+// Total-bundle ceiling across ALL files of one upload (per-file cap is the multipart `fileSize`).
+// A real session is tens of MB (JPEG shots + audio); this only stops abuse/runaway bundles.
+const MAX_BUNDLE_BYTES = 500 * 1024 * 1024;
+
 /**
  * Token-authenticated bundle upload.
  * Files ride their relative path on the multipart field NAME (multipart strips
- * directories from filenames); we stream each to object storage, validate the
- * manifest, persist a RecSession, and enqueue synthesis.
+ * directories from filenames); we STREAM each part to object storage (never buffering a file in
+ * RAM — this instance also serves the public copilot), validate the manifest, persist a
+ * RecSession, and enqueue synthesis. Any rejected/failed upload deletes what was already stored
+ * so nothing is orphaned in R2.
  */
 app.post('/v1/sessions', async (req, reply) => {
   const ws = await authWorkspace(req.headers.authorization);
@@ -39,23 +46,46 @@ app.post('/v1/sessions', async (req, reply) => {
 
   const sessionId = randomUUID();
   let manifestRaw: unknown = null;
+  let totalBytes = 0;
 
-  for await (const part of req.parts()) {
-    if (part.type === 'file') {
-      const rel = part.fieldname || part.filename || `file-${randomUUID()}`;
-      const buf = await part.toBuffer();
-      await putObject(sessionKey(ws.workspaceId, sessionId, rel), buf, part.mimetype);
-    } else if (part.fieldname === 'manifest') {
-      try {
-        manifestRaw = JSON.parse(String(part.value));
-      } catch {
-        manifestRaw = null;
+  // Best-effort cleanup for every non-success exit below.
+  const discardBundle = () => deleteSessionPrefix(ws.workspaceId, sessionId).catch(() => {});
+
+  try {
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        const rel = part.fieldname || part.filename || `file-${randomUUID()}`;
+        totalBytes += await putObjectStream(
+          sessionKey(ws.workspaceId, sessionId, rel),
+          part.file,
+          part.mimetype,
+        );
+        if (part.file.truncated) {
+          // The multipart fileSize limit cut this file short — the stored object is incomplete.
+          await discardBundle();
+          return reply.code(413).send({ error: 'a bundle file exceeds the per-file size limit' });
+        }
+        if (totalBytes > MAX_BUNDLE_BYTES) {
+          await discardBundle();
+          return reply.code(413).send({ error: 'bundle exceeds the total size limit' });
+        }
+      } else if (part.fieldname === 'manifest') {
+        try {
+          manifestRaw = JSON.parse(String(part.value));
+        } catch {
+          manifestRaw = null;
+        }
       }
     }
+  } catch (err) {
+    // Storage/stream failure mid-upload — don't leave a partial bundle behind.
+    await discardBundle();
+    throw err;
   }
 
   const parsed = sessionManifestSchema.safeParse(manifestRaw);
   if (!parsed.success) {
+    await discardBundle();
     return reply.code(400).send({ error: 'invalid manifest', issues: parsed.error.issues.slice(0, 5) });
   }
   const m = parsed.data;
@@ -85,30 +115,61 @@ app.get('/v1/sessions/:id', async (req, reply) => {
   return { id: s.id, status: s.status, error: s.error };
 });
 
+// Question ceiling: the endpoint is public (key is in host page source) and every extra char is
+// tokens the workspace owner pays for. The widget input caps at 400; 2000 leaves headroom for
+// other integrations without allowing megabyte bodies.
+const MAX_QUESTION_CHARS = 2000;
+
+/**
+ * Shared gate for ALL /v1/copilot/* routes (P1-M9): resolve the PUBLIC embeddable key + origin
+ * allowlist, then rate-limit. Every copilot route writes to the DB, so none may skip the limiter.
+ * Buckets are per-route (`/answer` keeps the bare key — its historical bucket) so a chatty host
+ * page pinging /seen can't starve real questions. Sends the error reply itself; null = handled.
+ */
+async function copilotGate(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  route: 'answer' | 'feedback' | 'seen',
+): Promise<{ workspaceId: string; showCitations: boolean; key: string; origin: string | undefined } | null> {
+  const key = (req.headers['x-sync-key'] as string | undefined) ?? '';
+  const origin = req.headers.origin as string | undefined;
+  const auth = await resolveCopilotKey(key, origin);
+  if (!auth.ok) {
+    void reply.code(auth.status).send({ error: auth.error });
+    return null;
+  }
+  if (!checkRateLimit(route === 'answer' ? key : `${route}:${key}`)) {
+    void reply.code(429).send({ error: 'rate limit exceeded — slow down' });
+    return null;
+  }
+  return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, key, origin };
+}
+
 /**
  * P1-M6 — copilot answer endpoint. Grounded ONLY in APPROVED-KB (P1-M5): retrieve approved items,
  * answer or honestly decline; on a decline, log a CoverageGap ("record this next"). Auth = the
  * workspace token for now; P1-M9 adds a public embeddable key + origin allowlist for in-app embed.
  */
 app.post('/v1/copilot/answer', async (req, reply) => {
-  // P1-M9: authenticate with the PUBLIC embeddable key (x-sync-key) + origin allowlist + rate limit.
-  const key = req.headers['x-sync-key'] as string | undefined;
-  const auth = await resolveCopilotKey(key, req.headers.origin as string | undefined);
-  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
-  if (!checkRateLimit(key ?? '')) return reply.code(429).send({ error: 'rate limit exceeded — slow down' });
-  const workspaceId = auth.workspaceId;
+  const gate = await copilotGate(req, reply, 'answer');
+  if (!gate) return reply;
+  const { workspaceId, key, origin } = gate;
   // A valid authed call from an allowed origin = the widget is live; confirm embed detection here too
   // (throttled, shared with the /seen ping) so usage alone keeps "copilot live" accurate.
-  await recordWidgetSeen(key ?? '', workspaceId, req.headers.origin as string | undefined);
+  await recordWidgetSeen(key, workspaceId, origin);
 
   const body = (req.body ?? {}) as { question?: string; history?: unknown; context?: { path?: string } };
   const question = (body.question ?? '').trim();
   if (!question) return reply.code(400).send({ error: 'question is required' });
+  if (question.length > MAX_QUESTION_CHARS) {
+    return reply.code(400).send({ error: `question too long (max ${MAX_QUESTION_CHARS} characters)` });
+  }
   if (!config.openaiApiKey) return reply.code(500).send({ error: 'OPENAI_API_KEY not configured' });
 
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
-  const contextPath = typeof body.context?.path === 'string' ? body.context.path : null;
-  const items = await retrieveApprovedKBItems(workspaceId, question, { contextPath });
+  // Bounded — it's untrusted input that lands in the DB and the prompt.
+  const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
+  const items = await retrieveApprovedKBItems(prisma, workspaceId, question, { contextPath });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
     const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false, contextPath }, select: { id: true } });
@@ -120,7 +181,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     history: sanitizeHistory(body.history),
     items,
     context: { path: contextPath },
-    showCitations: auth.showCitations,
+    showCitations: gate.showCitations,
     apiKey: config.openaiApiKey,
     model: config.synthModel,
   });
@@ -166,9 +227,8 @@ app.post('/v1/copilot/answer', async (req, reply) => {
 
 /** P1-M10 — thumbs feedback on a copilot answer (by the queryId returned from /answer). */
 app.post('/v1/copilot/feedback', async (req, reply) => {
-  const key = req.headers['x-sync-key'] as string | undefined;
-  const auth = await resolveCopilotKey(key, req.headers.origin as string | undefined);
-  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+  const gate = await copilotGate(req, reply, 'feedback');
+  if (!gate) return reply;
 
   const body = (req.body ?? {}) as { queryId?: string; feedback?: string };
   const feedback = body.feedback === 'up' || body.feedback === 'down' ? body.feedback : null;
@@ -176,7 +236,7 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
 
   // Scope the update to this workspace's queries only.
   const updated = await prisma.copilotQuery.updateMany({
-    where: { id: body.queryId, workspaceId: auth.workspaceId },
+    where: { id: body.queryId, workspaceId: gate.workspaceId },
     data: { feedback },
   });
   if (updated.count === 0) return reply.code(404).send({ error: 'query not found' });
@@ -189,12 +249,10 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
  * (same as /answer); DB writes are throttled per key so busy hosts don't hammer the workspace row.
  */
 app.post('/v1/copilot/seen', async (req, reply) => {
-  const key = req.headers['x-sync-key'] as string | undefined;
-  const origin = req.headers.origin as string | undefined;
-  const auth = await resolveCopilotKey(key, origin);
-  if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+  const gate = await copilotGate(req, reply, 'seen');
+  if (!gate) return reply;
 
-  await recordWidgetSeen(key ?? '', auth.workspaceId, origin);
+  await recordWidgetSeen(gate.key, gate.workspaceId, gate.origin);
   return { ok: true };
 });
 
@@ -207,3 +265,15 @@ app
     app.log.error(err);
     process.exit(1);
   });
+
+// Graceful shutdown (§3.4): deploys send SIGTERM — finish in-flight requests, close the queue's
+// Redis connection + DB pool, then let the process drain naturally. No process.exit() in the happy
+// path so the worker's own handler (same process on the free tier, all.ts) isn't cut off; the
+// unref'd failsafe covers anything that hangs (the host force-kills after its grace period anyway).
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    app.log.info(`${signal} received — shutting down API`);
+    setTimeout(() => process.exit(0), 10_000).unref();
+    void Promise.allSettled([app.close(), synthesisQueue.close(), prisma.$disconnect()]);
+  });
+}

@@ -9,6 +9,7 @@ import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import {
   asManifest,
   deriveRecordingMeta,
+  isRecordingStalled,
   relativeTime,
 } from '@/lib/recordings';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -50,6 +51,7 @@ export default async function RecordingsPage() {
         appBaseUrl: true,
         error: true,
         createdAt: true,
+        updatedAt: true,
         manifest: true,
       },
     }),
@@ -80,6 +82,7 @@ export default async function RecordingsPage() {
         }),
         recordedAgo: relativeTime(s.createdAt),
         status: s.status,
+        stalled: isRecordingStalled(s.status, s.updatedAt),
         error: s.error,
         workflowCount: wfBySource.get(s.id) ?? 0,
         durationMs: meta.durationMs,

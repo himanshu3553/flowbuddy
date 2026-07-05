@@ -22,6 +22,7 @@ import {
   deriveRecordingMeta,
   timelineEvents,
   formatDuration,
+  isRecordingStalled,
   recordingStatusBadge,
 } from '@/lib/recordings';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -98,8 +99,9 @@ export default async function RecordingDetailPage({
   const app = manifest?.app;
   const recordedBy = source.createdBy?.name || source.createdBy?.email || '—';
   const failed = source.status === 'error';
+  const stalled = isRecordingStalled(source.status, source.updatedAt);
   const hasReplay = frames.length > 0 || !!audioUrl;
-  const st = recordingStatusBadge(source.status);
+  const st = recordingStatusBadge(source.status, { stalled });
 
   const summary: [string, string][] = [
     ['App', source.appBaseUrl || '—'],
@@ -151,6 +153,34 @@ export default async function RecordingDetailPage({
             </p>
             <p className="mt-0.5 font-mono text-[11px] text-danger-ink">
               {source.error || 'Capture or synthesis was interrupted.'}
+            </p>
+            <div className="mt-2.5">
+              <ReprocessButton id={source.id} />
+            </div>
+          </div>
+        )}
+
+        {/* Degraded-but-successful build (§3.3): the worker lands `ready` but leaves a warning in
+            `error` (e.g. narration failed to transcribe) — a notice, not a failure. */}
+        {!failed && source.status === 'ready' && source.error && (
+          <div className="rounded-card border border-warning-border bg-warning-bg px-4 py-3.5">
+            <p className="text-sm font-semibold text-warning-text">
+              Processed with a warning.
+            </p>
+            <p className="mt-0.5 font-mono text-[11px] text-warning-text">
+              {source.error}
+            </p>
+          </div>
+        )}
+
+        {stalled && (
+          <div className="rounded-card border border-danger-border bg-danger-bg px-4 py-3.5">
+            <p className="text-sm font-semibold text-danger-text">
+              Processing looks stalled.
+            </p>
+            <p className="mt-0.5 font-mono text-[11px] text-danger-ink">
+              This recording has been “processing” for over 15 minutes — the job was likely lost.
+              Re-processing is safe and starts it over.
             </p>
             <div className="mt-2.5">
               <ReprocessButton id={source.id} />

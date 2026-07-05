@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Code2, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Code2, Eye, EyeOff, RefreshCw } from 'lucide-react';
 
 import {
   setCopilotOrigins,
@@ -118,6 +118,7 @@ export function CopilotWorkspace({
 }) {
   const [tab, setTab] = useState<Tab>('activity');
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
+  const [rejectedOrigins, setRejectedOrigins] = useState<string[]>([]);
   const [cite, setCite] = useState(showCitations);
   const [showKey, setShowKey] = useState(false);
   const [pending, start] = useTransition();
@@ -125,7 +126,11 @@ export function CopilotWorkspace({
 
   function saveOrigins() {
     start(async () => {
-      await setCopilotOrigins(origins);
+      // The action normalizes entries to exact Origin-header form — reflect what was ACTUALLY
+      // saved back into the textarea, and surface anything it couldn't parse (not saved).
+      const result = await setCopilotOrigins(origins);
+      setOrigins(result.origins.join('\n'));
+      setRejectedOrigins(result.rejected);
       router.refresh();
     });
   }
@@ -211,6 +216,28 @@ export function CopilotWorkspace({
           </button>
         ))}
       </div>
+
+      {detection.detected && allowedOrigins.length === 0 && (
+        // The widget is LIVE but no allowlist is set — the copilot answers from ANY website that
+        // copies the public key (it's visible in the host page source). Shown on every tab until
+        // the owner locks it down; the empty-allowlist dev default itself stays unchanged.
+        <div className="flex flex-wrap items-center gap-2.5 rounded-card border border-warning-border bg-warning-bg px-4 py-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning-dot" />
+          <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-warning-text">
+            <span className="font-semibold">Origin allowlist not set.</span> Your copilot is live
+            and will answer from <span className="font-semibold">any website</span> that copies
+            your public key. Add your app’s origins to lock it down.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setTab('settings')}
+          >
+            Set allowed origins
+          </Button>
+        </div>
+      )}
 
       {tab === 'activity' &&
         (activity.total === 0 ? (
@@ -533,6 +560,13 @@ export function CopilotWorkspace({
                 rows={4}
                 className="font-mono text-xs"
               />
+              {rejectedOrigins.length > 0 && (
+                <p className="text-[11.5px] text-danger-text">
+                  Couldn’t parse (not saved):{' '}
+                  <span className="font-mono">{rejectedOrigins.join(', ')}</span> — use{' '}
+                  <span className="font-mono">https://app.example.com</span> form.
+                </p>
+              )}
               <Button
                 type="button"
                 size="sm"

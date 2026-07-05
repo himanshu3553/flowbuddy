@@ -92,6 +92,7 @@ const form = el('form', 'sc-input');
 const input = el('input');
 input.type = 'text';
 input.placeholder = 'Ask a question…';
+input.maxLength = 400; // the API rejects oversized questions; keep honest input bounded at the source
 const send = el('button', 'sc-send', 'Send');
 send.type = 'submit';
 form.appendChild(input);
@@ -139,8 +140,9 @@ async function ask(question: string): Promise<void> {
   messages.push({ role: 'user', content: question });
   loading = true;
   render();
-  // Prior turns (exclude the question we just pushed; it's sent separately).
-  const history = messages.filter((m) => !m.error).slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+  // Prior turns (exclude the question we just pushed; it's sent separately). Only the last 10
+  // ride along — the server slices to 10 anyway, so a long chat must not grow the payload.
+  const history = messages.filter((m) => !m.error).slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content }));
   try {
     const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
       method: 'POST',

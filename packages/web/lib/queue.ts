@@ -48,7 +48,17 @@ function onQueueError(err: unknown): void {
  */
 function getQueue(): Queue {
   if (g.__syncSynthesisQueue) return g.__syncSynthesisQueue;
-  const queue = new Queue(SYNTHESIS_QUEUE, { connection });
+  // defaultJobOptions MUST mirror packages/api/src/queue.ts: bounded retries for transient
+  // failures (the worker is idempotent) + bounded retention so finished jobs can't fill Redis.
+  const queue = new Queue(SYNTHESIS_QUEUE, {
+    connection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 500 },
+    },
+  });
   queue.on('error', onQueueError);
   g.__syncSynthesisQueue = queue;
   return queue;
