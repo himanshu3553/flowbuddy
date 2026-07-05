@@ -53,7 +53,10 @@ export type PopupCmd =
   | { cmd: 'marker' }
   | { cmd: 'getState' };
 
-export interface PortEventMsg { kind: 'event'; event: CapturedEvent; domHtml: string; }
+// `scroll` (R12) = the top-document scroll when the event's bbox was measured; the background uses it
+// to reconcile the bbox against any scroll before the (queued) screenshot. Not persisted on the event.
+// `preShotId` (R12) = claims a pre-click screenshot captured at pointerdown (see PortPreCaptureMsg).
+export interface PortEventMsg { kind: 'event'; event: CapturedEvent; domHtml: string; scroll?: { x: number; y: number }; preShotId?: string; }
 export interface PortPostActionMsg {
   kind: 'postAction';
   eventId: string;
@@ -65,4 +68,7 @@ export interface PortAppMetaMsg { kind: 'appMeta'; meta: AppMeta; }
 // R4 — a heartbeat with no payload: resets the MV3 idle timer so the service worker isn't evicted
 // mid-recording during quiet narration. The background receives it and does nothing else.
 export interface PortKeepAliveMsg { kind: 'keepalive'; }
-export type PortMsg = PortEventMsg | PortPostActionMsg | PortAppMetaMsg | PortKeepAliveMsg;
+// R12 — fired on `pointerdown` (before the click's side effect): asks the background to snapshot the
+// tab NOW and stash it under `shotId`, so the click that follows shows the target still visible.
+export interface PortPreCaptureMsg { kind: 'preCapture'; shotId: string; }
+export type PortMsg = PortEventMsg | PortPostActionMsg | PortAppMetaMsg | PortKeepAliveMsg | PortPreCaptureMsg;

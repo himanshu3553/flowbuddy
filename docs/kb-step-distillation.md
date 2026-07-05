@@ -119,9 +119,9 @@ interface DistilledStep {                 // what we persist (in KnowledgeItem.d
 ```
 
 **Screenshot selection (frame rule C, deterministic — no LLM frame choice):**
-- Resolve `keyEventId` → its event in the (cleaned) set. Default to the **action frame** `shots/<keyEventId>.png`.
-- For the **last step of the workflow** (the outcome) → use the **result frame** `shots/<keyEventId>-post.png` (falls back to the action frame if no post-shot exists).
-- Carry the keyEvent's `target.bbox` onto the step (free; powers the deferred highlight).
+- Resolve `keyEventId` → its event in the (cleaned) set. Default to the **action frame** `shots/<keyEventId>.jpg`.
+- For the **last step of the workflow** (the outcome) → use the **result frame** `shots/<keyEventId>-post.jpg` (falls back to the action frame if no post-shot exists).
+- Carry the keyEvent's `target.bbox` onto the step (free; powers the element highlight — **now rendered in Studio's KB detail page** (2026-07-03), see §8).
 - Fallback if `keyEventId` is missing/invalid: the step's last valid `sourceEventId`; if none, `screenshotFile = null`.
 
 **Prompt rules:**
@@ -209,7 +209,7 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 
 ## 8. Out of scope (future hardening)
 
-- **bbox highlight rendering**: draw a highlight box on the step screenshot around the element (CSS overlay scaled to the rendered image). The data (`bbox`) is persisted now in Phase 2/3, so this is a pure render-layer add — no pipeline change, no reprocess. Needs coordinate-scaling calibration (DPR / image resize).
+- **bbox highlight rendering** — ✅ **shipped 2026-07-03** on Studio's KB detail page ([`web/.../step-screenshot.tsx`](../packages/web/components/dashboard/step-screenshot.tsx)): the step screenshot opens in a **same-page lightbox** and the `bbox` is drawn as a CSS overlay expressed in **viewport fractions** (`bbox / manifest.app.viewport`) — DPR-independent, no coordinate calibration needed. Pure render-layer add (no pipeline change, no reprocess). *(The parked Phase-2 article editor has its own `lib/highlight.ts` doing the same fraction math; the KB page keeps a self-contained copy rather than importing parked code.)*
 - **Prune unreferenced screenshots**: only ~1 screenshot per step is referenced; the dropped/stray events' shots sit unused in MinIO.
 - **C — capture-source filtering**: stop emitting non-interactive clicks / dedupe in the extension.
 - **D — workflow-start marker**: let the recorder mark where the task begins (kills pre-workflow noise at the source); workflow-level narration instead of per-event smear.

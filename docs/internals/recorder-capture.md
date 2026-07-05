@@ -54,7 +54,7 @@ and the **`micLevel`** relay that feeds the control-bar meter into the top frame
 - **Output:** an HTTP `POST /v1/sessions` carrying:
   - the `manifest` (a `SessionManifest` JSON),
   - `audio.webm` (if narration was captured),
-  - `shots/<eventId>.png` and `shots/<eventId>-post.png` (screenshots),
+  - `shots/<eventId>.jpg` and `shots/<eventId>-post.jpg` (screenshots — JPEG, R12),
   - `dom/<eventId>.html` and `dom/<eventId>-post.html` (DOM snapshots).
 
 ---
@@ -74,9 +74,10 @@ resets mid-recording.
 ### 4.2 What the content script captures (the DOM fingerprint)
 
 The content script ([`content.ts`](../../packages/extension/src/content.ts)) attaches **capture-phase**
-listeners for `click`, `change` (→ `input`), `submit`, `keydown`, `popstate`, and (R10) `scroll` +
-`mouseover`, and it **monkey-patches `history.pushState`/`replaceState`** so SPA route changes also
-emit a `nav` event. It runs in **all frames** (R8): sub-frame events translate their `bbox` into
+listeners for `click`, `change` (→ `input`), `submit`, `keydown`, `popstate`, (R10) `scroll` +
+`mouseover`, and (R12) `pointerdown` (which triggers the pre-click screenshot, §4.3 — it emits no event
+itself), and it **monkey-patches `history.pushState`/`replaceState`** so SPA route changes also emit a
+`nav` event. It runs in **all frames** (R8): sub-frame events translate their `bbox` into
 top-document coordinates (cross-origin frames omit `bbox`) and record a `framePath`.
 
 **Richer interactions (R10), kept low-noise so distillation isn't flooded:**
@@ -118,11 +119,22 @@ capped at 400 KB. It's a forensic record, not used by the live copilot path toda
 
 Events stream to the background over the `capture` port. For each `event` message the background:
 
-1. Calls `captureShot()` → `chrome.tabs.captureVisibleTab` (a **PNG of the visible tab**). This API is
-   rate-limited (~2/s), so calls are **serialized through a promise chain and spaced ≥700 ms apart**,
-   with one retry against the current window on failure.
-2. Stores the screenshot under `shot:<file>`, the DOM under `dom:<file>`, and the event record under
-   `event:<paddedTimestamp>:<id>` — all in **IndexedDB** ([`idb.ts`](../../packages/extension/src/idb.ts)).
+1. Gets a screenshot via `captureShot()` → `chrome.tabs.captureVisibleTab` (a **JPEG of the visible
+   tab**, quality 80 — R12, ~5–10× lighter than PNG). This API is rate-limited (~2/s), so calls are
+   **serialized through a promise chain and spaced ≥700 ms apart**, with one retry on failure.
+   - **R12 — snapshot closer to the event:** for a **click**, the shot starts at **`pointerdown`**
+     (a `preCapture` fired *before* the click's side effect); the background stashes the in-flight
+     **promise** and the click **awaits** it by `preShotId` (awaiting avoids a race — `captureVisibleTab`
+     often finishes after the click arrives). So a click that opens a modal / navigates shows the target
+     *before* it's covered. The **last input** before a submit reuses the same frame: its `change`
+     (fired on blur by that click) references the click's pre-shot too — both claim the one frame. No
+     pointerdown (keyboard/Tab) → capture at event time.
+2. **R12 — bbox vs. scroll (fallback path only):** a delayed (event-time) shot may have scrolled since
+   the event, so the background asks the top frame for its **current scroll** and shifts the bbox by
+   the delta (or **drops it** if it scrolled out of frame). A pre-click shot skips this — it already
+   matches the bbox's moment. Top frame only.
+3. Stores the screenshot under `shot:<file>` (`shots/<id>.jpg`), the DOM under `dom:<file>`, and the
+   event record under `event:<paddedTimestamp>:<id>` — all in **IndexedDB** ([`idb.ts`](../../packages/extension/src/idb.ts)).
 
 The padded-timestamp key (`event:000012345:<uuid>`) means a prefix cursor scan returns events **in
 chronological order** for free at assembly time.
@@ -154,7 +166,7 @@ Enter/nav, the content script arms a watcher ([`schedulePostAction`](../../packa
 - On settle it sends a `postAction` message with a fresh DOM snapshot, the (possibly new) route, and a
   `settleReason` (`mutation_quiet` | `timeout`).
 
-The background then takes a **post screenshot** (`shots/<id>-post.png`) and attaches `postAction`
+The background then takes a **post screenshot** (`shots/<id>-post.jpg`) and attaches `postAction`
 (screenshot + DOM + route + reason) to the original event. This before/after pair is what lets the KB
 later show "you clicked here → you landed there", and lets distillation pick the *result* frame for a
 workflow's final step.
@@ -192,7 +204,7 @@ to the recording tab's top frame for the **control-bar meter** (R7).
 1. Read `meta`, all `event:*` (sorted by key = chronological), and `audio` from IndexedDB.
 2. Build the `manifest` object: `app` meta, `audio` ref, `markers`, `events[]`.
 3. Build a `FormData`: the `manifest` JSON field, `audio.webm`, and every `shot:*`/`dom:*` entry.
-   **The relative path is the field name** (`fd.append('shots/<id>.png', blob, ...)`) — because
+   **The relative path is the field name** (`fd.append('shots/<id>.jpg', blob, ...)`) — because
    multipart strips directories from filenames, the path must ride on the field name so the server can
    reconstruct the object key.
 4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>`.

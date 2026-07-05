@@ -126,8 +126,8 @@ One bucket (`sync-artifacts` by default). Keys are **workspace- and session-pref
 
 ```
 workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>
-                                              ├── shots/<eventId>.png
-                                              ├── shots/<eventId>-post.png
+                                              ├── shots/<eventId>.jpg
+                                              ├── shots/<eventId>-post.jpg
                                               ├── dom/<eventId>.html
                                               ├── dom/<eventId>-post.html
                                               └── audio.webm
@@ -138,7 +138,7 @@ workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>
 - Read by the [worker](knowledge-base.md) through an **`ArtifactReader`** —
   `sessionArtifactReader(ws, id)` returns a `(relPath) => Promise<Buffer|null>` bound to one session;
   a miss returns `null` (the pipeline tolerates missing artifacts).
-- `screenshotFile` on a `DistilledStep` is a **relative path** (e.g. `shots/<id>.png`); resolving it to
+- `screenshotFile` on a `DistilledStep` is a **relative path** (e.g. `shots/<id>.jpg`); resolving it to
   a URL/object means re-applying the `workspaces/<ws>/sessions/<id>/` prefix.
 
 The workspace prefix is the storage-level expression of tenancy — one customer's bytes are never under

@@ -39,6 +39,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // R7 — live mic level pushed from the offscreen recorder (top-frame control bar only).
     setMicLevel(Number(msg.level) || 0);
     sendResponse?.({ ok: true });
+  } else if (msg?.cmd === 'getScroll') {
+    // R12 — report the current top-document scroll + viewport so the background can re-validate a
+    // queued event's bbox against any scroll that happened before its screenshot was actually taken.
+    sendResponse?.({ x: window.scrollX, y: window.scrollY, vw: window.innerWidth, vh: window.innerHeight });
   }
   // Respond synchronously — do NOT keep the channel open (avoids the
   // "message channel closed / bfcache" warnings on navigation).
@@ -71,6 +75,7 @@ function startCapture(t0: number, pausedBase = 0): void {
   }
   startKeepAlive();
   patchHistory();
+  addEventListener('pointerdown', onPointerDown, true); // R12 — pre-click screenshot (before side effects)
   addEventListener('click', onClick, true);
   addEventListener('change', onChange, true);
   addEventListener('submit', onSubmit, true);
@@ -90,9 +95,11 @@ function stopCapture(): void {
   removeEventListener('submit', onSubmit, true);
   removeEventListener('keydown', onKeydown, true);
   removeEventListener('popstate', onNav, true);
+  removeEventListener('pointerdown', onPointerDown, true);
   removeEventListener('scroll', onScroll, true);
   removeEventListener('mouseover', onMouseOver, true);
   clearScrollHover();
+  clearPendingShot();
   clearWatcher();
   stopKeepAlive();
   flush(); // best-effort: drain any buffered events before we drop the port
@@ -171,15 +178,49 @@ function onClick(e: Event): void {
   if (isControlBarEvent(e)) return; // R7 — never capture clicks on our own on-page control bar
   const el = resolveTarget(e.target as Element | null);
   if (!el) return;
-  emit('click', el);
+  emit('click', el, undefined, takePendingShotId()); // R12 — use the pointerdown pre-click shot if any
   schedulePostAction();
+}
+
+// R12 — capture the screenshot at pointerdown, BEFORE the click fires and triggers its side effect
+// (a modal, a navigation, an in-place state change). The click then claims that pre-click frame by id,
+// so the highlight lands on the target while it's still visible. No pointerdown (keyboard/programmatic
+// click) → no id → the background captures at event time (the old, possibly-late behavior).
+let pendingShotId: string | null = null;
+let pendingShotTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onPointerDown(e: Event): void {
+  if (isControlBarEvent(e)) return;
+  if ((e as PointerEvent).button !== 0) return; // primary button only
+  if (!resolveTarget(e.target as Element | null)) return; // only where a click would be captured
+  const id = crypto.randomUUID();
+  pendingShotId = id;
+  if (pendingShotTimer != null) clearTimeout(pendingShotTimer);
+  // Drop it if no click follows (drag/cancel) so it can't attach to a later, unrelated click.
+  pendingShotTimer = setTimeout(() => { if (pendingShotId === id) clearPendingShot(); }, 1200);
+  send({ kind: 'preCapture', shotId: id });
+}
+
+function takePendingShotId(): string | undefined {
+  const id = pendingShotId ?? undefined;
+  clearPendingShot();
+  return id;
+}
+
+function clearPendingShot(): void {
+  pendingShotId = null;
+  if (pendingShotTimer != null) { clearTimeout(pendingShotTimer); pendingShotTimer = null; }
 }
 
 function onChange(e: Event): void {
   if (isControlBarEvent(e)) return;
   const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
   if (!el || !('value' in el)) return;
-  emit('input', el, maskValue(el));
+  // R12 — a text field's `change` fires on blur, usually caused by clicking the next control (or the
+  // final submit). That click's pointerdown just captured a pre-side-effect frame — reference it (PEEK,
+  // don't consume; the click claims it too) so the input's screenshot shows the filled field BEFORE the
+  // click's result, not the delayed post-click state. No pointerdown (keyboard/Tab) → normal capture.
+  emit('input', el, maskValue(el), pendingShotId ?? undefined);
 }
 
 function onSubmit(e: Event): void {
@@ -289,11 +330,11 @@ function clearScrollHover(): void {
   lastHoverKey = '';
 }
 
-function emit(type: string, el: Element, value?: string): void {
-  emitEvent(type, buildTarget(el), value);
+function emit(type: string, el: Element, value?: string, preShotId?: string): void {
+  emitEvent(type, buildTarget(el), value, preShotId);
 }
 
-function emitEvent(type: string, target: EventTarget, value?: string): void {
+function emitEvent(type: string, target: EventTarget, value?: string, preShotId?: string): void {
   const event: CapturedEvent = {
     id: crypto.randomUUID(),
     t: Date.now() - startTime - pausedTotal,
@@ -304,9 +345,13 @@ function emitEvent(type: string, target: EventTarget, value?: string): void {
     screenshot: { file: '' }, // filled by background after captureVisibleTab
     domSnapshot: { file: '' },
   };
-  event.screenshot = { file: `shots/${event.id}.png` };
+  event.screenshot = { file: `shots/${event.id}.jpg` }; // R12 — JPEG (lighter than PNG)
   event.domSnapshot = { file: `dom/${event.id}.html` };
-  send({ kind: 'event', event, domHtml: serializeDom() });
+  // R12 — the top-document scroll at bbox-measurement time; the background re-checks scroll when the
+  // (queued) screenshot is actually taken and shifts the bbox to match. Top frame only — a sub-frame's
+  // scroll doesn't map onto the full-tab screenshot.
+  const scroll = window === window.top ? { x: window.scrollX, y: window.scrollY } : undefined;
+  send({ kind: 'event', event, domHtml: serializeDom(), scroll, preShotId });
   pendingEventId = event.id;
 }
 

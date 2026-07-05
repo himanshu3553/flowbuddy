@@ -48,6 +48,12 @@ async function armTab(tabId: number, arm: object): Promise<void> {
 const idToKey = new Map<string, string>();
 let captureChain: Promise<unknown> = Promise.resolve();
 let lastCapture = 0;
+// R12 — a pre-click screenshot captured at pointerdown, waiting for the click event to claim it by id.
+// We stash the in-flight PROMISE (not the resolved data) because captureVisibleTab (100–300 ms) often
+// finishes AFTER the click arrives ~150 ms later; the click awaits this so it still gets the pre-click
+// frame (captureVisibleTab snapshots the pixels at call time = pre-click) instead of racing and taking
+// its own post-click shot. Single-slot: pointerdown→click is a tight pair, so at most one is pending.
+let pendingPreShot: { shotId: string; shot: Promise<string | null> } | null = null;
 let finalizing = false;
 let finalizeFallback: ReturnType<typeof setTimeout> | null = null;
 
@@ -194,8 +200,10 @@ chrome.runtime.onConnect.addListener((port) => {
   // The event's own tab/window — so screenshots capture the tab the user acted in, even when the
   // session spans multiple tabs/windows (R9), not always the primary window.
   const windowId = port.sender?.tab?.windowId;
+  const tabId = port.sender?.tab?.id; // for the R12 bbox-vs-scroll re-check (top frame only)
+  const frameId = port.sender?.frameId;
   port.onMessage.addListener((msg: PortMsg) => {
-    handlePortMsg(msg, windowId).catch((e) => console.error('port msg error', e));
+    handlePortMsg(msg, windowId, tabId, frameId).catch((e) => console.error('port msg error', e));
   });
 });
 
@@ -237,7 +245,7 @@ async function rearmIfRecording(tabId: number): Promise<void> {
   await armTab(tabId, { cmd: 'startCapture', startTime: rec.startTime, pausedTotal: rec.pausedTotal || 0 });
 }
 
-async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
+async function handlePortMsg(msg: PortMsg, windowId?: number, tabId?: number, frameId?: number): Promise<void> {
   // R4 — the keepalive heartbeat carries no payload; simply receiving it has already reset the
   // worker's idle timer, which is the whole point. Nothing else to do.
   if (msg.kind === 'keepalive') return;
@@ -252,11 +260,35 @@ async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
     return;
   }
 
+  if (msg.kind === 'preCapture') {
+    // R12 — start the snapshot NOW (at pointerdown, before the click's side effect) and stash the
+    // promise; the click awaits it. Do NOT await here — returning fast lets the capture run in flight.
+    pendingPreShot = { shotId: msg.shotId, shot: captureShot(shotWindow) };
+    return;
+  }
+
   if (msg.kind === 'event') {
     const ev = msg.event;
-    // screenshot
-    const shot = await captureShot(shotWindow);
+    // R12 — prefer the pre-click shot captured at pointerdown (target still visible); otherwise
+    // capture now (the old, possibly-late path).
+    let shot: string | null;
+    let preClick = false;
+    if (msg.preShotId && pendingPreShot?.shotId === msg.preShotId) {
+      // Don't clear it — the input event that blurred a field and the click that caused the blur can
+      // BOTH claim this one pre-side-effect frame. The slot is refreshed on the next pointerdown.
+      shot = await pendingPreShot.shot; // wait for the in-flight pointerdown capture to finish
+      if (shot) preClick = true;
+      else shot = await captureShot(shotWindow); // pre-capture failed → fall back to a fresh shot
+    } else {
+      shot = await captureShot(shotWindow);
+    }
     if (shot && ev.screenshot?.file) {
+      // A delayed (post-event) shot may have scrolled since the event → shift the bbox to match it
+      // (or drop it if the element scrolled out of frame). A pre-click shot already matches the bbox's
+      // moment, so leave it alone. Top frame only.
+      if (!preClick && ev.target?.bbox && frameId === 0 && tabId != null && msg.scroll) {
+        await reconcileBboxWithScroll(ev, msg.scroll, tabId);
+      }
       await kvPut('shot:' + ev.screenshot.file, shot);
     } else {
       ev.screenshot = undefined;
@@ -275,7 +307,7 @@ async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
     if (!key) return;
     const ev = await kvGet<CapturedEvent>(key);
     if (!ev) return;
-    const shotFile = `shots/${msg.eventId}-post.png`;
+    const shotFile = `shots/${msg.eventId}-post.jpg`; // R12 — JPEG
     const domFile = `dom/${msg.eventId}-post.html`;
     const shot = await captureShot(shotWindow);
     if (shot) await kvPut('shot:' + shotFile, shot);
@@ -288,6 +320,43 @@ async function handlePortMsg(msg: PortMsg, windowId?: number): Promise<void> {
     };
     await kvPut(key, ev);
   }
+}
+
+/**
+ * R12 — reconcile a captured bbox with the scroll that happened during the screenshot's queue delay.
+ * `evScroll` is the top-document scroll when the bbox was measured; we ask the top frame for its
+ * scroll now (≈ shot time) and shift the bbox by the delta so the highlight lands on the element —
+ * or drop the bbox if the element scrolled out of the captured viewport (no wrong highlight).
+ */
+async function reconcileBboxWithScroll(
+  ev: CapturedEvent,
+  evScroll: { x: number; y: number },
+  tabId: number,
+): Promise<void> {
+  const cur = await getScroll(tabId);
+  const b = ev.target?.bbox;
+  if (!cur || !b) return;
+  const dx = cur.x - evScroll.x;
+  const dy = cur.y - evScroll.y;
+  if (!dx && !dy) return; // no scroll during the delay — the bbox already matches the shot
+  const nx = b.x - dx;
+  const ny = b.y - dy;
+  if (ny + b.h <= 0 || ny >= cur.vh || nx + b.w <= 0 || nx >= cur.vw) {
+    ev.target.bbox = undefined; // scrolled out of frame — omit rather than draw a wrong highlight
+  } else {
+    ev.target.bbox = { x: Math.round(nx), y: Math.round(ny), w: b.w, h: b.h };
+  }
+}
+
+/** Ask the top frame for its current scroll + viewport (best-effort; null if the frame is gone). */
+async function getScroll(tabId: number): Promise<{ x: number; y: number; vw: number; vh: number } | null> {
+  try {
+    const r = await chrome.tabs.sendMessage(tabId, { cmd: 'getScroll' }, { frameId: 0 });
+    if (r && typeof r.x === 'number' && typeof r.y === 'number') return r;
+  } catch {
+    /* frame navigated / not ready — skip the adjustment */
+  }
+  return null;
 }
 
 async function findEventKey(id: string): Promise<string | undefined> {
@@ -309,7 +378,9 @@ function captureShot(windowId?: number): Promise<string | null> {
     const wait = Math.max(0, 700 - (Date.now() - lastCapture));
     if (wait) await sleep(wait);
     lastCapture = Date.now();
-    const opts = { format: 'png' as const };
+    // R12 — JPEG (quality 80) instead of PNG: ~5–10× smaller for UI screenshots, so uploads/storage
+    // shrink with no meaningful loss (we take two shots per step).
+    const opts = { format: 'jpeg' as const, quality: 80 };
     try {
       const shot =
         windowId != null
@@ -345,6 +416,7 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
 
   await kvClear();
   idToKey.clear();
+  pendingPreShot = null; // R12 — drop any stale pre-click shot from a previous session
   finalizing = false;
   clearFinalizeFallback(); // cancel any pending fallback from a previous session (never finalize THIS one)
   // Clear the previous session's result + progress so the popup's upload poll can't transition on
@@ -538,7 +610,8 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   }
   for (const { key, value } of shotEntries) {
     const rel = key.slice('shot:'.length);
-    parts.push({ name: rel, filename: rel, contentType: 'image/png', body: await dataUrlToBlob(value) });
+    const contentType = /\.jpe?g$/i.test(rel) ? 'image/jpeg' : 'image/png'; // R12 — shots are JPEG now
+    parts.push({ name: rel, filename: rel, contentType, body: await dataUrlToBlob(value) });
   }
   for (const { key, value } of await kvEntriesByPrefix<string>('dom:')) {
     const rel = key.slice('dom:'.length);

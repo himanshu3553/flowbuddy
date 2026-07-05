@@ -157,7 +157,7 @@ Studio origin and only relays same-origin messages, so a random site can't injec
 - **Payload:** one `manifest` JSON field (the [capture contract](#6-the-cross-module-contracts)) plus
   N binary files (screenshots, DOM snapshots, audio). **Each file's relative path rides on the
   multipart *field name*** — because multipart strips directory components from filenames, the path
-  (`shots/<id>.png`) is preserved as the field name and reconstructed server-side.
+  (`shots/<id>.jpg`) is preserved as the field name and reconstructed server-side.
 - **Gate:** recorder token (Bearer).
 - **Result:** `{ sessionId, status: "uploaded" }` — and a queued job. Nothing is processed yet.
 

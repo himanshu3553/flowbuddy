@@ -82,7 +82,7 @@ Key mechanics worth understanding:
   File parts are streamed straight to object storage one at a time (`part.toBuffer()` →
   `putObject`), so a 300 MB bundle never has to fit in one allocation.
 - **The field-name-is-the-path trick.** `const rel = part.fieldname || part.filename`. The recorder
-  put the relative path (`shots/<id>.png`) on the field *name* precisely because multipart strips
+  put the relative path (`shots/<id>.jpg`) on the field *name* precisely because multipart strips
   directories from filenames. The server uses it verbatim (after sanitization) as the object key
   suffix. This is the matching half of the recorder's upload step.
 - **Validation happens after storage.** Artifacts are written as they stream; the manifest is parsed
