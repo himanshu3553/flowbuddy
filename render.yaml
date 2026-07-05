@@ -85,6 +85,14 @@ services:
       # PUBLIC api URL — baked into the browser embed snippet (data-sync-api) + extension payload.
       - { key: SYNC_API_URL, sync: false } # https://sync-api.onrender.com
       - { key: SYNC_WIDGET_URL, sync: false } # https://sync-widget.onrender.com/sync-copilot.js
+      # Transactional email (Resend) — §3.6: setting the key ENABLES the verified-email requirement
+      # for new signups + password reset. Unset = auth works but signups auto-verify (dev semantics).
+      # ⚠️ On first enable, backfill pre-existing accounts or they can't sign in:
+      #   UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;
+      - { key: RESEND_API_KEY, sync: false }
+      # Optional custom sender (needs a verified domain in Resend); default = onboarding@resend.dev,
+      # which only delivers to the Resend account owner's own address.
+      # - { key: EMAIL_FROM, sync: false }
 
   # --- Widget host: serves the embeddable sync-copilot.js bundle (static site, free) ---
   - type: web

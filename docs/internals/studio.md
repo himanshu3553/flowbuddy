@@ -63,6 +63,28 @@ one `Workspace` (slugged from the email) — Phase 1 is **single-user = single-w
 `getCurrentWorkspace()` resolves the signed-in user → their workspace for every server action; a
 `null` means "not authenticated" and the action throws. **Every query is scoped to that workspaceId.**
 
+Hardening (2026-07-06, review §3.6 Cuts 2+3):
+
+- **Brute-force limits** ([`lib/auth-limits.ts`](../../packages/web/lib/auth-limits.ts)) — failed
+  sign-ins counted per-email (5/15 min) and per-IP (20/15 min, `x-forwarded-for`); over the cap the
+  attempt is refused before any password check; success clears the email's counter. In-memory MVP
+  (mirrors the api's copilot limiter); the same mechanism caps email-sending requests (3/15 min per
+  email) so reset/verification mails can't be bombed.
+- **Email verification** — new signups get a 24 h single-use link and can't sign in until clicked;
+  enforced as a friendly pre-check in `signInAction` AND a backstop in `authorize()`. Enforcement is
+  conditional on `emailEnabled` (`RESEND_API_KEY` set) — keyless local dev auto-verifies at signup.
+- **Password reset** — `/forgot-password` → emailed 1 h single-use link → `/reset-password`;
+  enumeration-safe (identical response either way); completing a reset also verifies the email.
+- **Tokens** ([`lib/auth-tokens.ts`](../../packages/web/lib/auth-tokens.ts)) — stored SHA-256-hashed
+  in the previously-unused Auth.js `VerificationToken` table (`identifier = "<purpose>:<email>"`),
+  single-use, purpose-checked; no schema change was needed.
+- **Email** ([`lib/email.ts`](../../packages/web/lib/email.ts)) — Resend REST API via fetch (no SDK);
+  keyless = sends are console-logged so dev flows stay walkable. Default `onboarding@resend.dev`
+  sender only delivers to the Resend account owner until a domain is verified (`EMAIL_FROM`).
+
+**Deliberately open:** signup itself has no invite gate (user decision 2026-07-06) — revisit at
+private beta.
+
 ### 4.2 Connecting the recorder (token minting → handshake)
 
 The `/connect` page calls the [`connectExtension`](../../packages/web/lib/connect-actions.ts) server

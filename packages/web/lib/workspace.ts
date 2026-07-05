@@ -10,8 +10,14 @@ function slugify(input: string): string {
   return base || 'workspace';
 }
 
-/** Create a user (credentials) and auto-create their workspace (single-user = single-workspace). */
-export async function createUserWithWorkspace(email: string, password: string) {
+/** Create a user (credentials) and auto-create their workspace (single-user = single-workspace).
+ *  `verified` = stamp `emailVerified` immediately (used when email delivery isn't configured —
+ *  the verification requirement only exists where a verification email can actually be sent). */
+export async function createUserWithWorkspace(
+  email: string,
+  password: string,
+  opts: { verified?: boolean } = {},
+) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error('An account with this email already exists.');
 
@@ -23,6 +29,7 @@ export async function createUserWithWorkspace(email: string, password: string) {
     data: {
       email,
       passwordHash,
+      emailVerified: opts.verified ? new Date() : null,
       ownedWorkspaces: { create: { name: `${local}'s workspace`, slug } },
     },
     include: { ownedWorkspaces: true },

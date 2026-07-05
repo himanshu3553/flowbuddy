@@ -96,6 +96,7 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `AUTH_URL` | `sync-web` | the real `sync-web` URL (see step 8) |
 | `SYNC_API_URL` | `sync-web` | the real `sync-api` URL (see step 8) |
 | `SYNC_WIDGET_URL` | `sync-web` | the real `sync-widget` URL + `/sync-copilot.js` |
+| `RESEND_API_KEY` | `sync-web` | Resend key — **enables** email verification + password reset (§3.6). ⚠️ Before first enable, backfill: `UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;` — pre-existing accounts can't sign in otherwise. Optional `EMAIL_FROM` needs a Resend-verified domain (default `onboarding@resend.dev` only delivers to the account owner). |
 
 Auto-wired by the blueprint (do **not** set): `DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`,
 `TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`.
@@ -229,7 +230,7 @@ To run always-on and reliable, edit `render.yaml`:
 ```
 sync-r2 group : R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
 sync-api      : OPENAI_API_KEY
-sync-web      : OPENAI_API_KEY, AUTH_SECRET, AUTH_URL, SYNC_API_URL, SYNC_WIDGET_URL
+sync-web      : OPENAI_API_KEY, AUTH_SECRET, AUTH_URL, SYNC_API_URL, SYNC_WIDGET_URL, RESEND_API_KEY
 ```
 
 Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`,
