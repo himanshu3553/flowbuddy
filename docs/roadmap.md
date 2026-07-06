@@ -72,7 +72,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M0** | Monorepo, infrastructure & auth (Postgres, R2/MinIO, Redis/BullMQ, Auth.js, api, worker, multi-tenancy) | ✅ **Done** | M0, M1 |
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **v0.2.1 LIVE on the Chrome Web Store** (approved 2026-07-06; prod-targeted: deployed-Studio + localhost connect). **v0.3.0** (stop→upload feedback + resilience, 2026-07-06) **submitted to the Web Store 2026-07-06** (in review); see [`deploy-render.md`](deploy-render.md) §11. *(R13 ranked locators landed after the v0.3.0 submission — ships in the next store version.)* | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
-| **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending | M7 (+ M11 retrieval) |
+| **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending (Render Postgres `vector` support **confirmed 2026-07-06**) | M7 (+ M11 retrieval) |
 | **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `sync-web-uir8.onrender.com` | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
@@ -122,14 +122,14 @@ A throwaway, lightweight spike answered one question before building any product
 Outside Version 1. Two groups:
 
 - **Capture modalities** — **narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
-- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)**, plus **pgvector (P1-M3)** pending discussion.)*
+- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)** — **prototyped 2026-07-07 on the unmerged experiment branch `dev-feature-copilot-preview`** (`af7d043`: the preview embeds the real widget bundle in a `data-sync-preview` mode; deliberately kept out of `dev` as an experiment); **pgvector (P1-M3)** stays pending discussion.)*
 
 | Module | What it is | Status |
 |:---|:---|:---|
 | **V2 · 1.2** | **Narration-only capture** (+ narration-derived `static` explainer articles) | 📝 **Draft** — deferred |
 | **V2 · 1.3** | **Video capture** | 📝 **Draft** — deferred |
 | **V2 · D1** | **Analytics depth** (ex-P1-M10 backlog) — 👎 feedback drill-down · richer gap states (partial/recording) · period deltas · query log + export · real deflection metric · citation backfill | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
-| **V2 · D2** | **Copilot-page extensions** (ex-P1-M6/M9 backlog) — decline-threshold persistence + enforcement · F17 origin-blocked state (needs a blocked-origin signal). *Real-widget tester (Approach B) stays in Phase 1.* | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
+| **V2 · D2** | **Copilot-page extensions** (ex-P1-M6/M9 backlog) — decline-threshold persistence + enforcement · F17 origin-blocked state (needs a blocked-origin signal). *Real-widget tester (Approach B) stays in Phase 1 — prototyped on the unmerged experiment branch `dev-feature-copilot-preview` (2026-07-07).* | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
 | **V2 · D3** | **Recorder UX features** (ex-P1-M11 backlog) — R5 marker hotkey + labels · pre-upload review (thumbnails/discard) · undo last event · local draft/crash recovery · per-workspace capture profiles | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
 | **V2 · D4** | **Studio polish** (ex-Phase-1 backlog) — Recordings Tier 3 (sort/bulk) · signup invite gate · token-management UI (list/revoke; pairs with per-device tokens). | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
 
