@@ -18,7 +18,7 @@ VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 ├─ PHASE 2 · Help Portal & Articles (frozen)    🟩🟩🟩⬜⬜⬜⬜               3 done · 4 draft
 └─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
 
-VERSION 2 — Additional capture modalities (later) ⬜⬜                       deferred
+VERSION 2 — Modalities + product depth (later)   ⬜⬜⬜⬜⬜⬜                 deferred
 ```
 
 🟩 Done · 🟨 In Progress · ⬜ Draft  *(one square per module)*
@@ -49,7 +49,7 @@ VERSION 2 — Additional capture modalities (later) ⬜⬜                      
 | **Phase 1 — Copilot** | 13 | **10** | 3 | 0 |
 | **Phase 2 — Portal & Articles** | 7 | **3** | 0 | 4 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
-| **Version 2 — Modalities** | 2 | 0 | 0 | 2 |
+| **Version 2 — Modalities + product depth** | 6 | 0 | 0 | 6 |
 
 ---
 
@@ -80,7 +80,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M8** | **Context API** — widget reports host route/page → "answer for where I am" | ✅ **Done** | C4 |
 | **P1-M9** | **Embed auth & tenant scoping** — public key, origin allowlist, rate limit | ✅ **Done** | C5 |
 | **P1-M10** | Copilot **feedback loop & analytics** — log Q&A, hit/miss, coverage gaps | ✅ **Done** | C6 |
-| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — R1/R2/R3/R6 + Pause/Resume + R1 cross-origin re-arm + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + R12 screenshot timing/cost shipped; R13 → backlog; R5 deferred (build TBD) | M9 (+ R1–R13) |
+| **P1-M11** | **Capture reliability hardening** — no-silent-data-loss, nav, iframe | 🔄 **In Progress** — R1/R2/R3/R6 + Pause/Resume + R1 cross-origin re-arm + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + R12 screenshot timing/cost shipped; R13 → backlog; R5 + recorder-UX parking lot → **V2·D3** (2026-07-06) | M9 (+ R1–R13) |
 | **P1-M12** | **PII redaction** — client masking + server backstop (elevated: end-user-facing) | 🔄 **In Progress** — client masking + **server text-scrub (Cut 1)** done; screenshot OCR/blur (Cut 2) → **Phase 2** | M10 |
 
 **Build order (locked 2026-06-22, deploy last):** P1-M5 approval → P1-M6 answer → **P1-M7 widget (first *local* demo)** → P1-M8 context → P1-M9 embed auth → P1-M10 feedback → **P1-M11 + P1-M12 release-hardening** → **P1-M4 cloud deploy (FINAL step)**. The whole copilot is built & verified **locally** (docker-compose) first; pgvector retrieval folds into P1-M3 when answer quality needs it.
@@ -117,14 +117,21 @@ A throwaway, lightweight spike answered one question before building any product
 
 ---
 
-## 5. Version 2 — additional capture modalities (deferred)
+## 5. Version 2 — additional capture modalities + product depth (deferred)
 
-Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
+Outside Version 1. Two groups:
+
+- **Capture modalities** — **narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
+- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)**, plus **onboarding flow** and **pgvector (P1-M3)** pending discussion.)*
 
 | Module | What it is | Status |
 |:---|:---|:---|
 | **V2 · 1.2** | **Narration-only capture** (+ narration-derived `static` explainer articles) | 📝 **Draft** — deferred |
 | **V2 · 1.3** | **Video capture** | 📝 **Draft** — deferred |
+| **V2 · D1** | **Analytics depth** (ex-P1-M10 backlog) — 👎 feedback drill-down · richer gap states (partial/recording) · period deltas · query log + export · real deflection metric · citation backfill | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
+| **V2 · D2** | **Copilot-page extensions** (ex-P1-M6/M9 backlog) — decline-threshold persistence + enforcement · F17 origin-blocked state (needs a blocked-origin signal). *Real-widget tester (Approach B) stays in Phase 1.* | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
+| **V2 · D3** | **Recorder UX features** (ex-P1-M11 backlog) — R5 marker hotkey + labels · pre-upload review (thumbnails/discard) · undo last event · local draft/crash recovery · per-workspace capture profiles | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
+| **V2 · D4** | **Studio polish** (ex-Phase-1 backlog) — Recordings Tier 3 (sort/bulk) · signup invite gate · token-management UI (list/revoke; pairs with per-device tokens). *Onboarding flow stays in Phase 1 pending discussion.* | 📝 **Draft** — moved from Phase 1 (2026-07-06) |
 
 ---
 
@@ -155,7 +162,7 @@ Outside Version 1. **Narration-only capture (1.2)** + **video capture (1.3)** + 
 
 Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`phase-1-review.md`](phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@sync/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5); **later that day, auth hardening §3.6 Cuts 2+3** (sign-in rate limiting + Resend-backed email verification & password reset — signup gate deliberately open). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
-1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + **R12 screenshot timing/cost** are **shipped**, leaving **R13** (ranked selectors — mostly a Phase-3 enabler). **R5** (marker hotkey/labels) is **deferred** — build TBD (markers are already droppable from the popup + the R7 bar).
+1. 🔄 **P1-M11** — capture-reliability backlog; R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + **R12 screenshot timing/cost** are **shipped**, leaving **R13** (ranked selectors — mostly a Phase-3 enabler). **R5** (marker hotkey/labels) and the recorder UX parking lot moved to **Version 2 · D3** (scope decision 2026-07-06).
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Phase 2** — not release-blocking.
 3. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
 

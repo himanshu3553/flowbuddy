@@ -93,6 +93,9 @@ services:
       # Optional custom sender (needs a verified domain in Resend); default = onboarding@resend.dev,
       # which only delivers to the Resend account owner's own address.
       # - { key: EMAIL_FROM, sync: false }
+      # Chrome Web Store listing for the Sync Recorder — when set, the Home "Get started" checklist's
+      # install CTA opens the store ("Add to Chrome") instead of the manual Settings fallback.
+      - { key: SYNC_EXTENSION_URL, sync: false } # https://chromewebstore.google.com/detail/<extension-id>
 
   # --- Widget host: serves the embeddable sync-copilot.js bundle (static site, free) ---
   - type: web
