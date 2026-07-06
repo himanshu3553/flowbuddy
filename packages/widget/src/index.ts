@@ -7,7 +7,14 @@
 //           data-sync-key="<workspace key>"
 //           data-sync-title="Help"            (optional — per-page override, see below)
 //           data-sync-accent="#4f46e5"        (optional — brand the widget to the host)
-//           data-sync-position="left"></script> (optional — "left" | "right", default right)
+//           data-sync-position="left"          (optional — "left" | "right", default right)
+//           data-sync-preview="1"></script>    (optional — Studio tester mode, see below)
+//
+// data-sync-preview marks a STUDIO PREVIEW embed (the Copilot page's real-widget tester): the mount
+// heartbeat is suppressed and answer calls are flagged `preview` so the API skips embed detection
+// and analytics — a founder trying the widget must never read as a customer install. The panel also
+// starts open AND the launcher stays visible below it (panel lifted via --sc-panel-bottom), so both
+// the conversation and every launcher appearance control are on screen at once.
 // (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
 //
 // APPEARANCE (2026-07-07): the widget fetches its look (accent/title/greeting/position/launcher)
@@ -45,10 +52,11 @@ const cfg = {
   // Launcher look: 'icon' (chat bubble, default), 'text' (filled pill), or 'text-outline' (bordered pill).
   launcher: explicit.launcher || 'icon',
   launcherText: explicit.launcherText || 'Ask me anything',
+  preview: (script?.dataset.syncPreview || g.preview || '') === '1',
 };
 
 const messages: Msg[] = [];
-let open = false;
+let open = cfg.preview; // preview (Studio tester) starts open; real embeds start at the launcher
 let loading = false;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -85,6 +93,9 @@ if (cfg.position === 'left') {
   host.style.setProperty('--sc-right', 'auto');
   host.style.setProperty('--sc-left', '20px');
 }
+// Preview keeps the launcher visible under the open panel (so launcher style/text/position edits
+// show immediately in the Studio tester) — lift the panel clear of the 56px launcher.
+if (cfg.preview) host.style.setProperty('--sc-panel-bottom', '86px');
 const root = host.attachShadow({ mode: 'open' });
 const styleEl = document.createElement('style');
 styleEl.textContent = CSS;
@@ -124,7 +135,8 @@ root.appendChild(panel);
 
 function render(): void {
   panel.style.display = open ? 'flex' : 'none';
-  launcher.style.display = open ? 'none' : 'flex';
+  // Real embeds swap launcher ↔ panel; the Studio preview shows BOTH (panel lifted above).
+  launcher.style.display = open && !cfg.preview ? 'none' : 'flex';
   list.replaceChildren();
   if (messages.length === 0) list.appendChild(el('div', 'sc-greeting', cfg.greeting));
   for (const m of messages) {
@@ -165,7 +177,12 @@ async function ask(question: string): Promise<void> {
     const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
-      body: JSON.stringify({ question, history, context: { path: location.pathname, title: document.title } }),
+      body: JSON.stringify({
+        question,
+        history,
+        context: { path: location.pathname, title: document.title },
+        ...(cfg.preview ? { preview: true } : {}),
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
@@ -207,7 +224,7 @@ form.addEventListener('submit', (e) => {
 // Embed-detection heartbeat: tell the API the snippet loaded so the Studio shows real "live"
 // status (best-effort, fire-and-forget — never blocks or surfaces errors to the host page).
 function pingSeen(): void {
-  if (!cfg.key) return;
+  if (!cfg.key || cfg.preview) return; // a Studio preview must never stamp embed detection
   void fetch(`${cfg.apiBase}/v1/copilot/seen`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'X-Sync-Key': cfg.key },
@@ -226,7 +243,10 @@ interface ServerConfig {
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 async function fetchServerConfig(): Promise<ServerConfig | null> {
-  if (!cfg.key) return null;
+  // The Studio preview passes EVERY appearance field as an explicit attr (live, possibly-unsaved
+  // editing state), so the server config could never apply — skip the round-trip entirely; the
+  // preview iframe reloads on each appearance edit and must not burst /config calls.
+  if (!cfg.key || cfg.preview) return null;
   // A tight budget: the config lookup is a single indexed read (~ms); a slow/unreachable API must
   // delay the launcher by at most this long — the widget always appears.
   const ctl = new AbortController();

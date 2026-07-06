@@ -154,11 +154,21 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   const gate = await copilotGate(req, reply, 'answer');
   if (!gate) return reply;
   const { workspaceId, key, origin } = gate;
+  const body = (req.body ?? {}) as {
+    question?: string;
+    history?: unknown;
+    context?: { path?: string };
+    preview?: unknown;
+  };
+  // The Studio's real-widget tester flags its calls `preview`: same key, same engine, but a founder
+  // trying their own copilot is NOT a customer install — skip embed detection and every analytics
+  // write (query log / citations / coverage gaps), and return no queryId (so no thumbs feedback).
+  // Self-declared and harmless to spoof: the only thing the flag can do is suppress your own stats.
+  const preview = body.preview === true;
   // A valid authed call from an allowed origin = the widget is live; confirm embed detection here too
   // (throttled, shared with the /seen ping) so usage alone keeps "copilot live" accurate.
-  await recordWidgetSeen(key, workspaceId, origin);
+  if (!preview) await recordWidgetSeen(key, workspaceId, origin);
 
-  const body = (req.body ?? {}) as { question?: string; history?: unknown; context?: { path?: string } };
   const question = (body.question ?? '').trim();
   if (!question) return reply.code(400).send({ error: 'question is required' });
   if (question.length > MAX_QUESTION_CHARS) {
@@ -177,8 +187,10 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
+    const reason = 'This copilot has no approved help content yet.';
+    if (preview) return { covered: false, answer: null, citations: [], reason };
     const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false, contextPath }, select: { id: true } });
-    return { covered: false, answer: null, citations: [], reason: 'This copilot has no approved help content yet.', queryId: q.id };
+    return { covered: false, answer: null, citations: [], reason, queryId: q.id };
   }
 
   const result = await answerFromKB({
@@ -190,6 +202,13 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     apiKey: config.openaiApiKey,
     model: config.synthModel,
   });
+
+  // Preview answers are never persisted — return the engine's result as-is (no queryId).
+  if (preview) {
+    return result.covered
+      ? { covered: true, answer: result.answer, citations: result.citations }
+      : { covered: false, answer: null, citations: [], reason: result.reason };
+  }
 
   // P1-M10: log the Q&A (analytics + the thumbs-feedback target). On a grounded answer,
   // persist the cited workflows too (powers Analytics "Top workflows by citations").

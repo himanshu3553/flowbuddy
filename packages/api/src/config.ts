@@ -1,8 +1,20 @@
 import 'dotenv/config';
 
+/** Normalize a URL to bare Origin-header form (scheme://host[:port], no path/trailing slash). */
+function toOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url.replace(/\/+$/, '');
+  }
+}
+
 export const config = {
   port: Number(process.env.PORT || 8787),
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  // The Studio's origin — exempt from workspace origin allowlists so the in-Studio real-widget
+  // tester keeps working after a customer locks the copilot to their own site's origins.
+  studioOrigin: toOrigin(process.env.SYNC_STUDIO_URL || 'http://localhost:3000'),
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   transcribeModel: process.env.TRANSCRIBE_MODEL || 'whisper-1',
   synthModel: process.env.SYNTH_MODEL || 'gpt-4o',

@@ -31,8 +31,12 @@ export const CSS = `
   background: transparent; color: var(--sc-accent); border: 2px solid var(--sc-accent);
 }
 .sc-panel {
-  position: fixed; right: var(--sc-right); left: var(--sc-left); bottom: 20px; z-index: 2147483000;
-  width: 370px; max-width: calc(100vw - 32px); height: 540px; max-height: calc(100vh - 40px);
+  position: fixed; right: var(--sc-right); left: var(--sc-left); z-index: 2147483000;
+  /* --sc-panel-bottom is only raised in Studio preview mode, where the launcher stays visible
+     below the open panel; real embeds keep the 20px default (panel replaces the launcher). */
+  bottom: var(--sc-panel-bottom, 20px);
+  width: 370px; max-width: calc(100vw - 32px); height: 540px;
+  max-height: calc(100vh - var(--sc-panel-bottom, 20px) - 20px);
   background: var(--sc-surface); border: 1px solid var(--sc-border); border-radius: 16px;
   box-shadow: 0 8px 26px rgba(40,50,90,.16);
   display: none; flex-direction: column; overflow: hidden;

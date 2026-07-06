@@ -1,4 +1,5 @@
 import { prisma } from '@sync/db';
+import { config } from './config';
 
 /**
  * P1-M9 — embed auth & tenant scoping for the public copilot endpoint.
@@ -26,8 +27,10 @@ export async function resolveCopilotKey(
 
   const allow = ws.copilotAllowedOrigins ?? [];
   // Enforce only when an allowlist is configured AND the browser sent an Origin (server-to-server
-  // calls have none — they can't be spoofed by a page, so we don't block them here).
-  if (allow.length > 0 && origin && !allow.includes(origin)) {
+  // calls have none — they can't be spoofed by a page, so we don't block them here). The Studio's
+  // own origin is always allowed: the in-Studio real-widget tester runs on it, and a third-party
+  // page can't forge Origin (browser-set), so this only admits pages we serve ourselves.
+  if (allow.length > 0 && origin && origin !== config.studioOrigin && !allow.includes(origin)) {
     return { ok: false, status: 403, error: 'origin not allowed' };
   }
   return { ok: true, workspaceId: ws.id, showCitations: ws.copilotShowCitations };

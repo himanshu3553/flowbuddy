@@ -2,7 +2,7 @@
 
 > **Module:** the copilot routes on the Fastify service
 > ([`server.ts`](../../packages/api/src/server.ts)) plus
-> [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (retrieval — SHARED with the Studio preview),
+> [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (retrieval — the single no-leak seam),
 > [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) (embed auth), and
 > [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) (the grounded answer).
 > **Role:** the primary product — answer an end-user's question **only** from **approved** KB, with
@@ -25,7 +25,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — the API routes *and* the Studio preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call the same functions (Prisma client injected, so `@sync/synthesis` stays DB-free). |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-06) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@sync/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
 | [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
@@ -35,9 +35,13 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 ## 3. Inputs / Outputs
 
 - **`POST /v1/copilot/answer`**
-  - **In:** `X-Sync-Key: <public embed key>`, body `{ question, history?, context?: { path } }`.
+  - **In:** `X-Sync-Key: <public embed key>`, body `{ question, history?, context?: { path }, preview? }`.
   - **Out (covered):** `{ covered: true, answer, citations[], queryId }`.
   - **Out (decline):** `{ covered: false, answer: null, citations: [], reason, queryId }`.
+  - **`preview: true`** (the Studio real-widget tester) — same engine, but the call skips
+    `recordWidgetSeen` and every analytics write (no `CopilotQuery`, no citations, no `CoverageGap`)
+    and the response carries **no `queryId`** (so the widget shows no thumbs). Self-declared and safe:
+    the flag can only suppress your own workspace's stats.
 - **`POST /v1/copilot/feedback`** — `{ queryId, feedback: 'up' | 'down' }` → records the thumb.
 - **`GET /v1/copilot/config`** (2026-07-07) — the widget's mount-time appearance fetch: returns the
   workspace's saved accent/title/greeting/position/launcher (nulls = widget defaults), `no-store`
@@ -85,8 +89,9 @@ recorder-token auth used by ingestion. See [connections.md](connections.md) §3.
 ### 4.2 Retrieval — the no-leak enforcement seam ([`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts))
 
 `retrieveApprovedKBItems(db, workspaceId, question, { contextPath })` is **the single point that keeps
-the copilot grounded only in approved-KB** — one implementation, two callers (the public answer route
-and the Studio preview), with the Prisma client injected so `@sync/synthesis` stays DB-free:
+the copilot grounded only in approved-KB** — one implementation, one caller (the public answer route;
+since 2026-07-06 the Studio tester is the real widget and arrives through that same route), with the
+Prisma client injected so `@sync/synthesis` stays DB-free:
 
 1. **Load the approval set.** Fetch `CopilotApproval` rows for the workspace → a `Set` of
    `"sourceId:segmentIndex"` keys. **If empty, return `[]` immediately** (an un-provisioned copilot).
@@ -94,8 +99,9 @@ and the Studio preview), with the Prisma client injected so `@sync/synthesis` st
    ordered by `(sourceId, segmentIndex, orderIndex)`.
 3. **Filter to approved.** Keep only items whose `(sourceId, segmentIndex)` is in the approved set.
    *This is the gate* — and since the 2026-07-06 consolidation it exists **once**: the Studio
-   preview's former mirror (`listApprovedItems` in `copilot-approvals.ts`) was retired and both
-   surfaces call this function. Any new copilot read path must go through it or no-leak breaks.
+   preview's former mirror (`listApprovedItems` in `copilot-approvals.ts`) was retired, and the
+   preview itself now embeds the real widget, so every surface reaches this function through the
+   public answer route. Any new copilot read path must go through it or no-leak breaks.
 4. **Vector candidates (P1-M3, 2026-07-07 — best-effort).** The question embed
    (`text-embedding-3-small`, via `embeddings.ts`) **starts before the DB reads** and overlaps
    them, with a **2s timeout + 1 retry** (the SDK default is 600s — a hanging embeddings API must

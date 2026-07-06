@@ -42,6 +42,14 @@ Built with `pnpm --filter @sync/widget build`.
     (`icon`|`text`|`text-outline`), `data-sync-launcher-text`.
   - `data-sync-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
     secret recorder token.*
+  - `data-sync-preview` — `"1"` marks a **Studio tester** embed (2026-07-06): the panel starts open
+    **with the launcher kept visible below it** (panel lifted via `--sc-panel-bottom: 86px`, so
+    launcher style/text/position edits show immediately), the mount heartbeat is suppressed,
+    `/answer` calls carry `preview: true` so the API skips embed detection + analytics and returns
+    no `queryId` (→ no thumbs), **and the `/v1/copilot/config` fetch is skipped** (the preview frame
+    passes every appearance field as an explicit attr — live, possibly-unsaved editing state — so
+    the saved server config could never apply, and reload-per-edit must not burst /config calls).
+    Never used in customer embeds.
 - **Input (runtime):** the end-user's typed questions; `location.pathname` + `document.title` as
   context.
 - **Output:** `GET /v1/copilot/config` at mount; `POST`s to `/v1/copilot/answer` and

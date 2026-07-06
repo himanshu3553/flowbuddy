@@ -4,9 +4,11 @@ import { embedTexts, toVectorLiteral, type EmbedOpts } from './embeddings';
 /**
  * P1-M5/M6 — THE single retrieval + grounding-enforcement seam for the copilot.
  *
- * Every consumer goes through here via the public answer endpoint (packages/api/src/server.ts) and
- * the in-Studio tester (packages/web/lib/copilot-preview-actions.ts), so the no-leak guarantee
- * ("the copilot grounds ONLY on approved-KB") has exactly ONE implementation.
+ * Every consumer goes through here via the public answer endpoint (packages/api/src/server.ts) —
+ * since 2026-07-06 the in-Studio tester embeds the real widget, so it arrives through that same
+ * route — and the no-leak guarantee ("the copilot grounds ONLY on approved-KB") has exactly ONE
+ * implementation with ONE caller (the two pre-consolidation copies had already drifted: the old
+ * preview lacked the route-boost).
  *
  * P1-M3 (2026-07-07): retrieval is HYBRID — keyword term-overlap fused with pgvector cosine
  * similarity via reciprocal-rank fusion (RRF), plus the P1-M8 route signal. The vector half is

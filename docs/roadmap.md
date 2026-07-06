@@ -122,7 +122,7 @@ A throwaway, lightweight spike answered one question before building any product
 Outside Version 1. Two groups:
 
 - **Capture modalities** — **narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
-- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)** — **prototyped 2026-07-07 on the unmerged experiment branch `dev-feature-copilot-preview`** (`af7d043`: the preview embeds the real widget bundle in a `data-sync-preview` mode; deliberately kept out of `dev` as an experiment); **pgvector (P1-M3)** — **built 2026-07-07** (hybrid keyword+vector).)*
+- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)** — **prototyped 2026-07-07 on the unmerged experiment branch `dev-feature-copilot-preview`** (the preview embeds the real widget bundle in a `data-sync-preview` mode; deliberately kept out of `dev` as an experiment); **pgvector (P1-M3)** — **built 2026-07-07** (hybrid keyword+vector).)*
 
 | Module | What it is | Status |
 |:---|:---|:---|

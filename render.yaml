@@ -63,6 +63,10 @@ services:
       - { key: SYNTH_MODEL, value: gpt-4o }
       # P1-M3 hybrid retrieval — must match the vector(1536) column dims (see @sync/synthesis embeddings.ts).
       - { key: EMBED_MODEL, value: text-embedding-3-small }
+      # The deployed Studio URL (https://sync-web-....onrender.com). Its origin is exempt from
+      # workspace origin allowlists so the Copilot page's real-widget tester keeps working after a
+      # customer restricts the copilot to their own site's origins. Unset = http://localhost:3000.
+      - { key: SYNC_STUDIO_URL, sync: false }
 
   # --- Studio (Next.js): approve workflows, copilot settings, analytics ---
   - type: web
@@ -80,8 +84,8 @@ services:
       - { key: AUTH_SECRET, sync: false }
       - { key: AUTH_URL, sync: false } # the deployed web URL (https://sync-web.onrender.com)
       - { key: AUTH_TRUST_HOST, value: true }
-      # The in-Studio copilot TESTER (Copilot page "Test live") answers via a server action that calls
-      # OpenAI from THIS web process — so the model creds live here too, not only on sync-api.
+      # The Copilot-page tester now embeds the REAL widget against sync-api (no OpenAI call from this
+      # process on the live path) — the key stays only for the parked Phase-2 article engine.
       - { key: OPENAI_API_KEY, sync: false }
       - { key: SYNTH_MODEL, value: gpt-4o }
       - { key: EMBED_MODEL, value: text-embedding-3-small } # P1-M3 — the tester's retrieval path

@@ -225,13 +225,13 @@ came from (`sourceId`) and which workflow within that source (`segmentIndex`, a 
 assigned at distill time). Those coordinates survive a rebuild; the item rows under them are
 disposable.
 
-This is enforced at exactly **one seam** — and since the 2026-07-06 consolidation, one
-*implementation*: [`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
-filters items through the approved-key set, and **both** the public answer route and the Studio
-preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call that
-same function (the old Studio mirror `listApprovedItems` was retired). If you ever add a second path
-that reads the KB for the copilot, it **must** go through this function or the no-leak guarantee
-breaks.
+This is enforced at exactly **one seam** — and since 2026-07-06, one *implementation* with one
+*caller*: [`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
+filters items through the approved-key set, called only by the public answer route (the old Studio
+mirror `listApprovedItems` was retired in the consolidation, and later that day the Studio preview
+became the **real widget** — `copilot-preview-actions.ts` deleted — so the tester reaches retrieval
+through the same public `/answer` route end-users hit). If you ever add a second path that reads the
+KB for the copilot, it **must** go through this function or the no-leak guarantee breaks.
 
 ```mermaid
 flowchart LR

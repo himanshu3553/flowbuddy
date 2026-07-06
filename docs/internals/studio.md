@@ -28,7 +28,7 @@ actions** (`'use server'`) — Studio never calls the [API service](ingestion-ap
 | **Connect the recorder** | [`app/connect/`](../../packages/web/app/connect/), [`lib/connect-actions.ts`](../../packages/web/lib/connect-actions.ts), [`lib/tokens.ts`](../../packages/web/lib/tokens.ts) |
 | **Recordings / KB** | [`app/dashboard/recordings/`](../../packages/web/app/dashboard/recordings/), [`app/dashboard/kb/`](../../packages/web/app/dashboard/kb/), [`lib/candidates.ts`](../../packages/web/lib/candidates.ts) |
 | **Approval gate** | [`app/dashboard/copilot-approval-panel.tsx`](../../packages/web/app/dashboard/copilot-approval-panel.tsx), [`components/dashboard/kb-workflow-list.tsx`](../../packages/web/components/dashboard/kb-workflow-list.tsx), [`lib/copilot-actions.ts`](../../packages/web/lib/copilot-actions.ts), [`lib/copilot-approvals.ts`](../../packages/web/lib/copilot-approvals.ts) |
-| **Copilot config / embed** | [`app/dashboard/copilot/`](../../packages/web/app/dashboard/copilot/), [`lib/copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts), `lib/copilot-settings-actions.ts`, [`components/dashboard/widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) |
+| **Copilot config / embed** | [`app/dashboard/copilot/`](../../packages/web/app/dashboard/copilot/) (incl. the `preview-frame` host-page route), [`lib/copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts), `lib/copilot-settings-actions.ts`, [`components/dashboard/widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) (real-widget iframe), [`app/widget/sync-copilot.js`](../../packages/web/app/widget/sync-copilot.js/route.ts) (local bundle fallback) |
 | **Analytics** | [`app/dashboard/analytics/`](../../packages/web/app/dashboard/analytics/), [`lib/copilot-metrics.ts`](../../packages/web/lib/copilot-metrics.ts), [`components/dashboard/home-steady-state.tsx`](../../packages/web/components/dashboard/home-steady-state.tsx) |
 | **Shell / nav** | [`app/dashboard/layout.tsx`](../../packages/web/app/dashboard/layout.tsx), [`components/dashboard/`](../../packages/web/components/dashboard/) (sidebar, page-header, …) |
 
@@ -128,16 +128,22 @@ The read side, [`copilot-approvals.ts`](../../packages/web/lib/copilot-approvals
 `approvedSegmentKeys` / `listApprovedWorkflows` — Studio-UI bookkeeping only (candidate lists,
 counts). The retrieval-side enforcement moved to the shared
 [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (2026-07-06); the old
-`listApprovedItems` mirror was retired, and the Studio copilot tester now calls the exact function
-the public API uses.
+`listApprovedItems` mirror was retired, and the Studio copilot tester now IS the real widget
+(later that day) — it exercises the exact public `/answer` route end-users hit.
 
 ### 4.5 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 
 `getOrCreateCopilotKey(workspaceId)` returns the workspace's **public** embed key, minting one
 (`pk_<48 hex>`) on first use, plus the `allowedOrigins` list. The Copilot page renders the
-`<script>` snippet with this key and a live [widget preview](../../packages/web/components/dashboard/widget-preview.tsx).
+`<script>` snippet with this key and the **real-widget tester** (2026-07-06):
+[`widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) frames the
+session-authed host page [`copilot/preview-frame/route.ts`](../../packages/web/app/dashboard/copilot/preview-frame/route.ts),
+which embeds the actual bundle (`SYNC_WIDGET_URL`, or the local fallback route
+[`app/widget/sync-copilot.js`](../../packages/web/app/widget/sync-copilot.js/route.ts) that serves the
+monorepo build) in `data-sync-preview` mode — appearance edits ride in as debounced query params.
 The settings actions let the operator edit the origin allowlist (enforced server-side by
-[`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)).
+[`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts); the Studio origin itself is exempt via
+`SYNC_STUDIO_URL` so the tester survives a locked-down allowlist).
 
 ### 4.6 Analytics ([`copilot-metrics.ts`](../../packages/web/lib/copilot-metrics.ts))
 
