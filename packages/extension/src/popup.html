@@ -173,8 +173,16 @@
 
   #recent .recent-row { display: flex; align-items: center; gap: 8px; }
   .recent-row .rdot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: 0 0 auto; }
+  /* per-status tones: queued/uploading amber-ish, processing indigo pulse, ready green, error terracotta */
+  .recent-row .rdot.s-uploaded { background: var(--warn); }
+  .recent-row .rdot.s-processing { background: var(--primary); animation: rpulse 1.2s ease-in-out infinite; }
+  .recent-row .rdot.s-ready { background: var(--live); }
+  .recent-row .rdot.s-error { background: var(--rec); }
+  @keyframes rpulse { 50% { opacity: .35; } }
   .recent-row .name { flex: 1; font: 11.5px var(--font-sans); color: #5a5a5a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recent-row .rbadge { font: 10px var(--font-mono); color: #b0b0b0; flex: 0 0 auto; }
+  #recent .rlink { display: inline-block; margin: 5px 0 0 14px; font: 600 10px var(--font-mono); color: var(--primary); cursor: pointer; }
+  #recent .rlink:hover { text-decoration: underline; }
   .empty { font: 11.5px var(--font-sans); color: var(--muted); }
 
   .lbl-row { margin: 13px 0 7px; }
@@ -362,7 +370,7 @@
       <div class="track"><i id="upFill"></i></div>
       <div class="note">
         <span class="note-ico">↻</span>
-        <span class="txt">Keep this open — uploads resume automatically if your connection drops.</span>
+        <span class="txt">You can close this — the upload continues in the background and retries if interrupted.</span>
       </div>
       <div class="foot">Then Studio distils it into your Knowledge Base</div>
     </section>

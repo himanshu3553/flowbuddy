@@ -25,6 +25,7 @@ let ticker: number | null = null;
 let statePoller: number | null = null;
 let uploadPoller: number | null = null;
 let statusTimer: number | null = null; // auto-dismiss for the success notification
+let sessionPoller: number | null = null; // idle view: polls the last session's processing status
 
 // mic meter
 let meterCtx: AudioContext | null = null;
@@ -37,6 +38,19 @@ interface Upload {
   sessionId?: string;
   error?: string;
   retryable?: boolean;
+}
+
+/** Mirror of the background's persisted stop→upload pipeline state (storage.local `phase`). */
+interface PhaseState {
+  name?: string;
+  at?: number;
+}
+
+/** The last successfully uploaded session — persists so "Recent" survives popup reopens. */
+interface LastSession {
+  id: string;
+  at: number;
+  status: 'uploaded' | 'processing' | 'ready' | 'error';
 }
 
 interface RecState {
@@ -65,6 +79,15 @@ async function init(): Promise<void> {
     enterRecording(state);
     return;
   }
+  // A stop is mid-pipeline (saving narration / uploading) — resume the uploading view instead of
+  // falsely claiming idle. The persisted phase is what makes a REOPENED popup honest.
+  const { phase } = await chrome.storage.local.get('phase');
+  const ph = phase as PhaseState | undefined;
+  if (ph?.name === 'saving' || ph?.name === 'uploading') {
+    $('upMeta').textContent = 'Your recording is safe — it uploads in the background.';
+    enterUploading();
+    return;
+  }
   if (!connected) {
     setState('disconnected');
     return;
@@ -84,6 +107,7 @@ function stopLoops(): void {
   if (statePoller != null) { clearInterval(statePoller); statePoller = null; }
   if (uploadPoller != null) { clearInterval(uploadPoller); uploadPoller = null; }
   if (statusTimer != null) { clearTimeout(statusTimer); statusTimer = null; }
+  if (sessionPoller != null) { clearInterval(sessionPoller); sessionPoller = null; }
   stopMeter();
 }
 
@@ -94,16 +118,15 @@ function enterIdle(lastUpload?: Upload): void {
   $('orgName').textContent = org || 'Your workspace';
   $('connEmail').textContent = email ? `Connected as ${email}` : 'Connected';
   $('orgAvatar').textContent = (org.trim()[0] || 'S').toUpperCase();
-  renderRecent(lastUpload);
+  void renderRecent();
+  startSessionPoll();
   // The upload outcome is a ONE-TIME notification: show it, then clear it from storage + the toolbar
-  // badge so it never persists across popup opens / extension reloads. Success also auto-dismisses.
+  // badge so it never persists across popup opens / extension reloads. Success auto-dismisses; the
+  // "Recent" row is NOT cleared with it — that persists until the next recording replaces it.
   if (lastUpload?.ok) {
-    setStatusBar('ok', 'Uploaded', 'processing in Sync');
+    setStatusBar('ok', 'Uploaded', 'Studio is turning it into workflows');
     acknowledgeResult();
-    statusTimer = setTimeout(() => {
-      setStatusBar(null);
-      renderRecent(undefined);
-    }, 5000) as unknown as number;
+    statusTimer = setTimeout(() => setStatusBar(null), 5000) as unknown as number;
   } else if (lastUpload && !lastUpload.ok) {
     setStatusBar('error', 'Error', lastUpload.error || 'Upload failed.');
     acknowledgeResult();
@@ -133,24 +156,86 @@ function setStatusBar(kind: 'ok' | 'error' | null, label = '', message = ''): vo
   bar.style.display = 'flex';
 }
 
-function renderRecent(lastUpload?: Upload): void {
+// Per-status presentation for the Recent row: dot tone + badge copy that tracks server-side
+// processing, so "what happened to my recording" is answered right here in the popup.
+const SESSION_BADGE: Record<LastSession['status'], string> = {
+  uploaded: 'uploaded · queued',
+  processing: 'processing…',
+  ready: 'ready',
+  error: 'processing failed',
+};
+
+async function renderRecent(): Promise<void> {
   const recent = $('recent');
-  if (lastUpload?.ok && lastUpload.sessionId) {
-    recent.textContent = '';
-    const row = document.createElement('div');
-    row.className = 'recent-row';
-    const dot = document.createElement('span');
-    dot.className = 'rdot';
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = `Session ${String(lastUpload.sessionId).slice(0, 8)}…`;
-    const badge = document.createElement('span');
-    badge.className = 'rbadge';
-    badge.textContent = 'uploaded';
-    row.append(dot, name, badge);
-    recent.appendChild(row);
-  } else {
+  const { lastSession } = await chrome.storage.local.get('lastSession');
+  const s = lastSession as LastSession | undefined;
+  if (!s?.id) {
     recent.innerHTML = '<p class="empty">No recordings yet.</p>';
+    return;
+  }
+  recent.textContent = '';
+  const row = document.createElement('div');
+  row.className = 'recent-row';
+  const dot = document.createElement('span');
+  dot.className = `rdot s-${s.status}`;
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = `Session ${s.id.slice(0, 8)}…`;
+  const badge = document.createElement('span');
+  badge.className = 'rbadge';
+  badge.textContent = SESSION_BADGE[s.status] ?? s.status;
+  row.append(dot, name, badge);
+  const link = document.createElement('a');
+  link.className = 'rlink';
+  link.textContent = 'View in Studio ↗';
+  link.addEventListener('click', () => {
+    chrome.tabs.create({ url: `${__STUDIO_URL__}/dashboard/recordings/${s.id}` });
+  });
+  recent.append(row, link);
+}
+
+/** Poll the last session's server-side status (uploaded → processing → ready/error) while idle. */
+function startSessionPoll(): void {
+  if (sessionPoller != null) return;
+  void pollSession();
+  sessionPoller = setInterval(() => void pollSession(), 4000) as unknown as number;
+}
+
+function stopSessionPoll(): void {
+  if (sessionPoller != null) { clearInterval(sessionPoller); sessionPoller = null; }
+}
+
+async function pollSession(): Promise<void> {
+  const { lastSession, apiToken, backendUrl } = await chrome.storage.local.get([
+    'lastSession',
+    'apiToken',
+    'backendUrl',
+  ]);
+  const s = lastSession as LastSession | undefined;
+  if (!s?.id || !apiToken || !backendUrl) { stopSessionPoll(); return; }
+  if (s.status === 'ready' || s.status === 'error') { stopSessionPoll(); return; }
+  try {
+    const res = await fetch(`${String(backendUrl).replace(/\/$/, '')}/v1/sessions/${s.id}`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    if (res.status === 404) {
+      // The session no longer exists server-side (e.g. deleted / a wiped dev DB) — drop the row.
+      await chrome.storage.local.remove('lastSession');
+      stopSessionPoll();
+      void renderRecent();
+      return;
+    }
+    if (!res.ok) return; // transient (cold start, offline, auth churn) — retry next tick
+    const json = (await res.json()) as { status?: string };
+    // `done` is the post-ready article state (Phase 2) — from the recorder's view that's "ready".
+    const status = (json.status === 'done' ? 'ready' : json.status) as LastSession['status'] | undefined;
+    if (status && status !== s.status && SESSION_BADGE[status]) {
+      await chrome.storage.local.set({ lastSession: { ...s, status } });
+      void renderRecent();
+    }
+    if (status === 'ready' || status === 'error') stopSessionPoll();
+  } catch {
+    /* offline — retry next tick */
   }
 }
 
@@ -210,38 +295,52 @@ function enterUploading(): void {
   uploadPoller = setInterval(pollUpload, 500) as unknown as number;
 }
 
-function setUploadUI(pct: number): void {
+/** Render one honest pipeline stage: what is happening RIGHT NOW, not a generic spinner. */
+function setUploadUI(pct: number, ph?: PhaseState): void {
   const fill = $('upFill');
   const track = fill.parentElement as HTMLElement;
-  if (pct === -2) {
+  const setBar = (indeterminate: boolean, label: string, pctText: string, width: string): void => {
+    track.classList.toggle('indeterminate', indeterminate);
+    $('upLabel').textContent = label;
+    $('upPct').textContent = pctText;
+    fill.style.width = width;
+  };
+  if (ph?.name === 'saving') {
+    // Between Stop and upload: the narration track is being stopped/encoded/flushed.
+    setBar(true, 'Saving narration…', '', '');
+  } else if (pct === -2) {
     // Finishing — all bytes sent; the server is receiving + processing before it responds.
-    track.classList.add('indeterminate');
-    $('upLabel').textContent = 'Finishing…';
-    $('upPct').textContent = '';
-    fill.style.width = '';
-  } else if (pct < 0) {
-    // Indeterminate (HTTP/1.1 fallback — no byte progress available).
-    track.classList.add('indeterminate');
-    $('upLabel').textContent = 'Uploading securely…';
-    $('upPct').textContent = '…';
-    fill.style.width = '';
+    setBar(true, 'Finishing…', '', '');
+  } else if (pct >= 1) {
+    setBar(false, 'Uploading securely…', `${pct}%`, `${pct}%`);
   } else {
-    track.classList.remove('indeterminate');
-    $('upLabel').textContent = 'Uploading securely…';
-    $('upPct').textContent = `${pct}%`;
-    fill.style.width = `${pct}%`;
+    // 0 / -1: no bytes moving yet (or an HTTP/1.1 fallback with no byte progress). If this stage
+    // has been sitting a while, the honest explanation is a cold-starting server, not a hang.
+    const stalled = ph?.at != null && Date.now() - ph.at > 8000;
+    setBar(true, stalled ? 'Waking the Sync server — this can take a minute…' : 'Uploading securely…', pct === -1 ? '…' : '', '');
   }
 }
 
 async function pollUpload(): Promise<void> {
-  const { uploadProgress, lastUpload } = await chrome.storage.local.get(['uploadProgress', 'lastUpload']);
-  if (typeof uploadProgress === 'number') setUploadUI(uploadProgress);
+  const { uploadProgress, lastUpload, phase } = await chrome.storage.local.get([
+    'uploadProgress',
+    'lastUpload',
+    'phase',
+  ]);
   if (lastUpload) {
     if (uploadPoller != null) { clearInterval(uploadPoller); uploadPoller = null; }
     if (lastUpload.ok) enterIdle(lastUpload);
     else if (lastUpload.retryable) void enterRetry(lastUpload);
     else enterIdle(lastUpload); // hard failure → idle + bottom Error bar (retry wouldn't help)
+    return;
   }
+  const ph = phase as PhaseState | undefined;
+  // Outcome consumed elsewhere (e.g. acknowledged in another popup instance) — settle to idle.
+  if (ph?.name === 'idle' || ph?.name === 'done' || ph?.name === 'failed') {
+    enterIdle();
+    return;
+  }
+  if (typeof uploadProgress === 'number') setUploadUI(uploadProgress, ph);
 }
 
 async function enterRetry(lastUpload: { error?: string }): Promise<void> {
@@ -315,8 +414,10 @@ async function start(): Promise<void> {
 async function stop(): Promise<void> {
   const s: RecState = await send({ cmd: 'getState' });
   const workflows = s?.workflows ?? 1;
-  $('upMeta').textContent = `${fmt(elapsedMs())} · ${workflows} workflow${workflows === 1 ? '' : 's'} · narration saved`;
+  $('upMeta').textContent = `${fmt(elapsedMs())} · ${workflows} workflow${workflows === 1 ? '' : 's'}`;
   enterUploading();
+  // Show the true first stage instantly (the poll confirms it from the persisted phase).
+  setUploadUI(0, { name: 'saving', at: Date.now() });
   await send({ cmd: 'stop' });
 }
 

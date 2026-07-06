@@ -32,8 +32,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     stopCapture();
     sendResponse?.({ ok: true });
   } else if (msg?.cmd === 'setStatus') {
-    // Upload outcomes are shown ONLY inside the extension popup (its bottom status bar / retry
-    // screen). Nothing — success or error — is ever rendered on the recorded page.
+    // No-op: the popup owns the detailed outcome UI; the on-page feedback at stop is the control
+    // bar's status pill (controlbar.ts), which tracks the persisted `phase` from storage directly.
     sendResponse?.({ ok: true });
   } else if (msg?.cmd === 'micLevel') {
     // R7 — live mic level pushed from the offscreen recorder (top-frame control bar only).

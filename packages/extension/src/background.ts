@@ -57,8 +57,27 @@ let pendingPreShot: { shotId: string; shot: Promise<string | null> } | null = nu
 let finalizing = false;
 let finalizeFallback: ReturnType<typeof setTimeout> | null = null;
 
+// Eviction-proof twin of the in-memory fallback timer: chrome.alarms persist across service-worker
+// restarts (and browser restarts), so a stop can't get stranded by MV3 eviction.
+const FINALIZE_ALARM = 'finalize-fallback';
+
 function clearFinalizeFallback(): void {
   if (finalizeFallback != null) { clearTimeout(finalizeFallback); finalizeFallback = null; }
+  void chrome.alarms.clear(FINALIZE_ALARM);
+}
+
+/**
+ * The stop→upload pipeline's SINGLE persisted truth (chrome.storage.local `phase`), written at every
+ * transition so the popup and the on-page pill can show the real state even when they (re)open
+ * mid-pipeline — a reopened popup must never claim "idle" while an upload is in flight.
+ */
+type Phase = 'idle' | 'recording' | 'saving' | 'uploading' | 'done' | 'failed';
+async function setPhase(name: Phase): Promise<void> {
+  try {
+    await chrome.storage.local.set({ phase: { name, at: Date.now() } });
+  } catch {
+    /* ignore */
+  }
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -100,7 +119,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // one-time notification, not a sticky state that survives reopens/reloads.
       const rec = await getRec();
       await chrome.storage.local.remove('lastUpload');
-      if (!rec.recording) await setBadge(null);
+      if (!rec.recording) {
+        await setBadge(null);
+        await setPhase('idle');
+      }
       sendResponse({ ok: true });
     } else if (msg?.cmd === 'hello') {
       // A freshly loaded page asking "is this tab mid-recording?" — the deterministic PULL-based
@@ -223,6 +245,71 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   pruneTab(tabId).catch(() => {});
 });
+
+// ---- stop→upload resilience (the alarm twin + boot-time recovery) ----
+
+// The persistent finalize fallback: fires ~30s after Stop if the offscreen audio never reported
+// back AND the in-memory setTimeout died with the worker. `rec.stopping` guards a late/stale alarm
+// (finalize flips it off on completion), and finalize() itself dedupes via `finalizing`.
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== FINALIZE_ALARM) return;
+  void (async () => {
+    const rec = await getRec();
+    if (rec.stopping) await finalize().catch((e) => console.error('[alarm finalize]', e));
+  })();
+});
+
+// Boot-time recovery: every fresh worker instance checks whether its predecessor died
+// mid-pipeline and left a recording stranded with no outcome — the state that used to show a
+// stuck ↑ badge and a popup claiming "idle". Runs once per worker start.
+void recoverInterruptedUpload();
+
+async function recoverInterruptedUpload(): Promise<void> {
+  // Give a concurrently-delivered audioData/alarm (possibly what woke this worker) a moment to
+  // finalize WITH narration first; both paths dedupe against this via `finalizing`.
+  await sleep(1500);
+  try {
+    const rec = await getRec();
+    if (rec.recording || finalizing) return;
+    const { lastUpload, phase } = await chrome.storage.local.get(['lastUpload', 'phase']);
+    if (lastUpload) return; // an outcome exists — the popup's result/retry screens own it
+    const phaseName = (phase as { name?: string } | undefined)?.name;
+
+    // Died mid-upload (audio already banked): resume the upload directly. Known edge: if the dead
+    // worker's POST actually reached the server but the response was lost, this re-uploads — a
+    // duplicate recording is the honest failure mode vs. silently losing one.
+    if (phaseName === 'uploading' && (rec.stopping || rec.backendUrl)) {
+      console.log('[recover] resuming an upload interrupted by worker eviction');
+      await finalize();
+      return;
+    }
+
+    // Stop begun but narration never landed: the persistent alarm will finalize (keeps the 30s
+    // grace so a still-alive offscreen doc can deliver audio before we upload without it).
+    if (rec.stopping) return;
+
+    // Orphaned buffer with no live session and no outcome (browser restart / crash killed
+    // storage.session): surface it as a retryable interruption so the popup shows the retry
+    // screen instead of pretending nothing happened. Upload deliberately needs the user's click.
+    if (phaseName === 'recording' || phaseName === 'saving' || phaseName === 'uploading') {
+      const events = await kvEntriesByPrefix<CapturedEvent>('event:');
+      if (events.length === 0) return;
+      console.log('[recover] surfacing an interrupted recording for retry');
+      await chrome.storage.local.set({
+        lastUpload: {
+          ok: false,
+          retryable: true,
+          error: 'The recording was interrupted before its upload finished.',
+          at: Date.now(),
+        },
+      });
+      await setPhase('failed');
+      await setBadge('fail');
+    }
+  } catch (e) {
+    console.warn('[recover]', e);
+  }
+}
 
 async function adoptTabIfChild(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id == null || tab.openerTabId == null) return;
@@ -444,6 +531,7 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
     }
   }
   await setBadge('rec'); // toolbar shows REC for the duration
+  await setPhase('recording');
   return { ok: true };
 }
 
@@ -452,6 +540,7 @@ async function onStop(): Promise<void> {
   if (!rec.recording) return;
   await setRec({ ...rec, recording: false, stopping: true });
 
+  await setPhase('saving'); // narration is being stopped/encoded/flushed — upload hasn't started
   await setBadge('up');
   for (const id of recordingTabs(rec)) chrome.tabs.sendMessage(id, { cmd: 'stopCapture' }).catch(() => {});
   await notifyTab(rec.tabId, { cmd: 'setStatus', phase: 'uploading' });
@@ -460,8 +549,11 @@ async function onStop(): Promise<void> {
   // Fallback: if the offscreen audio never reports back, finalize without it. Generous (R3) so
   // long recordings have time to stop/encode/flush — don't drop narration by finalizing too early.
   // Tracked + cancelled on finalize/start so a stale timer can't fire into a LATER recording.
+  // The setTimeout is the fast path while this worker instance lives; the alarm is its
+  // eviction-proof twin (fires ≥30s, survives SW restarts) so a stop can never be stranded.
   clearFinalizeFallback();
   finalizeFallback = setTimeout(() => { finalize().catch((e) => console.error(e)); }, 30000);
+  chrome.alarms.create(FINALIZE_ALARM, { delayInMinutes: 0.5 });
 }
 
 async function onMarker(): Promise<void> {
@@ -518,13 +610,7 @@ async function finalize(): Promise<void> {
     result = { ok: false, error: (e as Error)?.message || 'Recording failed to finalize.' };
   }
 
-  // R2: only wipe the buffer on SUCCESS — keep it on failure so the user can Retry (don't lose a
-  // recording to a transient network blip).
-  if (result.ok) await kvClear();
-  await chrome.storage.local.set({
-    lastUpload: { ...result, retryable: result.retryable ?? !result.ok, at: Date.now() },
-  });
-  await setBadge(result.ok ? 'ok' : 'fail');
+  await recordOutcome(result);
   await notifyTab(rec.tabId, {
     cmd: 'setStatus',
     phase: result.ok ? 'done' : 'failed',
@@ -534,6 +620,28 @@ async function finalize(): Promise<void> {
   // Mark the session terminal so a late offscreen audioData reply can't re-trigger finalize.
   await setRec({ ...(await getRec()), stopping: false });
   await ensureClosed();
+}
+
+/**
+ * Persist one upload outcome everywhere it surfaces: buffer wipe on success (R2 keeps it on failure
+ * so Retry can't lose a recording), `lastUpload` for the popup's result/retry screens, `lastSession`
+ * for the persistent "Recent" row (the popup polls its processing status from the API), the `phase`
+ * for any mid-pipeline UI, and the toolbar badge.
+ */
+async function recordOutcome(result: UploadResult): Promise<void> {
+  if (result.ok) {
+    await kvClear();
+    if (result.sessionId) {
+      await chrome.storage.local.set({
+        lastSession: { id: result.sessionId, at: Date.now(), status: 'uploaded' },
+      });
+    }
+  }
+  await chrome.storage.local.set({
+    lastUpload: { ...result, retryable: result.retryable ?? !result.ok, at: Date.now() },
+  });
+  await setPhase(result.ok ? 'done' : 'failed');
+  await setBadge(result.ok ? 'ok' : 'fail');
 }
 
 /** "Start fresh" from the interrupted screen: drop the unsent recording + result, clear the badge. */
@@ -548,6 +656,7 @@ async function onDiscard(): Promise<void> {
   await chrome.storage.local.remove('lastUpload');
   await chrome.storage.local.set({ uploadProgress: 0 });
   await setBadge(null);
+  await setPhase('idle');
 }
 
 /** R2 — re-attempt the upload from the buffer kept after a failed finalize (triggered from the popup). */
@@ -555,6 +664,9 @@ async function onRetryUpload(): Promise<{ ok: boolean; error?: string }> {
   const { lastUpload } = await chrome.storage.local.get('lastUpload');
   if (lastUpload?.ok) return { ok: true };
   const rec = await getRec();
+  // Flip the persisted phase off 'failed' immediately — the popup's poll must not read the stale
+  // terminal state as "this retry already settled" while the bundle is still being assembled.
+  await setPhase('uploading');
   await setBadge('up');
   let result: UploadResult;
   try {
@@ -562,11 +674,7 @@ async function onRetryUpload(): Promise<{ ok: boolean; error?: string }> {
   } catch (e) {
     result = { ok: false, error: (e as Error)?.message || 'Retry failed.' };
   }
-  if (result.ok) await kvClear();
-  await chrome.storage.local.set({
-    lastUpload: { ...result, retryable: result.retryable ?? !result.ok, at: Date.now() },
-  });
-  await setBadge(result.ok ? 'ok' : 'fail');
+  await recordOutcome(result);
   return { ok: result.ok, error: result.error };
 }
 
@@ -618,33 +726,75 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
     parts.push({ name: rel, filename: rel, contentType: 'text/html', body: new Blob([value], { type: 'text/html' }) });
   }
 
-  const apiBase = (rec.backendUrl || 'http://localhost:8787').replace(/\/$/, '');
+  // The session's own target/token, falling back to the stored CONNECTION for recovery paths where
+  // `rec` (storage.session) was lost — e.g. retrying an interrupted upload after a browser restart.
+  const conn = await chrome.storage.local.get(['apiToken', 'backendUrl']);
+  const apiBase = (rec.backendUrl || (conn.backendUrl as string) || 'http://localhost:8787').replace(/\/$/, '');
+  const token = rec.token || (conn.apiToken as string | undefined);
   const url = `${apiBase}/v1/sessions`;
-  const authHeaders: Record<string, string> = rec.token ? { Authorization: `Bearer ${rec.token}` } : {};
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  // Watchdog: a fetch with no deadline can hang forever (the exact failure that stranded a stop on
+  // a cold-starting server) — the badge would show ↑ indefinitely with no outcome. Abort when no
+  // progress happens for STALL_MS (streaming resets it per chunk; cold start ~1 min fits), or after
+  // a flat PLAIN_MS for the no-progress plain POST. An abort surfaces as a retryable timeout.
+  const STALL_MS = 120_000;
+  const PLAIN_MS = 240_000;
+  let timedOut = false;
+  const aborter = new AbortController();
+  let watchdog: ReturnType<typeof setTimeout> | null = null;
+  const armWatchdog = (ms: number): void => {
+    if (watchdog != null) clearTimeout(watchdog);
+    watchdog = setTimeout(() => { timedOut = true; aborter.abort(); }, ms);
+  };
+  const disarmWatchdog = (): void => {
+    if (watchdog != null) { clearTimeout(watchdog); watchdog = null; }
+  };
+  const timeoutResult = (): UploadResult => ({
+    ok: false,
+    error: 'Upload timed out — the Sync server may have been waking up. Retry in a moment.',
+  });
+
   // Plain multipart POST — no upload progress (fetch(FormData) exposes none), so the popup shows an
   // indeterminate bar (-1). This is the reliable path that works on HTTP/1.1.
   const plainUpload = (): Promise<Response> => {
     void setUploadProgress(-1);
-    return fetch(url, { method: 'POST', headers: authHeaders, body: partsToFormData(parts) });
+    armWatchdog(PLAIN_MS);
+    return fetch(url, { method: 'POST', headers: authHeaders, body: partsToFormData(parts), signal: aborter.signal });
   };
 
+  await setPhase('uploading'); // bundle assembled — bytes start moving now
   await setUploadProgress(0);
   let res: Response;
   try {
     // Streamed body gives byte-progress (capped at 90% + a "finishing" tail — see streamingUpload),
     // but Chrome only allows a streaming request body over HTTP/2 (TLS); plaintext localhost is
     // HTTP/1.1, where it throws. So only stream over https.
-    res = url.startsWith('https:')
-      ? await streamingUpload(url, rec.token, parts, (pct) => void setUploadProgress(pct))
-      : await plainUpload();
+    if (url.startsWith('https:')) {
+      armWatchdog(STALL_MS);
+      res = await streamingUpload(
+        url,
+        token,
+        parts,
+        (pct) => { armWatchdog(STALL_MS); void setUploadProgress(pct); },
+        aborter.signal,
+      );
+    } else {
+      res = await plainUpload();
+    }
   } catch {
+    disarmWatchdog();
+    if (timedOut) return timeoutResult();
     // Streaming failed (e.g. the host didn't negotiate HTTP/2) — fall back to the plain POST.
     try {
       res = await plainUpload();
     } catch (e) {
+      disarmWatchdog();
+      if (timedOut) return timeoutResult();
       return { ok: false, error: `Could not reach the Sync API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
     }
   }
+  disarmWatchdog();
 
   const json = await res.json().catch(() => ({}));
   if (res.ok && json?.sessionId) {
@@ -699,6 +849,7 @@ async function streamingUpload(
   token: string | undefined,
   parts: Part[],
   report: (pct: number) => void,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const enc = new TextEncoder();
   const CRLF = '\r\n';
@@ -762,6 +913,7 @@ async function streamingUpload(
     },
     body: stream,
     duplex: 'half', // required by Chrome when streaming a request body
+    signal,
   };
   return fetch(url, init as RequestInit);
 }

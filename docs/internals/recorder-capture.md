@@ -178,7 +178,8 @@ workflow's final step.
 | **R1 — survive full-page navs (incl. cross-origin)** | A hard navigation re-injects a fresh content script that nothing re-armed, silently stopping capture; the push-based re-arm raced on cross-origin hops. | **Pull-based:** every freshly loaded page sends the background a `hello`; the background answers from `sender.tab.id` + the stored `rec` (`startTime`, `pausedTotal`) so the page **self-arms deterministically** on any origin. `chrome.tabs.onUpdated` (status `complete`) → `rearmIfRecording` is kept as a **backup** push. Timeline stays continuous. |
 | **R4 — survive service-worker eviction (MV3)** | During quiet narration the MV3 worker is evicted after ~30 s idle, dropping the `capture` port; events after it are lost while audio keeps going. | **Keepalive:** the top frame pings the port every **20 s** to reset the idle timer. **Reconnect + buffer:** events flow through an in-memory `outbox`; `flush()` reconnects on a dead port (waking a fresh worker — state lives in `chrome.storage.session`, `idToKey` rebuilds from IDB) and retries in-place so the event + its screenshot land immediately. |
 | **R2 — never lose a recording to a network blip** | A failed upload could discard the buffer. | The IndexedDB buffer is **only cleared on upload success**. On failure, `lastUpload` is marked `retryable` and the popup shows a **Retry** that re-runs `assembleAndUpload` from the still-intact buffer. |
-| **R3 — don't drop narration by finalizing early** | The offscreen audio may take time to stop/encode/flush on long recordings. | On stop, a **generous 30 s fallback** finalizes without audio only if the offscreen doc never reports back; normally finalize is triggered by the `audioData` message. The fallback timer is tracked + cancelled so a stale timer can't finalize a later session. |
+| **R3 — don't drop narration by finalizing early** | The offscreen audio may take time to stop/encode/flush on long recordings. | On stop, a **generous 30 s fallback** finalizes without audio only if the offscreen doc never reports back; normally finalize is triggered by the `audioData` message. The fallback is a `setTimeout` (fast path) **plus a `chrome.alarms` twin** that survives worker eviction; both are tracked + cancelled so a stale one can't finalize a later session. |
+| **Stop→upload can't strand (v0.3.0)** | The stop pipeline had no persisted state and no deadline: a worker eviction after Stop (or a fetch hung on a cold-starting server) left a stuck `↑` badge, no outcome, and a popup that claimed **idle** mid-upload. | Three mechanisms: **(1) the persisted `phase`** (`recording → saving → uploading → done/failed`, in `chrome.storage.local`) is the pipeline's single truth — the popup and the on-page pill route on it; **(2) boot-time recovery** — a fresh worker instance that finds `phase=uploading` with no outcome resumes `finalize()` (audio already banked), and an orphaned buffer (browser crash) is surfaced as a **retryable interruption**; **(3) an upload watchdog** (`AbortController`: no progress for 2 min streaming / 4 min flat plain POST) turns a hung fetch into a retryable timeout. |
 | **R8 — iframe capture** | Content scripts were top-frame only, so iframe UIs (Stripe, embedded editors) captured nothing. | `all_frames:true`; each frame self-arms via the `hello` handshake; `bbox` is translated to top-document coords (cross-origin frames omit it) and `framePath` recorded; `appMeta` stays gated to the top frame. |
 | **R9 — multi-tab / popups (Option A)** | Capture was bound to one `tabId`; OAuth popups / "open in new tab" lost capture. | `Rec.tabIds` is a **set**; `tabs.onCreated` + `openerTabId` **adopts tabs opened FROM a recording tab**; stop/pause/resume/hello span the set; screenshots use the event tab's `windowId`; closed tabs pruned. |
 | **Pause / Resume** | The operator needs to pause for a sensitive screen or a break. | Pause detaches page listeners + `MediaRecorder.pause()` + freezes the timer; event `t` is **active-time** (`pausedTotal`) so audio and events stay aligned. Reachable from the popup and the on-page control bar. |
@@ -207,9 +208,12 @@ to the recording tab's top frame for the **control-bar meter** (R7).
    **The relative path is the field name** (`fd.append('shots/<id>.jpg', blob, ...)`) — because
    multipart strips directories from filenames, the path must ride on the field name so the server can
    reconstruct the object key.
-4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>`.
-5. Map the response to a single result object; drive the toolbar **badge + popup** off it (no on-page
-   toast — the popup's one-time status bar is the only outcome surface).
+4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>` (falls back to the stored
+   connection's URL/token if the session's own were lost to a browser restart).
+5. Record the outcome once (`recordOutcome`): buffer wipe on success, `lastUpload` for the popup's
+   result/retry screens, `lastSession` for the persistent **Recent** row, the terminal `phase`, and
+   the toolbar badge. The popup's status bar and the control bar's **status pill** both read from
+   this — one write, every surface consistent.
 
 ### 4.9 The popup state machine + the on-page control bar
 
@@ -229,12 +233,24 @@ and determinate upload-% are all **real** now (formerly placeholders): the meter
 (indeterminate fallback on HTTP/1.1). The toolbar **badge** is a parallel state machine: `REC` (red) →
 `↑` (uploading) → `✓` / `!`, with a **blinking red-dot action icon** while recording.
 
+**Honest mid-pipeline states (v0.3.0):** the popup routes on the persisted `phase` at open, so a
+popup reopened mid-upload lands back on the **uploading** view (never a false idle) with stage-true
+labels — *Saving narration…* (stop → audio flush), *Uploading securely… N%*, *Finishing…*, and after
+~8 s with no bytes moving, *Waking the Sync server — this can take a minute…* (the free-tier
+cold-start, named instead of a mute spinner). The idle view's **Recent** row is persistent and live:
+it polls `GET /v1/sessions/:id` (4 s, only while the popup is open) to show
+`uploaded · queued → processing… → ready / processing failed`, with a **View in Studio ↗** deep link
+to the recording's detail page; a 404 (wiped dev DB) drops the row.
+
 **R7 — the on-page control bar** ([`controlbar.ts`](../../packages/extension/src/controlbar.ts)) is a
 parallel control surface mounted in the recorded page's **top frame** so Stop/Pause/Mark and live
 status (timer, step count, mic meter) are reachable without opening the popup. It reads the same
 `getState` and sends the same background commands; it **survives Pause** and **re-appears after a
-full-page nav** (its state is polled, not tied to the per-frame capture), unmounts when the session
-ends, and is draggable. It does not replace the popup.
+full-page nav** (its state is polled, not tied to the per-frame capture), and is draggable. It does
+not replace the popup. **On Stop it doesn't vanish** (v0.3.0): it collapses into a **status pill**
+that mirrors the persisted `phase` (*Saving narration… → Uploading… N% → ✓ Uploaded — Sync is
+processing it*, or the failure variant pointing at the extension), then removes itself — the pill
+also appears when Stop came from the popup, since the user's attention is on the page either way.
 
 ### 4.10 Getting connected (the token handshake)
 
@@ -253,8 +269,9 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
   `meta`, `audio`, `event:*`, `shot:*`, `dom:*`. Cleared on successful upload (R2).
 - **Writes (durably):** nothing in Postgres directly — it hands the bundle to the API, which persists
   the `KnowledgeSource`.
-- **Reads:** `chrome.storage.local` (`apiToken`, `backendUrl`, `connectedEmail`, `lastUpload`) and
-  `chrome.storage.session` (the live `rec` state).
+- **Reads:** `chrome.storage.local` (`apiToken`, `backendUrl`, `connectedEmail`, `lastUpload`, plus
+  the v0.3.0 `phase` — the persisted stop→upload pipeline state — and `lastSession` — the Recent
+  row's id/status) and `chrome.storage.session` (the live `rec` state).
 - **Object storage:** indirectly — the API writes the uploaded artifacts to
   `workspaces/<ws>/sessions/<id>/...`.
 

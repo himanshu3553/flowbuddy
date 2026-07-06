@@ -11,6 +11,8 @@ let host: HTMLDivElement | null = null;
 let root: ShadowRoot | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
 let poller: ReturnType<typeof setInterval> | null = null;
+let statusPoller: ReturnType<typeof setInterval> | null = null; // post-stop pill: tracks the upload
+let pillSince = 0;
 let micBars: HTMLElement[] = [];
 
 // local mirror of the recording session (refreshed from getState)
@@ -57,6 +59,7 @@ export function ensureControlBar(): void {
 export function removeControlBar(): void {
   if (ticker != null) { clearInterval(ticker); ticker = null; }
   if (poller != null) { clearInterval(poller); poller = null; }
+  if (statusPoller != null) { clearInterval(statusPoller); statusPoller = null; }
   host?.remove();
   host = null;
   root = null;
@@ -96,6 +99,14 @@ function build(): void {
       .btn.stop{background:#cc4a3a;border-color:#cc4a3a;color:#fff}
       .btn.stop:hover{background:#b94334}
       .paused .timer{color:#8a6d2e}
+      /* post-stop status pill (D): the bar collapses into this instead of vanishing silently */
+      .spin{width:12px;height:12px;border-radius:50%;border:2px solid #dfe3f5;border-top-color:#3b50e0;
+        animation:cspin .9s linear infinite;flex:none}
+      @keyframes cspin{to{transform:rotate(360deg)}}
+      .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+      .pdot.ok{background:#1aa86a}
+      .pdot.fail{background:#cc4a3a}
+      .ptext{white-space:nowrap;color:#3a3f4d;padding:2px 2px}
     </style>
     <div class="bar">
       <span class="grip" title="Drag">⠿</span>
@@ -142,10 +153,60 @@ async function onPause(): Promise<void> {
 }
 
 async function onStop(): Promise<void> {
-  // Tear the bar down immediately — upload status lives in the popup/toolbar, never on the page.
-  stopping = true;
+  // Don't vanish silently — collapse into the status pill right where the user clicked Stop, and
+  // stay until the upload reaches an outcome ("clicked stop, nothing happened" was a real bug).
+  enterStatusPill();
   await sendMsg({ cmd: 'stop' });
-  removeControlBar();
+}
+
+// ---- post-stop status pill (D) ----
+
+/** Swap the controls for a compact pill that mirrors the persisted upload phase until an outcome. */
+function enterStatusPill(): void {
+  if (!root || !host || stopping) return;
+  stopping = true;
+  if (ticker != null) { clearInterval(ticker); ticker = null; }
+  if (poller != null) { clearInterval(poller); poller = null; }
+  const bar = root.querySelector('.bar') as HTMLElement | null;
+  if (!bar) { removeControlBar(); return; }
+  bar.classList.remove('paused');
+  bar.innerHTML = '<span class="spin"></span><span class="ptext">Saving narration…</span>';
+  pillSince = Date.now();
+  statusPoller = setInterval(() => void pollStatusPill(), 500);
+}
+
+async function pollStatusPill(): Promise<void> {
+  if (!root) { removeControlBar(); return; }
+  // Hard cap: the background's upload watchdog guarantees an outcome well before this.
+  if (Date.now() - pillSince > 300_000) { removeControlBar(); return; }
+  let phase: { name?: string } | undefined;
+  let lastUpload: { ok?: boolean } | undefined;
+  let uploadProgress: number | undefined;
+  try {
+    ({ phase, lastUpload, uploadProgress } = await chrome.storage.local.get(['phase', 'lastUpload', 'uploadProgress']));
+  } catch {
+    removeControlBar(); // extension reloaded/invalidated under us
+    return;
+  }
+  if (lastUpload?.ok || phase?.name === 'done') { finishPill(true); return; }
+  if ((lastUpload && !lastUpload.ok) || phase?.name === 'failed') { finishPill(false); return; }
+  if (phase?.name === 'idle' || phase?.name === 'recording') { removeControlBar(); return; } // outcome consumed elsewhere
+  const p = root.querySelector('.ptext');
+  if (!p) return;
+  if (phase?.name === 'saving') p.textContent = 'Saving narration…';
+  else if (uploadProgress === -2) p.textContent = 'Uploading… finishing';
+  else if (typeof uploadProgress === 'number' && uploadProgress >= 1) p.textContent = `Uploading… ${uploadProgress}%`;
+  else p.textContent = Date.now() - pillSince > 8000 ? 'Uploading… waking the Sync server' : 'Uploading…';
+}
+
+function finishPill(ok: boolean): void {
+  if (statusPoller != null) { clearInterval(statusPoller); statusPoller = null; }
+  const bar = root?.querySelector('.bar') as HTMLElement | null;
+  if (!bar) { removeControlBar(); return; }
+  bar.innerHTML = ok
+    ? '<span class="pdot ok"></span><span class="ptext">Uploaded — Sync is processing it</span>'
+    : '<span class="pdot fail"></span><span class="ptext">Upload didn’t finish — open the Sync extension to retry</span>';
+  setTimeout(removeControlBar, ok ? 4000 : 8000);
 }
 
 // ---- state ----
@@ -153,7 +214,17 @@ async function onStop(): Promise<void> {
 async function refresh(): Promise<void> {
   if (stopping) return;
   const s = await sendMsg({ cmd: 'getState' });
-  if (!s?.recording) { removeControlBar(); return; } // session ended elsewhere
+  if (!s?.recording) {
+    // Session ended elsewhere (popup Stop): if the upload pipeline is live, show the pill here too —
+    // the user's attention is on the page either way.
+    try {
+      const { phase } = await chrome.storage.local.get('phase');
+      const name = (phase as { name?: string } | undefined)?.name;
+      if (name === 'saving' || name === 'uploading') { enterStatusPill(); return; }
+    } catch { /* extension reloaded — fall through to removal */ }
+    removeControlBar();
+    return;
+  }
   recStart = s.startTime || Date.now();
   recPaused = Boolean(s.paused);
   recPausedAt = s.pausedAt || 0;

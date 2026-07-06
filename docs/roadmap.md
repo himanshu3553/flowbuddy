@@ -70,7 +70,7 @@ A throwaway, lightweight spike answered one question before building any product
 | Module | What it is | Status | Legacy |
 |:---|:---|:---|:---|
 | **P1-M0** | Monorepo, infrastructure & auth (Postgres, R2/MinIO, Redis/BullMQ, Auth.js, api, worker, multi-tenancy) | ✅ **Done** | M0, M1 |
-| **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **published to the Chrome Web Store 2026-07-06** (v0.1.0 live; v0.2.1, the first prod-targeted build — deployed-Studio + localhost connect — in review; see [`deploy-render.md`](deploy-render.md) §11) | M2 |
+| **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **v0.2.1 LIVE on the Chrome Web Store** (approved 2026-07-06; prod-targeted: deployed-Studio + localhost connect). **v0.3.0** (stop→upload feedback + resilience, 2026-07-06) built in-tree, pending store submission; see [`deploy-render.md`](deploy-render.md) §11 | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending | M7 (+ M11 retrieval) |
 | **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `sync-web-uir8.onrender.com` | M8 |
