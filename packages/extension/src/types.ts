@@ -2,6 +2,14 @@
 
 export interface Bbox { x: number; y: number; w: number; h: number; }
 
+// R13 — one entry in the ranked locator set. `value` is a ready-to-run CSS selector for every
+// strategy except `text`, whose value is the element's normalized visible text.
+export interface Locator {
+  strategy: 'testid' | 'id' | 'aria' | 'name' | 'placeholder' | 'href' | 'text' | 'css' | 'xpath';
+  value: string;
+  unique?: boolean; // matched exactly one element in its own document at capture time
+}
+
 export interface EventTarget {
   role?: string;
   accessibleName?: string;
@@ -10,6 +18,7 @@ export interface EventTarget {
   attributes?: Record<string, string>;
   cssPath?: string;
   xpath?: string;
+  locators?: Locator[]; // R13 — ranked best-first; Phase-3 replay uses the first that resolves
   bbox?: Bbox;
   framePath?: string; // R8 — the sub-frame URL an event came from (top-frame events omit this)
 }

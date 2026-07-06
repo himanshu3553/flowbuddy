@@ -9,6 +9,16 @@ export interface Bbox {
   h: number;
 }
 
+// R13 — one entry in the ranked locator set. `value` is a ready-to-run CSS selector for every
+// strategy except `text`, whose value is the element's normalized visible text (resolve it against
+// elements of `EventTarget.tag`). `unique` = the locator matched exactly one element in its own
+// document at capture time; ambiguous locators are still kept (ranked lower) as healing signals.
+export interface Locator {
+  strategy: 'testid' | 'id' | 'aria' | 'name' | 'placeholder' | 'href' | 'text' | 'css' | 'xpath';
+  value: string;
+  unique?: boolean;
+}
+
 export interface EventTarget {
   role?: string;
   accessibleName?: string;
@@ -17,6 +27,9 @@ export interface EventTarget {
   attributes?: Record<string, string>;
   cssPath?: string;
   xpath?: string;
+  // R13 — ranked best-first (stable+unique → stable+ambiguous → positional css/xpath). Phase-3
+  // replay walks this list in order and uses the first locator that still resolves.
+  locators?: Locator[];
   bbox?: Bbox;
   framePath?: string;
 }

@@ -2,7 +2,7 @@
 // and post-action settle, streaming them to the background over a long-lived port.
 
 import { ensureControlBar, isControlBarEvent, setMicLevel } from './controlbar.js';
-import type { AppMeta, CapturedEvent, EventTarget, PortMsg, Route } from './types.js';
+import type { AppMeta, CapturedEvent, EventTarget, Locator, PortMsg, Route } from './types.js';
 
 let recording = false;
 let startTime = 0;
@@ -441,6 +441,7 @@ function buildTarget(el: Element): EventTarget {
     attributes: pickAttrs(el),
     cssPath: cssPath(el),
     xpath: xpath(el),
+    locators: rankedLocators(el), // R13 — ranked stable-first locator set for Phase-3 replay
   };
   // R8 — translate the element bbox into TOP-document viewport coords so it lines up with the
   // full-tab screenshot. Resolvable for a same-origin frame chain; for a cross-origin frame the
@@ -527,6 +528,84 @@ function accessibleName(el: Element): string {
   const attr = el.getAttribute('alt') || el.getAttribute('title') || el.getAttribute('placeholder');
   if (attr) return attr.trim().slice(0, 120);
   return (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+// ---- R13 — ranked, multi-signal locators ----------------------------------------------------
+// Phase-3 self-validation has to re-find these elements months after recording, when positional
+// cssPath/xpath have long since rotted. Capture is the only moment we can both read the stable
+// signals (testid/id/aria/name) AND verify each one's uniqueness against the live document, so we
+// rank here and replay just walks the list: stable+unique first, stable-but-ambiguous next (still
+// useful healing signals), positional css/xpath as last resorts.
+
+const TESTID_ATTRS = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
+const LOCATOR_VALUE_MAX = 150; // an attr value longer than this is content, not an identifier
+const LOCATORS_MAX = 8;
+
+// Framework-generated ids churn on every build/render (ember123, radix-:r5:, uuids) — anchoring a
+// "stable" locator to one is worse than not having it, so those never make the id strategy.
+function looksGenerated(id: string): boolean {
+  return (
+    /\d{3,}/.test(id) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(id) ||
+    /^(?:ember|react|radix|mui|chakra|headlessui|downshift|select2)[-:_]/i.test(id) ||
+    /^:r[0-9a-z]+:?$/i.test(id) // React useId()
+  );
+}
+
+function attrValueSel(tag: string, attr: string, value: string): string {
+  return `${tag}[${attr}="${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+}
+
+function rankedLocators(el: Element): Locator[] {
+  const doc = el.ownerDocument;
+  const tag = el.tagName.toLowerCase();
+  const count = (sel: string): number => {
+    try { return doc.querySelectorAll(sel).length; } catch { return 0; }
+  };
+  const stable: Locator[] = [];
+  // count 0 means the built selector doesn't even match its own element (odd chars the escaping
+  // didn't survive) — a locator that fails at capture time can only mislead replay, so drop it.
+  const add = (strategy: Locator['strategy'], sel: string): void => {
+    const n = count(sel);
+    if (n > 0) stable.push({ strategy, value: sel, unique: n === 1 });
+  };
+  const attr = (name: string): string | null => {
+    const v = el.getAttribute(name);
+    return v && v.length <= LOCATOR_VALUE_MAX ? v : null;
+  };
+
+  for (const a of TESTID_ATTRS) {
+    const v = attr(a);
+    if (v) { add('testid', attrValueSel('', a, v)); break; }
+  }
+  const id = attr('id');
+  if (id && !looksGenerated(id)) add('id', `#${CSS.escape(id)}`);
+  const aria = attr('aria-label');
+  if (aria) add('aria', attrValueSel(tag, 'aria-label', aria));
+  const name = attr('name');
+  if (name) add('name', attrValueSel(tag, 'name', name));
+  const placeholder = attr('placeholder');
+  if (placeholder) add('placeholder', attrValueSel(tag, 'placeholder', placeholder));
+  if (tag === 'a') {
+    const href = attr('href');
+    if (href && href !== '#' && !href.startsWith('javascript:')) add('href', attrValueSel('a', 'href', href));
+  }
+  // Visible text — the signal that survives full redesigns (a "Save changes" button keeps its label
+  // long after its DOM position changes). Short labels only; resolved against same-tag elements.
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (text && text.length <= 60) {
+    let n = 0;
+    for (const c of Array.from(doc.querySelectorAll(tag))) {
+      if ((c.textContent || '').replace(/\s+/g, ' ').trim() === text) n++;
+    }
+    stable.push({ strategy: 'text', value: text, unique: n === 1 });
+  }
+
+  const ranked = [...stable.filter((l) => l.unique), ...stable.filter((l) => !l.unique)];
+  const css = cssPath(el);
+  ranked.push({ strategy: 'css', value: css, unique: count(css) === 1 });
+  ranked.push({ strategy: 'xpath', value: xpath(el), unique: true }); // absolute indexed path — one node by construction
+  return ranked.slice(0, LOCATORS_MAX);
 }
 
 function cssPath(el: Element): string {

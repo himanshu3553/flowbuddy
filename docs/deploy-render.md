@@ -166,7 +166,7 @@ reverts to localhost — the committed `src/manifest.json` stays localhost so lo
 listing URL goes in `SYNC_EXTENSION_URL` on `sync-web` so the Home checklist's install CTA reads
 "Add to Chrome". *(0.1.0/0.2.0 were dev builds whose bridge only matched localhost, so store installs
 couldn't connect to the deployed Studio.)* **v0.3.0** (stop→upload feedback + resilience; adds the
-`alarms` permission) is built in-tree and **pending store submission**. The store zip is built from
+`alarms` permission) was **submitted to the store 2026-07-06** (in review). The store zip is built from
 `dist/` (`cd dist && zip -r ../sync-recorder-<version>.zip .`). ⚠️ The baked Studio URL is part of the
 store artifact — moving to a custom domain later means a rebuild + resubmission (add the new domain
 to the list; keep the old one during the transition).

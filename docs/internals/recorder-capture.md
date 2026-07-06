@@ -105,9 +105,10 @@ capture robust and queryable later:
 | `accessibleName` | `aria-label` → `aria-labelledby` → `<label>` → `alt`/`title`/`placeholder` → text | human-readable name ("Sign In") |
 | `text` | trimmed `textContent`, ≤120 chars | fallback label |
 | `tag` | `tagName` | element kind |
-| `attributes` | a whitelist: `id, name, class, type, href, placeholder, aria-label, data-testid` | re-location hints (feeds future selector ranking) |
-| `cssPath` | a built CSS selector, stops at first `#id`, uses `:nth-of-type`, ≤8 levels | a locator |
-| `xpath` | positional xpath | a second locator |
+| `attributes` | a whitelist: `id, name, class, type, href, placeholder, aria-label, data-testid` | raw re-location hints (the R13 ranking draws on the same signals) |
+| `cssPath` | a built CSS selector, stops at first `#id`, uses `:nth-of-type`, ≤8 levels | a positional fallback locator |
+| `xpath` | positional xpath | a second positional fallback |
+| `locators` | R13 — `rankedLocators()`: a best-first `{strategy, value, unique}` set — `testid` (data-testid/-test-id/-test/-cy/-qa) → human `id` (`looksGenerated()` rejects ember/react/uuid/digit-run ids) → `aria` → `name` → `placeholder` → `href` → visible `text` (≤60 chars); each CSS-strategy value is uniqueness-checked via `querySelectorAll` in its own document and the set is ordered unique-first, then `cssPath`/`xpath` tails; capped at 8 | **the Phase-3 replay key** — validation walks the list in order and uses the first locator that still resolves |
 | `bbox` | `getBoundingClientRect()` → `{x,y,w,h}` | **powers the highlight box on the screenshot** |
 
 The element's *value* is captured for `input` events — but run through `maskValue` first (§4.4).

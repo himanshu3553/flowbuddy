@@ -19,6 +19,12 @@ export const routeSchema = z.object({
 
 export const fileRefSchema = z.object({ file: z.string() });
 
+export const locatorSchema = z.object({
+  strategy: z.enum(['testid', 'id', 'aria', 'name', 'placeholder', 'href', 'text', 'css', 'xpath']),
+  value: z.string(),
+  unique: z.boolean().optional(),
+});
+
 export const eventTargetSchema = z.object({
   role: z.string().optional(),
   accessibleName: z.string().optional(),
@@ -27,6 +33,7 @@ export const eventTargetSchema = z.object({
   attributes: z.record(z.string()).optional(),
   cssPath: z.string().optional(),
   xpath: z.string().optional(),
+  locators: z.array(locatorSchema).optional(),
   bbox: bboxSchema.optional(),
   framePath: z.string().optional(),
 });
