@@ -90,7 +90,7 @@ sequenceDiagram
     W->>A: POST /v1/copilot/answer  (X-Sync-Key public key, {question, history, context.path})
     A->>A: resolve key → workspace · check origin allowlist · rate-limit
     A->>P: load CopilotApproval keys → fetch only APPROVED KnowledgeItems
-    A->>A: keyword-shortlist + boost items on the user's current route
+    A->>A: hybrid rank (keyword ∪ pgvector via RRF) + the user's current-route signal
     A->>L: ground: answer ONLY from these items, or decline
     L-->>A: { covered, answer, citedItemIds }  OR  { covered: false, reason }
     A->>P: log CopilotQuery · on decline log CoverageGap

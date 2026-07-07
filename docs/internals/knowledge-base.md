@@ -50,6 +50,12 @@ Runs as `pnpm --filter @sync/api worker`, `concurrency: 2`.
   - `KnowledgeSource.transcript` — the persisted, redacted transcript.
   - `KnowledgeItem[]` — one row per **distilled step**, grouped by workflow via `segmentIndex` /
     `segmentTitle`.
+  - `KnowledgeItem.embedding` (P1-M3, 2026-07-07) — after `createMany`, the worker batch-embeds each
+    item's `text` (`embedTexts`, 60s timeout) and writes the `vector(1536)` via raw SQL. **Strictly
+    best-effort:** a failed embed call still lands the build `ready`, but the failure **surfaces as
+    a degraded-build notice** in `KnowledgeSource.error` (the §3.3 mechanism — "semantic search
+    unavailable… until re-processed"), not just a log line; those items ride the keyword half of
+    hybrid retrieval until the next (re)process (delete+recreate ⇒ automatic re-embed).
   - `KnowledgeSource.status = ready` (or `error`).
 
 The shape persisted into each `KnowledgeItem.data` is a

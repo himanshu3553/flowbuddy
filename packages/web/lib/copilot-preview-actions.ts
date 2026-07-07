@@ -54,7 +54,10 @@ export async function previewCopilotAnswer(
 
   // Empty ⇔ the workspace has no approved content at all (the shortlist otherwise always returns
   // up to `limit` items) — the tester has no host page, so no contextPath route-boost applies.
-  const items = await retrieveApprovedKBItems(prisma, ctx.workspace.id, q);
+  // P1-M3: same hybrid keyword+vector retrieval as the public route (degrades to keyword on failure).
+  const items = await retrieveApprovedKBItems(prisma, ctx.workspace.id, q, {
+    embedding: { apiKey, model: process.env.EMBED_MODEL || undefined },
+  });
   if (items.length === 0) {
     return {
       covered: false,

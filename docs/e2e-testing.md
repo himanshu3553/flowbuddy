@@ -169,9 +169,10 @@ This is the core capture → knowledge path **and** the workflow-segmentation qu
 Watch the **worker terminal**:
 ```
 [worker] processing session <id>
+[worker] embedded M item(s) for hybrid retrieval
 [worker] ready <id>: 1 workflow(s), M distilled step(s) from transcript(N seg)
 ```
-*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `M` is the **distilled step** count, not the raw event count.)*
+*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `M` is the **distilled step** count, not the raw event count. The `embedded` line is P1-M3 hybrid retrieval — if it's missing and a "Semantic search is unavailable" notice appears on the recording instead, embedding failed and answers fall back to keyword matching until re-processed.)*
 
 ✅ **PASS criteria:**
 - Upload returns a `sessionId` (extension shows success; no 401).

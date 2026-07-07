@@ -25,7 +25,8 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + keyword/route shortlist; sanitize history. **The single enforcement seam** — the API routes *and* the Studio preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call the same functions (Prisma client injected, so `@sync/synthesis` stays DB-free). |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — the API routes *and* the Studio preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call the same functions (Prisma client injected, so `@sync/synthesis` stays DB-free). |
+| [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
 | [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
 
@@ -91,20 +92,42 @@ and the Studio preview), with the Prisma client injected so `@sync/synthesis` st
    *This is the gate* — and since the 2026-07-06 consolidation it exists **once**: the Studio
    preview's former mirror (`listApprovedItems` in `copilot-approvals.ts`) was retired and both
    surfaces call this function. Any new copilot read path must go through it or no-leak breaks.
-4. **Keyword shortlist.** Tokenize the question (lowercase, drop stop-words and ≤2-char tokens), score
+4. **Vector candidates (P1-M3, 2026-07-07 — best-effort).** The question embed
+   (`text-embedding-3-small`, via `embeddings.ts`) **starts before the DB reads** and overlaps
+   them, with a **2s timeout + 1 retry** (the SDK default is 600s — a hanging embeddings API must
+   never stall an answer). The scan pulls the **top-50 by cosine distance** (`embedding <=> $q`
+   through the injected `$queryRaw` — the one raw-SQL touchpoint, since Prisma can't read
+   `Unsupported("vector")`) **constrained to the approved `(sourceId, segmentIndex)` keys** — so
+   unapproved rows can neither leak nor starve the candidate budget (review hardening 2026-07-07;
+   the fused list is additionally re-checked against the approved set as defense-in-depth).
+   **Any failure — no `$queryRaw`, no embedding opts, no embedded rows, a failed/slow embed call —
+   silently drops to the pure keyword shortlist** (one `console.warn`), so the copilot never errors
+   on the vector path.
+5. **Keyword scoring.** Tokenize the question (lowercase, drop stop-words and ≤2-char tokens), score
    each item by **term-overlap count** against its `text`.
-5. **Context boost (P1-M8).** If a `contextPath` was sent (the host page the user is on) and an item's
-   `route` matches it (equal or substring either way), add **+3** to its score — "answer for this
-   screen".
-6. **Top-K.** Sort by score (ties keep KB order) and return up to **24** items as `CopilotKBItem`s
+6. **Fusion (RRF, k=60).** Reciprocal-rank fusion over three signals: the keyword ranking (**matching
+   items only** — a zero-overlap item isn't "ranked", it missed; letting arbitrary KB order into the
+   list would cancel the vector signal on paraphrases), the vector ranking, and the **route signal
+   (P1-M8)** as a **double-weighted** third list (`2/(k+1)` — outranks any single rank-1 signal,
+   ties a keyword+vector double-#1, mirroring the fallback's dominant +3). Route matching is exact
+   or segment-boundary prefix, never raw substring — a root `contextPath` of `/` carries no screen
+   signal and never matches (pre-hardening it matched everything).
+   *(In the keyword-only fallback path, the route signal stays the classic +3 score boost.)*
+7. **Top-K.** Sort by fused score and return up to **24** items as `CopilotKBItem`s
    (`id, sourceId, segmentIndex, segmentTitle, text, narration`). It **always returns up to the
-   limit, even on zero keyword matches**, so the *LLM* judges coverage rather than a hard keyword
-   miss pre-declining.
+   limit, even on zero matches** (unmatched items fill the tail in KB order), so the *LLM* judges
+   coverage rather than a hard retrieval miss pre-declining.
 
-> Retrieval is **keyword-first** today. Swapping in **pgvector embeddings** is the planned P1-M3
-> upgrade and slots in at exactly this step — now with exactly one landing spot (this module); the
-> rest of the pipeline is unaffected. Trigger guidance lives in the module header (~1–2k items, or
-> decline-rate rising on covered topics).
+> Retrieval is **hybrid keyword + vector** as of 2026-07-07 (P1-M3). Embeddings are written by the
+> **worker at KB build** (delete+recreate ⇒ re-process re-embeds automatically; an embed failure
+> never fails the build — items stay keyword-only and the failure **surfaces as a degraded-build
+> notice on the recording**, the §3.3 mechanism). There is **no backfill**: pre-upgrade rows have
+> `embedding NULL` and ride the keyword half until re-processed (deliberate — dev data was reset).
+> Model/dims live in `synthesis/embeddings.ts` (`DEFAULT_EMBED_MODEL`; `embedTexts` **validates
+> every vector against `EMBEDDING_DIMS`** and fails with an actionable message on a wrong-width
+> model, instead of a swallowed Postgres dimension error). ⚠️ `EMBED_MODEL` must resolve to the
+> SAME model on api and web — a same-width model drift can't be detected from dimensions and would
+> compare vectors across incompatible embedding spaces.
 
 `sanitizeHistory` also lives here: it accepts only well-formed `user`/`assistant` turns from the
 untrusted request body, keeps the **last 10**, and clips each to **4000 chars**.

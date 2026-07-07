@@ -169,7 +169,12 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
   // Bounded — it's untrusted input that lands in the DB and the prompt.
   const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
-  const items = await retrieveApprovedKBItems(prisma, workspaceId, question, { contextPath });
+  // P1-M3 — hybrid keyword+vector retrieval; the embedding config is best-effort (retrieval
+  // degrades to the keyword shortlist on any vector-path failure — never errors here).
+  const items = await retrieveApprovedKBItems(prisma, workspaceId, question, {
+    contextPath,
+    embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
+  });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
     const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false, contextPath }, select: { id: true } });

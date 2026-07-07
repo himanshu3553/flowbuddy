@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
 import type { SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
-import { buildWorkflowKB, distilledStepText } from '@sync/synthesis';
+import { buildWorkflowKB, distilledStepText, embedTexts, toVectorLiteral } from '@sync/synthesis';
 import { config } from './config';
 import { connection } from './queue';
 import { sessionArtifactReader } from './storage';
@@ -56,11 +56,45 @@ const worker = new Worker(
       );
       if (rows.length > 0) await prisma.knowledgeItem.createMany({ data: rows });
 
-      // A degraded-but-successful build (e.g. narration too long to transcribe) lands `ready`
-      // with the warning in `error` — the Studio shows it as a notice, not a failure.
+      // P1-M3 — embed the fresh items for hybrid retrieval (delete+recreate above means a
+      // re-process re-embeds automatically). STRICTLY best-effort: an embedding failure never
+      // fails the KB build — the items simply stay keyword-only until the next (re)process — but
+      // it must not be invisible either (review hardening 2026-07-07): the failure surfaces as a
+      // degraded-build notice on the recording (the §3.3 mechanism), not just a log line.
+      let embedWarning: string | null = null;
+      if (rows.length > 0) {
+        try {
+          const created = await prisma.knowledgeItem.findMany({
+            where: { sourceId: sessionId },
+            select: { id: true, text: true },
+          });
+          const vectors = await embedTexts(created.map((r) => r.text), {
+            apiKey: config.openaiApiKey,
+            model: config.embedModel || undefined,
+            timeoutMs: 60_000, // batch path: generous but bounded (the SDK default is 600s)
+            maxRetries: 2,
+          });
+          // Raw SQL — Prisma can't write Unsupported("vector"); a handful of rows, so per-row is fine.
+          for (const [i, row] of created.entries()) {
+            const vector = vectors[i];
+            if (!vector) continue; // unreachable (embedTexts enforces 1:1 + dims) — never write a wrong row
+            await prisma.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
+          }
+          console.log(`[worker] embedded ${created.length} item(s) for hybrid retrieval`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          embedWarning = `Semantic search is unavailable for this recording (embedding failed: ${msg}) — answers use keyword matching until it is re-processed.`;
+          console.warn(`[worker] embedding failed for ${sessionId} (items stay keyword-only): ${msg}`);
+        }
+      }
+
+      // A degraded-but-successful build (e.g. narration too long to transcribe, or an embedding
+      // failure) lands `ready` with the notice in `error` — the Studio shows it as a notice, not
+      // a failure.
+      const notice = [warning, embedWarning].filter(Boolean).join(' · ') || null;
       await prisma.knowledgeSource.update({
         where: { id: sessionId },
-        data: { status: 'ready', error: warning ?? null },
+        data: { status: 'ready', error: notice },
       });
       console.log(
         `[worker] ready ${sessionId}: ${workflows.length} workflow(s), ${rows.length} distilled step(s) ` +

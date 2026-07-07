@@ -48,6 +48,13 @@ Same `package.json` and registry; better at multi-package repos (one install for
 ### Docker Compose — the infrastructure (separate from pnpm)
 Runs **Postgres** + **Redis** as containers so you don't install them on your Mac. The app connects via `DATABASE_URL` / `REDIS_URL`. Defined in `docker-compose.yml`.
 
+> **Postgres image = `pgvector/pgvector:pg16`** (since P1-M3 hybrid retrieval, 2026-07-07) — a
+> drop-in postgres:16 with the `vector` extension the migrations need. Upgrading an existing
+> checkout: `docker compose up -d postgres` recreates the container on the new image (the data
+> volume survives). If Postgres then logs a *collation version mismatch* warning, run
+> `ALTER DATABASE sync REFRESH COLLATION VERSION;` (and the same for `template1` — Prisma's shadow
+> DB clones it and `migrate dev` fails otherwise).
+
 ### Prisma — the database toolkit (in `packages/db`)
 - `prisma generate` — generates the typed client from `schema.prisma` (auto-runs on install/build).
 - `prisma migrate dev` — turns schema changes into SQL and applies them (creates/updates tables).

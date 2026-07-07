@@ -18,9 +18,11 @@ export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 // P1-M5/M6 — the SINGLE retrieval + approved-KB enforcement seam (api answer route + Studio
-// preview both call it; pgvector lands here). See retrieval.ts.
+// preview both call it; the P1-M3 hybrid keyword+vector upgrade lives here). See retrieval.ts.
 export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retrieval';
-export type { RetrievalDb, RetrievableKBItem, ShortlistOpts } from './retrieval';
+export type { RetrievalDb, RetrievableKBItem, ShortlistOpts, RetrieveOpts } from './retrieval';
+export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
+export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/kb-step-distillation.md
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A

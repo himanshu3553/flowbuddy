@@ -14,7 +14,7 @@
 ```
 VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 │
-├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟨🟩🟩🟩🟩🟩🟩🟩🟩🟨   11 done · 2 in progress
+├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨   12 done · 1 in progress
 ├─ PHASE 2 · Help Portal & Articles (frozen)    🟩🟩🟩⬜⬜⬜⬜               3 done · 4 draft
 └─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
 
@@ -46,7 +46,7 @@ VERSION 2 — Modalities + product depth (later)   ⬜⬜⬜⬜⬜⬜           
 
 | Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
 |---|:---:|:---:|:---:|:---:|
-| **Phase 1 — Copilot** | 13 | **11** | 2 | 0 |
+| **Phase 1 — Copilot** | 13 | **12** | 1 | 0 |
 | **Phase 2 — Portal & Articles** | 7 | **3** | 0 | 4 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
 | **Version 2 — Modalities + product depth** | 6 | 0 | 0 | 6 |
@@ -72,7 +72,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M0** | Monorepo, infrastructure & auth (Postgres, R2/MinIO, Redis/BullMQ, Auth.js, api, worker, multi-tenancy) | ✅ **Done** | M0, M1 |
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **v0.2.1 LIVE on the Chrome Web Store** (approved 2026-07-06; prod-targeted: deployed-Studio + localhost connect). **v0.3.0** (stop→upload feedback + resilience, 2026-07-06) **submitted to the Web Store 2026-07-06** (in review); see [`deploy-render.md`](deploy-render.md) §11. *(R13 ranked locators landed after the v0.3.0 submission — ships in the next store version.)* | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
-| **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | 🔄 **In Progress** — built; pgvector upgrade pending (Render Postgres `vector` support **confirmed 2026-07-06**) | M7 (+ M11 retrieval) |
+| **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | ✅ **Done** (2026-07-07) — **hybrid keyword + pgvector retrieval** (RRF fusion, `text-embedding-3-small`, worker embeds at KB build, keyword fallback on any vector failure; no backfill — dev reset); Render `vector` support confirmed 2026-07-06 | M7 (+ M11 retrieval) |
 | **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `sync-web-uir8.onrender.com` | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
@@ -122,7 +122,7 @@ A throwaway, lightweight spike answered one question before building any product
 Outside Version 1. Two groups:
 
 - **Capture modalities** — **narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
-- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)** — **prototyped 2026-07-07 on the unmerged experiment branch `dev-feature-copilot-preview`** (`af7d043`: the preview embeds the real widget bundle in a `data-sync-preview` mode; deliberately kept out of `dev` as an experiment); **pgvector (P1-M3)** stays pending discussion.)*
+- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision: the **real-widget tester (Approach B)** — **prototyped 2026-07-07 on the unmerged experiment branch `dev-feature-copilot-preview`** (`af7d043`: the preview embeds the real widget bundle in a `data-sync-preview` mode; deliberately kept out of `dev` as an experiment); **pgvector (P1-M3)** — **built 2026-07-07** (hybrid keyword+vector).)*
 
 | Module | What it is | Status |
 |:---|:---|:---|
@@ -164,7 +164,7 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 
 1. ✅ **P1-M11** — capture-reliability backlog **complete** (2026-07-06): R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + R12 screenshot timing/cost + **R13 ranked multi-signal locators** (the Phase-3 replay enabler) are all **shipped**. **R5** (marker hotkey/labels) and the recorder UX parking lot moved to **Version 2 · D3** (scope decision 2026-07-06); the R12 follow-ups stay parked.
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Phase 2** — not release-blocking.
-3. 🔄 **P1-M3** — pgvector retrieval upgrade folds in **when answer quality needs it** (optional for MVP).
+3. ✅ **P1-M3** — the pgvector upgrade **shipped 2026-07-07** as **hybrid keyword + vector retrieval** (RRF fusion inside the single `synthesis/retrieval.ts` seam; worker embeds at KB build; every vector-path failure degrades to the keyword shortlist).
 
 > Everything else in Phase 1 is ✅ and **P1-M4 cloud deploy is done**. Phase 1's definition-of-done is met post-deploy — **that is the Version 1 release**; the items above are follow-on quality/robustness work.
 
