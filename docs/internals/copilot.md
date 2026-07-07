@@ -28,7 +28,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — the API routes *and* the Studio preview ([`copilot-preview-actions.ts`](../../packages/web/lib/copilot-preview-actions.ts)) call the same functions (Prisma client injected, so `@sync/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
-| [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
+| [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
 
 ---
 
@@ -39,6 +39,10 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
   - **Out (covered):** `{ covered: true, answer, citations[], queryId }`.
   - **Out (decline):** `{ covered: false, answer: null, citations: [], reason, queryId }`.
 - **`POST /v1/copilot/feedback`** — `{ queryId, feedback: 'up' | 'down' }` → records the thumb.
+- **`GET /v1/copilot/config`** (2026-07-07) — the widget's mount-time appearance fetch: returns the
+  workspace's saved accent/title/greeting/position/launcher (nulls = widget defaults), `no-store`
+  so a Studio save shows on the next page load. Same gate (key + origin allowlist, own rate
+  bucket); read-only — writes nothing.
 
 ---
 

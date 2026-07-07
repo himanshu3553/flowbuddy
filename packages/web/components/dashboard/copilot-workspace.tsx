@@ -19,6 +19,7 @@ import {
 import type { EmbedStatus } from '@/lib/embed-status';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/toast';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -155,8 +156,13 @@ export function CopilotWorkspace({
   }
   function saveAppearance() {
     start(async () => {
-      await setCopilotAppearance(appearance);
-      router.refresh();
+      try {
+        await setCopilotAppearance(appearance);
+        router.refresh();
+        toast.success('Appearance saved — live on your embed’s next page load.');
+      } catch {
+        toast.error('Could not save the appearance. Please try again.');
+      }
     });
   }
 
@@ -730,7 +736,8 @@ export function CopilotWorkspace({
               {pending ? 'Saving…' : 'Save appearance'}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Changes preview live; Save bakes them into your embed snippet.
+              Changes preview live; Save applies them to your embedded copilot on its next page
+              load — no snippet changes needed.
             </p>
           </div>
         </div>

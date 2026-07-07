@@ -1,8 +1,11 @@
 /**
  * Copilot appearance (host branding) — shared, pure helpers used by both the Studio controls and the
- * live preview. The embedded widget reads its look from the snippet's `data-sync-*` attrs (NOT the
- * DB), so these defaults MUST match the widget runtime defaults (packages/widget/src) — that keeps
- * "preview == snippet == embed". An empty stored value means "use the widget default".
+ * live preview. Since 2026-07-07 the embedded widget fetches its look from `GET /v1/copilot/config`
+ * (the DB is the source of truth), so Studio Appearance changes reach every embed live — the snippet
+ * carries only src/api/key and never needs re-copying. Explicit `data-sync-*` attrs remain supported
+ * as deliberate per-page overrides. These defaults MUST still match the widget runtime defaults
+ * (packages/widget/src) so the preview shows exactly what an uncustomized embed renders. An empty
+ * stored value means "use the widget default".
  */
 
 /** Launcher button look on the host page: chat bubble icon, a filled text pill, or a bordered pill. */
@@ -61,32 +64,16 @@ export function resolveAppearance(a: CopilotAppearance) {
 }
 
 /**
- * Build the embed `<script>` snippet. Only NON-default attrs are emitted — defaults match the widget
- * runtime, so an unbranded copilot still looks identical with the minimal snippet.
+ * Build the embed `<script>` snippet — src/api/key ONLY. Appearance is deliberately NOT baked in:
+ * the widget fetches it from `/v1/copilot/config` at mount, so the snippet stays stable across
+ * Appearance changes and customers never re-copy it. (Baking attrs here would freeze the look at
+ * copy time — attrs win over server config by design, as per-page overrides.)
  */
-export function buildSnippet(opts: {
-  widgetSrc: string;
-  apiBase: string;
-  publicKey: string;
-  appearance: CopilotAppearance;
-}): string {
-  const { widgetSrc, apiBase, publicKey, appearance } = opts;
-  const lines = [
+export function buildSnippet(opts: { widgetSrc: string; apiBase: string; publicKey: string }): string {
+  const { widgetSrc, apiBase, publicKey } = opts;
+  return [
     `<script src="${widgetSrc}"`,
     `  data-sync-api="${apiBase}"`,
     `  data-sync-key="${publicKey}"`,
-  ];
-  const title = appearance.title.trim();
-  const greeting = appearance.greeting.trim();
-  const accent = appearance.accent.trim();
-  if (title) lines.push(`  data-sync-title="${title}"`);
-  if (greeting) lines.push(`  data-sync-greeting="${greeting}"`);
-  if (HEX.test(accent)) lines.push(`  data-sync-accent="${accent}"`);
-  if (appearance.position === 'left') lines.push(`  data-sync-position="left"`);
-  if (appearance.launcherStyle === 'text' || appearance.launcherStyle === 'text-outline') {
-    lines.push(`  data-sync-launcher="${appearance.launcherStyle}"`);
-    const launcherText = appearance.launcherText.trim();
-    if (launcherText) lines.push(`  data-sync-launcher-text="${launcherText}"`);
-  }
-  return lines.join('\n') + '></script>';
+  ].join('\n') + '></script>';
 }

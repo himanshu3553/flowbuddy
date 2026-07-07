@@ -47,7 +47,8 @@ export function CopilotConsole({
   appearance: CopilotAppearance;
 }) {
   const [appearance, setAppearance] = useState<CopilotAppearance>(initialAppearance);
-  const snippet = buildSnippet({ widgetSrc, apiBase, publicKey, appearance });
+  // Appearance is served to embeds by /v1/copilot/config, so the snippet is appearance-independent.
+  const snippet = buildSnippet({ widgetSrc, apiBase, publicKey });
   const resolved = resolveAppearance(appearance);
 
   return (

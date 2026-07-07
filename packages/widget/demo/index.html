@@ -19,13 +19,13 @@
     <p class="note">Before loading: build the widget (<code>pnpm --filter @sync/widget build</code>), run the API + Studio, approve a workflow, then set <code>data-sync-key</code> to a workspace token and <code>data-sync-api</code> to your API base below.</p>
   </div>
 
-  <!-- The entire embed: one script tag. -->
+  <!-- The entire embed: one script tag. Appearance (accent/title/greeting/position/launcher) is
+       fetched live from the API (Studio → Copilot → Appearance) — add data-sync-* attrs only to
+       deliberately override it per page (attrs win over the server config). -->
   <script
     src="../dist/sync-copilot.js"
     data-sync-api="http://localhost:8787"
     data-sync-key="REPLACE_WITH_WORKSPACE_TOKEN"
-    data-sync-title="Acme Help"
-    data-sync-greeting="Hi! Ask me how to do anything in Acme."
   ></script>
 </body>
 </html>

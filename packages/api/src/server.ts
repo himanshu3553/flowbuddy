@@ -129,7 +129,7 @@ const MAX_QUESTION_CHARS = 2000;
 async function copilotGate(
   req: FastifyRequest,
   reply: FastifyReply,
-  route: 'answer' | 'feedback' | 'seen',
+  route: 'answer' | 'feedback' | 'seen' | 'config',
 ): Promise<{ workspaceId: string; showCitations: boolean; key: string; origin: string | undefined } | null> {
   const key = (req.headers['x-sync-key'] as string | undefined) ?? '';
   const origin = req.headers.origin as string | undefined;
@@ -246,6 +246,42 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
   });
   if (updated.count === 0) return reply.code(404).send({ error: 'query not found' });
   return { ok: true };
+});
+
+/**
+ * Widget appearance config — the widget fetches this at mount so Studio Appearance changes reach
+ * every embed WITHOUT customers re-copying the snippet (the DB is the source of truth; explicit
+ * `data-sync-*` attrs on the script tag still win as per-page overrides). Auth = the public key +
+ * origin allowlist (same as /answer). `no-store` so a Studio save is visible on the next page load.
+ * Nulls mean "not customized" — the widget falls back to its built-in defaults, which keeps the
+ * default look defined in exactly one place (the widget runtime).
+ */
+app.get('/v1/copilot/config', async (req, reply) => {
+  const gate = await copilotGate(req, reply, 'config');
+  if (!gate) return reply;
+
+  const ws = await prisma.workspace.findUnique({
+    where: { id: gate.workspaceId },
+    select: {
+      copilotAccent: true,
+      copilotTitle: true,
+      copilotGreeting: true,
+      copilotPosition: true,
+      copilotLauncherStyle: true,
+      copilotLauncherText: true,
+    },
+  });
+  if (!ws) return reply.code(404).send({ error: 'workspace not found' });
+
+  reply.header('cache-control', 'no-store');
+  return {
+    accent: ws.copilotAccent,
+    title: ws.copilotTitle,
+    greeting: ws.copilotGreeting,
+    position: ws.copilotPosition,
+    launcher: ws.copilotLauncherStyle,
+    launcherText: ws.copilotLauncherText,
+  };
 });
 
 /**

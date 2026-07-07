@@ -213,7 +213,7 @@ Watch the **worker terminal**:
 1. Studio → **Copilot** page:
    - Shows **N workflow(s) approved**.
    - **Public embeddable key** (`data-sync-key`) is generated (`getOrCreateCopilotKey`) — distinct from the secret recorder token.
-   - **Embed snippet** is shown (`<script src=… data-sync-api data-sync-key data-sync-title>`).
+   - **Embed snippet** is shown (`<script src=… data-sync-api data-sync-key>` — appearance is NOT baked in; it's served live by `GET /v1/copilot/config`).
 2. In the **Allowed origins** control, add `http://localhost:8080` (where the demo page is served in Part 10). Save.
 
 ✅ **PASS:** a public key exists; the snippet renders with it; the allowed-origins list saves.

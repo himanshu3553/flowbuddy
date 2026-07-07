@@ -30,16 +30,22 @@ Built with `pnpm --filter @sync/widget build`.
 
 ## 3. Inputs / Outputs
 
-- **Input (configuration):** `data-*` attributes on the script tag, or a `window.SyncCopilot` object:
-  - `data-sync-api` — the copilot API base URL.
-  - `data-sync-key` — the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
+- **Input (configuration):** the snippet carries only `data-sync-api` + `data-sync-key`; the LOOK
+  comes from the server (2026-07-07):
+  - **Server config** — at mount the widget fetches `GET /v1/copilot/config` (authed by the key,
+    1.5s timeout, best-effort): accent, title, greeting, position, launcher style/text — whatever
+    the founder saved in Studio → Copilot → Appearance. So appearance changes reach every embed
+    live, without re-copying the snippet.
+  - **Per-page overrides** — explicit `data-*` attrs (or a `window.SyncCopilot` object) still win
+    over the server value, field by field: `data-sync-title`, `data-sync-greeting`,
+    `data-sync-accent`, `data-sync-position` (`left`|`right`), `data-sync-launcher`
+    (`icon`|`text`|`text-outline`), `data-sync-launcher-text`.
+  - `data-sync-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
     secret recorder token.*
-  - `data-sync-title`, `data-sync-greeting` — copy.
-  - `data-sync-accent` — optional host brand color (overrides the indigo default).
-  - `data-sync-position` — `left` | `right` (default right).
 - **Input (runtime):** the end-user's typed questions; `location.pathname` + `document.title` as
   context.
-- **Output:** `POST`s to `/v1/copilot/answer` and `/v1/copilot/feedback`; renders answers in the panel.
+- **Output:** `GET /v1/copilot/config` at mount; `POST`s to `/v1/copilot/answer` and
+  `/v1/copilot/feedback`; renders answers in the panel.
 
 ---
 
@@ -60,9 +66,13 @@ that shadow tree. Consequences:
 
 ### 4.2 Configuration resolution
 
-`cfg` is resolved once at load: each value is `script.dataset.X` → `window.SyncCopilot.X` → a default.
-`apiBase` is trailing-slash-trimmed. The script tag is grabbed via `document.currentScript`. So both
-`data-*` attributes and a pre-set `window.SyncCopilot` global work.
+`cfg` is resolved in two steps. At load: each value is `script.dataset.X` → `window.SyncCopilot.X` →
+a default (`apiBase` is trailing-slash-trimmed; the script tag is grabbed via
+`document.currentScript`). At mount: `boot()` awaits `GET /v1/copilot/config` (1.5s abort budget)
+and folds each **valid** server field into `cfg` — but only where no explicit attr/global was set
+(the `explicit` capture) — then patches the already-built DOM (`applyServerConfig`) BEFORE
+`document.body.appendChild`, so the first paint is already branded (no default-theme flash). Any
+fetch failure/timeout mounts with attrs/defaults — the widget always appears.
 
 ### 4.3 State & the render loop
 

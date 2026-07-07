@@ -5,11 +5,18 @@
 //   <script src=".../sync-copilot.js"
 //           data-sync-api="https://api.example.com"
 //           data-sync-key="<workspace key>"
-//           data-sync-title="Help"
+//           data-sync-title="Help"            (optional — per-page override, see below)
 //           data-sync-accent="#4f46e5"        (optional — brand the widget to the host)
 //           data-sync-position="left"></script> (optional — "left" | "right", default right)
 // (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
-// The default theme is the Sync indigo brand (matches Sync Studio); data-sync-accent overrides it with the host's own brand color (text on it is white).
+//
+// APPEARANCE (2026-07-07): the widget fetches its look (accent/title/greeting/position/launcher)
+// from `GET /v1/copilot/config` at mount, so Studio → Copilot → Appearance changes reach every
+// embed live — customers never re-copy the snippet. Precedence per field:
+//   explicit data-sync-* attr (or window.SyncCopilot) > server config > built-in default.
+// Attrs stay supported as deliberate per-page overrides; the fetch is best-effort (short timeout,
+// any failure falls back to attrs/defaults) so the widget always appears.
+// The default theme is the Sync indigo brand (matches Sync Studio); an accent (from Studio or the attr) overrides it with the host's own brand color (text on it is white).
 
 import { CSS } from './styles.js';
 
@@ -18,16 +25,26 @@ interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citatio
 
 const script = document.currentScript as HTMLScriptElement | null;
 const g = (window as unknown as { SyncCopilot?: Record<string, string> }).SyncCopilot ?? {};
+// Explicit host-page values (attr or window global) — recorded separately from the resolved cfg
+// because an explicit value must keep winning over the server config fetched at mount.
+const explicit = {
+  title: script?.dataset.syncTitle || g.title || '',
+  greeting: script?.dataset.syncGreeting || g.greeting || '',
+  accent: script?.dataset.syncAccent || g.accent || '',
+  position: (script?.dataset.syncPosition || g.position || '').toLowerCase(),
+  launcher: (script?.dataset.syncLauncher || g.launcher || '').toLowerCase(),
+  launcherText: script?.dataset.syncLauncherText || g.launcherText || '',
+};
 const cfg = {
   apiBase: (script?.dataset.syncApi || g.apiBase || 'http://localhost:8787').replace(/\/+$/, ''),
   key: script?.dataset.syncKey || g.key || '',
-  title: script?.dataset.syncTitle || g.title || 'Ask AI',
-  greeting: script?.dataset.syncGreeting || g.greeting || 'How can I help you today?',
-  accent: script?.dataset.syncAccent || g.accent || '',
-  position: (script?.dataset.syncPosition || g.position || 'right').toLowerCase(),
+  title: explicit.title || 'Ask AI',
+  greeting: explicit.greeting || 'How can I help you today?',
+  accent: explicit.accent,
+  position: explicit.position || 'right',
   // Launcher look: 'icon' (chat bubble, default), 'text' (filled pill), or 'text-outline' (bordered pill).
-  launcher: (script?.dataset.syncLauncher || g.launcher || 'icon').toLowerCase(),
-  launcherText: script?.dataset.syncLauncherText || g.launcherText || 'Ask me anything',
+  launcher: explicit.launcher || 'icon',
+  launcherText: explicit.launcherText || 'Ask me anything',
 };
 
 const messages: Msg[] = [];
@@ -83,7 +100,8 @@ launcher.setAttribute('aria-label', 'Open help copilot');
 
 const panel = el('div', 'sc-panel');
 const header = el('div', 'sc-header');
-header.appendChild(el('span', 'sc-title', cfg.title));
+const titleEl = el('span', 'sc-title', cfg.title);
+header.appendChild(titleEl);
 const closeBtn = el('button', 'sc-close', '✕');
 header.appendChild(closeBtn);
 
@@ -197,6 +215,67 @@ function pingSeen(): void {
   }).catch(() => { /* best-effort */ });
 }
 
+// Server appearance config (Studio → Copilot → Appearance). Fetched before mount so the widget
+// first paints already-branded (no default-theme flash). Every field an explicit attr didn't set
+// falls through to the server value when it's present and valid, else the built-in default.
+interface ServerConfig {
+  accent?: string | null; title?: string | null; greeting?: string | null;
+  position?: string | null; launcher?: string | null; launcherText?: string | null;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+async function fetchServerConfig(): Promise<ServerConfig | null> {
+  if (!cfg.key) return null;
+  // A tight budget: the config lookup is a single indexed read (~ms); a slow/unreachable API must
+  // delay the launcher by at most this long — the widget always appears.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 1500);
+  try {
+    const res = await fetch(`${cfg.apiBase}/v1/copilot/config`, {
+      headers: { 'X-Sync-Key': cfg.key },
+      signal: ctl.signal,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as ServerConfig;
+  } catch {
+    return null; // best-effort: attrs/defaults still render a working widget
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Fold valid server values into cfg (explicit attrs win) and re-patch the already-built DOM. */
+function applyServerConfig(s: ServerConfig): void {
+  if (!explicit.title && s.title?.trim()) cfg.title = s.title.trim();
+  if (!explicit.greeting && s.greeting?.trim()) cfg.greeting = s.greeting.trim();
+  if (!explicit.accent && s.accent && HEX.test(s.accent.trim())) cfg.accent = s.accent.trim();
+  if (!explicit.position && (s.position === 'left' || s.position === 'right')) cfg.position = s.position;
+  if (!explicit.launcher && (s.launcher === 'icon' || s.launcher === 'text' || s.launcher === 'text-outline')) {
+    cfg.launcher = s.launcher;
+  }
+  if (!explicit.launcherText && s.launcherText?.trim()) cfg.launcherText = s.launcherText.trim();
+
+  titleEl.textContent = cfg.title; // greeting is read from cfg at render()
+  if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);
+  if (cfg.position === 'left') {
+    host.style.setProperty('--sc-right', 'auto');
+    host.style.setProperty('--sc-left', '20px');
+  } else {
+    host.style.removeProperty('--sc-right');
+    host.style.removeProperty('--sc-left');
+  }
+  const isText = cfg.launcher === 'text' || cfg.launcher === 'text-outline';
+  launcher.textContent = isText ? cfg.launcherText : '💬';
+  launcher.classList.toggle('sc-launcher-pill', isText);
+  launcher.classList.toggle('sc-launcher-outline', cfg.launcher === 'text-outline');
+}
+
 function mount(): void { document.body.appendChild(host); render(); pingSeen(); }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-else mount();
+async function boot(): Promise<void> {
+  const server = await fetchServerConfig();
+  if (server) applyServerConfig(server);
+  mount();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void boot());
+else void boot();
