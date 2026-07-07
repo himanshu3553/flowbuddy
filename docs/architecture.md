@@ -8,7 +8,7 @@
 ### Product versions & phases (scope — **phases REDEFINED 2026-06-22, copilot-first**)
 - **Version 1** = the **workflow-capture** product (**capture is workflow-only, 1.1**), released in **three phases** — authoritative roadmap: [`roadmap.md`](roadmap.md):
   - **Phase 1 — Copilot** ⭐ (the Version 1 release, ships first): the foundation we've built (capture → KB → retrieval/grounding) + the embeddable copilot. Modules **P1-M0…P1-M12** ([`phase-1-copilot.md`](phase-1-copilot.md)).
-  - **Phase 2 — Help Portal & Articles** (the human-facing **by-products**; a decoupled publish target): Studio article editor + curated generation (built; **Studio UI removed 2026-06-25, engine parked dormant in-tree** — see [`phase-2-portal.md`](phase-2-portal.md) §6) + the public portal app (validated the render path, **removed for the Phase-1 clean slate 2026-06-22, returns in Phase 2**) + productization. Modules **P2-M0…P2-M6** ([`phase-2-portal.md`](phase-2-portal.md)).
+  - **Phase 2 — Help Portal & Articles** (the human-facing **by-products**; a decoupled publish target): Studio article editor + curated generation (built; UI removed 2026-06-25; **engine removed 2026-07-07 — superseded by workflows-as-articles**, Phase 2 renders approved distilled workflows instead — see [`phase-2-portal.md`](phase-2-portal.md) §7) + the public portal app (validated the render path, **removed for the Phase-1 clean slate 2026-06-22, returns in Phase 2**) + productization. Modules **P2-M0…P2-M6** ([`phase-2-portal.md`](phase-2-portal.md)).
   - **Phase 3 — Self-validation & freshness** (the moat; to be planned).
 - **Version 2** = additional **capture modalities** — **narration-only (1.2)** and **video (1.3)** — plus the narration-derived `static` explainer-article path. Deferred out of V1.
 
@@ -148,7 +148,7 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 |---|---|---|
 | Module 1 | 1.1 workflow only | **1.1 workflow only** (narration 1.2 + video 1.3 = **Version 2**); capture carries `kind` |
 | **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + keyword retrieval (M6/M7 done)** | + pgvector embeddings (later) |
-| Module 3 | **3.1 curated** (M6.1) **+ 3.2 prompt-to-article** (M7), both reading the **KB** — **engine parked dormant in-tree, Studio UI removed 2026-06-25** (Phase-2 by-product; [`phase-2-portal.md`](phase-2-portal.md) §6) | — (complete for V1) |
+| Module 3 | **3.1 curated** (M6.1) **+ 3.2 prompt-to-article** (M7), both reading the **KB** — **engine removed 2026-07-07, superseded by workflows-as-articles** (Phase 2 renders approved distilled workflows; [`phase-2-portal.md`](phase-2-portal.md) §7) | — (superseded; Phase 2 = render approved workflows) |
 
 **Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics) — the **Prisma model** was renamed; the underlying **table is kept as `RecSession`** (`@@map`) so existing data is preserved; add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
 

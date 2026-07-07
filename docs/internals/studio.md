@@ -12,7 +12,7 @@
 Everything the operator does between "I recorded my product" and "my customers can ask the copilot"
 happens in Studio: mint the recorder token, watch a recording turn into clean workflows, **decide
 which workflows the copilot may use**, grab the embed snippet, and watch answer-quality + coverage
-gaps. Studio is **copilot-first** — the article editor/portal UI was removed (engine parked), so the
+gaps. Studio is **copilot-first** — the article editor/portal UI was removed (engine removed 2026-07-07), so the
 shipped IA is about capture → approve → embed → measure.
 
 ---
@@ -107,7 +107,7 @@ background. The operator never sees or copies a token. Full handshake: [connecti
 `KnowledgeItem` rows: it groups items by `(sourceId, segmentIndex)`, counts steps per group, takes the
 `segmentTitle`, joins the source's `appBaseUrl`, and marks each with `copilotApproved` (by checking the
 approved-key set). A "candidate" = one workflow = the unit the operator approves. *(Phase-2 note in the
-file: this is also the unit the parked article generator would consume.)*
+file: this same unit becomes a portal help article under workflows-as-articles.)*
 
 ### 4.4 The approval gate ([`copilot-actions.ts`](../../packages/web/lib/copilot-actions.ts)) ⭐
 

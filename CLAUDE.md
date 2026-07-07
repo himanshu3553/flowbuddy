@@ -11,7 +11,7 @@
 | [`architecture.md`](docs/architecture.md) | Technical model — the 3 modules (Capture → KB → Article creation), KB schema, decisions. |
 | [`phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog. |
 | [`phase-1-modules-map.md`](docs/phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map. |
-| [`phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules. |
+| [`phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules. **§7 = the 2026-07-07 workflows-as-articles direction change + rebuild notes** (the old engine is removed, not resumed). |
 | [`kb-step-distillation.md`](docs/kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
 | [`design_system/`](docs/design_system/README.md) | **Design system (indigo brand) — the source of truth for ALL UI.** Tokens (colors · type · spacing · elevation), components, the full Studio UI kit, + recorder/widget specs. Canonical since 2026-06-28; **supersedes the deleted Claude Design handoff** (`design_handoff_sync_studio/`). Studio + extension + widget are all token-aligned to it. |
 | [`internals/`](docs/internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements the product docs' *why/what*). Start at `internals/connections.md`. **Follows the code — if a mechanic disagrees with the source, the source wins.** |
@@ -28,17 +28,17 @@ pnpm + Turborepo. One repo, several packages under `packages/`:
 
 | Package | What it is |
 |---|---|
-| `shared` | Shared types + zod schemas (capture contract, content model, job contracts). |
+| `shared` | Shared types + zod schemas (capture contract, job contracts). |
 | `db` | Prisma schema + client (Postgres). |
-| `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`) **+ the shared retrieval/no-leak seam (`retrieval.ts` — HYBRID keyword+pgvector via RRF since P1-M3, 2026-07-07; used by both the api and the Studio preview; DB client injected) + the embedding half (`embeddings.ts` — model/dims source of truth, must match the `vector(1536)` column)**. *(Article-generation engine `synthesize.ts`/`prompt.ts` is present but **parked Phase 2** — see below.)* |
+| `synthesis` | OpenAI pipeline — capture → KB synthesis + the copilot answer engine (`answerFromKB`) **+ the shared retrieval/no-leak seam (`retrieval.ts` — HYBRID keyword+pgvector via RRF since P1-M3, 2026-07-07; used by both the api and the Studio preview; DB client injected) + the embedding half (`embeddings.ts` — model/dims source of truth, must match the `vector(1536)` column)**. *(The pre-pivot article-generation engine was **removed 2026-07-07** — see below.)* |
 | `api` | Fastify HTTP service (ingestion + copilot routes) **and** the BullMQ worker (`worker` entrypoint). |
-| `web` | Next.js **Studio** — copilot-first: app shell (sidebar w/ workspace switcher + user footer; per-page header) over a 6-item nav **Home · Recordings · Knowledge Base · Copilot · Analytics · Settings**; built on **Tailwind + shadcn/ui** under the **indigo brand**, token-aligned to [`docs/design_system/`](docs/design_system/README.md) (cool-gray neutrals, low-sat status palette, radii/shadow ramps, Plus Jakarta Sans + JetBrains Mono). Every screen has empty/loading/error states. *(The article editor + generation UI is **parked Phase 2**, removed from the Studio pages but kept dormant in-tree.)* |
+| `web` | Next.js **Studio** — copilot-first: app shell (sidebar w/ workspace switcher + user footer; per-page header) over a 6-item nav **Home · Recordings · Knowledge Base · Copilot · Analytics · Settings**; built on **Tailwind + shadcn/ui** under the **indigo brand**, token-aligned to [`docs/design_system/`](docs/design_system/README.md) (cool-gray neutrals, low-sat status palette, radii/shadow ramps, Plus Jakarta Sans + JetBrains Mono). Every screen has empty/loading/error states. *(The pre-pivot article editor + generation UI was **removed 2026-07-07** — see below.)* |
 | `widget` | Embeddable copilot `<script>` (esbuild → `sync-copilot.js`); **Sync-indigo by default**, host-rebrandable via `data-sync-accent` — aligned to the design system. |
 | `extension` | Chrome MV3 recorder; indigo UI aligned to the design system (record/danger = terracotta). |
 
 *(`portal` — the Phase-2 public help site — was removed for the Phase-1 clean slate and returns in Phase 2; it's not in the current workspace.)*
 
-> **Phase-2 code is parked, not gone.** As of 2026-06-25 the article/portal **engine** is kept dormant in-tree (still type-checked) while its **Studio UI was removed** so the shipped product is copilot-only. Parked files carry a `// PARKED — Phase 2` banner; the full inventory + re-wiring map is in [`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6. **Don't extend or wire up parked code unless resuming Phase 2.**
+> **Phase-2 article engine: REMOVED 2026-07-07 — superseded by workflows-as-articles.** The pre-pivot article/portal engine (parked in-tree since 2026-06-25) and its `Article`/`Step` tables were swept out: Phase 1's distilled workflows (title + clean steps with screenshots/bboxes) + the approval-gate pattern already provide everything a help article needs, so Phase 2 will **render approved workflows** instead of resuming a parallel synthesis engine. Decision record + rebuild notes (editing overlay · Text→Article · prose polish): [`docs/phase-2-portal.md`](docs/phase-2-portal.md) **§7**; historical inventory + recovery hash: **§6**.
 
 ---
 

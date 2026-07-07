@@ -1,20 +1,16 @@
 import OpenAI from 'openai';
-import type { SessionManifest, CapturedEvent, Marker } from '@sync/shared';
+import type { SessionManifest, CapturedEvent } from '@sync/shared';
 import { transcribe, type Transcript } from './transcribe';
 import { alignNarration } from './align';
-import { segment, eventLabel, type Segment } from './segment';
-import { synthesizeArticles, type SynthArticle } from './synthesize';
-import { redactText, redactTranscript } from './redact';
+import { segment } from './segment';
+import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
 import type { ArtifactReader } from './types';
 
 export type { ArtifactReader } from './types';
-export type { SynthArticle, SynthStep } from './synthesize';
 export type { Transcript } from './transcribe';
 export type { Segment } from './segment';
-export { promptToArticle } from './prompt';
-export type { PromptItem, PromptArtifactReader, PromptToArticleResult } from './prompt';
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 // P1-M5/M6 — the SINGLE retrieval + approved-KB enforcement seam (api answer route + Studio
@@ -29,70 +25,10 @@ export { distillSteps, distilledStepText } from './distill'; // KB step distilla
 export type { DistilledStep, DistilledStepLLM } from './distill';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
-/** A KB step-item as the synthesis package produces/consumes it (Module 2 ⇄ Module 3). */
-export interface KbStepItem {
-  orderIndex: number;
-  kind: 'step';
-  text: string; // searchable content
-  event: CapturedEvent; // the captured interaction (ground truth)
-  narration: string | null; // aligned narration ("why")
-}
-
-/** Split KB items into the parallel `events` + `narration`-by-event-id the synthesis stages expect. */
-function eventsAndNarration(items: KbStepItem[]): {
-  events: CapturedEvent[];
-  narration: Map<string, string>;
-} {
-  const events = items.map((it) => it.event);
-  const narration = new Map<string, string>();
-  for (const it of items) if (it.narration) narration.set(it.event.id, it.narration);
-  return { events, narration };
-}
-
-// ---------- Module 2: capture → KB ----------
-
-export interface BuildKBInput {
-  manifest: SessionManifest;
-  getArtifact: ArtifactReader;
-  apiKey: string;
-  transcribeModel: string;
-}
-
-export interface BuiltKB {
-  transcript: Transcript;
-  items: KbStepItem[];
-}
-
-/** Extract a workflow capture into KB knowledge: persistable transcript + normalized step items.
- *  P1-M12 (Cut 1): high-confidence PII is scrubbed from everything the copilot later reads —
- *  the transcript (before alignment), each item's searchable text, and the aligned narration. */
-export async function buildKB(input: BuildKBInput): Promise<BuiltKB> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
-  // Scrub the transcript first so the narration spans derived from it are already clean.
-  const transcript = redactTranscript(
-    await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
-  );
-  const narration = alignNarration(input.manifest.events, transcript);
-
-  const items: KbStepItem[] = input.manifest.events.map((event, i) => {
-    const n = narration.get(event.id) ?? null;
-    return {
-      orderIndex: i,
-      kind: 'step',
-      // Redact the final searchable text too — it also carries event labels/values, not just narration.
-      text: redactText(`${eventLabel(event)}${n ? ` — ${n}` : ''}`),
-      event,
-      narration: n ? redactText(n) : null,
-    };
-  });
-
-  return { transcript, items };
-}
-
 // ---------- Module 2 (LIVE copilot path): capture → distilled workflow KB ----------
 // docs/kb-step-distillation.md. This is what the worker runs: transcribe → align → clean (B) →
-// segment → distill (A). It SUPERSEDES the raw 1:1 `buildKB` + `segmentItems` path for the copilot.
-// (buildKB/segmentItems stay for the parked Phase-2 article engine, which still reads raw events.)
+// segment → distill (A). (The legacy raw 1:1 `buildKB`/`segmentItems` path it superseded was
+// removed 2026-07-07 with the Phase-2 article-engine sweep — docs/phase-2-portal.md §7.)
 
 export interface BuildWorkflowKBInput {
   manifest: SessionManifest;
@@ -186,66 +122,4 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
   }
 
   return { transcript, workflows, warning };
-}
-
-// ---------- Module 2 (cont.): segment the KB into workflow candidates ----------
-
-export interface SegmentItemsInput {
-  items: KbStepItem[];
-  markers: Marker[];
-  apiKey: string;
-  synthModel: string;
-  /** Full session narration — gives the segmenter the author's overall intent so it can tell
-   *  "one task across many steps" from "several independent tasks". Strongly reduces over-splitting. */
-  transcriptText?: string;
-}
-
-/** Segment the KB items into candidate workflows (titles). Runs at KB build (no synthesis).
- *  The worker persists the result onto each item (segmentIndex/segmentTitle, Option C); those
- *  titles become the candidates the Studio "Auto Generate Articles" picker lists — M6.1. */
-export async function segmentItems(input: SegmentItemsInput): Promise<Segment[]> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
-  const { events, narration } = eventsAndNarration(input.items);
-  return segment(openai, input.synthModel, events, input.markers ?? [], narration, input.transcriptText ?? '');
-}
-
-// ---------- Module 3.1: KB → article (curated — ONE selected candidate at a time) ----------
-
-export interface GenerateArticleInput {
-  items: KbStepItem[]; // the items belonging to ONE segment (ordered)
-  title: string; // the candidate title to synthesize
-  getArtifact: ArtifactReader;
-  apiKey: string;
-  synthModel: string;
-}
-
-/** Curated generation (M6.1): synthesize a SINGLE chosen workflow candidate into an article.
- *  Called synchronously from the Studio server action after the user selects candidates. */
-export async function generateArticleForSegment(input: GenerateArticleInput): Promise<SynthArticle> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
-  const { events, narration } = eventsAndNarration(input.items);
-
-  const seg: Segment = { title: input.title, eventIds: events.map((e) => e.id) };
-  const [article] = await synthesizeArticles(openai, input.synthModel, [seg], events, narration, input.getArtifact);
-  return article ?? { title: input.title, tags: [], routes: [], preconditions: [], steps: [] };
-}
-
-// ---------- KB persistence helpers — PARKED (Phase-2 article engine only) ----------
-// The worker NO LONGER writes this shape: since KB step distillation (2026-06-27),
-// `KnowledgeItem.data` holds a `DistilledStep` ({ instruction, detail, route, narration,
-// screenshotFile, bbox }) and raw events live only in `KnowledgeSource.manifest`. These decode the
-// LEGACY `{ event, narration }` shape and are consumed only by the parked Phase-2 article engine
-// (web/lib/generate-actions.ts, prompt-actions.ts) — which must re-source raw events from the
-// manifest when Phase 2 resumes. See docs/phase-2-portal.md §6.
-
-/** LEGACY shape of `KnowledgeItem.data` for a `step` item (pre-distillation rows only). */
-export interface StepItemData {
-  event: CapturedEvent;
-  narration: string | null;
-}
-
-/** Decode a LEGACY `KnowledgeItem.data` JSON value into its typed step payload. PARKED — Phase 2. */
-export function decodeStepData(data: unknown): StepItemData {
-  const d = (data ?? {}) as Partial<StepItemData>;
-  return { event: d.event as CapturedEvent, narration: d.narration ?? null };
 }

@@ -290,10 +290,10 @@ forged credential resolving to the wrong workspace, which none of the three reso
   service, which is for the recorder and the widget only.
 - **The worker never talks to the widget or Studio.** It's a pure queue consumer; its only output is
   Postgres rows. Surfaces discover its work by reading `status`.
-- **Phase-2 article authoring is parked.** The synthesis engine still contains `buildKB` (raw 1:1
-  items), `segmentItems`, and `generateArticleForSegment`, and the schema still has `Article`/`Step`,
-  but **no live path writes them** — the worker runs only the distilled `buildWorkflowKB`. Don't wire
-  these up unless resuming Phase 2 ([`../phase-2-portal.md`](../phase-2-portal.md) §6).
+- **Phase-2 article authoring was removed (2026-07-07).** The old raw-event engine (`buildKB`,
+  `segmentItems`, `generateArticleForSegment`) and the `Article`/`Step` tables are gone — superseded
+  by **workflows-as-articles**: Phase 2 renders approved distilled workflows instead. The worker's
+  distilled `buildWorkflowKB` is the only KB path ([`../phase-2-portal.md`](../phase-2-portal.md) §7).
 
 ---
 

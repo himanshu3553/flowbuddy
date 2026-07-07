@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1) and [`phase-2-portal.md`](phase-2-portal.md) (Phase 2). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-06 · **Branch:** `dev`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-07 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -91,12 +91,12 @@ A throwaway, lightweight spike answered one question before building any product
 
 ## 3. Phase 2 — Help Portal & Articles (decoupled by-products · frozen)
 
-**Goal:** the human-facing help center over the *same* KB — a **decoupled** publish target. The article editor + curated generation are built; their **Studio UI was removed 2026-06-25** so the released product is copilot-only, while the **engine stays dormant in-tree** (parked-code map: [`phase-2-portal.md`](phase-2-portal.md) §6). The public portal app validated the render path and **returns in Phase 2**. Stays **frozen** (no new investment) until the copilot ships. Detail: [`phase-2-portal.md`](phase-2-portal.md).
+**Goal:** the human-facing help center over the *same* KB — a **decoupled** publish target. **⚠️ Direction change 2026-07-07 — workflows-as-articles** ([`phase-2-portal.md`](phase-2-portal.md) **§7**): the pre-pivot article engine (parked in-tree since 2026-06-25) was **removed** — Phase 1's distilled workflows + the approval-gate pattern already provide what an article needs, so Phase 2 **renders approved workflows** (per-audience approval: copilot | portal) instead of resuming a parallel synthesis engine. Rebuild notes (editing overlay · Text→Article · prose polish) in §7; recovery inventory in §6. The public portal app validated the render path and **returns in Phase 2**. Stays **frozen** (no new investment) until the copilot ships. Detail: [`phase-2-portal.md`](phase-2-portal.md).
 
 | Module | What it is | Status | Legacy |
 |:---|:---|:---|:---|
-| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ **Built** — UI parked 2026-06-25, engine in-tree | M4 |
-| **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ **Built** — UI parked 2026-06-25, engine in-tree | M6.1 / M7 |
+| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ Built → 🗑️ **removed 2026-07-07** — superseded by workflows-as-articles ([`phase-2-portal.md`](phase-2-portal.md) §7: rebuild as a presentation overlay) | M4 |
+| **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ Built → 🗑️ **removed 2026-07-07** — superseded by workflows-as-articles ([`phase-2-portal.md`](phase-2-portal.md) §7) | M6.1 / M7 |
 | **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ Built → 🔄 `packages/portal` **removed for the Phase-1 clean slate (`c9f13f4`); returns in Phase 2** (render path proven) | M5 |
 | **P2-M3** | Portal + KB **search UI** (hybrid; user-facing half of search) | 📝 **Draft** | M11 (portal half) |
 | **P2-M4** | Authoring depth (split/merge/move, retake/crop, callouts, arrow highlight, manual `static`, collections, versioning, brand voice) | 📝 **Draft** | M12 |

@@ -19,7 +19,7 @@ sync/
   packages/
     shared/     # types + zod schemas shared by everyone
     db/         # Prisma schema + client
-    synthesis/  # transcribe → clean → segment → distill steps + the copilot answer engine (OpenAI). (article generation = parked Phase 2)
+    synthesis/  # transcribe → clean → segment → distill steps + the copilot answer engine (OpenAI)
     api/        # Fastify ingestion + copilot routes + the BullMQ worker (worker entrypoint)
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
     widget/     # embeddable copilot <script> (esbuild → sync-copilot.js) — Phase 1 · Sync-indigo default, host-rebrandable
@@ -115,8 +115,8 @@ docker compose down                           # stop Postgres + Redis (add -v to
 - **"command not found: pnpm"** → run `corepack enable` (once per machine / Node version).
 - **DB errors / "can't reach database"** → is Postgres up? `docker compose up -d`, then `docker compose ps` (postgres should be `healthy`).
 - **Type changes not picked up across packages** → `pnpm build` (Turbo rebuilds deps in order); for the Prisma client specifically, `pnpm db:generate`.
-- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in `packages/api/.env`** (worker — transcribe + segment; and the copilot answer endpoint). *(It's also read by `packages/web/.env` for the **parked Phase-2** article generation — not needed for the copilot release.)*
-- **Nothing happens after recording?** The **worker must be running** (`pnpm --filter @sync/api worker`) to turn an upload into the KB (`status → ready`). Once ready, open the recording's KB page to browse items and **approve workflows for the copilot**. *(Article generation is parked Phase-2 — see [`phase-2-portal.md`](phase-2-portal.md) §6.)*
+- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in `packages/api/.env`** (worker — transcribe + segment; and the copilot answer endpoint). *(It's also read from `packages/web/.env` — the Studio copilot preview answers server-side.)*
+- **Nothing happens after recording?** The **worker must be running** (`pnpm --filter @sync/api worker`) to turn an upload into the KB (`status → ready`). Once ready, open the recording's KB page to browse items and **approve workflows for the copilot**.
 - **Docker must be running** (Docker Desktop) before `docker compose up`.
 
 ---

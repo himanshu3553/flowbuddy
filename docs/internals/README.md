@@ -88,7 +88,7 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 ## Quick orientation (if you only read one box)
 
 - **One direction, then a fan-out.** Data flows **capture → ingestion → KB** in a strict line, then
-  the KB **fans out** to the copilot (and, parked for Phase 2, to article authoring). Nothing flows
+  the KB **fans out** to the copilot (and, in Phase 2, to the help portal rendering approved workflows). Nothing flows
   backward — the copilot never writes to the KB.
 - **The async seam is the queue.** The API accepts an upload and returns immediately; the expensive
   AI work (transcription, segmentation, distillation) happens later in the **worker**, decoupled by a

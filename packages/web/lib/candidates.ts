@@ -3,8 +3,8 @@ import { approvedSegmentKeys } from './copilot-approvals';
 
 /** A workflow candidate = one persisted segment (Option C) — the unit the founder approves for
  *  the copilot (P1-M5). Server-only.
- *  Phase 2 note: this same unit is what the (parked) article generator turns into an article; when
- *  Phase 2 resumes, re-add the `Article` join + a `generatedArticleId` here. See docs/phase-2-portal.md. */
+ *  Phase 2 note: this same unit becomes a portal help article when approved for that audience
+ *  (workflows-as-articles, 2026-07-07). See docs/phase-2-portal.md §7. */
 export interface Candidate {
   sourceId: string;
   appBaseUrl: string | null;

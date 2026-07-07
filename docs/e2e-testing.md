@@ -8,7 +8,7 @@ The full manual test plan for the Sync copilot — from a clean slate → record
 | **2 · Dev** | Render free tier (`sync-web-uir8.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **not deployed yet** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the **Phase-1 copilot** product end-to-end (P1-M0…M12). Phase-2 article/portal features are parked and out of scope. There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
+> **Scope.** This covers the **Phase-1 copilot** product end-to-end (P1-M0…M12). Phase-2 article/portal features are out of scope (the old engine was removed 2026-07-07 — workflows-as-articles, [`phase-2-portal.md`](phase-2-portal.md) §7). There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 

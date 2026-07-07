@@ -1,9 +1,10 @@
 # Sync — Phase 2: Help Portal & Articles (by-products)
 
-> **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**: the article editor + curated generation are **built but parked** — their **Studio UI was removed for the Phase-1 copilot clean slate (2026-06-25)** and the **engine code is kept dormant in-tree** (still type-checked) to resume from; the public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
+> **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**, and its build path changed on **2026-07-07 (§7)**: the pre-pivot article editor + curated generation (built, UI removed 2026-06-25, engine parked in-tree) were **removed — superseded by workflows-as-articles**: Phase 2 will render **approved distilled workflows** as articles instead of resuming a parallel engine. The public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
-- **Status:** **Frozen — UI removed, engine parked.** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article); the **Studio UI for both was removed 2026-06-25** so the released product is copilot-only, but the **engine stays dormant in-tree** (inventory + re-wiring: **§6**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
-- **Last updated:** 2026-06-27 · **Branch:** `copilot`
+- **Status:** **Frozen — UI removed 2026-06-25; engine removed 2026-07-07 (§7).** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article) — both later **superseded by workflows-as-articles** and swept from the tree (historical inventory: **§6**; decision + rebuild notes: **§7**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
+- **⚠️ DIRECTION CHANGE 2026-07-07 — read §7 first.** The parked engine (§6) was **superseded by workflows-as-articles** and removed from the tree (full sweep, incl. the `Article`/`Step` tables): Phase 2 will render **approved distilled workflows** as articles instead of resuming this engine. §6 stays as the historical inventory (recovery: `git show c357e2e:<path>`); the rebuild notes (editing overlay · Text→Article · prose polish) live in **§7**.
+- **Last updated:** 2026-07-07 · **Branch:** `dev`
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publish. Approving a workflow for the copilot and publishing an article are **independent** actions over the same KB. Mental model: `ONE raw KB → per-target approval/visibility → { Copilot, Portal }`.
 
 ---
@@ -14,8 +15,8 @@ The same recordings that power the copilot also produce **clean, step-by-step he
 
 | Module | What it is | Status |
 |:---|:---|:---|
-| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ built — **UI parked 2026-06-25, engine in-tree (§6)** |
-| **P2-M1** | Curated article generation + prompt-to-article | ✅ built — **UI parked 2026-06-25, engine in-tree (§6)** |
+| **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ built → 🗑️ **removed 2026-07-07 — superseded by workflows-as-articles (§7)** |
+| **P2-M1** | Curated article generation + prompt-to-article | ✅ built → 🗑️ **removed 2026-07-07 — superseded by workflows-as-articles (§7)** |
 | **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ built → app removed, **returns in Phase 2** |
 | **P2-M3** | Portal + KB **search UI** (hybrid) | 📝 to build |
 | **P2-M4** | Authoring depth | 📝 to build |
@@ -26,7 +27,7 @@ The same recordings that power the copilot also produce **clean, step-by-step he
 
 ## 2. As built (frozen — UI parked 2026-06-25)
 
-> **What "parked" means.** Everything in §2 was built and verified. On 2026-06-25 the **Studio UI** for it (the "Auto Generate Articles" + "Text → Article" cards, the article list, and the `/dashboard/articles/[id]` editor) was **removed from the Phase-1 pages** so the released product is copilot-only — but the **engine code stays in-tree, dormant and type-checked**. Resuming Phase 2 = re-wiring the UI, not rebuilding the engine. File-by-file inventory + re-wiring steps are in **§6**.
+> **What "parked" meant — and what happened to it.** Everything in §2 was built and verified. On 2026-06-25 the **Studio UI** for it (the "Auto Generate Articles" + "Text → Article" cards, the article list, and the `/dashboard/articles/[id]` editor) was removed from the Phase-1 pages so the released product is copilot-only, while the engine stayed in-tree, dormant and type-checked. On **2026-07-07 the engine itself was removed** — superseded by workflows-as-articles (**§7**). §2 below describes the as-built behavior for the historical record; the file inventory is in **§6** (recoverable at `c357e2e`).
 
 ### 2.1 Curated auto-generation ("Auto Generate Articles") — P2-M1
 Articles are **not pushed automatically**:
@@ -60,7 +61,7 @@ Open any article to edit step **title/instruction/rationale**, **reorder/delete*
 ### 2.5 Public Help Portal — P2-M2 *(built → returns in Phase 2)*
 A **public, per-workspace** site rendering **only published articles** (drafts + raw KB never exposed), each server-side with title, intent, preconditions, and ordered **steps with screenshots + element highlights**.
 
-> **Status:** built in the foundation (legacy M5) and **validated the KB→render path**; its standalone app (`packages/portal`) was **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22) and **returns in Phase 2** — the article editor + curated generation it depended on remain in Studio. When it returns it picks up the productization modules (P2-M3, P2-M5) below.
+> **Status:** built in the foundation (legacy M5) and **validated the KB→render path**; its standalone app (`packages/portal`) was **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22) and **returns in Phase 2** — rebuilt to render approved workflows (§7). When it returns it picks up the productization modules (P2-M3, P2-M5) below.
 
 ---
 
@@ -127,13 +128,15 @@ All **additive migrations** on the foundation schema — nothing existing change
 
 ---
 
-## 6. Parked Phase 2 code (dormant, in-tree) — the resume map
+## 6. Parked Phase 2 code — HISTORICAL inventory (removed 2026-07-07, see §7)
 
-When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 2 article/portal code was **kept** (not deleted) but **disconnected from the Studio UI** so the shipped product is copilot-only. Every file below is **still in the repo and still type-checked** (`pnpm typecheck` covers it) — it just isn't reachable from any Phase-1 page. Each carries a `// PARKED — Phase 2 …` banner pointing back here. **Resuming Phase 2 means re-wiring these in, not rebuilding them.**
+> **⚠️ This section is historical.** The re-wiring plan below is **obsolete** — the parked code was removed on 2026-07-07 (workflows-as-articles, **§7**). It is kept as the inventory of what was swept out; recover any file with `git show c357e2e:<path>`.
+
+When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 2 article/portal code was **kept** (not deleted) but **disconnected from the Studio UI** so the shipped product was copilot-only. Each file carried a `// PARKED — Phase 2 …` banner pointing back here.
 
 > Why parked, not deleted: Phase 2 is a confirmed future deliverable and these modules are ✅ built, so deleting working code we'll reuse — plus a destructive DB migration — was net-negative. We keep the engine and tables; we only hide the product surface. (The standalone `packages/portal` app is the exception — it was hard-removed earlier, commit `c9f13f4`, and returns rebuilt.)
 
-### What's parked (the engine — leave dormant)
+### What was parked (the engine — removed 2026-07-07)
 
 | File | What it is |
 |---|---|
@@ -168,3 +171,24 @@ When Phase 1 (the copilot) was readied for release on **2026-06-25**, the Phase 
 4. Rebuild `packages/portal` (P2-M2) on the current schema (see §5).
 5. Remove the `// PARKED — Phase 2` banners as each file goes live again.
 6. Then pick up the to-build modules P2-M3…M6 (§3).
+
+---
+
+## 7. Direction change (2026-07-07) — workflows-as-articles supersede the parked engine
+
+> **This section supersedes §6.** §6 stays as the historical inventory of what was removed; the re-wiring checklist above is **obsolete** — Phase 2 will not resume the parked engine.
+
+**The decision.** The parked article engine predates KB step distillation (2026-06-27). Since distillation, the Phase-1 worker **already produces what an article needs**: per-workflow `segmentTitle` + clean distilled steps `{ instruction, detail, route, narration, screenshotFile, bbox }` — one curated screenshot per step, with the bbox for the element highlight. And the `CopilotApproval` trust gate (keyed `(sourceId, segmentIndex)`, survives reprocess) generalizes to a second audience. So: **a help article ≈ an approved workflow, rendered.** The portal becomes a second publish target over the *same* distilled workflows — per-audience approval (copilot | portal) over ONE KB. This is the §0 decoupling guardrail (`ONE raw KB → per-target approval → { Copilot, Portal }`) realized with **one pipeline instead of two parallel synthesis engines**.
+
+**Consequences (the 2026-07-07 full sweep):**
+- The parked engine + UI (the §6 inventory), the `Article` + `Step` Prisma tables, and the legacy raw-event helpers in `synthesis/src/index.ts` (`buildKB`, `segmentItems`, `generateArticleForSegment`, `decodeStepData`) are **removed from the tree**. The engine was already non-functional for post-distillation data (the §6 resume gotcha — it read `KnowledgeItem.data.event`, which the worker no longer writes).
+- **Recovery:** everything lives in git history at the pre-cleanup commit **`c357e2e`** — `git show c357e2e:<path>`.
+- **Phase-2 resume now means:** add a portal audience to the approval model + build the portal to render approved workflows — not re-wiring §6. The to-build modules P2-M3…M6 (§3) survive, reframed onto workflows instead of `Article` rows (P2-M4's editor items become the presentation overlay below).
+
+### Rebuild notes — what the old engine had that Phase 2 must re-provide
+
+Three capabilities are consciously lost with the sweep; each has a better rebuild path on today's pipeline:
+
+1. **Article editing** (rename, edit steps, reorder, publish toggle — old P2-M0). Workflows are read-only KB items — and that's arguably a **feature**: one source of truth, so the copilot and portal never drift. Re-provide as a **thin presentation overlay** on top of the workflow (portal-only edits layered at render time), **not** by making KB items mutable.
+2. **Text → Article** (type a topic → grounded article, old P2-M1). No Phase-1 equivalent exists. Its main by-product — **coverage-gap detection** — already lives in the copilot decline path (`CoverageGap` rows with `source: 'copilot'`). If the authoring feature is ever wanted, rebuild it on today's **hybrid keyword+pgvector retrieval over distilled steps** — far better than the old raw-event keyword shortlist it used.
+3. **Reader-facing prose polish.** Distilled steps are optimized for retrieval (terse instruction + detail); the old articles carried intro/preconditions/expected-outcomes. Re-provide as a **render-time or approval-time presentation pass** (LLM polish over the approved workflow) in Phase 2 — much cheaper than maintaining a parallel synthesis engine.

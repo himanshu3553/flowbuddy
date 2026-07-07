@@ -280,15 +280,13 @@ its approval (and the copilot's access to it) survives. This is the seam between
 
 ---
 
-## 9. The parked Phase-2 path (don't confuse it with the live one)
+## 9. The old Phase-2 path — REMOVED (2026-07-07)
 
-The synthesis package still contains an **older, raw-event path** used by the parked article engine:
-`buildKB` (creates `KnowledgeItem`s 1:1 from raw events, `data = { event, narration }`),
-`segmentItems`, and `generateArticleForSegment`. **The worker does not run these** — it runs only
-`buildWorkflowKB` (distilled). The parked path reads `data.event`, which the distilled path no longer
-stores, so resuming Phase 2 means re-sourcing events from the manifest. See
-[`../phase-2-portal.md`](../phase-2-portal.md) §6 and the note in
-[`../kb-step-distillation.md`](../kb-step-distillation.md).
+The synthesis package used to carry an **older, raw-event path** for the parked article engine
+(`buildKB` — 1:1 raw items with `data = { event, narration }` —, `segmentItems`,
+`generateArticleForSegment`). It was **removed 2026-07-07** with the workflows-as-articles decision;
+the worker's `buildWorkflowKB` (distilled) is now the **only** KB build path. Decision + rebuild
+notes: [`../phase-2-portal.md`](../phase-2-portal.md) §7.
 
 ---
 

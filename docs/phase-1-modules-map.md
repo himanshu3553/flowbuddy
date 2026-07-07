@@ -110,4 +110,4 @@ flowchart TB
 | **P1-M11** Capture reliability | hardening inside **M1 · Capture** |
 | **P1-M12** PII redaction | client mask in **M1** + `redactText` server scrub in **M2** |
 
-> **Note:** Module 3 (article creation) and the Help Portal are **Phase 2 by-products** — decoupled from this copilot flow, engine parked dormant in-tree. See [`phase-2-portal.md`](phase-2-portal.md).
+> **Note:** Module 3 (article creation) and the Help Portal are **Phase 2 by-products** — decoupled from this copilot flow. The old article engine was **removed 2026-07-07** (superseded by workflows-as-articles). See [`phase-2-portal.md`](phase-2-portal.md) §7.

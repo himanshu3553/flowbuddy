@@ -84,7 +84,7 @@ erDiagram
   [`DistilledStep`](../../packages/synthesis/src/distill.ts)
   (`instruction, detail, route, narration, screenshotFile, bbox`). `segmentIndex`/`segmentTitle` group
   items into workflows. The schema comment still mentions the old `{ event, narration }` shape — that's
-  the **parked** raw path; the live worker writes the distilled shape. Indexed on `workspaceId` and
+  the **legacy pre-distillation** shape (old rows only); the live worker writes the distilled shape. Indexed on `workspaceId` and
   `sourceId`.
 
 ### 2.4 Copilot — gate, analytics, gaps
@@ -93,14 +93,14 @@ erDiagram
 |---|---|---|
 | **`CopilotApproval`** | The trust gate — one row = one approved workflow. | **`@@unique([sourceId, segmentIndex])`** — keyed by the workflow *coordinate*, not item ids, so it **survives the worker's delete+recreate of items**. Absence = not approved. |
 | **`CopilotQuery`** | Every end-user question (analytics + feedback target). | `answered` (covered vs. declined), `feedback` (`up`/`down`/null). |
-| **`CoverageGap`** | A question the KB couldn't cover → "record this next". | `source` = `copilot` (live) or `prompt` (parked article path); `status` `open`/`resolved`. |
+| **`CoverageGap`** | A question the KB couldn't cover → "record this next". | `source` = `copilot` (live) or `prompt` (historical — written by the removed article path; old rows only); `status` `open`/`resolved`. |
 
-### 2.5 Phase-2 (parked) — articles
+### 2.5 Phase-2 articles — REMOVED (2026-07-07)
 
-`Article` + `Step` model the human-facing help articles. **No live path writes them** — they're kept
-in-schema for the parked Phase-2 engine. `Article.segmentIndex` would link an article back to the
-workflow candidate it was generated from. Ignore unless resuming Phase 2
-([`../phase-2-portal.md`](../phase-2-portal.md)).
+The `Article` + `Step` tables (the parked Phase-2 article model) were **dropped** with the
+workflows-as-articles decision: Phase 2 will render **approved distilled workflows** as help
+articles instead of maintaining a parallel article store. Decision + rebuild notes:
+[`../phase-2-portal.md`](../phase-2-portal.md) §7.
 
 ---
 
