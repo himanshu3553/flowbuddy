@@ -85,6 +85,28 @@ function bubbleEl(m: Msg): HTMLDivElement {
   return b;
 }
 
+// Brand typography (design system: Plus Jakarta Sans + JetBrains Mono). @font-face rules are
+// DOCUMENT-level — a shadow tree resolves font-family against the host document — so the widget
+// injects ONE stylesheet link into the embedding page (guarded, best-effort). The system-ui
+// fallback stack in styles.ts keeps the widget correct when the fonts are blocked or offline.
+const FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap';
+function ensureBrandFonts(): void {
+  if (document.getElementById('sync-copilot-fonts')) return;
+  const link = document.createElement('link');
+  link.id = 'sync-copilot-fonts';
+  link.rel = 'stylesheet';
+  link.href = FONTS_HREF;
+  document.head.appendChild(link);
+}
+
+// Inline lucide icons (stroke-based, currentColor) — the shadow tree can't load icon fonts and
+// design rule = no emoji in chrome. Static markup, no user content.
+const BOT_SVG =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
+const ARROW_UP_SVG =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
+
 const host = el('div');
 host.id = 'sync-copilot-root';
 // Host theming (optional) — applied as inline CSS vars that inherit into the shadow tree.
@@ -111,8 +133,14 @@ launcher.setAttribute('aria-label', 'Open help copilot');
 
 const panel = el('div', 'sc-panel');
 const header = el('div', 'sc-header');
+const badge = el('span', 'sc-badge');
+badge.innerHTML = BOT_SVG; // static markup, not user content
+header.appendChild(badge);
+const titleWrap = el('span', 'sc-titles');
 const titleEl = el('span', 'sc-title', cfg.title);
-header.appendChild(titleEl);
+titleWrap.appendChild(titleEl);
+titleWrap.appendChild(el('span', 'sc-subtitle', 'grounded in your approved workflows'));
+header.appendChild(titleWrap);
 const closeBtn = el('button', 'sc-close', '✕');
 header.appendChild(closeBtn);
 
@@ -120,10 +148,12 @@ const list = el('div', 'sc-messages');
 const form = el('form', 'sc-input');
 const input = el('input');
 input.type = 'text';
-input.placeholder = 'Ask a question…';
+input.placeholder = 'Ask anything…';
 input.maxLength = 400; // the API rejects oversized questions; keep honest input bounded at the source
-const send = el('button', 'sc-send', 'Send');
+const send = el('button', 'sc-send');
 send.type = 'submit';
+send.setAttribute('aria-label', 'Send');
+send.innerHTML = ARROW_UP_SVG; // static markup, not user content
 form.appendChild(input);
 form.appendChild(send);
 
@@ -143,7 +173,19 @@ function render(): void {
     const row = el('div', `sc-msg sc-${m.role}${m.decline ? ' sc-decline' : ''}${m.error ? ' sc-error' : ''}`);
     row.appendChild(bubbleEl(m));
     const titles = [...new Set((m.citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
-    if (titles.length) row.appendChild(el('div', 'sc-cites', 'From: ' + titles.join(' · ')));
+    if (titles.length) {
+      // "Source" pill (accent dot + mono label). Titles are user content — text nodes only.
+      const pill = el('div', 'sc-cites');
+      pill.appendChild(el('span', 'sc-dot'));
+      pill.appendChild(document.createTextNode('Source: ' + titles.join(' · ')));
+      row.appendChild(pill);
+    }
+    if (m.decline) {
+      const pill = el('div', 'sc-flag');
+      pill.appendChild(el('span', 'sc-dot'));
+      pill.appendChild(document.createTextNode('Honest decline'));
+      row.appendChild(pill);
+    }
     if (m.role === 'assistant' && !m.error && m.queryId) {
       const fb = el('div', 'sc-feedback');
       for (const v of ['up', 'down'] as const) {
@@ -293,6 +335,7 @@ function applyServerConfig(s: ServerConfig): void {
 
 function mount(): void { document.body.appendChild(host); render(); pingSeen(); }
 async function boot(): Promise<void> {
+  ensureBrandFonts(); // kick the font download off first — it overlaps the config fetch
   const server = await fetchServerConfig();
   if (server) applyServerConfig(server);
   mount();

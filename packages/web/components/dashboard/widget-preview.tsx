@@ -52,8 +52,10 @@ export function WidgetPreview({
       <div className="rounded-[14px] border border-[#e7eafb] bg-[#f4f6fd] p-4">
         <iframe
           src={src}
-          title="Live copilot preview — the real widget on a stand-in page"
-          className="h-[540px] w-full rounded-[14px] border border-[color:var(--media-border)] bg-white shadow-widget"
+          title="Live copilot preview — the real widget"
+          // Chromeless on purpose: the frame's body matches this container's tint (#f4f6fd), so the
+          // widget panel + launcher float on ONE clean surface — no card-inside-a-card.
+          className="h-[540px] w-full"
         />
         <p className="mt-3 text-[11px] leading-relaxed text-faint">
           This is the <span className="font-semibold text-secondary-foreground">real widget</span>,

@@ -51,26 +51,14 @@ export async function GET(req: Request) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Copilot preview</title>
 <style>
-  /* A quiet stand-in for the customer's app page, on the design-system paper ramp. */
+  /* Flat backdrop in the SAME tint as the Studio preview container, so the iframe disappears into
+     it and the only visible chrome is the widget itself (panel + launcher) — one clean surface,
+     no page-behind-a-page effect. */
   * { box-sizing: border-box; margin: 0; }
-  body { min-height: 100vh; background: #f6f7f9; font-family: system-ui, sans-serif; }
-  .bar { height: 44px; background: #fff; border-bottom: 1px solid #eceef3; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: #eceef3; }
-  .chip { height: 10px; width: 90px; border-radius: 5px; background: #eceef3; }
-  .page { padding: 20px 16px; display: grid; gap: 12px; }
-  .block { border-radius: 12px; background: #fff; border: 1px solid #eceef3; }
-  .b1 { height: 64px; } .b2 { height: 120px; } .b3 { height: 44px; width: 60%; }
-  .hint { color: #6b7180; font-size: 11px; padding: 2px 4px; }
+  body { min-height: 100vh; background: #f4f6fd; }
 </style>
 </head>
 <body>
-  <div class="bar"><span class="dot"></span><span class="chip"></span></div>
-  <div class="page">
-    <div class="block b1"></div>
-    <div class="block b2"></div>
-    <div class="block b3"></div>
-    <p class="hint">This frame stands in for a page of your product — the widget below is the real embed.</p>
-  </div>
   <script src="${esc(widgetSrc)}"
     data-sync-api="${esc(apiBase)}"
     data-sync-key="${esc(publicKey)}"

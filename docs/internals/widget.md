@@ -88,11 +88,19 @@ The widget keeps three pieces of state: `messages[]` (the conversation), `open` 
 `loading`. There's no framework — a single `render()` function **rebuilds the message list** from
 `messages[]` on every change (`list.replaceChildren(...)`). It's a tiny immediate-mode UI:
 
-- empty conversation → a greeting bubble;
+- empty conversation → a centered greeting;
 - each message → a bubble with role/decline/error classes; assistant messages with citations get a
-  **"From: &lt;workflow titles&gt;"** line (deduped `segmentTitle`s); answered assistant messages get
+  **"Source: &lt;workflow titles&gt;" pill** (accent dot + mono label, deduped `segmentTitle`s);
+  declines additionally get an **"Honest decline" pill**; answered assistant messages get
   **👍/👎** buttons;
 - `loading` → a typing indicator; input/send disabled.
+
+The chrome follows the design system (2026-07-08): header = accent bar with a **bot-icon badge**,
+bold title and the mono *"grounded in your approved workflows"* tagline; input row = borderless
+field + a square accent **↑ send** button. **Typography** = Plus Jakarta Sans / JetBrains Mono at
+the token sizes — `index.ts` injects ONE Google-Fonts `<link>` into the host document
+(`ensureBrandFonts`, guarded; @font-face is document-level so the shadow tree can use it), with
+system-font fallback stacks so a blocked font never breaks the widget.
 
 ### 4.4 Asking a question (`ask`)
 

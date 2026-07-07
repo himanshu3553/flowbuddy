@@ -140,7 +140,7 @@ counts). The retrieval-side enforcement moved to the shared
 session-authed host page [`copilot/preview-frame/route.ts`](../../packages/web/app/dashboard/copilot/preview-frame/route.ts),
 which embeds the actual bundle (`SYNC_WIDGET_URL`, or the local fallback route
 [`app/widget/sync-copilot.js`](../../packages/web/app/widget/sync-copilot.js/route.ts) that serves the
-monorepo build) in `data-sync-preview` mode — appearance edits ride in as debounced query params.
+monorepo build) in `data-sync-preview` mode — appearance edits ride in as debounced query params. The host page is a **flat backdrop in the Studio container's tint** (and the iframe is chromeless), so the widget floats on one clean surface instead of a page-behind-a-page.
 The settings actions let the operator edit the origin allowlist (enforced server-side by
 [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts); the Studio origin itself is exempt via
 `SYNC_STUDIO_URL` so the tester survives a locked-down allowlist).
