@@ -238,6 +238,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 |---|---|---|
 | 10a | *"How do I sign in?"* | **Answered**, grounded in the approved sign-in workflow, with citation(s). |
 | 10b | *"How do I delete my account?"* (not recorded) | **Honest decline** ("I don't have that in approved help…"), no hallucination. |
+| 10c | *(no question)* Change the accent/title in Studio → Copilot → **Appearance** → **Save** (a green toast confirms) → reload the demo page | The embedded widget reflects the new look **without touching the snippet** (served by `GET /v1/copilot/config`). |
 | 10c | Thumbs **up/down** on an answer | Accepted (`/v1/copilot/feedback`). |
 | 10d | Origin not allowlisted | Serve demo from a different port not in the allowlist → answer request rejected (origin/`x-sync-key` check). |
 | 10e | Rapid-fire questions | Eventually `429` rate-limit. |

@@ -84,11 +84,8 @@ services:
       - { key: AUTH_SECRET, sync: false }
       - { key: AUTH_URL, sync: false } # the deployed web URL (https://sync-web.onrender.com)
       - { key: AUTH_TRUST_HOST, value: true }
-      # The Copilot-page tester now embeds the REAL widget against sync-api (no OpenAI call from this
-      # process on the live path) — the key stays only for the parked Phase-2 article engine.
-      - { key: OPENAI_API_KEY, sync: false }
-      - { key: SYNTH_MODEL, value: gpt-4o }
-      - { key: EMBED_MODEL, value: text-embedding-3-small } # P1-M3 — the tester's retrieval path
+      # No OpenAI config here: the Studio makes NO OpenAI calls — the Copilot-page tester embeds the
+      # REAL widget, so every answer goes through sync-api (which owns OPENAI_API_KEY/EMBED_MODEL).
       # PUBLIC api URL — baked into the browser embed snippet (data-sync-api) + extension payload.
       - { key: SYNC_API_URL, sync: false } # https://sync-api.onrender.com
       - { key: SYNC_WIDGET_URL, sync: false } # https://sync-widget.onrender.com/sync-copilot.js

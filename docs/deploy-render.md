@@ -91,8 +91,9 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `R2_ACCESS_KEY_ID` | `sync-r2` group | R2 token access key |
 | `R2_SECRET_ACCESS_KEY` | `sync-r2` group | R2 token secret |
 | `R2_BUCKET` | `sync-r2` group | `sync-artifacts` |
-| `OPENAI_API_KEY` | **`sync-api`** + **`sync-web`** | your `sk-…` (api = synthesis; web = the in-Studio copilot tester) |
-| `EMBED_MODEL` | `sync-api` + `sync-web` (blueprint sets both) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be the SAME on both services and a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy (Render Postgres supports it). |
+| `OPENAI_API_KEY` | **`sync-api`** only | your `sk-…` (synthesis + the copilot answer engine; the Studio makes no OpenAI calls — its tester embeds the real widget → sync-api) |
+| `EMBED_MODEL` | `sync-api` (blueprint sets it) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy (Render Postgres supports it). |
+| `SYNC_STUDIO_URL` | **`sync-api`** | the real `sync-web` URL (see step 8) — the Studio origin is exempt from workspace origin allowlists so the Copilot page's real-widget tester keeps working after a customer restricts origins. ⚠️ Unset = the tester 403s for allowlisted workspaces. |
 | `AUTH_SECRET` | `sync-web` | output of step 4 |
 | `AUTH_URL` | `sync-web` | the real `sync-web` URL (see step 8) |
 | `SYNC_API_URL` | `sync-web` | the real `sync-api` URL (see step 8) |

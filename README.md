@@ -62,8 +62,8 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 - **Database:** Postgres (Prisma)
 - **Queue / cache:** Redis
 - **Object storage:** S3-compatible — MinIO locally, Cloudflare R2 in production
-- **AI:** OpenAI (`whisper-1` transcription · `gpt-4o` segmentation, synthesis, and the copilot answer engine)
-- **Widget / extension:** esbuild bundles (both on the indigo design system; the widget is Sync-indigo by default and host-rebrandable via `data-sync-accent`)
+- **AI:** OpenAI (`whisper-1` transcription · `gpt-4o` segmentation, distillation, and the copilot answer engine · `text-embedding-3-small` for P1-M3 hybrid retrieval)
+- **Widget / extension:** esbuild bundles (both on the indigo design system; the widget's appearance — accent/title/greeting/launcher — is **live-served from Studio** via `GET /v1/copilot/config`, with `data-sync-*` attrs as per-page overrides)
 - **Deploy target:** Render (Dockerized) + Cloudflare R2
 
 ---
@@ -190,7 +190,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 | `DATABASE_URL` | all | Postgres connection (matches docker-compose locally) |
 | `REDIS_URL` | api, worker | BullMQ queue |
 | `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | api, worker, web | S3-compatible storage; defaults to local MinIO |
-| `OPENAI_API_KEY` | **api** (web: parked Phase-2 only) | transcription, segmentation, copilot answers |
+| `OPENAI_API_KEY` | **api** only | transcription, segmentation, copilot answers (the Studio makes no OpenAI calls) |
 | `TRANSCRIBE_MODEL` / `SYNTH_MODEL` | api, worker | default `whisper-1` / `gpt-4o` |
 | `AUTH_SECRET` / `AUTH_URL` | web | Studio auth (Auth.js v5) |
 
@@ -198,9 +198,9 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Project status
 
-**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). Remaining Phase-1 work is discretionary: the **P1-M3 pgvector retrieval upgrade** and the **P1-M11 capture-reliability backlog** (R13; R5 deferred — R12 screenshot timing/cost shipped); **P1-M12 Cut 2** (screenshot/DOM pixel PII) is deferred to Phase 2.
+**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). All Phase-1 modules are done — **P1-M3 hybrid keyword+pgvector retrieval shipped 2026-07-07** and the **P1-M11 capture-reliability backlog completed 2026-07-06** (R13 ranked locators closed it; R5 → V2). The Studio's copilot preview **is the real widget** (iframe, preview mode), and widget appearance is **live-served** from Studio. Only **P1-M12 Cut 2** (screenshot/DOM pixel PII) remains, deferred to Phase 2 as a portal-publish prerequisite.
 
-**Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — its engine is **parked dormant in-tree** and its Studio UI was removed for the copilot release ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
+**Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — direction changed 2026-07-07 to **workflows-as-articles**: the pre-pivot article engine was removed; the portal will render **approved distilled workflows** ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §7). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
 
 ---
 

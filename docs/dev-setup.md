@@ -115,7 +115,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 - **"command not found: pnpm"** → run `corepack enable` (once per machine / Node version).
 - **DB errors / "can't reach database"** → is Postgres up? `docker compose up -d`, then `docker compose ps` (postgres should be `healthy`).
 - **Type changes not picked up across packages** → `pnpm build` (Turbo rebuilds deps in order); for the Prisma client specifically, `pnpm db:generate`.
-- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in `packages/api/.env`** (worker — transcribe + segment; and the copilot answer endpoint). *(It's also read from `packages/web/.env` — the Studio copilot preview answers server-side.)*
+- **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in `packages/api/.env` only** (worker — transcribe + segment; and the copilot answer endpoint). *(The Studio needs no OpenAI key: its copilot preview embeds the real widget, so answers go through the api.)*
 - **Nothing happens after recording?** The **worker must be running** (`pnpm --filter @sync/api worker`) to turn an upload into the KB (`status → ready`). Once ready, open the recording's KB page to browse items and **approve workflows for the copilot**.
 - **Docker must be running** (Docker Desktop) before `docker compose up`.
 
