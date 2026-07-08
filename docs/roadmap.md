@@ -97,7 +97,7 @@ A throwaway, lightweight spike answered one question before building any product
 |:---|:---|:---|:---|
 | **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ Built → 🗑️ **removed 2026-07-07** — superseded by workflows-as-articles ([`phase-2-portal.md`](phase-2-portal.md) §7: rebuild as a presentation overlay) | M4 |
 | **P2-M1** | Curated article generation (propose titles → select → generate) + prompt-to-article | ✅ Built → 🗑️ **removed 2026-07-07** — superseded by workflows-as-articles ([`phase-2-portal.md`](phase-2-portal.md) §7) | M6.1 / M7 |
-| **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ Built → 🔄 `packages/portal` **removed for the Phase-1 clean slate (`c9f13f4`); returns in Phase 2** (render path proven) | M5 |
+| **P2-M2** | Public Help Portal (renders published **workflows** — steps, screenshots, highlights — + per-audience approval + presentation overlay) | ✅ Built → 🔄 `packages/portal` **removed for the Phase-1 clean slate (`c9f13f4`); returns in Phase 2 rebuilt to render workflows** (render path proven) | M5 |
 | **P2-M3** | Portal + KB **search UI** (hybrid; user-facing half of search) | 📝 **Draft** | M11 (portal half) |
 | **P2-M4** | Authoring depth (split/merge/move, retake/crop, callouts, arrow highlight, manual `static`, collections, versioning, brand voice) | 📝 **Draft** | M12 |
 | **P2-M5** | Portal productization (theming, custom domains, public/gated, "was this helpful?", SEO/sitemap) | 📝 **Draft** | M13 |

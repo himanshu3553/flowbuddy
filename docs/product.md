@@ -5,7 +5,7 @@
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.
 
 - **Status:** v0.2 — **copilot-first** (supersedes the original portal-first framing)
-- **Last updated:** 2026-06-27 · **Branch:** `copilot`
+- **Last updated:** 2026-07-08 · **Branch:** `dev`
 - **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · Phase 2 by-products → [`phase-2-portal.md`](phase-2-portal.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · local dev → [`dev-setup.md`](dev-setup.md)
 
 ---
@@ -101,7 +101,7 @@ That knowledge base powers, in priority order:
 - **Decoupled, always** — the copilot path must never *require* article authoring or portal publish; approving a workflow and publishing an article are independent actions over the same KB.
 - **No-leak preserved** — the copilot answers **only** from approved-KB; never raw/un-approved items, never draft articles.
 - **Don't build grounding Stage B** until explicitly revisited.
-- **By-products are frozen, not deleted** — investment pauses until the copilot is out. Concretely (as of 2026-06-25): the article/portal **engine code is kept dormant in-tree** (still type-checked) but its **Studio UI was removed** so the released product is copilot-only — resuming Phase 2 re-wires the UI, it doesn't rebuild the engine. *(The standalone public-portal app was hard-removed earlier for the clean slate and returns rebuilt in Phase 2.)* Parked-code inventory + re-wiring map: [`phase-2-portal.md`](phase-2-portal.md) §6.
+- **By-products are frozen** — investment pauses until the copilot is out. The article/portal Studio UI was removed 2026-06-25, and on **2026-07-07 the parked engine + the `Article`/`Step` tables were removed entirely** (workflows-as-articles): since KB step distillation the copilot's own distilled workflows already carry everything an article needs, so Phase 2 will **render approved workflows** (with a per-audience approval + a render-time presentation overlay) rather than resume a parallel synthesis engine. *(The standalone public-portal app was hard-removed earlier for the clean slate and returns rebuilt in Phase 2.)* Decision + rebuild notes: [`phase-2-portal.md`](phase-2-portal.md) §7 (historical inventory: §6; recovery `git show c357e2e:<path>`).
 
 ---
 
@@ -113,7 +113,7 @@ That knowledge base powers, in priority order:
   2. **Self-validation / freshness** — knowledge that re-checks itself and flags drift. Hardest to copy; directly answers "products change faster than docs." (Also the namesake: keeping the KB *in sync* with the product.)
   3. **The compounding feedback loop** — copilot questions, thumbs, and honest declines tell the founder exactly what to record next. The product improves with use.
 
-**Grounded authorship (core principle).** Everything the copilot says, and every AI-written article, is synthesized *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
+**Grounded authorship (core principle).** Everything the copilot says — and everything the Phase-2 portal will publish (a rendered approved workflow, optionally prose-polished) — comes *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
 
 **Operating principle:** treat capture + synthesis as quality we must achieve; treat **the copilot + freshness + feedback loop** as the things we differentiate and charge for.
 
@@ -126,12 +126,12 @@ Sync ships as **four distinct surfaces** over one shared structured knowledge ba
 | Surface | Who | Purpose |
 |---|---|---|
 | **Sync Recorder** (Chrome extension) | the builder | effortless multi-layer capture of narrated product workflows |
-| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; (by-product) author/publish articles |
+| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; *(Phase-2 by-product: approve/publish workflows to the portal)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
 | **Help Portal** (public web) — *Phase 2 by-product* | the builder's customers | browse + search published help articles |
 
 - **Recorder** — one-click "Connect with Sync"; start/stop; **mark new workflow**; **event/DOM-primary** capture (event + DOM + hi-res screenshot + post-action snapshot for `expected_outcome` + continuous audio); **PII masked before upload**; **capture reliability** (survives navigations, retry on upload failure, narration preserved). *(V1 capture is workflow-only; narration-only + video are Version 2.)*
-- **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), the KB browser, and the by-product article editor + curated generation.
+- **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate, **live-served appearance**), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), and the KB browser. *(Currently copilot-only; the Phase-2 portal-authoring surface — approve-for-portal + a presentation overlay over the same workflows — returns later.)*
 - **Copilot widget ⭐** — one `<script>` renders a shadow-DOM launcher + chat panel; grounded in **approved-KB**; **cites its source**; **honest declines**; **context-aware** (biases to the host route); multi-turn; 👍/👎 feedback; embed security (public key + origin allowlist + rate limit). *Future:* "show me" actionability and human handoff.
 - **Help Portal (Phase 2)** — published structured articles (steps + screenshots + element highlights), hybrid search, theming/custom domains/SEO/gating/"was this helpful?". **Decoupled** from the copilot.
 

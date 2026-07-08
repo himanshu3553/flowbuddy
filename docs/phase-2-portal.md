@@ -2,22 +2,22 @@
 
 > **Phase 2 is the human-facing help center over the *same* Knowledge Base — a decoupled publish target.** It is **frozen**, and its build path changed on **2026-07-07 (§7)**: the pre-pivot article editor + curated generation (built, UI removed 2026-06-25, engine parked in-tree) were **removed — superseded by workflows-as-articles**: Phase 2 will render **approved distilled workflows** as articles instead of resuming a parallel engine. The public portal app validated the render path and **returns in Phase 2**; the rest is productization. No new investment here until the copilot (Phase 1) ships. Roadmap/status: [`roadmap.md`](roadmap.md) §3. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
-- **Status:** **Frozen — UI removed 2026-06-25; engine removed 2026-07-07 (§7).** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article) — both later **superseded by workflows-as-articles** and swept from the tree (historical inventory: **§6**; decision + rebuild notes: **§7**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6.
-- **⚠️ DIRECTION CHANGE 2026-07-07 — read §7 first.** The parked engine (§6) was **superseded by workflows-as-articles** and removed from the tree (full sweep, incl. the `Article`/`Step` tables): Phase 2 will render **approved distilled workflows** as articles instead of resuming this engine. §6 stays as the historical inventory (recovery: `git show c357e2e:<path>`); the rebuild notes (editing overlay · Text→Article · prose polish) live in **§7**.
-- **Last updated:** 2026-07-07 · **Branch:** `dev`
+- **Status:** **Frozen — UI removed 2026-06-25; engine + `Article`/`Step` tables removed 2026-07-07 (§7).** Built: P2-M0 (editor), P2-M1 (curated generation + prompt-to-article) — both later **superseded by workflows-as-articles** and swept from the tree (historical inventory: **§6**; decision + rebuild notes: **§7**). P2-M2 (public portal) **built → app removed for the clean slate, returns in Phase 2**. To build: P2-M3…P2-M6. **The to-build plan (§3), data-model deltas (§4), and risks (§5) were reconciled onto the post-sweep reality on 2026-07-08** — they no longer target the removed `Article`/`Step` model; they build a **presentation overlay + per-audience approval over the distilled workflows**.
+- **⚠️ DIRECTION CHANGE 2026-07-07 — read §7 first.** The parked engine (§6) was **superseded by workflows-as-articles** and removed from the tree (full sweep, incl. the `Article`/`Step` tables — migration `20260707132717_drop_phase2_article_step_tables`): Phase 2 will render **approved distilled workflows** as articles instead of resuming this engine. §6 stays as the historical inventory (recovery: `git show c357e2e:<path>`); the rebuild notes (editing overlay · Text→Article · prose polish) live in **§7**.
+- **Last updated:** 2026-07-08 · **Branch:** `dev`
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publish. Approving a workflow for the copilot and publishing an article are **independent** actions over the same KB. Mental model: `ONE raw KB → per-target approval/visibility → { Copilot, Portal }`.
 
 ---
 
 ## 1. Overview
 
-The same recordings that power the copilot also produce **clean, step-by-step help articles** and a **public help portal** — a second, *decoupled* publish target for **public/SEO readers** (vs. the copilot's in-app authenticated end-users). Both authoring paths obey **grounded authorship**: AI writes **only** from the workspace's own recordings, and declines + flags a coverage gap when a topic isn't covered.
+The same recordings that power the copilot also feed a **public help portal** — a second, *decoupled* publish target for **public/SEO readers** (vs. the copilot's in-app authenticated end-users). Since the 2026-07-07 pivot (§7), a help article **is an approved distilled workflow, rendered** (title + clean steps + screenshots/highlights the Phase-1 worker already produces) — not the output of a separate synthesis engine. Grounded authorship is preserved for free: the portal renders **only** the workspace's own approved recordings, and the copilot's decline path already flags coverage gaps when a topic isn't covered.
 
 | Module | What it is | Status |
 |:---|:---|:---|
 | **P2-M0** | Studio article editor (view/edit/reorder/publish) | ✅ built → 🗑️ **removed 2026-07-07 — superseded by workflows-as-articles (§7)** |
 | **P2-M1** | Curated article generation + prompt-to-article | ✅ built → 🗑️ **removed 2026-07-07 — superseded by workflows-as-articles (§7)** |
-| **P2-M2** | Public Help Portal (published articles, screenshots, highlights) | ✅ built → app removed, **returns in Phase 2** |
+| **P2-M2** | Public Help Portal (renders published **workflows** — steps, screenshots, highlights) + per-audience approval + presentation overlay | ✅ built → app removed, **returns in Phase 2 (rebuilt to render workflows)** |
 | **P2-M3** | Portal + KB **search UI** (hybrid) | 📝 to build |
 | **P2-M4** | Authoring depth | 📝 to build |
 | **P2-M5** | Portal productization | 📝 to build |
@@ -27,7 +27,7 @@ The same recordings that power the copilot also produce **clean, step-by-step he
 
 ## 2. As built (frozen — UI parked 2026-06-25)
 
-> **What "parked" meant — and what happened to it.** Everything in §2 was built and verified. On 2026-06-25 the **Studio UI** for it (the "Auto Generate Articles" + "Text → Article" cards, the article list, and the `/dashboard/articles/[id]` editor) was removed from the Phase-1 pages so the released product is copilot-only, while the engine stayed in-tree, dormant and type-checked. On **2026-07-07 the engine itself was removed** — superseded by workflows-as-articles (**§7**). §2 below describes the as-built behavior for the historical record; the file inventory is in **§6** (recoverable at `c357e2e`).
+> **What "parked" meant — and what happened to it.** Everything in §2 was built and verified. On 2026-06-25 the **Studio UI** for it (the "Auto Generate Articles" + "Text → Article" cards, the article list, and the `/dashboard/articles/[id]` editor) was removed from the Phase-1 pages so the released product is copilot-only, while the engine stayed in-tree, dormant and type-checked. On **2026-07-07 the engine itself — and the `Article`/`Step` Prisma tables (migration `20260707132717_drop_phase2_article_step_tables`) — were removed**, superseded by workflows-as-articles (**§7**). **§2 below is the historical as-built record only** — the `Article`/`Step` model it describes no longer exists in the schema; the current KB unit is the distilled `KnowledgeItem` step (see [`phase-1-copilot.md`](phase-1-copilot.md) §7). File inventory: **§6** (recoverable at `c357e2e`).
 
 ### 2.1 Curated auto-generation ("Auto Generate Articles") — P2-M1
 Articles are **not pushed automatically**:
@@ -40,8 +40,10 @@ Entry points: **per-recording** (from a recording's KB page) and a workspace-wid
 ### 2.2 Prompt-to-article ("Text → Article") — P2-M1
 Type a topic; Sync retrieves the relevant items over the **whole-workspace KB** (keyword shortlist), then **synthesizes or declines**. A decline logs a **coverage gap** ("record this next") on the dashboard. Prompt-grounded articles can **span multiple recordings**; their screenshots resolve back to whichever recording each step came from. *(This shares the retrieval/grounding engine with the copilot — see [`architecture.md`](architecture.md) Module 3.)*
 
-### 2.3 The structured Article model — P2-M0
-Articles are stored as **structured data, not markdown blobs** — what makes the portal (and later self-validation) possible:
+### 2.3 The structured Article model — P2-M0 *(removed 2026-07-07 — historical)*
+> The `Article`/`Step` tables below were **dropped 2026-07-07**. Their role — structured, self-validatable, step-shaped knowledge — is now carried by the distilled `KnowledgeItem` step (`{ instruction, detail, route, narration, screenshotFile, bbox }`), which already holds the screenshot + element bbox an article needs. The prose-only fields the old model added on top (`intent`, `preconditions`, `expectedOutcome`, per-article `body`) are what the Phase-2 **presentation overlay** (§7, §4) re-provides at render time.
+
+Articles were stored as **structured data, not markdown blobs** — what made the portal (and later self-validation) possible:
 
 ```
 Article { id, title, intent, tags[], routes[], preconditions[], source, type, status, steps[] }
@@ -65,41 +67,45 @@ A **public, per-workspace** site rendering **only published articles** (drafts +
 
 ---
 
-## 3. To-build modules (P2-M3 … P2-M6)
+## 3. To-build modules (P2-M2 … P2-M6)
 
-> Priority within Phase 2 mirrors the old "beta-blocking" order: search first, then authoring/portal polish, then collaboration last. Each is built one at a time, verified, with a stop for review.
+> **Reframed onto workflows-as-articles (2026-07-08).** Every module below now builds over the **distilled workflows** (approved `KnowledgeItem` steps), not the removed `Article`/`Step` engine. Two structural pieces the pivot introduces sit under these modules and are the first things to build:
+> - **P2-M2·a — a portal audience on the approval model.** Generalize the copilot trust gate into **per-audience approval** (`copilot | portal`) over the same `(sourceId, segmentIndex)` workflow key — a workflow can be approved for the copilot, the portal, both, or neither. Concretely a `PortalPublication` row mirroring `CopilotApproval` (survives the worker's item delete+recreate on reprocess). §0 guardrail realized: `ONE raw KB → per-target approval → { Copilot, Portal }`.
+> - **P2-M2·b — the presentation overlay.** Portal-only prose/edits (title override, intro, per-step tweaks, reorder, callouts) layered **at render time** over the read-only workflow — never by mutating KB items (§7). One source of truth, so the copilot and portal can't drift.
+
+> Priority within Phase 2 mirrors the old "beta-blocking" order: **portal rebuild + audience/overlay first**, then search, then authoring/portal polish, then collaboration last. Each is built one at a time, verified, with a stop for review.
 
 > **⚠️ CARRIED OVER FROM PHASE 1 — must build before the portal goes public: PII redaction Cut 2 (screenshot OCR + region blur + DOM-pixel scrub).** Phase 1 shipped **Cut 1** (P1-M12) — scrubbing high-confidence PII from the *text* the copilot reads. But PII *displayed on the page* is captured in **screenshot pixels + DOM** (e.g. a customer name in a table, "signed in as jane@acme.com"). The copilot never surfaces those, **but the public portal renders screenshots** — so Cut 2 is a **hard prerequisite for publishing**. Build it in/with **P2-M5 (portal productization)**: OCR each screenshot → detect high-confidence PII (email/phone/card/SSN) → blur those regions in the stored image; scrub DOM-text/attributes at rest. Engine decision (self-hosted to avoid shipping screenshots to a 3rd party): **Microsoft Presidio** (text + image redactor, self-hostable) vs. Tesseract.js + a blur step. Pairs with the **Studio review-time one-click redaction** in P2-M4. Reuse the Phase-1 `redactText` detectors (`@sync/synthesis/src/redact.ts`) for the text side. See [`phase-1-copilot.md`](phase-1-copilot.md) §8.
 
 ### P2-M3 — Search (portal + KB UI) *(legacy M11, portal half)*
-The user-facing half of search (the retrieval/embedding half is the Phase-1 P1-M3 pgvector upgrade).
-- **Portal search UI** — search published articles (**hybrid** keyword + semantic); **no-result queries logged** as coverage signals (feeds P2-M6).
-- **Studio KB search UI** — a workspace-wide search over the KB (across recordings) — the search surface deferred from the foundation.
-- **Done when:** portal hybrid search returns relevant published articles, no-result queries are logged, and Studio has a working KB search.
+The user-facing half of search. **The retrieval/embedding half already shipped** — hybrid keyword ∪ pgvector RRF landed in P1-M3 (2026-07-07, `synthesis/retrieval.ts`); Phase 2 reuses that engine and adds only the UI + a query log.
+- **Portal search UI** — search published workflows (rendered as articles) over the **hybrid** engine; **no-result queries logged** (new `SearchQuery` table) as coverage signals (feeds P2-M6).
+- **Studio KB search UI** — a workspace-wide search over the KB (across recordings) — the search surface deferred from the foundation; can point straight at the existing `retrieveApprovedKB`/hybrid seam.
+- **Done when:** portal hybrid search returns relevant published workflows, no-result queries are logged, and Studio has a working KB search.
 
 ### P2-M4 — Authoring depth (Studio) *(legacy M12)*
-Raises output quality and cuts time-to-publish. The foundation ships edit-text + reorder/delete + publish; this fills out the editor.
-- **Segmentation review** — split/merge articles, move steps between articles, rename.
-- **Screenshot retake/crop** — re-pick a frame or re-upload, and re-crop. *(Still no step-level re-record — re-recording replaces a flow.)*
-- **Callouts/warnings**, **arrow-pointer highlight** (alongside the rectangle), **related-article links**.
-- **Manual `static` authoring UI** — hand-write prose articles (`source=manual`, `type=static`; the model supports it, needs `Article.body`). Badged "not self-validated"; AI never generates these.
-- **Collections / tags** organization + **lightweight versioning at publish**.
-- **Brand voice / tone** at (re)generation (the portal theming half is P2-M5).
-- **Done when:** a founder can reshape segmentation, fix screenshots, enrich steps, hand-write static pages, organize the KB, and version on publish.
+Raises output quality and cuts time-to-publish. **Reframed onto the presentation overlay (P2-M2·b):** the KB workflow stays read-only (the copilot's source of truth); every edit below is layered on the portal-facing overlay, not written back onto `KnowledgeItem`s. This *replaces* the old mutable-`Article`/`Step` editor.
+- **Segmentation review** — split/merge/reorder the steps a portal article shows and rename it, as overlay edits over the workflow's distilled steps. *(True cross-workflow re-segmentation of the KB itself stays a heavier, separate concern; the overlay reshapes presentation, not the KB.)*
+- **Screenshot retake/crop** — re-pick a frame or re-upload, and re-crop, stored on the overlay. *(Still no step-level re-record — re-recording replaces a flow.)*
+- **Callouts/warnings**, **arrow-pointer highlight** (alongside the rectangle), **related-workflow links** — overlay fields.
+- **Manual `static` pages** — hand-write prose pages **not backed by a workflow** (`source=manual`, `type=static`). Since the `Article` table is gone, these need a **standalone lightweight store** (a `StaticPage` with a markdown `body`), not the old `Article.body`. Badged "not self-validated"; AI never generates these.
+- **Collections / tags** organization + **lightweight versioning at publish** (a snapshot of the overlay/render, not of a mutable article).
+- **Reader-facing prose polish / brand voice** — an approval-time or render-time LLM pass over the approved workflow (§7 rebuild note 3), giving intro/preconditions/expected-outcome prose the terse distilled steps omit. The portal-theming half is P2-M5.
+- **Done when:** a founder can reshape a workflow's portal presentation, fix screenshots, enrich steps, hand-write standalone static pages, organize the KB, and version on publish — all without mutating the underlying KB.
 
 ### P2-M5 — Portal productization *(legacy M13)*
 Makes the public portal credible for a real customer-facing launch.
 - **Theming/branding** — logo + colors set in Studio.
 - **Custom domains** — beyond the `…/<slug>` path; map a customer domain to a workspace portal.
-- **Public / gated visibility** — public default; gated/private as a fast-follow.
-- **"Was this helpful?"** per-article feedback → analytics foundations (feeds P2-M6).
+- **Public / gated visibility** — public default; gated/private as a fast-follow. *(Visibility is the portal audience's approval flag from P2-M2·a — a workflow is portal-visible only when published for that audience.)*
+- **"Was this helpful?"** per-published-workflow feedback → analytics foundations (feeds P2-M6).
 - **SEO** — server-rendered article pages (already SSR), structured data + a **sitemap**.
 - **🔒 PII redaction Cut 2 (prerequisite to publishing) — screenshot OCR + region blur + DOM-pixel scrub** (carried from Phase 1 P1-M12, §3 callout). The portal renders screenshots publicly, so this gates "publish." Self-hosted engine (Presidio or Tesseract.js + blur); reuse `@sync/synthesis` `redactText` for the text side.
 - **Done when:** the portal is themed, supports a custom domain + gated visibility, collects feedback, is SEO-clean, **and published screenshots are PII-redacted (Cut 2)**.
 
 ### P2-M6 — Coverage analytics + collaboration *(legacy M14, last)*
 The lowest-leverage items for an invite-only beta, so they close the phase.
-- **Coverage-gap analytics dashboard** — unify prompt-to-article misses + portal no-result searches (and the copilot's own declines) into a single "record this next" view, beyond the current basic list.
+- **Coverage-gap analytics dashboard** — unify the live gap signals — **copilot declines** (`source=copilot`, shipped P1-M10) + **portal no-result searches** (P2-M3) — into a single "record this next" view, beyond the current basic list. *(The legacy `source=prompt` gap came from the removed Text→Article engine; historical rows may remain but no new ones are produced.)*
 - **Multi-seat / minimal roles** — a workspace can have multiple members with **owner/editor** roles + invitations (V1 is single-user = single-workspace). Enforce role checks across Studio actions.
 - **Done when:** the gaps dashboard surfaces all signal sources with a record-this prompt, and a second user can be invited into a workspace as an editor with correctly scoped permissions.
 
@@ -107,22 +113,27 @@ The lowest-leverage items for an invite-only beta, so they close the phase.
 
 ## 4. Data-model deltas (additive, per module)
 
-All **additive migrations** on the foundation schema — nothing existing changes:
+**Reframed 2026-07-08 onto the post-sweep schema.** The `Article`/`Step` tables are **gone** (dropped 2026-07-07), so Phase 2 no longer *adds columns to them* — it adds **new** tables that hang off the workflow key `(sourceId, segmentIndex)` (the same key `CopilotApproval` uses) or off `KnowledgeItem`. All migrations stay **additive** — nothing in the current schema changes:
 
-- **P2-M3 (search):** `KnowledgeItem.embedding` (pgvector) + the **pgvector** extension (shared with the Phase-1 P1-M3 retrieval upgrade); a `SearchQuery` log (workspace, query, result-count, ts) so portal **no-result** queries become coverage signals.
-- **P2-M4 (authoring):** `Article.body` (markdown — for **manual `static`** articles; also the hook V2 narration reuses); `ArticleVersion` (lightweight history at publish); `Collection` (+ Article↔Collection); `Step` callout/warning fields + a highlight `kind` (rectangle | arrow).
-- **P2-M5 (portal):** `Workspace` theme fields (logo key, colors), `customDomain`, `visibility` (public | gated) + access secret; `ArticleFeedback` (article, helpful bool, optional note); **PII Cut 2** — a `redactions Json` on `Step`/`KnowledgeItem` (persisted blur regions) and/or redacted-image artifacts so published screenshots are scrubbed.
-- **P2-M6 (collaboration):** `Membership` (User↔Workspace + `role: owner | editor`) + `Invitation`; `CoverageGap` aggregation across sources (prompt-miss · portal-no-result · copilot-decline) for the analytics view.
+- **P2-M2 (audience + overlay — the pivot's core):**
+  - `PortalPublication` — the **portal half of per-audience approval**, keyed `@@unique([sourceId, segmentIndex])` + `workspaceId` (mirrors `CopilotApproval`, so it **survives the worker's item delete+recreate on reprocess**). Absence = not portal-visible. Optional `visibility` (public | gated) folds in here (P2-M5).
+  - `WorkflowOverlay` (or `ArticleOverlay`) — the **presentation overlay**, also keyed `(sourceId, segmentIndex)`: portal-only `titleOverride`, `intro`/`body` prose, per-step edits (instruction/detail overrides, hidden/reordered steps as a `steps Json`), callout/warning fields, highlight `kind` (rectangle | arrow), related-workflow links. Rendered on top of the read-only workflow; **never** written back to `KnowledgeItem`.
+- **P2-M3 (search):** `KnowledgeItem.embedding` + the **pgvector** extension **already exist** (shipped in P1-M3, migration `20260706200500_pgvector_hybrid_retrieval`) — **no new retrieval migration**. Phase 2 adds only a `SearchQuery` log (workspace, query, result-count, ts) so portal **no-result** queries become coverage signals.
+- **P2-M4 (authoring):** `StaticPage` (workspace, title, markdown `body`, `source=manual`, `type=static`) — a **standalone** store for prose pages not backed by a workflow (replaces the removed `Article.body`; still the modality-agnostic hook V2 narration-statics reuse); `PublishVersion` (lightweight history — a snapshot of the overlay/render at publish); `Collection` (+ a workflow/page↔Collection join). *(Callout/highlight-`kind` fields live on the overlay, above.)*
+- **P2-M5 (portal):** `Workspace` theme fields (logo key, colors), `customDomain`, gated-access secret *(the `visibility` flag itself lives on `PortalPublication`, P2-M2)*; `WorkflowFeedback` (published-workflow ref, helpful bool, optional note); **PII Cut 2** — a `redactions Json` on `KnowledgeItem` (persisted blur regions) and/or redacted-image artifacts so published screenshots are scrubbed. *(No `Step` table anymore — redactions attach to the `KnowledgeItem` step.)*
+- **P2-M6 (collaboration):** `Membership` (User↔Workspace + `role: owner | editor`) + `Invitation`; `CoverageGap` aggregation across sources (prompt-miss · portal-no-result · copilot-decline) for the analytics view. *(`CoverageGap.source` already carries `prompt | copilot`; add `portal` for no-result searches.)*
 
 ---
 
 ## 5. Risks / details to finalize
 
-- **pgvector on the deploy target (P2-M3):** confirm managed Postgres supports the `vector` extension; pick an embedding model + dimensions; tune hybrid ranking (keyword vs. semantic weight).
-- **`Article.body` shared with V2 (P2-M4):** the markdown body for **manual** statics is the same hook V2 narration-derived statics reuse — keep it modality-agnostic so V2 slots in additively.
+- **Read-only KB vs. editable portal (P2-M2·b) — the central design tension:** the copilot's source of truth must stay the workflow, but portal authors want to reshape prose/steps. Resolved in principle (§7): all edits are a **render-time overlay**, never a KB mutation — so the two audiences can't drift. The detail to finalize is how much the overlay may diverge (reorder/hide steps? full prose replace?) before it's effectively a fork.
+- **pgvector on the deploy target — ✅ settled (P1-M3, 2026-07-07):** hybrid keyword ∪ pgvector RRF shipped; `text-embedding-3-small`@1536; Render `vector` support confirmed 2026-07-06. Phase-2 search reuses it — **no retrieval risk left**; only the search UI + `SearchQuery` log remain.
+- **Manual `static` body shared with V2 (P2-M4):** the markdown `body` for **manual** statics now lives on the new **`StaticPage`** table (the old `Article.body` is gone) — keep it modality-agnostic so V2 narration-derived statics reuse the same hook.
 - **Custom domains (P2-M5):** TLS/cert provisioning + domain-verification flow; the per-workspace routing model.
 - **Multi-tenancy under multi-seat (P2-M6):** the foundation assumes single-user isolation; auditing every Studio/portal query for correct workspace + role scoping is the main correctness risk when seats are introduced.
-- **Portal app restoration (P2-M2):** rebuild the removed `packages/portal` (render path proven) on the current schema; wire it to the published-article view and the P2-M5 productization.
+- **Portal app restoration (P2-M2):** rebuild the removed `packages/portal` (render path proven) on the current schema; wire it to **render approved workflows** (via `PortalPublication` + the overlay) — **not** a published-`Article` view (that model is gone) — plus the P2-M5 productization.
+- **🔒 PII redaction Cut 2 gates publish (P2-M5):** the portal renders screenshot pixels + DOM the copilot never surfaces; nothing goes public until screenshot OCR + region-blur + DOM-scrub lands (§3 callout). Reuse `@sync/synthesis` `redactText` for the text side.
 
 > **Not in Phase 2:** the in-app **Copilot** (Phase 1), **self-validation/drift** (Phase 3), **Version 2 capture modalities** (narration-only + video), billing, and i18n (tracked, English-first beta).
 

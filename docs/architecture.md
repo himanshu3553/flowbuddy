@@ -42,7 +42,7 @@ A processing/extraction step (the worker, repurposed) reads a raw capture and wr
 - **`KnowledgeItem[]`** — the normalized, **indexed units of knowledge** (what makes the KB queryable and modality-agnostic):
   - from a **workflow** capture → *distilled step items* (clean imperative `instruction`, optional `detail`, `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, + searchable `text`). Raw events are **not** persisted as items — they're cleaned + distilled into these steps (2026-06-26); the raw event log remains only in the source `manifest`.
   - from a **narration-only** capture → *topic items* (transcript span text, time range, + searchable `text`)
-- **Index** over every item's `text` — **keyword / LLM retrieval now → pgvector embeddings later** (decided 2026-06-19).
+- **Index** over every item's `text` — **hybrid keyword ∪ pgvector** (RRF fusion), **shipped P1-M3 (2026-07-07)**; keyword-only is the fallback on any vector-path failure. *(Originally keyword-first with pgvector "later," decided 2026-06-19 — the "later" upgrade has landed.)*
 
 **The crucial property:** once knowledge is in the KB, **downstream stops caring how it was captured.** A step item and a topic item are both just retrievable knowledge. This is what lets workflow and narration content live in one substrate and be queried uniformly.
 
@@ -66,7 +66,8 @@ model KnowledgeSource {          // evolves RecSession (table kept as "RecSessio
   error        String?
   createdAt    DateTime @default(now())
   items        KnowledgeItem[]
-  articles     Article[]
+  // articles Article[] — REMOVED 2026-07-07: the Article/Step tables were dropped
+  // (workflows-as-articles; migration 20260707132717). See phase-2-portal.md §7.
 }
 
 model KnowledgeItem {            // the indexed unit of knowledge (new)
@@ -81,7 +82,8 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
   //   topic -> { spanText, startMs, endMs }
   segmentIndex Int?    // workflow this item belongs to (persisted segmentation — promoted toward C)
   segmentTitle String?
-  // embedding  vector   // FUTURE (pgvector)
+  embedding    Unsupported("vector(1536)")?  // SHIPPED P1-M3 (2026-07-07): hybrid keyword+pgvector RRF;
+                                             // text-embedding-3-small over `text`, written by the worker at KB build.
   source       KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 }
 ```
@@ -89,6 +91,8 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
 ---
 
 ## Module 3 — Article creation (derived views *from* the KB)
+
+> **⚠️ Engine removed 2026-07-07 — superseded by workflows-as-articles ([`phase-2-portal.md`](phase-2-portal.md) §7).** Module 3's *role* is unchanged (produce human-facing articles as derived views over the KB), but its **mechanism** changed: since KB step distillation the worker already emits article-shaped distilled workflows, so Phase 2 **renders approved workflows** (with a render-time presentation overlay) instead of running the parallel synthesis engine below. The `3.1 Auto` / `3.2 Prompt-to-article` engines and the `Article`/`Step` tables were **swept from the tree** (recovery: `git show c357e2e:<path>`). The description below is **historical** — read it for the *type/source* model (still valid conceptually), not as current code.
 
 Job: produce human-facing **Articles** by reading the KB. **Articles are not the KB** — they're curated outputs.
 
@@ -123,11 +127,10 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
         ├──► approved-for-copilot (per-workflow flag)
         │       └──► In-app COPILOT   ◄── PRIMARY product; grounds on APPROVED-KB (Stage A)
         │
-        ├──► authoring (builder-internal)
-        │       ├──► Module 3.1 Auto (curated)  propose titles → select → Article[]
-        │       └──► Module 3.2 Prompt           query index → Article, or decline → CoverageGap
-        │               └──► Article/Step (draft) → Studio edit → PUBLISH
-        │                       └──► Help PORTAL (public/SEO)  ◄── BY-PRODUCT (decoupled target)
+        ├──► approved-for-portal (per-workflow flag)   ◄── workflows-as-articles (2026-07-07)
+        │       └──► render approved workflow + presentation overlay
+        │               └──► Help PORTAL (public/SEO)  ◄── BY-PRODUCT (decoupled target)
+        │                    [Phase 2 — to build; the 3.1 Auto / 3.2 Prompt synthesis engines were REMOVED]
         │
         └──► Self-validation (Phase 3)  grounds on the selector-bearing KB
 ```
@@ -147,7 +150,7 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 | Layer | Today (foundation as built) | Target (this model — **V1**) |
 |---|---|---|
 | Module 1 | 1.1 workflow only | **1.1 workflow only** (narration 1.2 + video 1.3 = **Version 2**); capture carries `kind` |
-| **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + keyword retrieval (M6/M7 done)** | + pgvector embeddings (later) |
+| **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + hybrid keyword ∪ pgvector retrieval (M6/M7 + P1-M3 pgvector, 2026-07-07)** | ✅ reached (ANN/HNSW index only if a workspace ever exceeds ~tens of thousands of items) |
 | Module 3 | **3.1 curated** (M6.1) **+ 3.2 prompt-to-article** (M7), both reading the **KB** — **engine removed 2026-07-07, superseded by workflows-as-articles** (Phase 2 renders approved distilled workflows; [`phase-2-portal.md`](phase-2-portal.md) §7) | — (superseded; Phase 2 = render approved workflows) |
 
 **Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics) — the **Prisma model** was renamed; the underlying **table is kept as `RecSession`** (`@@map`) so existing data is preserved; add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
@@ -157,7 +160,7 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 ## Decisions
 
 ### Segmentation placement — Option C (B → C, finalized in M6.1, 2026-06-21)
-**Segmentation** (splitting one recording into distinct workflows) runs at **KB build** (the worker, after extracting items) and its **output is persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`). These persisted titles are the **candidates** the curated "Auto Generate Articles" picker lists.
+**Segmentation** (splitting one recording into distinct workflows) runs at **KB build** (the worker, after extracting items) and its **output is persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`). These persisted titles are the per-workflow units the **KB browser lists** and the **copilot approval gate** keys on `(sourceId, segmentIndex)`. *(They also fed the removed "Auto Generate Articles" picker — now historical; see the §Decisions note below.)*
 
 > **History:** B (segment at article creation) → promoted to C when the KB-browser UI needed grouping → **finalized as C in M6.1**, where segmentation moved **earlier**, to KB build: it must run before any article exists, because candidate titles are now proposed *before* the user chooses what to generate. (Full Option A — first-class Workflow entities — remains a future step if needed.)
 
@@ -166,15 +169,17 @@ Three options were considered. **All three remain valid future promotion paths**
 | | What the KB stores | Status |
 |---|---|---|
 | **B** | flat ordered items; segmentation at article creation | superseded by C |
-| **C** | + persisted segmentation **output** on items (`segmentIndex`/`segmentTitle`), computed at **KB build** → KB groups by workflow + drives candidate titles | ✅ **adopted (M6.1, 2026-06-21).** Further C step if needed: also store boundary *hints* for stable/inspectable re-gen |
+| **C** | + persisted segmentation **output** on items (`segmentIndex`/`segmentTitle`), computed at **KB build** → KB groups by workflow + keys the copilot approval gate | ✅ **adopted (M6.1, 2026-06-21).** Further C step if needed: also store boundary *hints* for stable/inspectable re-gen |
 | **A (future)** | first-class **Workflow** objects, as a *derived/cached retrieval layer* (not the authoritative article structure) | if the **copilot** needs whole workflows, or for cross-recording **dedupe/supersession** |
 
 The **marker hotkey** ("new workflow") is the main segmentation-quality lever, independent of B/C/A.
 
-### Index — LOCKED: keyword/LLM first → pgvector later (2026-06-21)
-Retrieval over `KnowledgeItem.text` starts as keyword/LLM; embeddings (pgvector) are a later upgrade.
+### Index — keyword/LLM first → pgvector (locked 2026-06-21; **pgvector shipped 2026-07-07**)
+Retrieval over `KnowledgeItem.text` started keyword/LLM-only; the **pgvector upgrade landed in P1-M3** as **hybrid keyword ∪ pgvector (RRF)** — `text-embedding-3-small`@1536, embedded by the worker at KB build, keyword-only fallback on any vector failure. See [`phase-1-copilot.md`](phase-1-copilot.md) §11.
 
-### Article generation — LOCKED: curated, not auto-pushed (2026-06-21)
+### Article generation — LOCKED: curated, not auto-pushed (2026-06-21) — *engine since removed (2026-07-07)*
+> **Historical.** The "Auto Generate Articles" engine below was **removed** with the workflows-as-articles pivot ([`phase-2-portal.md`](phase-2-portal.md) §7); Phase 2 renders approved workflows. The *curated, opt-in* principle (nothing auto-published; the founder chooses what goes to the portal) **survives** — it's now the **per-audience approval** gate, not a generation button.
+
 Articles are **not auto-generated** on capture. Segmentation runs at **KB build** and persists candidate **titles** (`segmentTitle`, Option C). The Studio **"Auto Generate Articles"** button then **lists** those titles (instant, **no LLM** — titles already exist) → user **selects** → the system synthesizes **only the selected** segments into draft articles. Titles are produced **once** (at KB build); the button surfaces them — it does not re-generate them. Stays on Option C (no first-class `Workflow` entity). See [`phase-2-portal.md`](phase-2-portal.md) §2.1.
 
 ### Copilot grounding — SUPERSEDED 2026-06-22 (was: "grounds on PUBLISHED articles")

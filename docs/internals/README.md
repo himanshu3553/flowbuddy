@@ -100,9 +100,18 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 - **Three keys, three audiences.** A secret **recorder token** (operator's machine → ingestion), a
   public **embed key** (customer's browser → copilot), and the **Studio login** (operator → console)
   are distinct and never interchangeable. See [connections.md](connections.md) §"Three identities".
+- **One logger across the Node services (cross-cutting, since 2026-07-08).** `api` (incl. the worker),
+  `synthesis`, and `web` server-side all log through **`@sync/logger`** (Pino — `createLogger('<service>')`,
+  env-driven level, JSON in prod / pretty in dev, secret redaction); Fastify is wired to it via
+  `loggerInstance`. Browser surfaces (widget/extension/web-client) use tiny local console loggers.
+  It's infrastructure, not a module, so it has no doc of its own — canonical reference:
+  [`../dev-setup.md`](../dev-setup.md) §7.
 
 ---
 
-*Last synced to the code: 2026-06-28. These docs describe the Phase-1 copilot build on branch
-`ui-change-copilot`. If a mechanic here disagrees with the source, the source wins — please update
-the doc.*
+*Last synced to the code: 2026-07-08 (branch `dev`). Since the initial 2026-06-28 sync these docs
+have tracked: retrieval consolidated into `synthesis/retrieval.ts` + **hybrid keyword∪pgvector (P1-M3)**,
+the **Approach-B real-widget preview** (one answer path), **live-served widget appearance**
+(`GET /v1/copilot/config`), the recorder **v0.3.0** stop→upload resilience + R12/R13, the **Phase-2
+sweep** (the `Article`/`Step` tables are gone), and **`@sync/logger`**. If a mechanic here disagrees
+with the source, the source wins — please update the doc.*

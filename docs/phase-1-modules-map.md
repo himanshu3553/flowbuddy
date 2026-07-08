@@ -81,10 +81,10 @@ flowchart TB
 |---|---|---|---|
 | **M1 · Capture** | `extension` | `content.ts`, `background.ts`, `offscreen.ts`, `controlbar.ts`, `idb.ts` | Record the session bundle (events + DOM + screenshots + audio), client-side PII mask, on-page control bar, reliable upload |
 | **Ingestion** | `api` | `server.ts`, `storage.ts`, `queue.ts` | Receive upload → store artifacts (S3/R2) → write `KnowledgeSource` → enqueue worker job |
-| **M2 · Knowledge Base** | `api` (worker) + `synthesis` | `worker.ts`; `index.ts`, `transcribe.ts`, `align.ts`, `segment.ts`, `redact.ts` | Transcribe → normalize to `KnowledgeItem`s → server PII scrub → segment into workflows → `ready` |
+| **M2 · Knowledge Base** | `api` (worker) + `synthesis` | `worker.ts`; `index.ts` (`buildWorkflowKB`), `transcribe.ts`, `align.ts`, `clean.ts`, `segment.ts`, `distill.ts`, `embeddings.ts`, `redact.ts` | Transcribe → align → **clean** events → segment into workflows → **distill** clean steps → server PII scrub → embed → `ready` |
 | **The KB store** | `db` | `schema.prisma` | One cumulative KB per workspace; `KnowledgeSource` + `KnowledgeItem` + index |
 | **Approval gate (P1-M5)** | `api` + `web` | `CopilotApproval`; Studio toggle | Per-workflow "approve for copilot" → defines **approved-KB** (the trust gate) |
-| **M3 · Retrieval & grounding (P1-M3/M6)** | `synthesis` | `copilot.ts` → `answerFromKB()` | Retrieve approved-KB → grounded answer + citations, or honest decline → `CoverageGap` |
+| **M3 · Retrieval & grounding (P1-M3/M6)** | `synthesis` | `retrieval.ts` (the single no-leak seam — hybrid keyword∪pgvector RRF) + `embeddings.ts` → `copilot.ts` `answerFromKB()` | Retrieve approved-KB → grounded answer + citations, or honest decline → `CoverageGap` |
 | **Copilot API (P1-M6/M8/M9)** | `api` | `copilot.ts`, `copilot-auth.ts` | `/v1/copilot/answer` + `/feedback`; embed key auth, origin allowlist, rate limit, route-bias |
 | **Widget (P1-M7/M10)** | `widget` | `index.ts`, `styles.ts` | One `<script>` shadow-DOM chat; renders answers/citations; 👍/👎 feedback |
 | **Studio (P1-M10 + console)** | `web` | `app/dashboard/*` | Builder UI: KB browser, approve toggle, embed snippet, activity + coverage gaps |

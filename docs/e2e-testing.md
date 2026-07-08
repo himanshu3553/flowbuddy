@@ -523,7 +523,7 @@ Studio → **Analytics**.
 | `AggregateError [ECONNREFUSED] … :9000` in sync-api | `R2_ENDPOINT` unset → defaults to local MinIO | Confirm the `sync-r2` group is set; redeploy `sync-api` |
 | Widget launcher doesn't appear | Page served via `file://`, or origin blocked (403) | Serve over HTTP; add the origin or empty the allowlist |
 | `[worker] failed …: 401 … API key` | `OPENAI_API_KEY` unset on `sync-api` | Set it; **re-record** (failed jobs don't auto-retry) |
-| `500` on Copilot page "Test live" | `OPENAI_API_KEY` unset on **`sync-web`** | Set it on `sync-web` and redeploy |
+| Copilot page real-widget tester errors / returns nothing | Since Approach B it answers via **`sync-api`** (`/v1/copilot/answer`), not the web process: `OPENAI_API_KEY` unset **or** a `403` from `SYNC_STUDIO_URL` unset | Set `OPENAI_API_KEY` + `SYNC_STUDIO_URL` on **`sync-api`**; `sync-web` needs **no** OpenAI key |
 
 More rows + the URL-suffix gotcha: [`deploy-render.md` → Troubleshooting](deploy-render.md#troubleshooting-real-errors-we-hit).
 
