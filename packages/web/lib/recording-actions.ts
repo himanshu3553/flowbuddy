@@ -2,9 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@sync/db';
+import { createLogger } from '@sync/logger';
 import { getCurrentWorkspace } from '@/lib/session';
 import { deleteSessionPrefix } from '@/lib/storage';
 import { enqueueSynthesis } from '@/lib/queue';
+
+const log = createLogger('web:recordings');
 
 /** Confirm a recording exists in the caller's workspace; throws otherwise. Returns its id. */
 async function ownRecording(id: string): Promise<{ workspaceId: string }> {
@@ -57,6 +60,6 @@ export async function reprocessRecording(id: string): Promise<void> {
   } catch (err) {
     // Redis/worker may be down in local dev — the recording is marked Processing; the job is
     // picked up once the worker is running. Don't fail the whole action over this.
-    console.error('[reprocess] failed to enqueue synthesis job', err);
+    log.error({ recordingId: id, err: err instanceof Error ? err.message : String(err) }, 'failed to enqueue synthesis job');
   }
 }

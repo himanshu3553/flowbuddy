@@ -2,6 +2,7 @@
 // buffers everything in IndexedDB, and uploads the assembled bundle on stop.
 
 import { kvClear, kvEntriesByPrefix, kvGet, kvPut } from './idb.js';
+import { log } from './log.js';
 import type { CapturedEvent, PortMsg } from './types.js';
 
 interface UploadResult {
@@ -40,7 +41,7 @@ async function armTab(tabId: number, arm: object): Promise<void> {
       await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
       await chrome.tabs.sendMessage(tabId, arm);
     } catch (e) {
-      console.warn('[arm] could not arm tab', tabId, e);
+      log.warn('[arm] could not arm tab', tabId, e);
     }
   }
 }
@@ -225,7 +226,7 @@ chrome.runtime.onConnect.addListener((port) => {
   const tabId = port.sender?.tab?.id; // for the R12 bbox-vs-scroll re-check (top frame only)
   const frameId = port.sender?.frameId;
   port.onMessage.addListener((msg: PortMsg) => {
-    handlePortMsg(msg, windowId, tabId, frameId).catch((e) => console.error('port msg error', e));
+    handlePortMsg(msg, windowId, tabId, frameId).catch((e) => log.error('port msg error', e));
   });
 });
 
@@ -234,13 +235,13 @@ chrome.runtime.onConnect.addListener((port) => {
 // (Backup to the content script's own `hello` self-arm; the `if (recording) return` guard dedupes.)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
-  rearmIfRecording(tabId).catch((e) => console.warn('[rearm]', e));
+  rearmIfRecording(tabId).catch((e) => log.warn('[rearm]', e));
 });
 
 // R9 (Option A) — follow tabs opened FROM a recording tab (Sign-in-in-a-new-tab, OAuth popups).
 // Adopt into the session's tab set; the new tab self-arms via its `hello` once its page loads.
 chrome.tabs.onCreated.addListener((tab) => {
-  adoptTabIfChild(tab).catch((e) => console.warn('[adopt]', e));
+  adoptTabIfChild(tab).catch((e) => log.warn('[adopt]', e));
 });
 chrome.tabs.onRemoved.addListener((tabId) => {
   pruneTab(tabId).catch(() => {});
@@ -255,7 +256,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== FINALIZE_ALARM) return;
   void (async () => {
     const rec = await getRec();
-    if (rec.stopping) await finalize().catch((e) => console.error('[alarm finalize]', e));
+    if (rec.stopping) await finalize().catch((e) => log.error('[alarm finalize]', e));
   })();
 });
 
@@ -279,7 +280,7 @@ async function recoverInterruptedUpload(): Promise<void> {
     // worker's POST actually reached the server but the response was lost, this re-uploads — a
     // duplicate recording is the honest failure mode vs. silently losing one.
     if (phaseName === 'uploading' && (rec.stopping || rec.backendUrl)) {
-      console.log('[recover] resuming an upload interrupted by worker eviction');
+      log.info('[recover] resuming an upload interrupted by worker eviction');
       await finalize();
       return;
     }
@@ -294,7 +295,7 @@ async function recoverInterruptedUpload(): Promise<void> {
     if (phaseName === 'recording' || phaseName === 'saving' || phaseName === 'uploading') {
       const events = await kvEntriesByPrefix<CapturedEvent>('event:');
       if (events.length === 0) return;
-      console.log('[recover] surfacing an interrupted recording for retry');
+      log.info('[recover] surfacing an interrupted recording for retry');
       await chrome.storage.local.set({
         lastUpload: {
           ok: false,
@@ -307,7 +308,7 @@ async function recoverInterruptedUpload(): Promise<void> {
       await setBadge('fail');
     }
   } catch (e) {
-    console.warn('[recover]', e);
+    log.warn('[recover]', e);
   }
 }
 
@@ -473,15 +474,15 @@ function captureShot(windowId?: number): Promise<string | null> {
         windowId != null
           ? await chrome.tabs.captureVisibleTab(windowId, opts)
           : await chrome.tabs.captureVisibleTab(opts);
-      if (!shot) console.warn('[capture] captureVisibleTab returned empty', chrome.runtime.lastError);
+      if (!shot) log.warn('[capture] captureVisibleTab returned empty', chrome.runtime.lastError);
       return shot || null;
     } catch (e) {
-      console.warn('[capture] captureVisibleTab failed:', (e as Error)?.message || e);
+      log.warn('[capture] captureVisibleTab failed:', (e as Error)?.message || e);
       // Retry once against the current window (no explicit windowId).
       try {
         return await chrome.tabs.captureVisibleTab(opts);
       } catch (e2) {
-        console.warn('[capture] retry failed:', (e2 as Error)?.message || e2);
+        log.warn('[capture] retry failed:', (e2 as Error)?.message || e2);
         return null;
       }
     }
@@ -552,7 +553,7 @@ async function onStop(): Promise<void> {
   // The setTimeout is the fast path while this worker instance lives; the alarm is its
   // eviction-proof twin (fires ≥30s, survives SW restarts) so a stop can never be stranded.
   clearFinalizeFallback();
-  finalizeFallback = setTimeout(() => { finalize().catch((e) => console.error(e)); }, 30000);
+  finalizeFallback = setTimeout(() => { finalize().catch((e) => log.error(e)); }, 30000);
   chrome.alarms.create(FINALIZE_ALARM, { delayInMinutes: 0.5 });
 }
 
@@ -708,7 +709,7 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   };
 
   const shotEntries = await kvEntriesByPrefix<string>('shot:');
-  console.log(`[capture] summary: events=${events.length}, screenshots=${shotEntries.length}, audio=${audio?.dataUrl ? 'yes' : 'no'}`);
+  log.info(`[capture] summary: events=${events.length}, screenshots=${shotEntries.length}, audio=${audio?.dataUrl ? 'yes' : 'no'}`);
 
   // Each file's relative PATH rides on the field NAME (multipart strips directories from
   // filenames), matching what the API expects. `manifest` is a plain text field (no filename).

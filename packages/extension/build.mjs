@@ -7,6 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outdir = path.join(__dirname, 'dist');
 const watch = process.argv.includes('--watch');
 
+// Dev builds keep verbose logging (log.debug/info); a prod build (NODE_ENV=production — the Web Store
+// artifact) compiles it out. `__DEV__` is inlined here and dead-code-eliminated by the minifier.
+const dev = watch || process.env.NODE_ENV !== 'production';
+
 const entryPoints = {
   background: 'src/background.ts',
   content: 'src/content.ts',
@@ -62,7 +66,9 @@ const common = {
   format: 'esm',
   target: 'chrome120',
   logLevel: 'info',
-  define: { __STUDIO_URL__: JSON.stringify(STUDIO_URL) },
+  // Minify only prod builds so __DEV__ dead branches are actually stripped (dev stays readable).
+  minify: !dev,
+  define: { __STUDIO_URL__: JSON.stringify(STUDIO_URL), __DEV__: JSON.stringify(dev) },
 };
 
 await rm(outdir, { recursive: true, force: true });

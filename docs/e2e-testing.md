@@ -120,10 +120,26 @@ pnpm --filter @sync/web dev
 ```
 
 ✅ **PASS:**
-- API terminal: `Sync api on :8787` (and the MinIO bucket is ensured on boot).
-- Worker terminal: `[worker] listening on queue "synthesis"`.
+- API terminal: an `INFO … Sync api listening` line with `port: 8787` (and the MinIO bucket is ensured on boot).
+- Worker terminal: an `INFO … listening on queue` line with `service: worker`, `queue: synthesis`.
 - `curl -s http://localhost:8787/healthz` → `{"ok":true}`.
 - http://localhost:3000 loads and redirects to `/signin`.
+
+> **Log format locally:** the Node services log at `debug` level, **pretty-printed** in an interactive terminal (each line = a colorized `LEVEL … msg` with its fields indented below). To quieten or change it, see the [Logging](#logging-local) note below / [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown).
+
+---
+
+## Logging (local)
+
+The Node services (`api`, `worker`, Studio server) share one structured logger (`@sync/logger`, Pino). **Locally the default is verbose + readable** — level `debug`, pretty-printed — so you can watch capture → synthesis progress in Parts 3–12. Change it with env vars on the process you're running:
+
+```bash
+LOG_LEVEL=warn   pnpm --filter @sync/api worker   # only warnings + errors
+LOG_LEVEL=silent pnpm --filter @sync/api dev       # mute a service
+LOG_PRETTY=0     pnpm --filter @sync/api dev        # emit prod-style JSON locally
+```
+
+The **widget** logs nothing by default (it runs on customer sites) — add `data-sync-debug="true"` to its `<script>` to see its console diagnostics. The **Studio browser console** level is `NEXT_PUBLIC_LOG_LEVEL` (build-time; `debug` in dev). Full model + prod control: [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown).
 
 ---
 
@@ -166,18 +182,18 @@ This is the core capture → knowledge path **and** the workflow-segmentation qu
 5. Extension popup → **Stop & upload** (the popup shows the **uploading** state, then the toolbar badge ↑→✓). The bundle (events + screenshots + audio + manifest) uploads to `POST /v1/sessions`.
 
 ### 6b. Worker processing
-Watch the **worker terminal**:
+Watch the **worker terminal** — the worker logs (pretty-printed locally, `service: worker`) progress through these messages:
 ```
-[worker] processing session <id>
-[worker] embedded M item(s) for hybrid retrieval
-[worker] ready <id>: 1 workflow(s), M distilled step(s) from transcript(N seg)
+processing session                  (fields: sessionId, jobId)
+embedded items for hybrid retrieval (fields: sessionId, count = M)
+ready                               (fields: sessionId, workflows = 1, steps = M, segments = N)
 ```
-*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `M` is the **distilled step** count, not the raw event count. The `embedded` line is P1-M3 hybrid retrieval — if it's missing and a "Semantic search is unavailable" notice appears on the recording instead, embedding failed and answers fall back to keyword matching until re-processed.)*
+*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `steps` is the **distilled step** count, not the raw event count. The `embedded …` line is P1-M3 hybrid retrieval — if it's missing and a "Semantic search is unavailable" notice appears on the recording instead, embedding failed and answers fall back to keyword matching until re-processed.)*
 
 ✅ **PASS criteria:**
 - Upload returns a `sessionId` (extension shows success; no 401).
 - Worker reaches `status → ready`.
-- **The recording produces exactly ONE workflow** (`1 workflow(s)`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
+- **The recording produces exactly ONE workflow** (the `ready` log shows `workflows: 1`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
 
 ❌ **FAIL:** ≥2 workflows, or any workflow titled by a phase. **If it still over-splits,** the lever is the segmenter prompt + inputs in [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts): strengthen the "default to ONE workflow" framing, confirm the full transcript reaches it as `overallNarration` (needs captured audio narration), and check no markers were placed unintentionally.
 
@@ -297,6 +313,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 | Security | API | origin allowlist + rate limit enforced |
 | Redaction | Synthesis | PII scrubbed from KB text/narration/transcript |
 | Idempotency | Worker | reprocess doesn't duplicate; approval survives |
+| Observability | all services | structured logs at the env-default level (debug local / info prod); secrets redacted; `LOG_LEVEL` tunes it |
 
 ---
 
@@ -401,15 +418,17 @@ your laptop — `ipAllowList: []` blocks external access.
 
 ## D4. Confirm the services are healthy
 
-Open the **sync-api** URL once to wake it (free tier cold-starts ~1 min after idle). The logs should show:
+Open the **sync-api** URL once to wake it (free tier cold-starts ~1 min after idle). Prod logs are **JSON at `info`+** (see [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production)); the boot should show:
 
 ```
 All migrations have been successfully applied.
-Sync api on :8787
-[worker] listening on queue "synthesis"
+{"level":"info","service":"api","port":8787,"env":"production","msg":"Sync api listening"}
+{"level":"info","service":"worker","queue":"synthesis","msg":"listening on queue"}
 ```
 
 ✅ **PASS:** all three lines present; no `ECONNREFUSED` (R2) or `MissingSecret` (auth) errors.
+
+> **Need more detail while testing on Render?** Bump `LOG_LEVEL` to `debug` on the service (dashboard → **Environment**; no code redeploy — the service restarts), then set it back to `info`. See [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production).
 
 ---
 
@@ -454,7 +473,7 @@ Notes when switching targets:
 ### D5.3 Record a workflow
 Record a **narrated** workflow → it uploads to the prod API → the embedded worker synthesizes it.
 
-✅ **PASS:** `sync-api` log shows `[worker] ready <id>: N workflow(s), M distilled step(s)…`; the
+✅ **PASS:** `sync-api` log shows a `ready` line — `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`; the
 recording appears under Studio → **Recordings**.
 
 ### D5.4 Approve it
@@ -526,4 +545,4 @@ There is currently no production environment; the Render deploy above is the fre
 
 ---
 
-*Last updated 2026-07-04 — merged `render-reset-and-test.md` into this guide as **Level 2** and added the **Level 3** prod placeholder. (Level 1 content last revised 2026-06-27: worker now cleans + distills events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md).)*
+*Last updated 2026-07-08 — added structured logging (`@sync/logger`, Pino): refreshed the worker/API log-line PASS signals to the new structured format and added **Logging (local)** + prod (Render) notes with the enable/disable knobs (`LOG_LEVEL` · `LOG_PRETTY` · `NEXT_PUBLIC_LOG_LEVEL` · widget `data-sync-debug`); canonical reference is [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown). (2026-07-04 — merged `render-reset-and-test.md` in as **Level 2** + **Level 3** prod placeholder. Level 1 content revised 2026-06-27: worker cleans + distills events into per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md).)*

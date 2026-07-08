@@ -1,5 +1,8 @@
+import { createLogger } from '@sync/logger';
 import type { CopilotKBItem, CopilotTurn } from './copilot';
 import { embedTexts, toVectorLiteral, type EmbedOpts } from './embeddings';
+
+const log = createLogger('retrieval');
 
 /**
  * P1-M5/M6 — THE single retrieval + grounding-enforcement seam for the copilot.
@@ -185,7 +188,7 @@ async function embedQuestion(question: string, embedding: EmbedOpts): Promise<nu
     });
     return qv ?? null;
   } catch (e) {
-    console.warn('[retrieval] question embed failed — keyword-only:', e instanceof Error ? e.message : e);
+    log.warn({ err: e instanceof Error ? e.message : String(e) }, 'question embed failed — keyword-only');
     return null;
   }
 }
@@ -212,7 +215,7 @@ async function vectorTopK(
       LIMIT ${VECTOR_CANDIDATES}`;
     return rows.map((r) => r.id);
   } catch (e) {
-    console.warn('[retrieval] vector search unavailable — keyword-only:', e instanceof Error ? e.message : e);
+    log.warn({ err: e instanceof Error ? e.message : String(e) }, 'vector search unavailable — keyword-only');
     return null;
   }
 }

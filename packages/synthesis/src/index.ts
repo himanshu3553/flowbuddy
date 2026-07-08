@@ -6,7 +6,10 @@ import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
+import { createLogger } from '@sync/logger';
 import type { ArtifactReader } from './types';
+
+const log = createLogger('synthesis');
 
 export type { ArtifactReader } from './types';
 export type { Transcript } from './transcribe';
@@ -71,7 +74,7 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
     warning = `Narration could not be transcribed (${msg}) — steps were built from the captured actions without voice-over context.`;
-    console.warn(`[transcribe] degraded to transcript-less build: ${msg}`);
+    log.warn({ component: 'transcribe', err: msg }, 'degraded to transcript-less build');
   }
   const narration = alignNarration(input.manifest.events, transcript);
 
@@ -90,9 +93,15 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
   );
   // Observability: what the segmenter decided (counts must add up — the guard re-adds any omitted event).
   const assigned = segments.reduce((n, s) => n + s.eventIds.length, 0);
-  console.log(
-    `[segment] ${cleaned.length} cleaned events → ${segments.length} workflow(s) ` +
-      `[${assigned} assigned]: ${segments.map((s) => `"${s.title}"(${s.eventIds.length})`).join(', ')}`,
+  log.info(
+    {
+      component: 'segment',
+      cleanedEvents: cleaned.length,
+      workflows: segments.length,
+      assigned,
+      titles: segments.map((s) => ({ title: s.title, events: s.eventIds.length })),
+    },
+    'segmented cleaned events into workflows',
   );
 
   // 4. Distill each workflow into clean, user-facing steps (A).
@@ -106,15 +115,22 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     const steps = await distillSteps(openai, input.synthModel, seg.title, segEvents, narration, transcript.text);
     if (steps.length === 0) {
       // distillSteps has a 0-step fallback, so this is unexpected — surface it rather than silently drop.
-      console.warn(`[distill] "${seg.title}": ${segEvents.length} events distilled to 0 steps — skipping`);
+      log.warn(
+        { component: 'distill', title: seg.title, events: segEvents.length },
+        'workflow distilled to 0 steps — skipping',
+      );
       continue;
     }
-    console.log(`[distill] workflow "${seg.title}": ${segEvents.length} events → ${steps.length} steps`);
+    log.info(
+      { component: 'distill', title: seg.title, events: segEvents.length, steps: steps.length },
+      'distilled workflow',
+    );
     // Drop-guard: a workflow shedding most of its events usually means a mis-scoped segment
     // (the distiller pruned a whole off-title sub-task). Surface it rather than let it pass silently.
     if (segEvents.length >= 10 && steps.length < segEvents.length * 0.3) {
-      console.warn(
-        `[distill] ⚠️ "${seg.title}" kept only ${steps.length}/${segEvents.length} events as steps — possible mis-scoped segment (a sub-task may have been dropped)`,
+      log.warn(
+        { component: 'distill', title: seg.title, kept: steps.length, events: segEvents.length },
+        'workflow kept few events as steps — possible mis-scoped segment (a sub-task may have been dropped)',
       );
     }
     // Contiguous segmentIndex (0..n) — the approval key; skip-on-empty keeps it dense.

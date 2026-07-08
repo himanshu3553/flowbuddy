@@ -3,19 +3,22 @@ import { SYNTHESIS_QUEUE } from '@sync/shared';
 import type { SessionManifest } from '@sync/shared';
 import { prisma } from '@sync/db';
 import { buildWorkflowKB, distilledStepText, embedTexts, toVectorLiteral } from '@sync/synthesis';
+import { createLogger } from '@sync/logger';
 import { config } from './config';
 import { connection } from './queue';
 import { sessionArtifactReader } from './storage';
+
+const log = createLogger('worker');
 
 const worker = new Worker(
   SYNTHESIS_QUEUE,
   async (job) => {
     const sessionId = job.data.sessionId as string;
-    console.log(`[worker] processing session ${sessionId}`);
+    log.info({ sessionId, jobId: job.id }, 'processing session');
 
     const rec = await prisma.knowledgeSource.findUnique({ where: { id: sessionId } });
     if (!rec) {
-      console.warn(`[worker] source ${sessionId} not found — skipping`);
+      log.warn({ sessionId }, 'source not found — skipping');
       return;
     }
     await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'processing' } });
@@ -80,11 +83,11 @@ const worker = new Worker(
             if (!vector) continue; // unreachable (embedTexts enforces 1:1 + dims) — never write a wrong row
             await prisma.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
           }
-          console.log(`[worker] embedded ${created.length} item(s) for hybrid retrieval`);
+          log.info({ sessionId, count: created.length }, 'embedded items for hybrid retrieval');
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           embedWarning = `Semantic search is unavailable for this recording (embedding failed: ${msg}) — answers use keyword matching until it is re-processed.`;
-          console.warn(`[worker] embedding failed for ${sessionId} (items stay keyword-only): ${msg}`);
+          log.warn({ sessionId, err: msg }, 'embedding failed — items stay keyword-only');
         }
       }
 
@@ -96,9 +99,15 @@ const worker = new Worker(
         where: { id: sessionId },
         data: { status: 'ready', error: notice },
       });
-      console.log(
-        `[worker] ready ${sessionId}: ${workflows.length} workflow(s), ${rows.length} distilled step(s) ` +
-          `from transcript(${transcript.segments.length} seg)${warning ? ` — WARNING: ${warning}` : ''}`,
+      log.info(
+        {
+          sessionId,
+          workflows: workflows.length,
+          steps: rows.length,
+          segments: transcript.segments.length,
+          ...(warning ? { warning } : {}),
+        },
+        'ready',
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -109,15 +118,18 @@ const worker = new Worker(
       if (!willRetry) {
         await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'error', error: msg } });
       }
-      console.error(`[worker] ${willRetry ? 'attempt failed (will retry)' : 'failed'} ${sessionId}: ${msg}`);
+      log.error(
+        { sessionId, jobId: job.id, willRetry, err: msg },
+        willRetry ? 'attempt failed (will retry)' : 'failed',
+      );
       throw e;
     }
   },
   { connection, concurrency: 2 },
 );
 
-worker.on('ready', () => console.log(`[worker] listening on queue "${SYNTHESIS_QUEUE}"`));
-worker.on('failed', (job, err) => console.error(`[worker] job ${job?.id} failed:`, err?.message));
+worker.on('ready', () => log.info({ queue: SYNTHESIS_QUEUE }, 'listening on queue'));
+worker.on('failed', (job, err) => log.error({ jobId: job?.id, err: err?.message }, 'job failed'));
 // An emitted 'error' with no listener throws and can take the process down — on the free tier the
 // worker shares a process with the public API (all.ts), so a Redis hiccup must never crash it.
 // Throttled like the queue handlers (one line / 30s).
@@ -126,7 +138,7 @@ worker.on('error', (err) => {
   const now = Date.now();
   if (now - lastWorkerErrLog < 30_000) return;
   lastWorkerErrLog = now;
-  console.error('[worker] Redis connection error (jobs resume when it recovers):', err?.message || err);
+  log.error({ err: err?.message || String(err) }, 'Redis connection error (jobs resume when it recovers)');
 });
 
 // Graceful shutdown (§3.4): worker.close() waits for the in-flight job (BullMQ default), so a
@@ -136,7 +148,7 @@ worker.on('error', (err) => {
 // in the combined all.ts process (both are `once` listeners; neither exits in the happy path).
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
-    console.log(`[worker] ${signal} received — closing (waiting for any in-flight job)`);
+    log.info({ signal }, 'signal received — closing (waiting for any in-flight job)');
     setTimeout(() => process.exit(0), 25_000).unref();
     void worker
       .close()

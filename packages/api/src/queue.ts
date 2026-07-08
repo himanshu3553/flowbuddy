@@ -1,6 +1,9 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
 import { SYNTHESIS_QUEUE } from '@sync/shared';
+import { createLogger } from '@sync/logger';
 import { config } from './config';
+
+const log = createLogger('synthesis-queue');
 
 // Pass connection OPTIONS (not an ioredis instance) so BullMQ owns the connection
 // and applies the settings it needs (e.g. maxRetriesPerRequest: null for workers).
@@ -35,5 +38,8 @@ synthesisQueue.on('error', (err) => {
   const now = Date.now();
   if (now - lastQueueErrLog < 30_000) return;
   lastQueueErrLog = now;
-  console.error('[synthesis-queue] Redis connection error (uploads keep failing-soft until it recovers):', err?.message || err);
+  log.error(
+    { err: err?.message || String(err) },
+    'Redis connection error (uploads keep failing-soft until it recovers)',
+  );
 });

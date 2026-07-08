@@ -1,5 +1,8 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
 import type { SynthesisJob } from '@sync/shared';
+import { createLogger } from '@sync/logger';
+
+const log = createLogger('web:queue');
 
 // Must match SYNTHESIS_QUEUE in @sync/shared (jobs.ts). Inlined rather than value-imported because
 // Next's server-action bundler can't resolve shared's raw-TS `.js`-extension entry for a value.
@@ -35,9 +38,9 @@ function onQueueError(err: unknown): void {
   const now = Date.now();
   if (now - lastErrLog < 30_000) return;
   lastErrLog = now;
-  console.error(
-    '[synthesis-queue] Redis connection error (re-process disabled until it recovers):',
-    (err as Error)?.message || err,
+  log.error(
+    { err: (err as Error)?.message || String(err) },
+    'Redis connection error (re-process disabled until it recovers)',
   );
 }
 

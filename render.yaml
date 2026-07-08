@@ -56,6 +56,9 @@ services:
     envVars:
       - fromGroup: sync-r2
       - { key: PORT, value: 8787 }
+      # Structured JSON logs at info+ (NODE_ENV=production is set in the Dockerfile). Lower to `debug`
+      # to trace a request path, or raise to `warn` to quieten — no redeploy of code needed.
+      - { key: LOG_LEVEL, value: info }
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       - { key: REDIS_URL, fromService: { name: sync-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
@@ -77,6 +80,9 @@ services:
     dockerContext: .
     envVars:
       - fromGroup: sync-r2
+      # Server-side Studio logs: JSON at info+. (Client/browser level is baked at build via
+      # NEXT_PUBLIC_LOG_LEVEL — defaults to warn in prod so end-user consoles stay clean.)
+      - { key: LOG_LEVEL, value: info }
       - { key: DATABASE_URL, fromDatabase: { name: sync-db, property: connectionString } }
       # Studio enqueues re-process jobs straight onto the worker's queue, so it needs the SAME Redis
       # as sync-api. Without this the BullMQ producer falls back to localhost and spams ECONNREFUSED.

@@ -1,6 +1,8 @@
 // Offscreen document: records microphone narration (service workers can't use
 // getUserMedia directly). Replies to the background with the audio as a data URL.
 
+import { log } from './log.js';
+
 let recorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let startedAt = 0;
@@ -49,7 +51,7 @@ async function startAudio(): Promise<void> {
     pausedTotal = 0;
     startLevelMeter(stream);
   } catch (e) {
-    console.error('mic capture failed', e);
+    log.error('mic capture failed', e);
     // Tell the background to proceed without audio.
     chrome.runtime.sendMessage({ type: 'audioData', dataUrl: null, durationMs: 0 });
   }

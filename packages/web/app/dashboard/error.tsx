@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { clientLog } from '@/lib/log.client';
 
 export default function DashboardError({
   error,
@@ -13,7 +14,7 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    clientLog.error('dashboard route error', { message: error.message, digest: error.digest });
   }, [error]);
 
   return (

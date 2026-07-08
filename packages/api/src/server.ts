@@ -3,6 +3,7 @@ import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@sync/db';
 import { sessionManifestSchema } from '@sync/shared';
+import { createLogger } from '@sync/logger';
 import { config } from './config';
 import { authWorkspace } from './auth';
 import { ensureBucket, putObjectStream, deleteSessionPrefix, sessionKey } from './storage';
@@ -12,7 +13,10 @@ import { synthesisQueue } from './queue';
 import { answerFromKB, retrieveApprovedKBItems, sanitizeHistory } from '@sync/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen } from './copilot-auth';
 
-const app = Fastify({ logger: true });
+// Use the shared structured logger so HTTP request logs share the app's level, JSON/pretty shape,
+// and secret redaction. `app.log` / `req.log` are children of it (Fastify adds the reqId + req/res
+// serializers), so the request lifecycle logs Fastify emits stay consistent with everything else.
+const app = Fastify({ loggerInstance: createLogger('api') });
 
 // CORS so the extension (chrome-extension://...) can upload.
 app.addHook('onRequest', async (req, reply) => {
@@ -135,10 +139,13 @@ async function copilotGate(
   const origin = req.headers.origin as string | undefined;
   const auth = await resolveCopilotKey(key, origin);
   if (!auth.ok) {
+    // Expected traffic (misconfigured embed, scraper, or wrong key) — debug, not an error.
+    req.log.debug({ route, origin, status: auth.status, reason: auth.error }, 'copilot request rejected');
     void reply.code(auth.status).send({ error: auth.error });
     return null;
   }
   if (!checkRateLimit(route === 'answer' ? key : `${route}:${key}`)) {
+    req.log.warn({ route, workspaceId: auth.workspaceId, origin }, 'copilot rate limit exceeded');
     void reply.code(429).send({ error: 'rate limit exceeded — slow down' });
     return null;
   }
@@ -320,9 +327,14 @@ await ensureBucket();
 
 app
   .listen({ port: config.port, host: process.env.HOST || '0.0.0.0' })
-  .then(() => app.log.info(`Sync api on :${config.port}`))
+  .then(() =>
+    app.log.info(
+      { port: config.port, env: process.env.NODE_ENV || 'development' },
+      'Sync api listening',
+    ),
+  )
   .catch((err) => {
-    app.log.error(err);
+    app.log.error({ err }, 'api failed to start');
     process.exit(1);
   });
 

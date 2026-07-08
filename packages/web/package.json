@@ -18,6 +18,7 @@
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-switch": "^1.1.2",
     "@sync/db": "workspace:*",
+    "@sync/logger": "workspace:*",
     "@sync/shared": "workspace:*",
     "@sync/synthesis": "workspace:*",
     "bcryptjs": "^2.4.3",

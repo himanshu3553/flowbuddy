@@ -1,5 +1,8 @@
 import OpenAI from 'openai';
 import type { CapturedEvent, Marker } from '@sync/shared';
+import { createLogger } from '@sync/logger';
+
+const log = createLogger('segment');
 
 export interface Segment { title: string; eventIds: string[]; }
 
@@ -147,11 +150,12 @@ export async function segment(
   }));
 
   // Observability: the model's decision + any low-confidence boundary the editor should review.
-  console.log(
-    `[segment] ${raw.length} workflow(s): ${raw.map((r) => `"${r.title}"(${r.eventIds.length},${r.confidence})`).join(', ')}`,
+  log.info(
+    { workflows: raw.map((r) => ({ title: r.title, events: r.eventIds.length, confidence: r.confidence })) },
+    `segmented into ${raw.length} workflow(s)`,
   );
   for (const r of raw) {
-    if (r.confidence === 'low') console.warn(`[segment] low-confidence boundary: "${r.title}" — ${r.evidence}`);
+    if (r.confidence === 'low') log.warn({ title: r.title, evidence: r.evidence }, 'low-confidence boundary');
   }
 
   // Map each event → its workflow (first assignment wins).
@@ -165,7 +169,10 @@ export async function segment(
   if (raw.length > 0) {
     const omitted = allIds.filter((id) => !assignment.has(id)).length;
     if (omitted > 0) {
-      console.warn(`[segment] model omitted ${omitted}/${allIds.length} events — carry-forward assigning so none are lost`);
+      log.warn(
+        { omitted, total: allIds.length },
+        'model omitted events — carry-forward assigning so none are lost',
+      );
     }
     let current = assignment.get(events.find((e) => assignment.has(e.id))?.id ?? '') ?? 0;
     for (const e of events) {

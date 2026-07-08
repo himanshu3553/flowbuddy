@@ -10,7 +10,10 @@ import {
 import { Upload } from '@aws-sdk/lib-storage';
 import { Transform, type Readable } from 'node:stream';
 import type { ArtifactReader } from '@sync/synthesis';
+import { createLogger } from '@sync/logger';
 import { config } from './config';
+
+const log = createLogger('storage');
 
 // S3-compatible client — points at local MinIO in dev, Cloudflare R2 in prod.
 export const s3 = new S3Client({
@@ -23,8 +26,10 @@ export const s3 = new S3Client({
 export async function ensureBucket(): Promise<void> {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: config.r2.bucket }));
+    log.debug({ bucket: config.r2.bucket }, 'object-storage bucket present');
   } catch {
     await s3.send(new CreateBucketCommand({ Bucket: config.r2.bucket }));
+    log.info({ bucket: config.r2.bucket }, 'created object-storage bucket');
   }
 }
 

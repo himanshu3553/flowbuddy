@@ -101,7 +101,8 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `RESEND_API_KEY` | `sync-web` | Resend key — **enables** email verification + password reset (§3.6). ⚠️ Before first enable, backfill: `UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;` — pre-existing accounts can't sign in otherwise. Optional `EMAIL_FROM` needs a Resend-verified domain (default `onboarding@resend.dev` only delivers to the account owner). |
 
 Auto-wired by the blueprint (do **not** set): `DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`,
-`TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`.
+`TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`, `LOG_LEVEL` (`info` — tunable live, see
+[Logging in production](#logging-in-production)).
 
 > **All three of `OPENAI_API_KEY`, `AUTH_SECRET`, and the R2 group are mandatory for a working stack** —
 > and each one fails at a *different* moment (see the [troubleshooting table](#troubleshooting-real-errors-we-hit)).
@@ -127,11 +128,11 @@ public URL, so:
 ## 9. First deploy — what happens
 
 - Each Docker image builds (full `pnpm install` per image — a few minutes).
-- `sync-api` start command runs `prisma migrate deploy` (creates all tables) **then** boots Fastify + the embedded worker. Success in the `sync-api` logs:
+- `sync-api` start command runs `prisma migrate deploy` (creates all tables) **then** boots Fastify + the embedded worker. Logs are **structured JSON at `info`+** in prod (see [Logging in production](#logging-in-production)). Success in the `sync-api` logs:
   ```
   All migrations have been successfully applied.
-  Sync api on :8787
-  [worker] listening on queue "synthesis"
+  {"level":"info","service":"api","port":8787,"env":"production","msg":"Sync api listening"}
+  {"level":"info","service":"worker","queue":"synthesis","msg":"listening on queue"}
   ```
 - A `503` on the first hit to `sync-web` / `sync-api` is a **free-tier cold start** (~1 min), **not** a crash.
 
@@ -178,7 +179,7 @@ to the list; keep the old one during the transition).
 ## 12. End-to-end test
 
 1. **Record** a narrated workflow → it uploads to the prod API → the embedded worker synthesizes it.
-   Success log: `[worker] ready <id>: N workflow(s), M distilled step(s)…`.
+   Success log (JSON): `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`.
 2. In Studio → **Knowledge Base** → **approve** the workflow (the copilot only answers from approved content).
 3. **Test the widget:** Studio → **Copilot** → copy the embed `<script>` (pre-filled with your prod API
    URL, widget URL, and public key). Set the **origin allowlist** (or leave empty = allow any). Drop the
@@ -191,6 +192,29 @@ to the list; keep the old one during the transition).
    The indigo launcher appears → ask a question about the approved workflow → expect a **grounded answer
    with citations**; ask something off-topic → expect an **honest decline** (logged as a coverage gap).
    The **first** question may take ~1 min (API cold start).
+
+---
+
+## Logging in production
+
+The Node services log **structured JSON at `info`+** in prod (`NODE_ENV=production` is set in the
+Dockerfiles; each line carries its `service` and secrets are redacted). The [`render.yaml`](../render.yaml)
+blueprint sets `LOG_LEVEL: info` explicitly on **`sync-api`** and **`sync-web`** so the level is visible
+and tunable in the dashboard.
+
+**Change the level without a code redeploy** — Render → the service → **Environment** → edit `LOG_LEVEL`
+→ save. Render restarts the service with the new value:
+
+| Set `LOG_LEVEL` to | To… |
+|---|---|
+| `debug` | trace a request/synthesis path in prod (verbose — **set back to `info`** after) |
+| `warn` | quieten a chatty service to warnings + errors only |
+| `silent` | mute a service entirely |
+
+`LOG_PRETTY=1` would switch a service to human-readable lines (rarely wanted in prod — JSON is what log
+search ingests). The **Studio browser console** level is separate and **build-time** (`NEXT_PUBLIC_LOG_LEVEL`,
+default `warn` in prod) — changing it means a rebuild, not just an env edit. Full model + local usage:
+[`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown).
 
 ---
 

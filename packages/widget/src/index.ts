@@ -26,6 +26,7 @@
 // The default theme is the Sync indigo brand (matches Sync Studio); an accent (from Studio or the attr) overrides it with the host's own brand color (text on it is white).
 
 import { CSS } from './styles.js';
+import { log, setDebug } from './log.js';
 
 interface Citation { segmentTitle: string | null }
 interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean; queryId?: string; feedback?: 'up' | 'down' }
@@ -53,7 +54,14 @@ const cfg = {
   launcher: explicit.launcher || 'icon',
   launcherText: explicit.launcherText || 'Ask me anything',
   preview: (script?.dataset.syncPreview || g.preview || '') === '1',
+  // Opt-in diagnostics (off by default — the widget must never spam a customer's console).
+  debug: /^(1|true|yes)$/i.test(script?.dataset.syncDebug || '') ||
+    (window as unknown as { SyncCopilotDebug?: boolean }).SyncCopilotDebug === true,
 };
+
+// Enable console diagnostics before anything else runs, so early boot steps are visible when asked for.
+setDebug(cfg.debug);
+log.debug('booting', { apiBase: cfg.apiBase, preview: cfg.preview });
 
 const messages: Msg[] = [];
 let open = cfg.preview; // preview (Studio tester) starts open; real embeds start at the launcher
@@ -229,10 +237,11 @@ async function ask(question: string): Promise<void> {
     const data = (await res.json().catch(() => ({}))) as {
       covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
     };
-    if (!res.ok) messages.push({ role: 'assistant', content: data.error || `Request failed (${res.status})`, error: true });
+    if (!res.ok) { log.warn('answer request failed', res.status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${res.status})`, error: true }); }
     else if (data.covered) messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
     else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true, queryId: data.queryId });
-  } catch {
+  } catch (e) {
+    log.error('could not reach the assistant', e);
     messages.push({ role: 'assistant', content: 'Could not reach the assistant. Please try again.', error: true });
   } finally {
     loading = false;
@@ -298,9 +307,10 @@ async function fetchServerConfig(): Promise<ServerConfig | null> {
       headers: { 'X-Sync-Key': cfg.key },
       signal: ctl.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) { log.debug('appearance config fetch non-ok', res.status); return null; }
     return (await res.json()) as ServerConfig;
-  } catch {
+  } catch (e) {
+    log.debug('appearance config fetch failed — using attrs/defaults', e);
     return null; // best-effort: attrs/defaults still render a working widget
   } finally {
     clearTimeout(timer);

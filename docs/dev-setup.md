@@ -19,6 +19,7 @@ sync/
   packages/
     shared/     # types + zod schemas shared by everyone
     db/         # Prisma schema + client
+    logger/     # the ONE structured logger (Pino) for every Node service — see §7
     synthesis/  # transcribe → clean → segment → distill steps + the copilot answer engine (OpenAI)
     api/        # Fastify ingestion + copilot routes + the BullMQ worker (worker entrypoint)
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
@@ -135,3 +136,69 @@ docker compose down                           # stop Postgres + Redis (add -v to
 *(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
 
 (Deploy maps these to Render services + Cloudflare R2 — see [`phase-1-copilot.md`](phase-1-copilot.md) §5 P1-M4.)
+
+---
+
+## 7. Logging (dev vs prod, and how to turn it up/down)
+
+**This is the canonical reference for logging** — the model, the levels, and every env knob. It's the same code everywhere; only the environment changes the default level and output shape.
+
+### The two logger worlds
+
+| Surface | Logger | Why |
+|---|---|---|
+| **Node services** — `api` (server + worker), `synthesis`, `web` **server-side** | **`@sync/logger`** (Pino). `import { createLogger } from '@sync/logger'` → `const log = createLogger('worker')` | Structured JSON for prod aggregation; secret redaction; one shared config. Fastify is wired to it via `loggerInstance`, so HTTP request logs match everything else. |
+| **Browser** — `widget`, `extension`, `web` **client components** | tiny local `console` wrappers (`widget/src/log.ts`, `extension/src/log.ts`, `web/lib/log.client.ts`) | Pino is Node-only — it must never reach a client bundle. |
+
+> **Rule:** runtime code (services + client bundles) logs through a logger; **build/tooling scripts (`*.mjs`) keep plain `console`** — they're one-shot terminal output, not a running service.
+
+### Levels & environment defaults (Node services)
+
+Standard Pino levels: `trace < debug < info < warn < error < fatal` (+ `silent` to mute). A logger emits everything **at or above** its threshold.
+
+| `NODE_ENV` | Default level | Default output |
+|---|---|---|
+| `development` (unset) | **`debug`** | **pretty**, colorized (in an interactive TTY) |
+| `production` | **`info`** | **JSON**, one line per log |
+
+Every line is tagged with its `service` (`api` / `worker` / `synthesis` / `retrieval` / `web:*`), and **secrets are redacted** (`authorization`, `token`, `apiKey`, `password`, `secretAccessKey`, … → `[redacted]`) so they can't leak into logs.
+
+### The env knobs
+
+| Var | Applies to | Effect |
+|---|---|---|
+| `LOG_LEVEL` | all Node services | Force the threshold: `trace`·`debug`·`info`·`warn`·`error`·`fatal`·`silent`. Overrides the `NODE_ENV` default. |
+| `LOG_PRETTY` | all Node services | Force the shape regardless of env: `1` = pretty, `0` = JSON. (Default: pretty in a dev TTY, JSON otherwise.) |
+| `NEXT_PUBLIC_LOG_LEVEL` | Studio **client** bundle | **Build-time** browser log level (inlined by Next). Default: `warn` in prod, `debug` in dev. |
+
+All are documented in the root [`.env.example`](../.env.example).
+
+### Turn logging up/down — **non-prod (local)**
+
+Default local dev already gives you `debug` + pretty. To change it, set the var in the service's `.env` (or inline for one run):
+
+```bash
+# quieten the worker to warnings+ for one run
+LOG_LEVEL=warn pnpm --filter @sync/api worker
+# silence a service entirely
+LOG_LEVEL=silent pnpm --filter @sync/api dev
+# force JSON locally (e.g. to eyeball exactly what prod emits)
+LOG_PRETTY=0 pnpm --filter @sync/api dev
+```
+
+### Turn logging up/down — **prod servers**
+
+Prod defaults to `info` + JSON (`NODE_ENV=production` is set in the Dockerfiles). `LOG_LEVEL=info` is also set explicitly on the Render services in [`render.yaml`](../render.yaml). To change it live, edit the env var in the Render dashboard — **no code redeploy needed** (Render restarts the service on an env change):
+
+```bash
+LOG_LEVEL=debug   # trace a request path in prod (verbose — set back to info after)
+LOG_LEVEL=warn    # quieten a noisy service to warnings + errors only
+```
+
+Full prod steps: [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production).
+
+### Browser surfaces (special cases)
+
+- **Studio client components** — level is baked at build via `NEXT_PUBLIC_LOG_LEVEL` (default `warn` in prod so end-user consoles stay clean).
+- **Widget** — runs on **customers' sites**, so it logs **nothing by default**. Opt in per embed with `data-sync-debug="true"` on the `<script>` tag, or `window.SyncCopilotDebug = true` before it loads.
+- **Extension (recorder)** — `debug`/`info` are **compiled out of production builds** (`NODE_ENV=production pnpm --filter @sync/extension build` — the Web Store artifact); `warn`/`error` always print. A plain `pnpm build` / `pnpm watch` keeps verbose logging for local dev.

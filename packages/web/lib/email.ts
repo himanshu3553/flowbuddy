@@ -11,6 +11,10 @@
  * before real users need these emails.
  */
 
+import { createLogger } from '@sync/logger';
+
+const log = createLogger('web:email');
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Sync <onboarding@resend.dev>';
 
@@ -26,7 +30,9 @@ export async function sendEmail(input: {
   text: string;
 }): Promise<boolean> {
   if (!RESEND_API_KEY) {
-    console.log(`[email] RESEND_API_KEY not set — NOT sent. To: ${input.to} · "${input.subject}"\n${input.text}`);
+    // Dev default (no key): email delivery is disabled — log the action link so auth flows stay
+    // walkable. The full body carries the token, so keep this at debug (verbose, dev-only) level.
+    log.debug({ to: input.to, subject: input.subject, body: input.text }, 'RESEND_API_KEY not set — email NOT sent');
     return true;
   }
   try {
@@ -36,12 +42,13 @@ export async function sendEmail(input: {
       body: JSON.stringify({ from: EMAIL_FROM, to: [input.to], subject: input.subject, html: input.html, text: input.text }),
     });
     if (!res.ok) {
-      console.error(`[email] Resend ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      log.error({ status: res.status, body: (await res.text()).slice(0, 300) }, 'Resend send failed');
       return false;
     }
+    log.info({ to: input.to, subject: input.subject }, 'email sent');
     return true;
   } catch (err) {
-    console.error('[email] send failed:', err instanceof Error ? err.message : err);
+    log.error({ err: err instanceof Error ? err.message : String(err) }, 'email send failed');
     return false;
   }
 }
