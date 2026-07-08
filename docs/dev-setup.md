@@ -25,10 +25,10 @@ sync/
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
     widget/     # embeddable copilot <script> (esbuild → sync-copilot.js) — Phase 1 · Sync-indigo default, host-rebrandable
     extension/  # Chrome MV3 recorder — indigo UI
-  docs/       # product · architecture · roadmap · phase-1-copilot · phase-1-modules-map · phase-2-portal · kb-step-distillation · design_system/ · e2e-testing · this file
+  docs/       # product · architecture · roadmap · phase-1-copilot · phase-1-modules-map · phase-4-autopilot · v2-portal · kb-step-distillation · design_system/ · e2e-testing · this file
 ```
 
-> **Note:** the `portal/` package (Phase-2 public help site) and the throwaway `spike/` were **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22). The portal **returns in Phase 2**.
+> **Note:** the `portal/` package (the public help site) and the throwaway `spike/` were **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22). The portal is **built in Version 2** ([`v2-portal.md`](v2-portal.md)).
 
 Why a monorepo: the extension, api, web, and widget must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
 
@@ -133,7 +133,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 | `extension` | Chrome MV3 recorder | `pnpm --filter @sync/extension build` → load `dist/` |
 | `shared`, `db` | shared types + Prisma | built as dependencies of the above |
 
-*(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
+*(`portal` — the V2 public help site — is built in Version 2; it's not in the current workspace.)*
 
 (Deploy maps these to Render services + Cloudflare R2 — see [`phase-1-copilot.md`](phase-1-copilot.md) §5 P1-M4.)
 
