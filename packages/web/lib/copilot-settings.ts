@@ -5,6 +5,9 @@ export interface CopilotSettings {
   publicKey: string;
   allowedOrigins: string[];
   showCitations: boolean;
+  // P2 Sense — the per-workspace master toggle + the "show me" highlight config (P2-M3).
+  senseEnabled: boolean;
+  showMe: boolean;
   // Appearance — '' means "use the widget default" (see lib/copilot-appearance.ts).
   accent: string;
   title: string;
@@ -20,6 +23,8 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     copilotPublicKey: true,
     copilotAllowedOrigins: true,
     copilotShowCitations: true,
+    senseEnabled: true,
+    copilotShowMe: true,
     copilotAccent: true,
     copilotTitle: true,
     copilotGreeting: true,
@@ -39,6 +44,8 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     publicKey: ws.copilotPublicKey ?? '',
     allowedOrigins: ws.copilotAllowedOrigins,
     showCitations: ws.copilotShowCitations,
+    senseEnabled: ws.senseEnabled,
+    showMe: ws.copilotShowMe,
     accent: ws.copilotAccent ?? '',
     title: ws.copilotTitle ?? '',
     greeting: ws.copilotGreeting ?? '',

@@ -75,6 +75,12 @@ export interface RetrievalDb {
 export interface ShortlistOpts {
   /** P1-M8 — the host-app route the end-user is on; boosts items captured on that screen. */
   contextPath?: string | null;
+  /**
+   * P2 Sense — the localized workflows' keys (`sourceId:segmentIndex`). Items in a hypothesis
+   * workflow get a soft boost — step-level context, sharper than the page-level route signal, and
+   * like it a BIAS, never a filter (an unrelated question still out-ranks it).
+   */
+  senseKeys?: string[];
   limit?: number;
 }
 
@@ -94,6 +100,10 @@ const VECTOR_CANDIDATES = 50; // pgvector top-K pulled per question (from APPROV
 // route match outranks any single keyword/vector #1 and ties exactly a double-#1 — mirroring the
 // fallback path's dominant +3 without letting one signal drown a strong keyword+vector consensus.
 const ROUTE_RRF_WEIGHT = 2;
+// P2 Sense — "answer for this STEP" carries the same weight as the route signal (an item in the
+// localized workflow usually also route-matches, so together they dominate exactly when the user
+// is asking about where they stand — and stay out-rankable by the question everywhere else).
+const SENSE_RRF_WEIGHT = 2;
 // Query-path embed budget: fail FAST — a missed vector pass costs one keyword-only answer, while a
 // hanging embeddings API must never stall the user-facing answer (SDK default is 600s!).
 const QUERY_EMBED_TIMEOUT_MS = 2000;
@@ -165,10 +175,14 @@ export function shortlistItems(
 ): CopilotKBItem[] {
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
+  const senseKeys = new Set(opts.senseKeys ?? []);
   const terms = questionTerms(question);
   const scored = items.map((i) => ({
     i,
-    score: termOverlap(i.text, terms) + (routeMatches(i, contextPath) ? 3 : 0),
+    score:
+      termOverlap(i.text, terms) +
+      (routeMatches(i, contextPath) ? 3 : 0) +
+      (senseKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 3 : 0),
   }));
   return topK(scored, limit);
 }
@@ -265,6 +279,7 @@ export async function retrieveApprovedKBItems(
   //     tail in KB order (the shortlist still always returns up to `limit`).
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
+  const senseKeySet = new Set(opts.senseKeys ?? []);
   const terms = questionTerms(question);
 
   const kwScored = approved.map((i) => ({ i, score: termOverlap(i.text, terms) }));
@@ -286,6 +301,7 @@ export async function retrieveApprovedKBItems(
     const vr = vecRank.get(i.id);
     if (vr) score += 1 / (RRF_K + vr);
     if (routeMatches(i, contextPath)) score += ROUTE_RRF_WEIGHT / (RRF_K + 1);
+    if (senseKeySet.has(`${i.sourceId}:${i.segmentIndex}`)) score += SENSE_RRF_WEIGHT / (RRF_K + 1);
     return { i, score };
   });
   return topK(fused, limit);

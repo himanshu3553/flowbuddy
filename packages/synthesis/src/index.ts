@@ -16,6 +16,7 @@ export type { Transcript } from './transcribe';
 export type { Segment } from './segment';
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
+export type { SenseContext, SenseHypothesisContext, AnswerPosition } from './copilot'; // P2 Sense
 // P1-M5/M6 — the SINGLE retrieval + approved-KB enforcement seam (api answer route + Studio
 // preview both call it; the P1-M3 hybrid keyword+vector upgrade lives here). See retrieval.ts.
 export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retrieval';

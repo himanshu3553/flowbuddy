@@ -113,6 +113,69 @@ export async function getWorkflowCopilotStats(
   };
 }
 
+export interface StepFriction {
+  sourceId: string;
+  segmentIndex: number;
+  step: number; // 1-based
+  title: string;
+  instruction: string | null;
+  count: number;
+}
+
+/**
+ * P2-M4 — WHERE users get stuck: questions whose answer USED a Sense localization, grouped by
+ * (workflow, step). Only `senseUsed = 'used'` counts — a localization the answer ignored (the
+ * user asked about something unrelated while standing there) is NOT step friction. The step's
+ * title/instruction resolve from the live KB (orderIndex is 0-based within the workflow).
+ */
+export async function getStepFriction(
+  workspaceId: string,
+  days: number,
+  take = 6,
+): Promise<StepFriction[]> {
+  const rows = await prisma.copilotQuery.groupBy({
+    by: ['senseSourceId', 'senseSegmentIndex', 'senseStep'],
+    where: {
+      workspaceId,
+      senseUsed: 'used',
+      senseSourceId: { not: null },
+      senseStep: { not: null },
+      createdAt: { gte: windowStart(days) },
+    },
+    _count: { _all: true },
+  });
+  const top = rows
+    .filter((r) => r.senseSourceId && r.senseSegmentIndex != null && r.senseStep != null)
+    .sort((a, b) => b._count._all - a._count._all)
+    .slice(0, take);
+  if (top.length === 0) return [];
+
+  const items = await prisma.knowledgeItem.findMany({
+    where: {
+      workspaceId,
+      OR: top.map((r) => ({
+        sourceId: r.senseSourceId!,
+        segmentIndex: r.senseSegmentIndex!,
+        orderIndex: r.senseStep! - 1,
+      })),
+    },
+    select: { sourceId: true, segmentIndex: true, orderIndex: true, segmentTitle: true, data: true },
+  });
+  const byKey = new Map(items.map((i) => [`${i.sourceId}:${i.segmentIndex}:${i.orderIndex}`, i]));
+
+  return top.map((r) => {
+    const item = byKey.get(`${r.senseSourceId}:${r.senseSegmentIndex}:${r.senseStep! - 1}`);
+    return {
+      sourceId: r.senseSourceId!,
+      segmentIndex: r.senseSegmentIndex!,
+      step: r.senseStep!,
+      title: item?.segmentTitle || 'Untitled workflow',
+      instruction: ((item?.data ?? {}) as { instruction?: string }).instruction ?? null,
+      count: r._count._all,
+    };
+  });
+}
+
 export interface GapWithCount {
   id: string;
   prompt: string;

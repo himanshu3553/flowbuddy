@@ -26,6 +26,8 @@ export default async function CopilotSettingsPage() {
     publicKey,
     allowedOrigins,
     showCitations,
+    senseEnabled,
+    showMe,
     accent,
     title,
     greeting,
@@ -78,6 +80,8 @@ export default async function CopilotSettingsPage() {
           allowedOrigins={allowedOrigins}
           primaryOrigin={primaryOrigin}
           showCitations={showCitations}
+          senseEnabled={senseEnabled}
+          showMe={showMe}
           activity={{
             total: metrics.total,
             window: metrics.window,

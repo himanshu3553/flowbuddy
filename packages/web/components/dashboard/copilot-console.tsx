@@ -24,6 +24,8 @@ export function CopilotConsole({
   allowedOrigins,
   primaryOrigin,
   showCitations,
+  senseEnabled,
+  showMe,
   activity,
   detection,
   appearance: initialAppearance,
@@ -35,6 +37,8 @@ export function CopilotConsole({
   allowedOrigins: string[];
   primaryOrigin: string;
   showCitations: boolean;
+  senseEnabled: boolean;
+  showMe: boolean;
   activity: {
     total: number;
     window: number;
@@ -60,6 +64,8 @@ export function CopilotConsole({
         primaryOrigin={primaryOrigin}
         widgetIsPlaceholder={widgetIsPlaceholder}
         showCitations={showCitations}
+        senseEnabled={senseEnabled}
+        showMe={showMe}
         activity={activity}
         detection={detection}
         appearance={appearance}

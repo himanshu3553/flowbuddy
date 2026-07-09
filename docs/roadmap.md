@@ -15,7 +15,7 @@
 VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 │
 ├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨   12 done · 1 in progress
-├─ PHASE 2 · Sense — in-context help            ⬜⬜⬜⬜⬜                   0 done · 5 to build (next up · design locked)
+├─ PHASE 2 · Sense — in-context help            🟩🟩🟩🟩🟩                   5 done · user-verified E2E
 ├─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
 └─ PHASE 4 · Autopilot — agentic execution      ⬜                          to be planned (after Phase 3)
 
@@ -50,7 +50,7 @@ VERSION 2 — Portal & articles · modalities · depth  ⬜×13                 
 | Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
 |---|:---:|:---:|:---:|:---:|
 | **Phase 1 — Copilot** | 13 | **12** | 1 | 0 |
-| **Phase 2 — Sense (in-context help)** | 5 | 0 | 0 | 5 |
+| **Phase 2 — Sense (in-context help)** | 5 | **5** | 0 | 0 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
 | **Phase 4 — Autopilot** | 4 | 0 | 0 | 4 |
 | **Version 2 — Portal & articles · modalities · depth** | 13 | 0 | 0 | 13 |
@@ -95,15 +95,15 @@ A throwaway, lightweight spike answered one question before building any product
 
 ## 3. Phase 2 — Sense (in-context help)
 
-**Goal:** the copilot knows **where the user is** — not just the page (P1-M8's route bias) but **which approved workflow and which step** — and answers **positionally**. An end-user stuck on step 3 of a 5-step KB workflow opens the copilot and asks; the widget runs an ask-time **read-only probe** of approved workflows' captured locators against the live page, scores the **top-k hypotheses**, and ships them on the existing `/answer` call — the answer LLM makes the final call *with the question in hand* (**hybrid** localization, locked) and answers: **unstick step 3, then the path to done** (step-level citation; genuine tie → "are you doing X or Y?"; re-probe every follow-up). **Read-only sensing, never surveillance** — no acting (that's Phase 4), no end-user recording, only booleans + one masked error snippet leave the page. Context **biases, never overrides** — unrelated questions answer exactly as today. **Design decisions LOCKED 2026-07-08** — detail: [`phase-2-sense.md`](phase-2-sense.md).
+**Goal:** the copilot knows **where the user is** — not just the page (P1-M8's route bias) but **which approved workflow and which step** — and answers **positionally**. An end-user stuck on step 3 of a 5-step KB workflow opens the copilot and asks; the widget runs an ask-time **read-only probe** of approved workflows' captured locators against the live page, scores the **top-k hypotheses**, and ships them on the existing `/answer` call — the answer LLM makes the final call *with the question in hand* (**hybrid** localization, locked) and answers: **unstick step 3, then the path to done** (step-level citation; genuine tie → "are you doing X or Y?"; re-probe every follow-up). **Read-only sensing, never surveillance** — no acting (that's Phase 4), no end-user recording, only booleans + one masked error snippet leave the page. Context **biases, never overrides** — unrelated questions answer exactly as today. **Design locked + built 2026-07-08; USER-VERIFIED E2E 2026-07-09** (three E2E hardening fixes landed during verification) — detail + as-built: [`phase-2-sense.md`](phase-2-sense.md).
 
 | Module | What it is | Status | Legacy |
 |:---|:---|:---|:---|
-| **P2-M0** | **Sense plan — compile + serve** (approved workflows → steps × ranked locators + routes + outcome markers; key-authed endpoint, cached; gated by the per-workspace Sense toggle) | 📝 **Draft** | — (new) |
-| **P2-M1** | **Widget probe + scorer** (ask-time read-only probe → evidence booleans + masked error snippet → deterministic top-k hypotheses; re-probe per follow-up) | 📝 **Draft** | — (new) |
-| **P2-M2** | **Positional answering** (`/answer` takes hypotheses; three-tier relevance — ignore / positional / deictic-primary; unstick-then-path; step-level citations; tie → ask) | 📝 **Draft** | — (new) |
-| **P2-M3** | **"Show me" highlight** — config-gated single-step element highlight on the host page (on → show, off → text-only) | 📝 **Draft** | — (new) |
-| **P2-M4** | **Step-level friction analytics** (must-have) — localization outcomes logged (`used\|ignored\|none`) → Studio per-step friction view + passive drift signals | 📝 **Draft** | — (new) |
+| **P2-M0** | **Sense plan — compile + serve** (approved workflows → steps × ranked locators + routes + outcome markers; key-authed endpoint, cached; gated by the per-workspace Sense toggle) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
+| **P2-M1** | **Widget probe + scorer** (ask-time read-only probe → evidence booleans + masked error snippet → deterministic top-k hypotheses; re-probe per follow-up) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
+| **P2-M2** | **Positional answering** (`/answer` takes hypotheses; three-tier relevance — ignore / positional / deictic-primary; unstick-then-path; step-level citations; tie → ask) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
+| **P2-M3** | **"Show me" highlight** — config-gated single-step element highlight on the host page (on → show, off → text-only) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
+| **P2-M4** | **Step-level friction analytics** (must-have) — localization outcomes logged (`used\|ignored\|none`) → Studio per-step friction view + passive drift signals | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
 
 **Depends on:** Phase 1 only — R13 ranked locators + routes + `expected_outcome` (already in the capture), the answer engine, and the P1-M8 context seam. **No Phase-3 gate needed:** probing is read-only, so a mislocalization = a slightly-off answer (recoverable) — nothing acts on the page. **Feeds:** **Phase 4 Autopilot** (mid-workflow entry — "finish from step 3" — consumes step localization; P4-M0's guided walkthrough builds on P2-M3; the sense plan is the base of P4's `ExecutionPlan`), **Phase 3** (locators that stop resolving on real users' pages = passive production drift signals), and founder analytics (per-step friction: "users get stuck on step 3 of X — re-record it or fix the UX").
 

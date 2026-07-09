@@ -90,6 +90,28 @@ export async function setCopilotShowCitations(showCitations: boolean): Promise<v
   revalidatePath('/dashboard/copilot');
 }
 
+/** P2 Sense — the per-workspace master toggle (gates the sense-plan endpoint; off = no probing). */
+export async function setSenseEnabled(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { senseEnabled: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
+/** P2-M3 "show me" — highlight the current step's element on the host page alongside positional answers. */
+export async function setCopilotShowMe(showMe: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { copilotShowMe: showMe },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
 /** Rotate the public embeddable key (invalidates the old one immediately). */
 export async function regenerateCopilotKey(): Promise<void> {
   const ctx = await getCurrentWorkspace();

@@ -27,6 +27,10 @@ export interface DistilledStep {
   narration: string | null; // spoken "why" for this step (derived from its source events)
   screenshotFile: string | null; // resolved from keyEventId + frame rule C
   bbox?: Bbox; // keyEvent's element rect — powers the deferred highlight
+  // P2 Sense — the manifest event this step's screen came from, so the sense plan (and later the
+  // Phase-3/4 execution plan) can recover the event's ranked locators WITHOUT re-matching by
+  // screenshot. Additive: pre-Sense rows lack it and fall back to screenshotFile matching.
+  keyEventId?: string;
 }
 
 const SYSTEM = `You convert ONE recorded product workflow into a short, clean, user-facing list of steps for an in-app help copilot.
@@ -110,6 +114,7 @@ function resolveStep(
     narration: stepNarration(sourceIds, narration),
     screenshotFile: resolveScreenshot(keyEvent, false),
     bbox: keyEvent.target?.bbox,
+    keyEventId: keyEvent.id,
   };
 }
 
@@ -122,6 +127,7 @@ function fallbackStep(ev: CapturedEvent, narration: Map<string, string>): Distil
     narration: n ? redactText(n) : null,
     screenshotFile: resolveScreenshot(ev, false),
     bbox: ev.target?.bbox,
+    keyEventId: ev.id,
   };
 }
 

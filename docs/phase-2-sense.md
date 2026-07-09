@@ -2,7 +2,7 @@
 
 > **Phase 2 makes the copilot know *where the user is*.** Today (Phase 1) the copilot biases answers by page route (P1-M8). Sense sharpens that to **workflow + step**: an end-user stuck on step 3 of a 5-step approved workflow opens the copilot and asks — Sense captures the context **at that moment** (route + a **read-only probe** of approved workflows' captured locators against the live page), localizes them to *workflow W, step k*, and the answer **meets them there**: unstick step 3 first, then the path to done. Internal name **Sense**; descriptive name **in-context help**. Roadmap/status: [`roadmap.md`](roadmap.md) §3.
 
-- **Status:** 📝 **Draft — design decisions LOCKED 2026-07-08 (§5); next up after Phase 1.** Module cut below; build order at kickoff.
+- **Status:** ✅ **BUILT 2026-07-08 · USER-VERIFIED E2E 2026-07-09** (verified on a real external test app: positional answers, re-anchoring on follow-ups, show-me highlight, friction logging). Design locked 2026-07-08 (§5); as-built + E2E hardening in §8.
 - **Last updated:** 2026-07-08 · **Branch:** `dev`
 - **Companion docs:** roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 (the substrate) → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 4 (consumes Sense's localization) → [`phase-4-autopilot.md`](phase-4-autopilot.md) · why copilot-first → [`product.md`](product.md) §5
 - **The trust story in one line — sensing, never surveillance.** Sense is an **instantaneous, read-only probe at ask time**: no end-user recording, no continuous monitoring, no screenshots, no DOM snapshots, no input values — only locator-hit **booleans** and a **masked** error snippet ever leave the page. The probe tests **only approved workflows'** locators (no-leak applied to sensing), and context **biases answers, never overrides the question** (the P1-M8 principle carried up).
@@ -171,6 +171,34 @@ POST /v1/copilot/answer  + context { route, hypotheses[] }               (server
 - **`Workspace.senseEnabled`** (default TBD at build) — the per-workspace Studio toggle; gates the plan endpoint. **`Workspace.copilotShowMe`** — the show-me config flag, served via `GET /v1/copilot/config`.
 - **Sense plan storage** — compiled at approval/reprocess, keyed by the workflow key `(sourceId, segmentIndex)` (a JSON column on `CopilotApproval` or a sibling table; decide at build — and design it as the shared base of Phase 4's `ExecutionPlan`).
 - **`CopilotQuery` localization fields** — `senseSourceId`/`senseSegmentIndex`, `senseStep`, `senseConfidence`, `senseUsed` (`used | ignored | none`) — powers the P2-M4 friction view. No other persistence; no end-user identity.
+
+---
+
+---
+
+## 8. As-built (2026-07-08; user-verified E2E 2026-07-09)
+
+**E2E hardening — three fixes found during user verification (2026-07-08/09):**
+1. **UUID hyphens** — the `/answer` wire validation rejected hypothesis `sourceId`s containing hyphens (`KnowledgeSource` ids are `randomUUID()`, not cuids) → every hypothesis was silently dropped server-side. Diagnostic tell: `CopilotQuery.senseUsed='none'` while the widget probed fine.
+2. **Show-me key mismatch** — the highlight looked up the probed element by the step number the *LLM echoed* (often the step it recommends *next*); `position.step` is now always the **probe's** step (also the honest value for friction analytics), plus a prefix-fallback element lookup and `data-sync-debug` narration of the show-me path. *(Also: the show-me/Sense config reaches an embed only on page load — flipping a Studio toggle needs a host-page reload.)*
+3. **Conversational position drift** — on "then?" follow-ups the model advanced through steps while the page never changed (it read "at step k" as "done with step k"). Hypotheses now carry the current step's **instruction resolved server-side from the KB** ("CURRENT step — NOT yet completed — is step 2: 'Enter your full name'"), and the prompt rules state the position is **re-measured from the live page every message and beats the conversation**: never advance from chat flow alone; same-step follow-up → re-anchor gently; refer to steps by instruction, not number.
+
+⚠️ Ops note: `tsx watch` does **not** hot-reload workspace-package (`@sync/synthesis`) changes — restart the api after engine edits.
+
+**Where everything lives:**
+
+| Piece | File(s) |
+|:---|:---|
+| Schema (`Workspace.senseEnabled` default **ON** · `copilotShowMe` default **OFF** · `CopilotQuery.sense*` fields) | `db/prisma/schema.prisma`, migration `20260708121649_sense_in_context_help` (applied locally; Render on next deploy) |
+| **P2-M0** plan compile + route-sharded serve | `api/src/sense-plan.ts` (on-demand compile, 60s per-workspace cache, shard cap top-8, ≤6 locators/step) + `GET /v1/copilot/sense-plan` in `api/src/server.ts` (own rate bucket, toggle-gated) |
+| Step → event locator recovery | NEW `DistilledStep.keyEventId` (`synthesis/src/distill.ts`) for fresh builds; **existing recordings resolve via `screenshotFile` matching against the manifest — no reprocess needed** |
+| **P2-M1** probe + scorer + masking + shard cache | `widget/src/sense.ts` (read-only locator walk incl. xpath + tag-scoped text; visible/enabled/filled booleans; `role=alert`/`aria-invalid` error capture → client-masked ≤200 chars; scorer weights 0.45 exact-route / 0.3 prefix / 0.35 current-step / 0.2 done-frac; `MIN_SCORE 0.2`, `TIE_DELTA 0.15`; shard cached 5 min per route, fetched on **panel open**) |
+| **P2-M2** positional answering | `synthesis/src/copilot.ts` (three-tier POSITION CONTEXT prompt rules, `<page-error>` treat-as-data, `usedPosition`/`positionKey`/`positionStep` in the strict schema, echo re-validated against provided hypotheses) + `synthesis/src/retrieval.ts` (`senseKeys` soft boost: RRF weight 2 hybrid / +3 fallback) + `api/src/server.ts` (`resolveSenseContext`: type-clamped wire validation, **approval-checked keys, titles from the approval snapshot**, error de-angled) |
+| **P2-M3** show-me | `widget/src/sense.ts` `spotlight()` (scrollIntoView + fixed pulse outline, 6s, reposition on scroll/resize) + `.sc-spotlight` in `widget/src/styles.ts`; gated by `showMe` served on `/v1/copilot/config`; cleared on next ask / panel close |
+| **P2-M4** friction | `senseLogFields` on every `CopilotQuery` (`used \| ignored \| none`) + `web/lib/analytics.ts` `getStepFriction` + the **"Where users get stuck"** card on `/dashboard/analytics` |
+| Studio toggles | Copilot → Settings → **"Sense — in-context help"** section (`copilot-workspace.tsx`): Enable Sense + "Show me" highlight (disabled while Sense is off), success/error toasts (citation toggle retrofitted with toasts too); actions in `web/lib/copilot-settings-actions.ts` |
+
+**Build-time decisions (within the locked design):** Sense defaults ON (read-only, harmless), show-me defaults OFF (draws on the host page); the plan compiles **on demand** with a 60s server cache instead of persisting at approval time (no invalidation machinery; approval flips visible ≤60s + widget shard TTL); an **empty shard sends no sense context at all** (no workflows near the route ≠ drift — `senseUsed='none'` is reserved for "candidates existed, nothing matched"); preview mode (`data-sync-preview`) skips Sense entirely. **Still open for later cuts:** friction-frequency in the hub-page shard ranking (needs accumulated P2-M4 data), SPA settle-check before probing, `postRoute` progression evidence in the scorer.
 
 ---
 

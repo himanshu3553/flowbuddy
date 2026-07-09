@@ -89,6 +89,12 @@ model Workspace {
   // detected" status (vs. inferring it from query traffic). Null = never seen the snippet load.
   widgetLastSeenAt      DateTime?
   widgetLastSeenOrigin  String?
+  // P2 Sense (in-context help) — the per-workspace master toggle. Gates the sense-plan endpoint:
+  // off = the widget never probes and the copilot answers exactly as before (route bias only).
+  senseEnabled          Boolean  @default(true)
+  // P2-M3 "show me" — when on, the widget also HIGHLIGHTS the current step's element on the host
+  // page alongside a positional answer (off = text-only). Served to the widget via /v1/copilot/config.
+  copilotShowMe         Boolean  @default(false)
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]
@@ -197,6 +203,16 @@ model CopilotQuery {
   answered    Boolean // true = covered/answered, false = declined
   feedback    String? // up | down | null (thumbs from the widget)
   contextPath String? // P1-M8: host-app path the end-user was on when they asked (e.g. "/settings")
+  // P2 Sense — the localization outcome attached to this question (P2-M4 step-friction analytics).
+  // A row where the probe localized the user records WHERE ("workflow W, step k") and whether the
+  // answer actually USED that position. `senseUsed`: used | ignored (hypotheses sent, answer was
+  // about something else — must NOT count as step friction) | none (probe ran, nothing matched —
+  // a passive drift signal). Null = pre-Sense row / no probe ran.
+  senseSourceId     String?
+  senseSegmentIndex Int?
+  senseStep         Int? // 1-based step index within the workflow
+  senseConfidence   Float?
+  senseUsed         String?
   createdAt   DateTime @default(now())
 
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

@@ -9,6 +9,8 @@ import {
   regenerateCopilotKey,
   setCopilotShowCitations,
   setCopilotAppearance,
+  setSenseEnabled,
+  setCopilotShowMe,
 } from '@/lib/copilot-settings-actions';
 import {
   ACCENT_PRESETS,
@@ -94,6 +96,8 @@ export function CopilotWorkspace({
   primaryOrigin,
   widgetIsPlaceholder = false,
   showCitations = true,
+  senseEnabled = true,
+  showMe = false,
   activity,
   detection,
   appearance,
@@ -105,6 +109,8 @@ export function CopilotWorkspace({
   primaryOrigin: string;
   widgetIsPlaceholder?: boolean;
   showCitations?: boolean;
+  senseEnabled?: boolean;
+  showMe?: boolean;
   activity: {
     total: number;
     window: number;
@@ -121,6 +127,8 @@ export function CopilotWorkspace({
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
   const [rejectedOrigins, setRejectedOrigins] = useState<string[]>([]);
   const [cite, setCite] = useState(showCitations);
+  const [sense, setSense] = useState(senseEnabled);
+  const [showMeOn, setShowMeOn] = useState(showMe);
   const [showKey, setShowKey] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -138,8 +146,41 @@ export function CopilotWorkspace({
   function toggleCite(value: boolean) {
     setCite(value); // optimistic
     start(async () => {
-      await setCopilotShowCitations(value);
-      router.refresh();
+      try {
+        await setCopilotShowCitations(value);
+        router.refresh();
+        toast.success(value ? 'Source citations on.' : 'Source citations off.');
+      } catch {
+        setCite(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  // P2 Sense — the two workspace toggles (master Sense + the "show me" highlight).
+  function toggleSense(value: boolean) {
+    setSense(value); // optimistic
+    start(async () => {
+      try {
+        await setSenseEnabled(value);
+        router.refresh();
+        toast.success(value ? 'Sense on — answers meet users where they are.' : 'Sense off — the widget stops probing.');
+      } catch {
+        setSense(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  function toggleShowMe(value: boolean) {
+    setShowMeOn(value); // optimistic
+    start(async () => {
+      try {
+        await setCopilotShowMe(value);
+        router.refresh();
+        toast.success(value ? '"Show me" on — the widget highlights the current step.' : '"Show me" off.');
+      } catch {
+        setShowMeOn(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
     });
   }
   function rotate() {
@@ -506,6 +547,49 @@ export function CopilotWorkspace({
                   onCheckedChange={toggleCite}
                   disabled={pending}
                   aria-label="Cite the workflow used"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">
+              Sense — in-context help
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              The copilot detects which approved workflow and step a user is on
+              (a read-only glance at their page when they ask — no recording,
+              no screenshots) and answers for that exact spot.
+            </p>
+            <div className="mt-3 divide-y">
+              <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
+                <div>
+                  <p className="text-sm font-medium">Enable Sense</p>
+                  <p className="text-xs text-muted-foreground">
+                    Positional answers: &ldquo;you&rsquo;re on step 3 — here&rsquo;s
+                    how to get unstuck, then the path to done.&rdquo;
+                  </p>
+                </div>
+                <Switch
+                  checked={sense}
+                  onCheckedChange={toggleSense}
+                  disabled={pending}
+                  aria-label="Enable Sense (in-context help)"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium">&ldquo;Show me&rdquo; highlight</p>
+                  <p className="text-xs text-muted-foreground">
+                    Also outline the current step&rsquo;s element on the page
+                    alongside a positional answer.
+                  </p>
+                </div>
+                <Switch
+                  checked={showMeOn}
+                  onCheckedChange={toggleShowMe}
+                  disabled={pending || !sense}
+                  aria-label='"Show me" highlight'
                 />
               </div>
             </div>

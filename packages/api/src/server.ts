@@ -10,8 +10,16 @@ import { ensureBucket, putObjectStream, deleteSessionPrefix, sessionKey } from '
 import { synthesisQueue } from './queue';
 // Retrieval + history sanitizing come from the SHARED @sync/synthesis seam (P1-M5 no-leak) —
 // the Studio preview uses the same functions, so both surfaces answer identically.
-import { answerFromKB, retrieveApprovedKBItems, sanitizeHistory } from '@sync/synthesis';
+import {
+  answerFromKB,
+  retrieveApprovedKBItems,
+  sanitizeHistory,
+  type SenseContext,
+  type SenseHypothesisContext,
+  type AnswerPosition,
+} from '@sync/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen } from './copilot-auth';
+import { getSenseShard } from './sense-plan';
 
 // Use the shared structured logger so HTTP request logs share the app's level, JSON/pretty shape,
 // and secret redaction. `app.log` / `req.log` are children of it (Fastify adds the reqId + req/res
@@ -133,7 +141,7 @@ const MAX_QUESTION_CHARS = 2000;
 async function copilotGate(
   req: FastifyRequest,
   reply: FastifyReply,
-  route: 'answer' | 'feedback' | 'seen' | 'config',
+  route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense',
 ): Promise<{ workspaceId: string; showCitations: boolean; key: string; origin: string | undefined } | null> {
   const key = (req.headers['x-sync-key'] as string | undefined) ?? '';
   const origin = req.headers.origin as string | undefined;
@@ -152,6 +160,119 @@ async function copilotGate(
   return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, key, origin };
 }
 
+// ── P2 Sense — validate the widget's localization payload ─────────────────────────────────────
+// The wire hypotheses are UNTRUSTED (any page holding the public key can send them). Every field
+// is type-checked, clamped, and sliced; the workflow keys are then re-verified against
+// CopilotApproval (no-leak: an unapproved key is dropped) and the TITLE comes from the approval
+// snapshot — never the wire — so the only host-page text that ever reaches the prompt is the
+// masked error snippet, which is delimited + de-angled here.
+const MAX_SENSE_HYPOTHESES = 3;
+const MAX_SENSE_ERROR_CHARS = 200;
+
+interface WireSenseHypothesis {
+  sourceId?: unknown;
+  segmentIndex?: unknown;
+  step?: unknown;
+  totalSteps?: unknown;
+  confidence?: unknown;
+  stepsDone?: unknown;
+  error?: unknown;
+}
+
+async function resolveSenseContext(
+  workspaceId: string,
+  raw: unknown,
+): Promise<{ sense: SenseContext | null; probed: boolean }> {
+  if (!raw || typeof raw !== 'object') return { sense: null, probed: false };
+  const w = raw as { probed?: unknown; tie?: unknown; hypotheses?: unknown };
+  const probed = w.probed === true;
+  const list = Array.isArray(w.hypotheses) ? w.hypotheses.slice(0, MAX_SENSE_HYPOTHESES) : [];
+
+  const parsed: Array<Omit<SenseHypothesisContext, 'title'>> = [];
+  for (const entry of list) {
+    const h = (entry ?? {}) as WireSenseHypothesis;
+    const sourceId = typeof h.sourceId === 'string' ? h.sourceId.slice(0, 40) : '';
+    const segmentIndex = Number(h.segmentIndex);
+    const totalSteps = Number(h.totalSteps);
+    const step = Number(h.step);
+    if (!/^[a-z0-9-]{1,40}$/i.test(sourceId)) continue; // KnowledgeSource ids are UUIDs (hyphens!)
+    if (!Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999) continue;
+    if (!Number.isInteger(totalSteps) || totalSteps < 1 || totalSteps > 200) continue;
+    if (!Number.isInteger(step) || step < 1 || step > totalSteps) continue;
+    const confidence = Math.min(1, Math.max(0, Number(h.confidence) || 0));
+    const stepsDone = (Array.isArray(h.stepsDone) ? h.stepsDone.slice(0, 50) : [])
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= totalSteps);
+    const error =
+      typeof h.error === 'string' && h.error.trim()
+        ? h.error.replace(/[<>\u0000-\u001f]/g, ' ').trim().slice(0, MAX_SENSE_ERROR_CHARS)
+        : undefined;
+    parsed.push({ sourceId, segmentIndex, step, totalSteps, confidence, stepsDone, ...(error ? { error } : {}) });
+  }
+  if (parsed.length === 0) return { sense: null, probed };
+
+  const approvals = await prisma.copilotApproval.findMany({
+    where: { workspaceId, OR: parsed.map((h) => ({ sourceId: h.sourceId, segmentIndex: h.segmentIndex })) },
+    select: { sourceId: true, segmentIndex: true, segmentTitle: true },
+  });
+  const titleByKey = new Map(approvals.map((a) => [`${a.sourceId}:${a.segmentIndex}`, a.segmentTitle]));
+  const approved = parsed.filter((h) => titleByKey.has(`${h.sourceId}:${h.segmentIndex}`));
+  if (approved.length === 0) return { sense: null, probed };
+
+  // Anchor each hypothesis on what its current step actually SAYS (server truth from the KB —
+  // orderIndex is 0-based within the workflow). Without this the model reads "at step 2" as
+  // "done with step 2" and skips past uncompleted steps.
+  const stepItems = await prisma.knowledgeItem.findMany({
+    where: {
+      workspaceId,
+      kind: 'step',
+      OR: approved.map((h) => ({
+        sourceId: h.sourceId,
+        segmentIndex: h.segmentIndex,
+        orderIndex: h.step - 1,
+      })),
+    },
+    select: { sourceId: true, segmentIndex: true, orderIndex: true, data: true },
+  });
+  const instructionByKey = new Map(
+    stepItems.map((i) => [
+      `${i.sourceId}:${i.segmentIndex}:${i.orderIndex}`,
+      ((i.data ?? {}) as { instruction?: string }).instruction?.slice(0, 200),
+    ]),
+  );
+
+  const hypotheses: SenseHypothesisContext[] = approved.map((h) => {
+    const instruction = instructionByKey.get(`${h.sourceId}:${h.segmentIndex}:${h.step - 1}`);
+    return {
+      ...h,
+      title: titleByKey.get(`${h.sourceId}:${h.segmentIndex}`) || 'this workflow',
+      ...(instruction ? { instruction } : {}),
+    };
+  });
+  return { sense: { hypotheses, tie: w.tie === true && hypotheses.length >= 2 }, probed };
+}
+
+/** P2-M4 — the localization-outcome fields logged onto CopilotQuery (step-friction analytics). */
+function senseLogFields(
+  sense: SenseContext | null,
+  probed: boolean,
+  position: AnswerPosition | null,
+): Record<string, unknown> {
+  if (!probed && !sense) return {}; // no probe ran (pre-Sense widget / Sense off) — null columns
+  if (!sense) return { senseUsed: 'none' }; // probed, nothing matched — a passive drift signal
+  const matched = position
+    ? sense.hypotheses.find((h) => h.sourceId === position.sourceId && h.segmentIndex === position.segmentIndex)
+    : undefined;
+  const top = matched ?? sense.hypotheses[0]!;
+  return {
+    senseSourceId: (position ?? top).sourceId,
+    senseSegmentIndex: position ? position.segmentIndex : top.segmentIndex,
+    senseStep: position ? position.step : top.step,
+    senseConfidence: top.confidence,
+    senseUsed: position ? 'used' : 'ignored',
+  };
+}
+
 /**
  * P1-M6 — copilot answer endpoint. Grounded ONLY in APPROVED-KB (P1-M5): retrieve approved items,
  * answer or honestly decline; on a decline, log a CoverageGap ("record this next"). Auth = the
@@ -164,7 +285,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   const body = (req.body ?? {}) as {
     question?: string;
     history?: unknown;
-    context?: { path?: string };
+    context?: { path?: string; sense?: unknown };
     preview?: unknown;
   };
   // The Studio's real-widget tester flags its calls `preview`: same key, same engine, but a founder
@@ -186,17 +307,24 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
   // Bounded — it's untrusted input that lands in the DB and the prompt.
   const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
+  // P2 Sense — validate the probe's hypotheses (approval-checked, titles from server truth).
+  const { sense, probed } = await resolveSenseContext(workspaceId, body.context?.sense);
+  const senseKeys = sense?.hypotheses.map((h) => `${h.sourceId}:${h.segmentIndex}`);
   // P1-M3 — hybrid keyword+vector retrieval; the embedding config is best-effort (retrieval
   // degrades to the keyword shortlist on any vector-path failure — never errors here).
   const items = await retrieveApprovedKBItems(prisma, workspaceId, question, {
     contextPath,
+    senseKeys,
     embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
   });
   if (items.length === 0) {
     // No approved content at all — an un-provisioned copilot, not a coverage gap.
     const reason = 'This copilot has no approved help content yet.';
     if (preview) return { covered: false, answer: null, citations: [], reason };
-    const q = await prisma.copilotQuery.create({ data: { workspaceId, question, answered: false, contextPath }, select: { id: true } });
+    const q = await prisma.copilotQuery.create({
+      data: { workspaceId, question, answered: false, contextPath, ...senseLogFields(sense, probed, null) },
+      select: { id: true },
+    });
     return { covered: false, answer: null, citations: [], reason, queryId: q.id };
   }
 
@@ -204,27 +332,31 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     question,
     history: sanitizeHistory(body.history),
     items,
-    context: { path: contextPath },
+    context: { path: contextPath, sense: sense ?? undefined },
     showCitations: gate.showCitations,
     apiKey: config.openaiApiKey,
     model: config.synthModel,
   });
+  // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
+  const position = result.covered ? result.position : null;
 
   // Preview answers are never persisted — return the engine's result as-is (no queryId).
   if (preview) {
     return result.covered
-      ? { covered: true, answer: result.answer, citations: result.citations }
+      ? { covered: true, answer: result.answer, citations: result.citations, position }
       : { covered: false, answer: null, citations: [], reason: result.reason };
   }
 
   // P1-M10: log the Q&A (analytics + the thumbs-feedback target). On a grounded answer,
   // persist the cited workflows too (powers Analytics "Top workflows by citations").
+  // P2-M4: also log the Sense localization outcome (used | ignored | none) — step-friction analytics.
   const logged = await prisma.copilotQuery.create({
     data: {
       workspaceId,
       question,
       answered: result.covered,
       contextPath,
+      ...senseLogFields(sense, probed, position),
       ...(result.covered && result.citations.length > 0
         ? {
             citations: {
@@ -253,7 +385,31 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }
 
-  return { covered: true, answer: result.answer, citations: result.citations, queryId: logged.id };
+  return { covered: true, answer: result.answer, citations: result.citations, position, queryId: logged.id };
+});
+
+/**
+ * P2-M0 — the ROUTE-SHARDED sense plan (docs/phase-2-sense.md §2). The widget fetches this on
+ * panel open for the page the end-user is on; each matched workflow is served WHOLE (all steps,
+ * incl. other-route steps) so mid-workflow progression never refetches. Gated by the per-workspace
+ * Sense toggle (off → `enabled:false` and the widget never probes). Auth = the public key +
+ * origin allowlist + its own rate bucket, like every copilot route. Founder-derived data only.
+ */
+app.get('/v1/copilot/sense-plan', async (req, reply) => {
+  const gate = await copilotGate(req, reply, 'sense');
+  if (!gate) return reply;
+
+  const ws = await prisma.workspace.findUnique({
+    where: { id: gate.workspaceId },
+    select: { senseEnabled: true },
+  });
+  reply.header('cache-control', 'no-store'); // the widget caches per route in-memory; the server caches the compile
+  if (!ws?.senseEnabled) return { enabled: false, version: '', workflows: [] };
+
+  const q = req.query as { route?: unknown };
+  const route = typeof q.route === 'string' ? q.route.slice(0, 512) : '';
+  const shard = await getSenseShard(gate.workspaceId, route);
+  return { enabled: true, version: shard.version, workflows: shard.workflows };
 });
 
 /** P1-M10 — thumbs feedback on a copilot answer (by the queryId returned from /answer). */
@@ -295,6 +451,8 @@ app.get('/v1/copilot/config', async (req, reply) => {
       copilotPosition: true,
       copilotLauncherStyle: true,
       copilotLauncherText: true,
+      senseEnabled: true,
+      copilotShowMe: true,
     },
   });
   if (!ws) return reply.code(404).send({ error: 'workspace not found' });
@@ -307,6 +465,9 @@ app.get('/v1/copilot/config', async (req, reply) => {
     position: ws.copilotPosition,
     launcher: ws.copilotLauncherStyle,
     launcherText: ws.copilotLauncherText,
+    // P2 Sense — `sense` gates the widget's plan fetch/probe; `showMe` gates the P2-M3 highlight.
+    sense: ws.senseEnabled,
+    showMe: ws.copilotShowMe,
   };
 });
 

@@ -12,6 +12,7 @@ import {
   getTopWorkflowsByCitations,
   getCoverageGapsRanked,
   getRecentDeclines,
+  getStepFriction,
 } from '@/lib/analytics';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { MetricCard } from '@/components/dashboard/metric-card';
@@ -34,11 +35,12 @@ export default async function AnalyticsPage({
   const days = parseRange((await searchParams).range);
   const label = rangeLabel(days).toLowerCase();
 
-  const [metrics, topWorkflows, gaps, declines] = await Promise.all([
+  const [metrics, topWorkflows, gaps, declines, friction] = await Promise.all([
     getCopilotMetrics(wsId, days),
     getTopWorkflowsByCitations(wsId, days),
     getCoverageGapsRanked(wsId),
     getRecentDeclines(wsId),
+    getStepFriction(wsId, days),
   ]);
 
   const rangeControl = <AnalyticsRange value={days} options={RANGE_OPTIONS} />;
@@ -115,6 +117,7 @@ export default async function AnalyticsPage({
         </section>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 space-y-6">
           <section className="min-w-0 rounded-card border bg-card p-5 shadow-card">
             <div className="flex items-center justify-between">
               <h3 className="text-[13.5px] font-bold text-ink">
@@ -166,6 +169,61 @@ export default async function AnalyticsPage({
               </ul>
             )}
           </section>
+
+          {/* P2-M4 — step-level friction: where users got stuck mid-workflow and asked for help.
+              Only answers that USED a Sense localization count (unrelated questions asked while
+              standing on a step never pollute this). */}
+          <section className="min-w-0 rounded-card border bg-card p-5 shadow-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[13.5px] font-bold text-ink">
+                Where users get stuck
+              </h3>
+              <StatusBadge tone="pending" dot={false}>
+                Sense
+              </StatusBadge>
+            </div>
+            <p className="mt-0.5 text-xs text-faint">
+              Steps your users needed help getting past, detected in-context —
+              re-record the workflow with a clearer explanation, or fix the
+              step in your product.
+            </p>
+            {friction.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No step-level friction detected in the {label}.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {friction.map((f) => (
+                  <li
+                    key={`${f.sourceId}:${f.segmentIndex}:${f.step}`}
+                    className="flex items-center gap-3 rounded-control border px-3 py-2.5"
+                  >
+                    <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-bold text-primary">
+                      step {f.step}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <Link
+                        href={`/dashboard/kb/${f.sourceId}?wf=${f.segmentIndex}`}
+                        className="block truncate text-[13px] font-medium text-secondary-foreground hover:text-primary hover:underline"
+                        title={f.title}
+                      >
+                        {f.title}
+                      </Link>
+                      {f.instruction && (
+                        <span className="block truncate font-mono text-[11px] text-faint">
+                          {f.instruction}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] text-secondary-foreground">
+                      {f.count}× stuck
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          </div>
 
           <aside className="min-w-0 space-y-6">
             <section className="rounded-card border border-success-border bg-success-bg p-5 shadow-card">

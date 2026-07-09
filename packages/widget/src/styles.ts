@@ -99,4 +99,17 @@ export const CSS = `
 .sc-thumb:hover { opacity: 1; }
 .sc-thumb-on { opacity: 1; }
 .sc-thumb:disabled { cursor: default; }
+
+/* P2-M3 "show me" — the config-gated single-step highlight drawn over the host page (fixed =
+   viewport coords from getBoundingClientRect; pointer-events none so it never intercepts). */
+.sc-spotlight {
+  position: fixed; z-index: 2147483646; pointer-events: none;
+  border: 2px solid var(--sc-accent); border-radius: 8px;
+  box-shadow: 0 0 0 4px rgba(59, 80, 224, .16);
+  animation: sc-spot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes sc-spot-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(59, 80, 224, .16); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 80, 224, .08); }
+}
 `;

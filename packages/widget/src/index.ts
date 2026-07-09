@@ -27,8 +27,11 @@
 
 import { CSS } from './styles.js';
 import { log, setDebug } from './log.js';
+// P2 Sense — panel-open shard fetch + ask-time read-only probe + the show-me highlight.
+import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeResult } from './sense.js';
 
 interface Citation { segmentTitle: string | null }
+interface AnswerPosition { sourceId: string; segmentIndex: number; step: number }
 interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean; queryId?: string; feedback?: 'up' | 'down' }
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -54,6 +57,10 @@ const cfg = {
   launcher: explicit.launcher || 'icon',
   launcherText: explicit.launcherText || 'Ask me anything',
   preview: (script?.dataset.syncPreview || g.preview || '') === '1',
+  // P2 Sense — both flags arrive from /v1/copilot/config (Studio-controlled); sense defaults ON
+  // (harmless read-only probe), showMe defaults OFF (it draws on the host page).
+  sense: true,
+  showMe: false,
   // Opt-in diagnostics (off by default — the widget must never spam a customer's console).
   debug: /^(1|true|yes)$/i.test(script?.dataset.syncDebug || '') ||
     (window as unknown as { SyncCopilotDebug?: boolean }).SyncCopilotDebug === true,
@@ -216,13 +223,22 @@ function render(): void {
   input.disabled = loading;
 }
 
+// P2 Sense — the probe result backing the LAST question (its resolved elements power show-me).
+let lastProbe: SenseProbeResult | null = null;
+const senseActive = () => Boolean(cfg.key) && !cfg.preview && cfg.sense;
+
 async function ask(question: string): Promise<void> {
   messages.push({ role: 'user', content: question });
   loading = true;
+  clearSpotlight(); // a new question retires the previous highlight
   render();
   // Prior turns (exclude the question we just pushed; it's sent separately). Only the last 10
   // ride along — the server slices to 10 anyway, so a long chat must not grow the payload.
   const history = messages.filter((m) => !m.error).slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content }));
+  // P2 Sense — re-probe on EVERY message (the user may have advanced since the last turn). The
+  // shard is normally cached from panel open; a short budget covers the cold case. null = Sense
+  // has nothing to say → the context is simply omitted (the copilot behaves exactly as before).
+  lastProbe = senseActive() ? await probeForAsk(cfg.apiBase, cfg.key, location.pathname, 800) : null;
   try {
     const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
       method: 'POST',
@@ -230,15 +246,40 @@ async function ask(question: string): Promise<void> {
       body: JSON.stringify({
         question,
         history,
-        context: { path: location.pathname, title: document.title },
+        context: {
+          path: location.pathname,
+          title: document.title,
+          ...(lastProbe && lastProbe.hypotheses.length > 0
+            ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
+            : {}),
+        },
         ...(cfg.preview ? { preview: true } : {}),
       }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
+      position?: AnswerPosition | null;
     };
     if (!res.ok) { log.warn('answer request failed', res.status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${res.status})`, error: true }); }
-    else if (data.covered) messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
+    else if (data.covered) {
+      messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
+      // P2-M3 "show me" (config-gated): the answer positioned the user → highlight that step's
+      // element, resolved by THIS question's probe (never a stale one). Fallback: the probe keeps
+      // ONE element per workflow, so a step-number disagreement still highlights the right spot.
+      if (data.position) {
+        const key = `${data.position.sourceId}:${data.position.segmentIndex}:${data.position.step}`;
+        if (!cfg.showMe) log.debug('show-me: off (enable it in Studio → Copilot → Settings, then reload this page)');
+        else if (!lastProbe) log.debug('show-me: no probe result for this question');
+        else {
+          const prefix = `${data.position.sourceId}:${data.position.segmentIndex}:`;
+          const el =
+            lastProbe.elements.get(key) ??
+            [...lastProbe.elements.entries()].find(([k]) => k.startsWith(prefix))?.[1];
+          if (el && el.isConnected) { log.debug('show-me: highlighting', key); spotlight(root, el); }
+          else log.debug('show-me: no live element for', key);
+        }
+      }
+    }
     else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true, queryId: data.queryId });
   } catch (e) {
     log.error('could not reach the assistant', e);
@@ -262,8 +303,15 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-launcher.addEventListener('click', () => { open = true; render(); input.focus(); });
-closeBtn.addEventListener('click', () => { open = false; render(); });
+launcher.addEventListener('click', () => {
+  open = true;
+  render();
+  input.focus();
+  // P2 Sense — prefetch this route's shard the moment the panel opens (a strong "about to ask"
+  // signal), so the ask-time probe is instant. Fire-and-forget; NOTHING is fetched on page load.
+  if (senseActive()) void ensureShard(cfg.apiBase, cfg.key, location.pathname, 1500);
+});
+closeBtn.addEventListener('click', () => { open = false; clearSpotlight(); render(); });
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const q = input.value.trim();
@@ -289,6 +337,7 @@ function pingSeen(): void {
 interface ServerConfig {
   accent?: string | null; title?: string | null; greeting?: string | null;
   position?: string | null; launcher?: string | null; launcherText?: string | null;
+  sense?: boolean; showMe?: boolean; // P2 Sense — Studio-controlled flags
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -327,6 +376,9 @@ function applyServerConfig(s: ServerConfig): void {
     cfg.launcher = s.launcher;
   }
   if (!explicit.launcherText && s.launcherText?.trim()) cfg.launcherText = s.launcherText.trim();
+  // P2 Sense — no data-sync-* override for these: they're workspace policy, not page styling.
+  if (s.sense === false) cfg.sense = false;
+  cfg.showMe = s.showMe === true;
 
   titleEl.textContent = cfg.title; // greeting is read from cfg at render()
   if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);
