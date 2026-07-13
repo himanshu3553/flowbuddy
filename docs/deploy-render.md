@@ -165,7 +165,7 @@ Click **Connect** — it opens `<your-sync-web-url>/connect`, relays the token +
 extension, and shows as connected. *(Plain `pnpm --filter @sync/extension build` with no `STUDIO_URL`
 reverts to localhost — the committed `src/manifest.json` stays localhost so local dev is unaffected.)*
 
-**Chrome Web Store:** **v0.3.0 is LIVE** (stop→upload feedback + resilience; approved after the
+**Chrome Web Store** (full per-version history + the cut-a-release checklist: [`extension-releases.md`](extension-releases.md)): **v0.3.0 is LIVE** (stop→upload feedback + resilience; approved after the
 2026-07-06 submission) — prod-targeted (`https://sync-web-uir8.onrender.com` + localhost):
 <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk>. Its
 listing URL goes in `SYNC_EXTENSION_URL` on `sync-web` so the Home checklist's install CTA reads

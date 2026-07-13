@@ -20,6 +20,7 @@
 | [`internals/`](docs/internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements the product docs' *why/what*). Start at `internals/connections.md`. **Follows the code — if a mechanic disagrees with the source, the source wins.** |
 | [`e2e-testing.md`](docs/e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics, with per-step PASS signals. **3 levels:** local · dev (Render, incl. data reset — absorbed `render-reset-and-test.md` 2026-07-04) · prod (placeholder). |
 | [`deploy-render.md`](docs/deploy-render.md) | **Render deploy guide** — free-tier blueprint walkthrough (first-deploy gotchas) + going-to-production deltas. |
+| [`extension-releases.md`](docs/extension-releases.md) | **Chrome Web Store release log (LIVING DOC)** — one entry per store build of the recorder (what shipped · permissions deltas · baked targets · status) + the cut-a-release checklist. **Update it every time a new store build is packaged.** |
 | [`phase-1-review.md`](docs/phase-1-review.md) | **Phase-1 E2E review (2026-07-03)** — full-codebase findings + prioritized P0/P1/P2 recommendations + remediation sequence; annotated as items land. |
 | [`dev-setup.md`](docs/dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |
 

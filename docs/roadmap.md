@@ -211,5 +211,6 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 | [`internals/`](internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements this map's *why/what*). Start at `internals/connections.md`. Follows the code — source wins on conflict. |
 | [`e2e-testing.md`](e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics; per-step PASS signals. **3 levels:** local · dev (Render, incl. data reset) · prod (placeholder). |
 | [`deploy-render.md`](deploy-render.md) | **Render deploy guide** — free-tier blueprint walkthrough (every first-deploy gotcha) + the going-to-production deltas. |
+| [`extension-releases.md`](extension-releases.md) | **Chrome Web Store release log (living)** — one entry per store build of the recorder (what shipped · permissions deltas · baked targets · status) + the cut-a-release checklist. Updated at every packaging. |
 | [`phase-1-review.md`](phase-1-review.md) | **Phase-1 E2E review (2026-07-03)** — full-codebase findings + prioritized recommendations (P0/P1/P2) + a suggested remediation sequence; annotated as items land. |
 | [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |
