@@ -24,6 +24,10 @@
 // Attrs stay supported as deliberate per-page overrides; the fetch is best-effort (short timeout,
 // any failure falls back to attrs/defaults) so the widget always appears.
 // The default theme is the Sync indigo brand (matches Sync Studio); an accent (from Studio or the attr) overrides it with the host's own brand color (text on it is white).
+//
+// DRAG + EXPAND (2026-07-13): the open panel drags by its header (viewport-clamped; the spot
+// lasts for the page view), and a header toggle expands it vertically to near-full viewport
+// height — it stays a floating draggable window and never touches the host page's layout.
 
 import { CSS } from './styles.js';
 import { log, setDebug } from './log.js';
@@ -156,6 +160,11 @@ const BOT_SVG =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
 const ARROW_UP_SVG =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
+// Header expand toggle — lucide chevrons-up-down (grow vertically) / chevrons-down-up (restore).
+const EXPAND_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+const COLLAPSE_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>';
 
 const host = el('div');
 host.id = 'sync-copilot-root';
@@ -191,6 +200,10 @@ const titleEl = el('span', 'sc-title', cfg.title);
 titleWrap.appendChild(titleEl);
 titleWrap.appendChild(el('span', 'sc-subtitle', 'grounded in your approved workflows'));
 header.appendChild(titleWrap);
+const expandBtn = el('button', 'sc-expand');
+expandBtn.innerHTML = EXPAND_SVG; // static markup, not user content
+expandBtn.setAttribute('aria-label', 'Expand panel');
+header.appendChild(expandBtn);
 const closeBtn = el('button', 'sc-close', '✕');
 header.appendChild(closeBtn);
 
@@ -378,9 +391,65 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+// ---- Drag + expand ----------------------------------------------------------------------------
+// The open panel drags by its header (viewport-clamped; the spot lasts for the page view — a
+// reload starts back at the configured corner). The header's expand toggle grows the panel to
+// near-full viewport height (the base max-height cap); it stays a floating, draggable window and
+// never touches the host page's layout.
+let expanded = false;
+let dragPos: { left: number; top: number } | null = null;
+
+function clampPos(left: number, top: number): { left: number; top: number } {
+  return {
+    left: Math.min(Math.max(8, left), Math.max(8, window.innerWidth - panel.offsetWidth - 8)),
+    top: Math.min(Math.max(8, top), Math.max(8, window.innerHeight - panel.offsetHeight - 8)),
+  };
+}
+function applyDragPos(): void {
+  if (!dragPos) return;
+  panel.style.left = `${dragPos.left}px`;
+  panel.style.top = `${dragPos.top}px`;
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+
+function setExpanded(on: boolean): void {
+  expanded = on;
+  panel.classList.toggle('sc-expanded', on);
+  expandBtn.innerHTML = on ? COLLAPSE_SVG : EXPAND_SVG; // static markup, not user content
+  expandBtn.setAttribute('aria-label', on ? 'Collapse panel' : 'Expand panel');
+  // The taller panel may not fit at the dragged spot — pull it back inside the viewport.
+  if (dragPos) { dragPos = clampPos(dragPos.left, dragPos.top); applyDragPos(); }
+}
+
+let drag: { dx: number; dy: number } | null = null;
+header.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || (e.target as Element).closest('button')) return;
+  const r = panel.getBoundingClientRect();
+  drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+  header.setPointerCapture(e.pointerId);
+  panel.classList.add('sc-dragging');
+  e.preventDefault(); // no text selection while dragging
+});
+header.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  dragPos = clampPos(e.clientX - drag.dx, e.clientY - drag.dy);
+  applyDragPos();
+});
+const endDrag = (): void => { drag = null; panel.classList.remove('sc-dragging'); };
+header.addEventListener('pointerup', endDrag);
+header.addEventListener('pointercancel', endDrag);
+expandBtn.addEventListener('click', () => setExpanded(!expanded));
+window.addEventListener('resize', () => {
+  if (open && dragPos) { dragPos = clampPos(dragPos.left, dragPos.top); applyDragPos(); }
+});
+// ------------------------------------------------------------------------------------------------
+
 launcher.addEventListener('click', () => {
   open = true;
   render();
+  // The viewport may have changed while the panel was closed — re-fit the dragged spot.
+  if (dragPos) { dragPos = clampPos(dragPos.left, dragPos.top); applyDragPos(); }
   input.focus();
   // P2 Sense — prefetch this route's shard the moment the panel opens (a strong "about to ask"
   // signal), so the ask-time probe is instant. Fire-and-forget; NOTHING is fetched on page load.

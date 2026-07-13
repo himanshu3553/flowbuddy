@@ -6,17 +6,34 @@
   <title>Sync Copilot — embed demo</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
-    .hero { padding: 48px; max-width: 720px; }
+    /* Full-width app chrome — makes the page feel like a real product under the floating panel. */
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: #14161f; color: #fff; }
+    .topbar .fake-user { color: #aab; font-size: 13px; }
+    .hero { padding: 32px 24px 8px; max-width: 720px; }
     h1 { margin: 0 0 8px; }
     code { background: #f0f0f0; padding: 1px 5px; border-radius: 4px; }
     .note { color: #666; font-size: 14px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; padding: 24px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+    .card h3 { margin: 0 0 6px; font-size: 15px; }
+    .card p { margin: 0; color: #666; font-size: 13px; }
   </style>
 </head>
 <body>
+  <div class="topbar"><strong>Acme App</strong><span class="fake-user">jane@acme.com</span></div>
   <div class="hero">
-    <h1>Acme App</h1>
-    <p>This page simulates a customer's product. The Sync copilot is embedded with a single script tag (bottom-right). Click it and ask about a workflow you've <strong>approved for the copilot</strong>.</p>
+    <h1>Dashboard</h1>
+    <p>This page simulates a customer's product. The Sync copilot is embedded with a single script tag (bottom-right). Click it and ask about a workflow you've <strong>approved for the copilot</strong>. Drag the open panel by its header; the header's expand icon grows it to near-full height (still floating and draggable).</p>
     <p class="note">Before loading: build the widget (<code>pnpm --filter @sync/widget build</code>), run the API + Studio, approve a workflow, then set <code>data-sync-key</code> to a workspace token and <code>data-sync-api</code> to your API base below.</p>
+  </div>
+  <!-- Edge-to-edge app-like content under the floating panel. -->
+  <div class="cards">
+    <div class="card"><h3>Invoices</h3><p>12 awaiting approval</p></div>
+    <div class="card"><h3>Customers</h3><p>1,204 active</p></div>
+    <div class="card"><h3>Reports</h3><p>Monthly close in 4 days</p></div>
+    <div class="card"><h3>Integrations</h3><p>3 connected</p></div>
+    <div class="card"><h3>Team</h3><p>8 seats in use</p></div>
+    <div class="card"><h3>Billing</h3><p>Next renewal Aug 1</p></div>
   </div>
 
   <!-- The entire embed: one script tag. Appearance (accent/title/greeting/position/launcher) is

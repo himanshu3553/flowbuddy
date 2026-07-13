@@ -84,8 +84,9 @@ fetch failure/timeout mounts with attrs/defaults — the widget always appears.
 
 ### 4.3 State & the render loop
 
-The widget keeps three pieces of state: `messages[]` (the conversation), `open` (panel visibility), and
-`loading`. There's no framework — a single `render()` function **rebuilds the message list** from
+The widget keeps three pieces of conversation state: `messages[]` (the conversation), `open` (panel
+visibility), and `loading` — plus the panel-geometry pair `dragPos`/`expanded` (2026-07-13, below).
+There's no framework — a single `render()` function **rebuilds the message list** from
 `messages[]` on every change (`list.replaceChildren(...)`). It's a tiny immediate-mode UI:
 
 - empty conversation → a centered greeting;
@@ -101,6 +102,20 @@ field + a square accent **↑ send** button. **Typography** = Plus Jakarta Sans 
 the token sizes — `index.ts` injects ONE Google-Fonts `<link>` into the host document
 (`ensureBrandFonts`, guarded; @font-face is document-level so the shadow tree can use it), with
 system-font fallback stacks so a blocked font never breaks the widget.
+
+**Drag + expand (2026-07-13).** The open panel is a movable floating window:
+
+- **Drag** — the header is the drag handle (pointer events + `setPointerCapture`, so it works with
+  touch too; `touch-action: none` keeps the host page from scrolling underneath). Dragging writes
+  inline `left/top` (overriding the corner anchor) into `dragPos`, **clamped to the viewport** —
+  re-clamped on window resize, on reopen, and on expand, so the panel can never be lost off-screen.
+  The spot lasts for the page view; a reload starts back at the configured corner. Clicks on the
+  header buttons never start a drag.
+- **Expand** — a header toggle (chevrons icon, before ✕) grows the panel vertically to the base
+  max-height cap (`calc(100vh - 40px)`; width stays 370px) and back to 540px. `sc-expanded` is just
+  a taller **floating** window: still draggable, and the host page's layout is never touched (a
+  deliberate constraint — a guest script that displaces the host page, e.g. via an `<html>` margin,
+  can't reflow the host's own `position: fixed` chrome, so the widget stays overlay-only).
 
 ### 4.4 Asking a question (`ask`)
 

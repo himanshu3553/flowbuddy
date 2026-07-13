@@ -50,7 +50,11 @@ export const CSS = `
 .sc-header {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px; background: var(--sc-accent); color: var(--sc-accent-fg);
+  /* The header is the floating panel's drag handle (touch-action none = pointer-drag works on
+     touch without scrolling the host page underneath). */
+  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none;
 }
+.sc-panel.sc-dragging .sc-header { cursor: grabbing; }
 .sc-badge {
   flex: none; width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,.16);
   display: flex; align-items: center; justify-content: center;
@@ -63,6 +67,15 @@ export const CSS = `
 }
 .sc-close { flex: none; background: transparent; border: none; color: var(--sc-accent-fg); font-size: 15px; cursor: pointer; padding: 4px; opacity: .75; }
 .sc-close:hover { opacity: 1; }
+.sc-expand {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--sc-accent-fg); cursor: pointer;
+  padding: 4px; opacity: .75;
+}
+.sc-expand:hover { opacity: 1; }
+/* Expanded mode — grow to the base max-height cap (near-full viewport height); still a floating,
+   draggable window (index.ts re-clamps a dragged spot so the taller panel stays on screen). */
+.sc-panel.sc-expanded { height: calc(100vh - var(--sc-panel-bottom, 20px) - 20px); }
 .sc-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--sc-messages-bg); }
 .sc-greeting { color: var(--sc-muted-fg); font-size: 13px; text-align: center; margin: auto 24px; }
 .sc-msg { display: flex; flex-direction: column; gap: 4px; max-width: 85%; }
