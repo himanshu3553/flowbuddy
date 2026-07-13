@@ -165,16 +165,19 @@ Click **Connect** — it opens `<your-sync-web-url>/connect`, relays the token +
 extension, and shows as connected. *(Plain `pnpm --filter @sync/extension build` with no `STUDIO_URL`
 reverts to localhost — the committed `src/manifest.json` stays localhost so local dev is unaffected.)*
 
-**Chrome Web Store:** **v0.2.1 is LIVE** (approved 2026-07-06) — the first prod-targeted build
-(`https://sync-web-uir8.onrender.com` + localhost):
+**Chrome Web Store:** **v0.3.0 is LIVE** (stop→upload feedback + resilience; approved after the
+2026-07-06 submission) — prod-targeted (`https://sync-web-uir8.onrender.com` + localhost):
 <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk>. Its
 listing URL goes in `SYNC_EXTENSION_URL` on `sync-web` so the Home checklist's install CTA reads
 "Add to Chrome". *(0.1.0/0.2.0 were dev builds whose bridge only matched localhost, so store installs
-couldn't connect to the deployed Studio.)* **v0.3.0** (stop→upload feedback + resilience; adds the
-`alarms` permission) was **submitted to the store 2026-07-06** (in review). The store zip is built from
+couldn't connect to the deployed Studio; v0.2.1 was the first prod-targeted release.)* **v0.4.0**
+(**R13 ranked multi-signal locators** — the Sense-localization / Phase-3-replay enabler — + the
+structured-logging pass; no new permissions) was **built + packaged 2026-07-13**
+(`sync-recorder-0.4.0.zip`, upload to the dashboard pending). The store zip is built from
 `dist/` (`cd dist && zip -r ../sync-recorder-<version>.zip .`). ⚠️ The baked Studio URL is part of the
 store artifact — moving to a custom domain later means a rebuild + resubmission (add the new domain
-to the list; keep the old one during the transition).
+to the list; keep the old one during the transition). ⚠️ After zipping, re-run a plain
+`pnpm --filter @sync/extension build` so your local `dist/` goes back to the localhost-primary dev build.
 
 ---
 
