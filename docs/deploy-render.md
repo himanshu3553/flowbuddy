@@ -246,6 +246,20 @@ default `warn` in prod) — changing it means a rebuild, not just an env edit. F
 
 ---
 
+## Upgrading an existing deploy — the Phase 2 drop (Sense + Reason)
+
+Taking a running deploy from Phase 1 to the Phase-2 code (Sense `8187af5` + Reason `cb143ca`), in order:
+
+1. **Merge to the deploy branch & push** → Render rebuilds the Docker services.
+2. **Migrations run automatically** on `sync-api` boot (`prisma migrate deploy` in the start command — §9): `20260708121649_sense_in_context_help` + `20260713090000_reason_diagnostic`. Both are additive (new `Workspace` / `CopilotQuery` columns, defaults included) — no data backfill, no downtime concern. Confirm `All migrations have been successfully applied.` in the `sync-api` logs.
+3. **Set `SYNC_STUDIO_URL` on `sync-api`** (the real `sync-web` URL) if it isn't set yet — without it the Studio's real-widget tester 403s once a workspace restricts origins (§7).
+4. **Publish BOTH widget bundles** to `sync-widget` from one `pnpm --filter @sync/widget build`: `sync-copilot.js` **and** `sync-copilot-render.js`, side by side (the widget derives the renderer URL as a sibling of its own `src`). A missing renderer never breaks answers — diagnostics silently degrade to structure-only.
+5. *(Optional)* set `REASON_MODEL` on `sync-api` for a stronger vision model on the diagnostic path (unset = `SYNTH_MODEL`, default `gpt-4o`).
+6. **No other new env vars.** Behavior toggles are per-workspace in Studio → Copilot → Settings, with safe defaults: Sense **ON** · show-me OFF · Reason **ON** (masked, structure-only) · page image OFF · typed values OFF.
+7. **Smoke test:** run [`e2e-testing.md`](e2e-testing.md) Part 11 against the deployed embed — a positional "what do I do next?" and a "why is this button disabled?" diagnosis; verify `CopilotQuery.reasonTrigger` is populated on the diagnostic row.
+
+---
+
 ## Going to production
 
 To run always-on and reliable, edit `render.yaml`:
