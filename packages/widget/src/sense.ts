@@ -50,8 +50,8 @@ export interface SenseProbeResult {
 // ── Masking (client-side, before anything leaves the page) ─────────────────────────────────────
 // The error snippet is the ONLY page text Sense ships; scrub high-precision structured PII first,
 // using the same placeholder vocabulary as the server's P1-M12 redactText. Card before phone
-// (digit-run overlap).
-function maskText(s: string): string {
+// (digit-run overlap). Shared with the P2-M5 Reason capture (reason.ts) — one masking vocabulary.
+export function maskText(s: string): string {
   return s
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[redacted-email]')
     .replace(/\b(?:\d[ -]?){13,19}\b/g, '[redacted-card]')

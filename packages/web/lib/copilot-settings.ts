@@ -8,6 +8,10 @@ export interface CopilotSettings {
   // P2 Sense — the per-workspace master toggle + the "show me" highlight config (P2-M3).
   senseEnabled: boolean;
   showMe: boolean;
+  // P2-M5 Reason — diagnostic answers (structure, masked) + the image tier + value unmasking.
+  reasonEnabled: boolean;
+  reasonImageEnabled: boolean;
+  reasonIncludeValues: boolean;
   // Appearance — '' means "use the widget default" (see lib/copilot-appearance.ts).
   accent: string;
   title: string;
@@ -25,6 +29,9 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     copilotShowCitations: true,
     senseEnabled: true,
     copilotShowMe: true,
+    reasonEnabled: true,
+    reasonImageEnabled: true,
+    reasonIncludeValues: true,
     copilotAccent: true,
     copilotTitle: true,
     copilotGreeting: true,
@@ -46,6 +53,9 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     showCitations: ws.copilotShowCitations,
     senseEnabled: ws.senseEnabled,
     showMe: ws.copilotShowMe,
+    reasonEnabled: ws.reasonEnabled,
+    reasonImageEnabled: ws.reasonImageEnabled,
+    reasonIncludeValues: ws.reasonIncludeValues,
     accent: ws.copilotAccent ?? '',
     title: ws.copilotTitle ?? '',
     greeting: ws.copilotGreeting ?? '',

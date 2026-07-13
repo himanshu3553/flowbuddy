@@ -2,23 +2,36 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@sync/db';
-import { sessionManifestSchema } from '@sync/shared';
+import { sessionManifestSchema, type CapturedEvent, type SessionManifest } from '@sync/shared';
 import { createLogger } from '@sync/logger';
 import { config } from './config';
 import { authWorkspace } from './auth';
-import { ensureBucket, putObjectStream, deleteSessionPrefix, sessionKey } from './storage';
+import {
+  ensureBucket,
+  putObjectStream,
+  deleteSessionPrefix,
+  sessionKey,
+  sessionArtifactReader,
+} from './storage';
 import { synthesisQueue } from './queue';
 // Retrieval + history sanitizing come from the SHARED @sync/synthesis seam (P1-M5 no-leak) —
 // the Studio preview uses the same functions, so both surfaces answer identically.
 import {
   answerFromKB,
+  diagnoseFromKB,
   retrieveApprovedKBItems,
   sanitizeHistory,
+  redactText,
   type SenseContext,
   type SenseHypothesisContext,
   type AnswerPosition,
+  type CopilotAnswer,
+  type ReasonSnapshot,
+  type ReasonSnapshotElement,
+  type ReasonWorkflow,
+  type ExpectedStepEvidence,
 } from '@sync/synthesis';
-import { resolveCopilotKey, checkRateLimit, recordWidgetSeen } from './copilot-auth';
+import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
 
 // Use the shared structured logger so HTTP request logs share the app's level, JSON/pretty shape,
@@ -142,7 +155,13 @@ async function copilotGate(
   req: FastifyRequest,
   reply: FastifyReply,
   route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense',
-): Promise<{ workspaceId: string; showCitations: boolean; key: string; origin: string | undefined } | null> {
+): Promise<{
+  workspaceId: string;
+  showCitations: boolean;
+  reason: ReasonFlags;
+  key: string;
+  origin: string | undefined;
+} | null> {
   const key = (req.headers['x-sync-key'] as string | undefined) ?? '';
   const origin = req.headers.origin as string | undefined;
   const auth = await resolveCopilotKey(key, origin);
@@ -157,7 +176,7 @@ async function copilotGate(
     void reply.code(429).send({ error: 'rate limit exceeded — slow down' });
     return null;
   }
-  return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, key, origin };
+  return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, reason: auth.reason, key, origin };
 }
 
 // ── P2 Sense — validate the widget's localization payload ─────────────────────────────────────
@@ -273,19 +292,177 @@ function senseLogFields(
   };
 }
 
+// ── P2-M5 Reason — validate the widget's diagnostic evidence package ───────────────────────────
+// Like the sense hypotheses, the whole payload is UNTRUSTED (any page holding the public key can
+// send it): every field is type-checked, de-angled, capped, and PII-backstopped (redactText); the
+// image is accepted only when the founder's image tier is ON, values only when unmasking is ON —
+// a spoofed widget can never force a capture posture the founder didn't enable.
+const MAX_REASON_ELEMENTS = 60;
+const MAX_REASON_TEXTS = 40;
+const MAX_REASON_IMAGE_CHARS = 1_200_000; // ~900 KB binary; the route's bodyLimit backstops this
+const REASON_MAX_PER_WINDOW = 6; // per-minute ceiling for the expensive path (per key)
+
+/** Untrusted page-derived string → prompt-safe: strip angle brackets/control chars, cap, redact. */
+function cleanPageString(v: unknown, cap: number): string {
+  if (typeof v !== 'string') return '';
+  return redactText(v.replace(/[<>\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cap));
+}
+
+interface ResolvedReason {
+  /** The validated evidence package, or null when none/invalid/disabled. */
+  payload: { trigger: 'intent' | 'blocked' | 'escalation'; snapshot: ReasonSnapshot; image: string | null } | null;
+  /** The widget declared it can capture on request (drives the fast-path-failure escalation). */
+  available: boolean;
+}
+
+function resolveReasonContext(raw: unknown, flags: ReasonFlags): ResolvedReason {
+  if (!flags.enabled || !raw || typeof raw !== 'object') return { payload: null, available: false };
+  const w = raw as { available?: unknown; trigger?: unknown; snapshot?: unknown; image?: unknown };
+  const available = w.available === true;
+  const trigger =
+    w.trigger === 'intent' || w.trigger === 'blocked' || w.trigger === 'escalation' ? w.trigger : null;
+  const snap = w.snapshot as
+    | { path?: unknown; title?: unknown; viewport?: unknown; elements?: unknown; texts?: unknown }
+    | null
+    | undefined;
+  if (!trigger || !snap || typeof snap !== 'object') return { payload: null, available };
+
+  const elements: ReasonSnapshotElement[] = [];
+  for (const entry of Array.isArray(snap.elements) ? snap.elements.slice(0, MAX_REASON_ELEMENTS) : []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const el = entry as Record<string, unknown>;
+    const tag = cleanPageString(el.tag, 20).toLowerCase();
+    if (!/^[a-z][a-z0-9-]*$/.test(tag)) continue;
+    const e: ReasonSnapshotElement = { tag };
+    const role = cleanPageString(el.role, 32);
+    if (role) e.role = role;
+    const name = cleanPageString(el.name, 80);
+    if (name) e.name = name;
+    for (const flag of ['disabled', 'checked', 'expanded', 'required', 'filled', 'valid', 'current'] as const) {
+      if (typeof el[flag] === 'boolean') e[flag] = el[flag] as boolean;
+    }
+    const invalidReason = cleanPageString(el.invalidReason, 30);
+    if (e.valid === false && invalidReason) e.invalidReason = invalidReason;
+    // Field values pass ONLY when the founder unmasked them — the server re-checks the policy.
+    const value = cleanPageString(el.value, 120);
+    if (flags.values && value) e.value = value;
+    elements.push(e);
+  }
+
+  const texts = (Array.isArray(snap.texts) ? snap.texts.slice(0, MAX_REASON_TEXTS) : [])
+    .map((t) => cleanPageString(t, 160))
+    .filter((t) => t.length >= 2);
+
+  const vp = (snap.viewport ?? {}) as { w?: unknown; h?: unknown };
+  const dim = (v: unknown) => Math.min(20_000, Math.max(0, Math.round(Number(v) || 0)));
+
+  const image =
+    flags.image &&
+    typeof w.image === 'string' &&
+    w.image.length <= MAX_REASON_IMAGE_CHARS &&
+    /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(w.image)
+      ? w.image
+      : null;
+
+  return {
+    payload: {
+      trigger,
+      snapshot: {
+        path: cleanPageString(snap.path, 512),
+        title: cleanPageString(snap.title, 120),
+        viewport: { w: dim(vp.w), h: dim(vp.h) },
+        elements,
+        texts,
+      },
+      image,
+    },
+    available,
+  };
+}
+
+/**
+ * The founder's side of expected-vs-actual (§3 #3/#6): the FULL localized workflow recipe (every
+ * step, not just the retrieval shortlist) + lazy accessors for the current step's expected-state
+ * artifacts — the TRUE screenshot and the captured DOM snapshot from the approved recording, read
+ * from object storage only if the reasoning loop asks for them. The workflow key comes from the
+ * approval-checked TOP sense hypothesis, so no-leak holds: unapproved workflows never feed Reason.
+ */
+async function buildReasonEvidence(
+  workspaceId: string,
+  sense: SenseContext | null,
+): Promise<{ workflow: ReasonWorkflow | null; expected: ExpectedStepEvidence | null }> {
+  const top = sense?.hypotheses[0];
+  if (!top) return { workflow: null, expected: null };
+
+  const items = await prisma.knowledgeItem.findMany({
+    where: { workspaceId, kind: 'step', sourceId: top.sourceId, segmentIndex: top.segmentIndex },
+    orderBy: { orderIndex: 'asc' },
+    select: { orderIndex: true, data: true },
+  });
+  if (items.length === 0) return { workflow: null, expected: null };
+
+  const workflow: ReasonWorkflow = {
+    title: top.title,
+    steps: items.map((i) => ({
+      index: i.orderIndex + 1,
+      instruction: (((i.data ?? {}) as { instruction?: string }).instruction ?? '').slice(0, 200),
+    })),
+    currentStep: top.step,
+  };
+
+  const cur = items.find((i) => i.orderIndex === top.step - 1);
+  const d = (cur?.data ?? {}) as { screenshotFile?: string | null; keyEventId?: string };
+  if (!d.screenshotFile && !d.keyEventId) return { workflow, expected: null };
+
+  // The DOM half lives on the manifest event (keyEventId, falling back to screenshot matching —
+  // the same recovery rule the sense plan uses for pre-2026-07-08 rows).
+  const source = await prisma.knowledgeSource.findUnique({
+    where: { id: top.sourceId },
+    select: { manifest: true },
+  });
+  const events = ((source?.manifest as unknown as SessionManifest | null)?.events ?? []) as CapturedEvent[];
+  const ev =
+    events.find((e) => e.id === d.keyEventId) ??
+    events.find(
+      (e) => e.screenshot?.file === d.screenshotFile || e.postAction?.screenshot?.file === d.screenshotFile,
+    );
+  const domFile = ev?.domSnapshot?.file ?? ev?.postAction?.domSnapshot?.file ?? null;
+
+  const read = sessionArtifactReader(workspaceId, top.sourceId);
+  const expected: ExpectedStepEvidence = {
+    screenshot: async () => {
+      if (!d.screenshotFile) return null;
+      const buf = await read(d.screenshotFile);
+      if (!buf) return null;
+      const mime = d.screenshotFile.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    },
+    dom: async () => {
+      if (!domFile) return null;
+      const buf = await read(domFile);
+      return buf ? buf.toString('utf8') : null;
+    },
+  };
+  return { workflow, expected };
+}
+
 /**
  * P1-M6 — copilot answer endpoint. Grounded ONLY in APPROVED-KB (P1-M5): retrieve approved items,
  * answer or honestly decline; on a decline, log a CoverageGap ("record this next"). Auth = the
  * workspace token for now; P1-M9 adds a public embeddable key + origin allowlist for in-app embed.
+ * P2-M5 Reason: when the widget ships a diagnostic evidence package (structured page state ±
+ * rendered image) and the founder's toggle is on, the question routes to the REASONING path —
+ * a stronger model + expected-vs-actual over the founder's recording — instead of the fast path.
+ * The raised bodyLimit exists for the (validated, size-capped) page image.
  */
-app.post('/v1/copilot/answer', async (req, reply) => {
+app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply) => {
   const gate = await copilotGate(req, reply, 'answer');
   if (!gate) return reply;
   const { workspaceId, key, origin } = gate;
   const body = (req.body ?? {}) as {
     question?: string;
     history?: unknown;
-    context?: { path?: string; sense?: unknown };
+    context?: { path?: string; sense?: unknown; reason?: unknown };
     preview?: unknown;
   };
   // The Studio's real-widget tester flags its calls `preview`: same key, same engine, but a founder
@@ -328,17 +505,67 @@ app.post('/v1/copilot/answer', async (req, reply) => {
     return { covered: false, answer: null, citations: [], reason, queryId: q.id };
   }
 
-  const result = await answerFromKB({
-    question,
-    history: sanitizeHistory(body.history),
-    items,
-    context: { path: contextPath, sense: sense ?? undefined },
-    showCitations: gate.showCitations,
-    apiKey: config.openaiApiKey,
-    model: config.synthModel,
-  });
+  // P2-M5 Reason — validate the diagnostic evidence package (dropped entirely when the founder's
+  // toggle is off). The reasoning path gets its OWN tighter ceiling on top of the normal answer
+  // bucket; over it, the question silently degrades to the fast path (never an error).
+  let { payload: reasonPayload, available: reasonAvailable } = resolveReasonContext(
+    body.context?.reason,
+    gate.reason,
+  );
+  if (reasonPayload && !checkRateLimit(`reason:${key}`, Date.now(), REASON_MAX_PER_WINDOW)) {
+    req.log.warn({ workspaceId }, 'reason rate limit exceeded — degrading to the fast path');
+    reasonPayload = null;
+  }
+
+  let result: CopilotAnswer;
+  if (reasonPayload) {
+    // The reasoning path (docs/phase-2-reason.md §4): full workflow recipe + expected-state
+    // artifacts for the localized current step, then the stronger model's agentic read-tool loop.
+    const { workflow, expected } = await buildReasonEvidence(workspaceId, sense);
+    req.log.info(
+      {
+        workspaceId,
+        trigger: reasonPayload.trigger,
+        elements: reasonPayload.snapshot.elements.length,
+        image: Boolean(reasonPayload.image),
+        localized: Boolean(workflow),
+      },
+      'reason path engaged',
+    );
+    result = await diagnoseFromKB({
+      question,
+      history: sanitizeHistory(body.history),
+      items,
+      sense: sense ?? undefined,
+      snapshot: reasonPayload.snapshot,
+      pageImage: reasonPayload.image,
+      workflow,
+      expected,
+      showCitations: gate.showCitations,
+      apiKey: config.openaiApiKey,
+      model: config.reasonModel,
+    });
+  } else {
+    result = await answerFromKB({
+      question,
+      history: sanitizeHistory(body.history),
+      items,
+      context: { path: contextPath, sense: sense ?? undefined },
+      showCitations: gate.showCitations,
+      apiKey: config.openaiApiKey,
+      model: config.synthModel,
+    });
+  }
   // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
   const position = result.covered ? result.position : null;
+
+  // P2-M5 — the fast-path-failure trigger (§5.2): the fast path declined, the founder's toggle is
+  // on, and the widget declared it can capture. Ask it to retry ONCE with evidence instead of
+  // logging the decline (the retry logs the real outcome; a widget that never retries costs one
+  // missing decline row, not a phantom coverage gap).
+  if (!result.covered && !reasonPayload && reasonAvailable && !preview) {
+    return { covered: false, answer: null, citations: [], reason: result.reason, escalate: true };
+  }
 
   // Preview answers are never persisted — return the engine's result as-is (no queryId).
   if (preview) {
@@ -350,6 +577,7 @@ app.post('/v1/copilot/answer', async (req, reply) => {
   // P1-M10: log the Q&A (analytics + the thumbs-feedback target). On a grounded answer,
   // persist the cited workflows too (powers Analytics "Top workflows by citations").
   // P2-M4: also log the Sense localization outcome (used | ignored | none) — step-friction analytics.
+  // P2-M5: and the Reason outcome (why the diagnostic path fired + whether the image rode along).
   const logged = await prisma.copilotQuery.create({
     data: {
       workspaceId,
@@ -357,6 +585,9 @@ app.post('/v1/copilot/answer', async (req, reply) => {
       answered: result.covered,
       contextPath,
       ...senseLogFields(sense, probed, position),
+      ...(reasonPayload
+        ? { reasonTrigger: reasonPayload.trigger, reasonImage: Boolean(reasonPayload.image) }
+        : {}),
       ...(result.covered && result.citations.length > 0
         ? {
             citations: {
@@ -453,6 +684,9 @@ app.get('/v1/copilot/config', async (req, reply) => {
       copilotLauncherText: true,
       senseEnabled: true,
       copilotShowMe: true,
+      reasonEnabled: true,
+      reasonImageEnabled: true,
+      reasonIncludeValues: true,
     },
   });
   if (!ws) return reply.code(404).send({ error: 'workspace not found' });
@@ -468,6 +702,11 @@ app.get('/v1/copilot/config', async (req, reply) => {
     // P2 Sense — `sense` gates the widget's plan fetch/probe; `showMe` gates the P2-M3 highlight.
     sense: ws.senseEnabled,
     showMe: ws.copilotShowMe,
+    // P2-M5 Reason — `reason` gates the diagnostic capture; the image tier and value unmasking
+    // are separate founder opt-ins (the server re-enforces all three on /answer regardless).
+    reason: ws.reasonEnabled,
+    reasonImage: ws.reasonImageEnabled,
+    reasonValues: ws.reasonIncludeValues,
   };
 });
 

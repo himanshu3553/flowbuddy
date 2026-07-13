@@ -17,6 +17,15 @@ export type { Segment } from './segment';
 export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 export type { SenseContext, SenseHypothesisContext, AnswerPosition } from './copilot'; // P2 Sense
+// P2-M5 Reason — the diagnostic engine (structured page state + expected-vs-actual, agentic read-tools).
+export { diagnoseFromKB } from './reason';
+export type {
+  ReasonInput,
+  ReasonSnapshot,
+  ReasonSnapshotElement,
+  ReasonWorkflow,
+  ExpectedStepEvidence,
+} from './reason';
 // P1-M5/M6 — the SINGLE retrieval + approved-KB enforcement seam (api answer route + Studio
 // preview both call it; the P1-M3 hybrid keyword+vector upgrade lives here). See retrieval.ts.
 export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retrieval';

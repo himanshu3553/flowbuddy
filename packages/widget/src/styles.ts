@@ -71,6 +71,21 @@ export const CSS = `
 .sc-bubble { padding: 9px 12px; border-radius: 13px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
 .sc-bubble strong { font-weight: 600; }
 .sc-bubble code { font-family: var(--sc-mono); font-size: 11.5px; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 5px; }
+/* Assistant answers are block-rendered (paragraphs + step rows) — spacing comes from margins,
+   not preserved newlines (user bubbles keep pre-wrap above). */
+.sc-assistant .sc-bubble { white-space: normal; }
+.sc-p { margin: 0; }
+.sc-p + .sc-p, .sc-p + .sc-steps, .sc-steps + .sc-p, .sc-steps + .sc-steps { margin-top: 8px; }
+.sc-steps { display: flex; flex-direction: column; gap: 7px; }
+.sc-step { display: flex; align-items: flex-start; gap: 8px; }
+.sc-step-n {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 19px; height: 19px; padding: 0 5px; margin-top: 1px; border-radius: 999px;
+  background: color-mix(in srgb, var(--sc-accent) 11%, transparent); color: var(--sc-accent);
+  font-family: var(--sc-mono); font-size: 10.5px; font-weight: 600; line-height: 1;
+}
+.sc-step-b { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--sc-accent); margin-top: 7.5px; }
+.sc-step-t { min-width: 0; }
 .sc-user .sc-bubble { background: var(--sc-accent); color: var(--sc-accent-fg); border-bottom-right-radius: 4px; }
 .sc-assistant .sc-bubble { background: var(--sc-surface); color: var(--sc-fg); border: 1px solid var(--sc-border); border-bottom-left-radius: 4px; }
 .sc-decline .sc-bubble { background: var(--sc-surface); border: 1px solid #f0ddd7; color: var(--sc-fg); }

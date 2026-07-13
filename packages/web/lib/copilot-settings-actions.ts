@@ -112,6 +112,42 @@ export async function setCopilotShowMe(showMe: boolean): Promise<void> {
   revalidatePath('/dashboard/copilot');
 }
 
+/** P2-M5 Reason — diagnostic answers (ask-time structured page-state capture, values masked). */
+export async function setReasonEnabled(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { reasonEnabled: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
+/** P2-M5 — the image tier: the widget also paints a masked DOM-rendered image of the user's page
+ *  on diagnostic questions. The most sensitive capture — the founder knowingly owns it (the
+ *  disclosure snippet surfaces alongside the switch). */
+export async function setReasonImageEnabled(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { reasonImageEnabled: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
+/** P2-M5 — unmask typed field values in the diagnostic capture. Hard floors apply regardless:
+ *  passwords are never captured, card/SSN patterns are always masked. */
+export async function setReasonIncludeValues(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { reasonIncludeValues: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
 /** Rotate the public embeddable key (invalidates the old one immediately). */
 export async function regenerateCopilotKey(): Promise<void> {
   const ctx = await getCurrentWorkspace();

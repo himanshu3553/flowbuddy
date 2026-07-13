@@ -11,6 +11,9 @@ import {
   setCopilotAppearance,
   setSenseEnabled,
   setCopilotShowMe,
+  setReasonEnabled,
+  setReasonImageEnabled,
+  setReasonIncludeValues,
 } from '@/lib/copilot-settings-actions';
 import {
   ACCENT_PRESETS,
@@ -98,6 +101,9 @@ export function CopilotWorkspace({
   showCitations = true,
   senseEnabled = true,
   showMe = false,
+  reasonEnabled = true,
+  reasonImageEnabled = false,
+  reasonIncludeValues = false,
   activity,
   detection,
   appearance,
@@ -111,6 +117,9 @@ export function CopilotWorkspace({
   showCitations?: boolean;
   senseEnabled?: boolean;
   showMe?: boolean;
+  reasonEnabled?: boolean;
+  reasonImageEnabled?: boolean;
+  reasonIncludeValues?: boolean;
   activity: {
     total: number;
     window: number;
@@ -129,6 +138,10 @@ export function CopilotWorkspace({
   const [cite, setCite] = useState(showCitations);
   const [sense, setSense] = useState(senseEnabled);
   const [showMeOn, setShowMeOn] = useState(showMe);
+  // P2-M5 Reason — the founder toggle ladder (diagnostic answers · page image · typed values).
+  const [reason, setReason] = useState(reasonEnabled);
+  const [reasonImg, setReasonImg] = useState(reasonImageEnabled);
+  const [reasonVals, setReasonVals] = useState(reasonIncludeValues);
   const [showKey, setShowKey] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -179,6 +192,54 @@ export function CopilotWorkspace({
         toast.success(value ? '"Show me" on — the widget highlights the current step.' : '"Show me" off.');
       } catch {
         setShowMeOn(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  // P2-M5 Reason — the three diagnostic-path toggles (master · image tier · value unmasking).
+  function toggleReason(value: boolean) {
+    setReason(value); // optimistic
+    start(async () => {
+      try {
+        await setReasonEnabled(value);
+        router.refresh();
+        toast.success(value ? 'Reason on — diagnostic answers enabled.' : 'Reason off — no page-state capture.');
+      } catch {
+        setReason(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  function toggleReasonImage(value: boolean) {
+    setReasonImg(value); // optimistic
+    start(async () => {
+      try {
+        await setReasonImageEnabled(value);
+        router.refresh();
+        toast.success(
+          value
+            ? 'Page image on — remember to update your privacy policy (snippet below).'
+            : 'Page image off.',
+        );
+      } catch {
+        setReasonImg(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  function toggleReasonValues(value: boolean) {
+    setReasonVals(value); // optimistic
+    start(async () => {
+      try {
+        await setReasonIncludeValues(value);
+        router.refresh();
+        toast.success(
+          value
+            ? 'Typed values on — passwords are never captured; card/SSN stay masked.'
+            : 'Typed values off — captures are masked again.',
+        );
+      } catch {
+        setReasonVals(!value);
         toast.error('Could not save the setting. Please try again.');
       }
     });
@@ -244,6 +305,15 @@ export function CopilotWorkspace({
 
   // Public key, masked by default (keep the recognizable prefix, hide the secret-ish tail).
   const maskedKey = publicKey.slice(0, 3) + '•'.repeat(24);
+
+  // P2-M5 Reason — the ready-made disclosure paragraph for the founder's privacy policy. Silent
+  // capture makes this load-bearing for THEIR legal posture, so it ships with the toggles, not as
+  // a follow-up (docs/phase-2-reason.md §6).
+  const disclosureSnippet =
+    'When you ask our in-app assistant a question, it may take a one-time reading of the page you are on — ' +
+    'the state of buttons and form fields (and, where enabled, a masked image of the page) — solely to ' +
+    'diagnose your issue. Passwords are never collected, and personal data is masked in your browser ' +
+    'before anything is sent.';
 
   return (
     <div className="min-w-0 space-y-5">
@@ -593,6 +663,83 @@ export function CopilotWorkspace({
                 />
               </div>
             </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">
+              Reason — diagnostic answers
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              On &ldquo;why isn&rsquo;t this working?&rdquo; questions, the copilot
+              takes a one-time reading of the user&rsquo;s page state (values
+              masked) and compares it with your recording of that step working —
+              then explains exactly what&rsquo;s blocking them.
+            </p>
+            <div className="mt-3 divide-y">
+              <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
+                <div>
+                  <p className="text-sm font-medium">Enable Reason</p>
+                  <p className="text-xs text-muted-foreground">
+                    Structured page-state capture at ask time only — no
+                    recording, no screenshots, all values masked.
+                  </p>
+                </div>
+                <Switch
+                  checked={reason}
+                  onCheckedChange={toggleReason}
+                  disabled={pending}
+                  aria-label="Enable Reason (diagnostic answers)"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Include page image</p>
+                  <p className="text-xs text-muted-foreground">
+                    Also render a masked image of the user&rsquo;s page for
+                    visual issues (layout, overlays, low-semantics UIs). The
+                    most sensitive capture — add the disclosure below to your
+                    privacy policy.
+                  </p>
+                </div>
+                <Switch
+                  checked={reasonImg}
+                  onCheckedChange={toggleReasonImage}
+                  disabled={pending || !reason}
+                  aria-label="Include page image"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium">Include typed values</p>
+                  <p className="text-xs text-muted-foreground">
+                    Send what users typed instead of filled/empty flags.
+                    Passwords are never captured; card &amp; SSN patterns stay
+                    masked regardless.
+                  </p>
+                </div>
+                <Switch
+                  checked={reasonVals}
+                  onCheckedChange={toggleReasonValues}
+                  disabled={pending || !reason}
+                  aria-label="Include typed values"
+                />
+              </div>
+            </div>
+            {reason && (
+              <div className="mt-3 rounded-md border border-dashed bg-[color:var(--paper-2)] p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-[11.5px] font-semibold text-muted-foreground">
+                    Privacy-policy disclosure — paste into your policy (capture
+                    is silent to end-users, so the disclosure is yours to
+                    carry):
+                  </p>
+                  <CopyButton value={disclosureSnippet} label="Copy" />
+                </div>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  {disclosureSnippet}
+                </p>
+              </div>
+            )}
           </section>
 
           <section className="rounded-card border bg-card p-5 shadow-card">

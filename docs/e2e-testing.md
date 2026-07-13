@@ -131,7 +131,7 @@ pnpm --filter @sync/web dev
 
 ## Logging (local)
 
-The Node services (`api`, `worker`, Studio server) share one structured logger (`@sync/logger`, Pino). **Locally the default is verbose + readable** — level `debug`, pretty-printed — so you can watch capture → synthesis progress in Parts 3–12. Change it with env vars on the process you're running:
+The Node services (`api`, `worker`, Studio server) share one structured logger (`@sync/logger`, Pino). **Locally the default is verbose + readable** — level `debug`, pretty-printed — so you can watch capture → synthesis progress in Parts 3–13. Change it with env vars on the process you're running:
 
 ```bash
 LOG_LEVEL=warn   pnpm --filter @sync/api worker   # only warnings + errors
@@ -242,7 +242,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 1. Build the widget + serve the demo:
    ```bash
-   pnpm --filter @sync/widget build      # → packages/widget/dist/sync-copilot.js
+   pnpm --filter @sync/widget build      # → dist/sync-copilot.js + dist/sync-copilot-render.js (siblings)
    cd packages/widget && python3 -m http.server 8080
    ```
 2. Edit `packages/widget/demo/index.html`: set `data-sync-key` to the **public key** from Part 9 and `data-sync-api="http://localhost:8787"`.
@@ -273,7 +273,27 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 ---
 
-## 11. Analytics & coverage gaps (the feedback loop)
+## 11. Phase 2 — Sense (positional answers) & Reason (diagnostics)
+
+Both ride the Part-10 embed (or your own test app — remember to copy **both** widget bundles there after a rebuild). Sense + Reason are ON by default per workspace (Studio → Copilot → Settings); the page image + typed values are separate founder opt-ins.
+
+**Sense (in-context help):**
+1. Open a recorded flow mid-workflow (e.g. the sign-in form), fill some fields, open the copilot and ask *"what do I do next?"*.
+2. Expect a **positional** answer anchored on the step you're actually on — and on a follow-up (*"then?"*) with an unchanged page it must **re-anchor**, never advance past an uncompleted step.
+3. With **"Show me" highlight** ON (reload the host page after flipping), a positional answer also outlines the current step's element for ~6s.
+
+✅ **PASS:** the answer names your real current step; "then?" on an unchanged page re-anchors; those rows log `CopilotQuery.senseUsed='used'`.
+
+**Reason (diagnostic reasoning):**
+1. Put the page into a blocked state (leave a required field empty / fail on-screen password rules so submit stays disabled) and ask *"why is the <button> disabled?"*.
+2. Expect a plain-language diagnosis naming **every** blocker, formatted as numbered step rows with **bolded** UI names — no constraint jargon (`valueMissing` …), no re-instructing things that are already fine.
+3. With **"Include page image"** ON, visual-only state (a color-coded requirements checklist) is diagnosed too; DevTools → Network shows the lazy `sync-copilot-render.js` fetch on the first diagnostic question.
+
+✅ **PASS:** correct blocker(s) in plain words; `CopilotQuery.reasonTrigger` = `intent`/`blocked` (+ `reasonImage=true` when the tier is on); a plain "how do I…" on the same page stays fast-path (`reasonTrigger` null).
+
+---
+
+## 12. Analytics & coverage gaps (the feedback loop)
 
 1. Studio → **Copilot** page → **Copilot activity**: shows total questions, % answered, 👍/👎 counts, and the recent Q&A list (each tagged answered/declined). Confirm your Part-10 questions appear with correct tags + feedback.
 2. Studio → **Home** (`/dashboard`) → **Coverage gaps — record these next**: the *declined* question from 10b appears as an open gap (source `copilot`).
@@ -283,7 +303,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 ---
 
-## 12. Reprocess / idempotency
+## 13. Reprocess / idempotency
 
 1. Re-record (or re-trigger) the same workflow. The worker deletes + recreates KnowledgeItems and resets segment tags each run.
 2. Confirm the previously-approved workflow's approval still holds (keyed by `sourceId + segmentIndex`).
@@ -310,6 +330,8 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 | Honest decline | API | unknown question declines, no hallucination |
 | Coverage gap | API + Studio | decline → open gap → dismiss |
 | Feedback | API + Studio | thumbs recorded + shown |
+| Sense | Widget + API | positional answer anchored on the measured current step; `senseUsed` logged |
+| Reason | Widget + API + Synthesis | diagnostic question → plain-language blocker diagnosis; `reasonTrigger`/`reasonImage` logged; simple questions stay on the fast path |
 | Security | API | origin allowlist + rate limit enforced |
 | Redaction | Synthesis | PII scrubbed from KB text/narration/transcript |
 | Idempotency | Worker | reprocess doesn't duplicate; approval survives |

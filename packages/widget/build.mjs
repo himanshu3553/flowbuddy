@@ -5,22 +5,33 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes('--watch');
 
-/** Bundle the widget to a single self-contained <script> (IIFE) the customer drops into their app. */
-const opts = {
-  entryPoints: [path.join(__dirname, 'src/index.ts')],
-  outfile: path.join(__dirname, 'dist/sync-copilot.js'),
+/**
+ * Two self-contained IIFE bundles:
+ *  - sync-copilot.js        — the widget the customer embeds (one <script>).
+ *  - sync-copilot-render.js — the P2-M5 Reason image-tier renderer (html2canvas + clone masking),
+ *    LAZY-loaded by the widget on the first diagnostic question when the founder enabled the page
+ *    image — it must never ride in the base bundle. Deploy it NEXT TO the widget bundle (the
+ *    widget derives its URL as a sibling file of its own script src).
+ */
+const shared = {
   bundle: true,
   format: 'iife',
   target: ['chrome120', 'firefox120', 'safari16'],
   minify: !watch,
   logLevel: 'info',
 };
+const bundles = [
+  { ...shared, entryPoints: [path.join(__dirname, 'src/index.ts')], outfile: path.join(__dirname, 'dist/sync-copilot.js') },
+  { ...shared, entryPoints: [path.join(__dirname, 'src/render-image.ts')], outfile: path.join(__dirname, 'dist/sync-copilot-render.js') },
+];
 
 if (watch) {
-  const ctx = await context(opts);
-  await ctx.watch();
-  console.log('watching… -> dist/sync-copilot.js');
+  for (const opts of bundles) {
+    const ctx = await context(opts);
+    await ctx.watch();
+  }
+  console.log('watching… -> dist/sync-copilot.js + dist/sync-copilot-render.js');
 } else {
-  await build(opts);
-  console.log('built -> dist/sync-copilot.js');
+  await Promise.all(bundles.map((opts) => build(opts)));
+  console.log('built -> dist/sync-copilot.js + dist/sync-copilot-render.js');
 }

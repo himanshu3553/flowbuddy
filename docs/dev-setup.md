@@ -23,9 +23,9 @@ sync/
     synthesis/  # transcribe → clean → segment → distill steps + the copilot answer engine (OpenAI)
     api/        # Fastify ingestion + copilot routes + the BullMQ worker (worker entrypoint)
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
-    widget/     # embeddable copilot <script> (esbuild → sync-copilot.js) — Phase 1 · Sync-indigo default, host-rebrandable
+    widget/     # embeddable copilot <script> (esbuild → sync-copilot.js + the lazy P2-M5 renderer sync-copilot-render.js) — Sync-indigo default, host-rebrandable
     extension/  # Chrome MV3 recorder — indigo UI
-  docs/       # product · architecture · roadmap · phase-1-copilot · phase-1-modules-map · phase-4-autopilot · v2-portal · kb-step-distillation · design_system/ · e2e-testing · this file
+  docs/       # product · architecture · roadmap · phase-1-copilot · phase-1-modules-map · phase-2-sense · phase-2-reason · phase-4-autopilot · v2-portal · kb-step-distillation · design_system/ · e2e-testing · this file
 ```
 
 > **Note:** the `portal/` package (the public help site) and the throwaway `spike/` were **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22). The portal is **built in Version 2** ([`v2-portal.md`](v2-portal.md)).
@@ -89,7 +89,7 @@ pnpm --filter @sync/api dev                   # ingestion API + copilot endpoint
 pnpm --filter @sync/api worker                # the worker (turns recordings into the KB)
 pnpm --filter @sync/web dev                   # run Studio → http://localhost:3000
 # for the copilot embed (Phase 1):
-pnpm --filter @sync/widget build              # build sync-copilot.js → SERVE the demo over HTTP (cd packages/widget && python3 -m http.server 8080), not file://
+pnpm --filter @sync/widget build              # builds sync-copilot.js + sync-copilot-render.js (lazy P2-M5 image tier) → SERVE the demo over HTTP (cd packages/widget && python3 -m http.server 8080), not file://
 pnpm --filter @sync/extension build           # build the recorder → load packages/extension/dist/ in Chrome
 
 # building / checking

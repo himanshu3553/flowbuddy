@@ -28,6 +28,9 @@ export default async function CopilotSettingsPage() {
     showCitations,
     senseEnabled,
     showMe,
+    reasonEnabled,
+    reasonImageEnabled,
+    reasonIncludeValues,
     accent,
     title,
     greeting,
@@ -82,6 +85,9 @@ export default async function CopilotSettingsPage() {
           showCitations={showCitations}
           senseEnabled={senseEnabled}
           showMe={showMe}
+          reasonEnabled={reasonEnabled}
+          reasonImageEnabled={reasonImageEnabled}
+          reasonIncludeValues={reasonIncludeValues}
           activity={{
             total: metrics.total,
             window: metrics.window,

@@ -7,8 +7,16 @@ import { config } from './config';
  * recorder token. We resolve key → workspace, enforce an origin allowlist, and rate-limit per key.
  */
 
+/** P2-M5 Reason — the workspace's diagnostic-path policy, resolved with the key so the answer
+ *  route can gate the reasoning path without a second workspace read. */
+export interface ReasonFlags {
+  enabled: boolean;
+  image: boolean;
+  values: boolean;
+}
+
 export type CopilotAuthResult =
-  | { ok: true; workspaceId: string; showCitations: boolean }
+  | { ok: true; workspaceId: string; showCitations: boolean; reason: ReasonFlags }
   | { ok: false; status: number; error: string };
 
 /** Resolve a public embeddable key → workspace, enforcing the origin allowlist (empty = allow any). */
@@ -21,7 +29,14 @@ export async function resolveCopilotKey(
 
   const ws = await prisma.workspace.findUnique({
     where: { copilotPublicKey: k },
-    select: { id: true, copilotAllowedOrigins: true, copilotShowCitations: true },
+    select: {
+      id: true,
+      copilotAllowedOrigins: true,
+      copilotShowCitations: true,
+      reasonEnabled: true,
+      reasonImageEnabled: true,
+      reasonIncludeValues: true,
+    },
   });
   if (!ws) return { ok: false, status: 401, error: 'invalid copilot key' };
 
@@ -33,21 +48,28 @@ export async function resolveCopilotKey(
   if (allow.length > 0 && origin && origin !== config.studioOrigin && !allow.includes(origin)) {
     return { ok: false, status: 403, error: 'origin not allowed' };
   }
-  return { ok: true, workspaceId: ws.id, showCitations: ws.copilotShowCitations };
+  return {
+    ok: true,
+    workspaceId: ws.id,
+    showCitations: ws.copilotShowCitations,
+    reason: { enabled: ws.reasonEnabled, image: ws.reasonImageEnabled, values: ws.reasonIncludeValues },
+  };
 }
 
-/** In-memory fixed-window rate limiter, per key. MVP — production would back this with Redis. */
+/** In-memory fixed-window rate limiter, per key. MVP — production would back this with Redis.
+ *  `max` lets a caller run a TIGHTER bucket (the P2-M5 reasoning path — the most expensive thing
+ *  the product does per interaction — gets its own low ceiling on top of the normal one). */
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 30;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
-export function checkRateLimit(key: string, now: number = Date.now()): boolean {
+export function checkRateLimit(key: string, now: number = Date.now(), max: number = MAX_PER_WINDOW): boolean {
   const b = buckets.get(key);
   if (!b || now >= b.resetAt) {
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return true;
   }
-  if (b.count >= MAX_PER_WINDOW) return false;
+  if (b.count >= max) return false;
   b.count++;
   return true;
 }

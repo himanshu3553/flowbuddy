@@ -20,7 +20,7 @@ The blueprint provisions **5 resources** (all free):
 | `sync-redis` | Key Value | Valkey 8 | BullMQ job queue (synthesis) |
 | `sync-api` | Web service | Docker | copilot answer API + recorder ingestion **+ the synthesis worker** (folded in — see below) |
 | `sync-web` | Web service | Docker | the Next.js **Studio** (approve workflows, copilot settings, analytics) |
-| `sync-widget` | Static site | Static | hosts the embeddable `sync-copilot.js` bundle |
+| `sync-widget` | Static site | Static | hosts the embeddable `sync-copilot.js` bundle **+ its sibling `sync-copilot-render.js`** (the lazy P2-M5 image-tier renderer — always publish BOTH from the same `packages/widget/dist/` build; the widget derives the renderer URL as a sibling of its own `src`, and a missing file degrades diagnostics to structure-only, silently) |
 
 Plus an **environment group** `sync-r2` holding the shared Cloudflare R2 credentials.
 
@@ -94,6 +94,7 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `OPENAI_API_KEY` | **`sync-api`** only | your `sk-…` (synthesis + the copilot answer engine; the Studio makes no OpenAI calls — its tester embeds the real widget → sync-api) |
 | `EMBED_MODEL` | `sync-api` (blueprint sets it) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy (Render Postgres supports it). |
 | `SYNC_STUDIO_URL` | **`sync-api`** | the real `sync-web` URL (see step 8) — the Studio origin is exempt from workspace origin allowlists so the Copilot page's real-widget tester keeps working after a customer restricts origins. ⚠️ Unset = the tester 403s for allowlisted workspaces. |
+| `REASON_MODEL` | `sync-api` (optional) | the P2-M5 diagnostic path's stronger (vision-capable) model; unset = falls back to `SYNTH_MODEL` (default `gpt-4o`) |
 | `AUTH_SECRET` | `sync-web` | output of step 4 |
 | `AUTH_URL` | `sync-web` | the real `sync-web` URL (see step 8) |
 | `SYNC_API_URL` | `sync-web` | the real `sync-api` URL (see step 8) |
@@ -141,6 +142,7 @@ public URL, so:
 ## 10. Smoke test
 
 - `sync-widget` URL + `/sync-copilot.js` serves a minified JS bundle (it's a global static site — no cold start).
+- `sync-widget` URL + `/sync-copilot-render.js` serves the P2-M5 renderer bundle too (the widget lazy-loads it as a sibling of its own `src` when "Include page image" is on).
 - `sync-web` URL renders the **Sync Studio** sign-in page.
 - Create an account in Studio (this exercises `AUTH_SECRET` + the DB).
 

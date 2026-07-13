@@ -29,12 +29,16 @@ import { CSS } from './styles.js';
 import { log, setDebug } from './log.js';
 // P2 Sense — panel-open shard fetch + ask-time read-only probe + the show-me highlight.
 import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeResult } from './sense.js';
+// P2-M5 Reason — the selective diagnostic trigger + structured page-state capture (+ lazy image tier).
+import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
 
 interface Citation { segmentTitle: string | null }
 interface AnswerPosition { sourceId: string; segmentIndex: number; step: number }
 interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean; queryId?: string; feedback?: 'up' | 'down' }
 
 const script = document.currentScript as HTMLScriptElement | null;
+// The widget's own URL — the P2-M5 lazy renderer bundle is derived from it (a sibling file).
+const SCRIPT_SRC = script?.src || '';
 const g = (window as unknown as { SyncCopilot?: Record<string, string> }).SyncCopilot ?? {};
 // Explicit host-page values (attr or window global) — recorded separately from the resolved cfg
 // because an explicit value must keep winning over the server config fetched at mount.
@@ -61,6 +65,11 @@ const cfg = {
   // (harmless read-only probe), showMe defaults OFF (it draws on the host page).
   sense: true,
   showMe: false,
+  // P2-M5 Reason — all three arrive from /v1/copilot/config. reason defaults ON (structure-only,
+  // masked); the image tier and value unmasking default OFF (the founder knowingly enables them).
+  reason: true,
+  reasonImage: false,
+  reasonValues: false,
   // Opt-in diagnostics (off by default — the widget must never spam a customer's console).
   debug: /^(1|true|yes)$/i.test(script?.dataset.syncDebug || '') ||
     (window as unknown as { SyncCopilotDebug?: boolean }).SyncCopilotDebug === true,
@@ -83,14 +92,40 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 
 // Render a SAFE minimal-markdown subset for assistant answers (the model returns markdown). HTML is
 // escaped FIRST, then only **bold** / `code` are introduced — so nothing in the answer can inject
-// markup into the host page. Line breaks are handled by CSS (`white-space: pre-wrap`).
+// markup into the host page. Block layout is line-based: "1. …" lines render as STEP ROWS with a
+// numbered chip, "- …" lines as bullet rows, everything else as paragraphs (blank lines = spacing
+// via CSS margins). The prompt's shared ANSWER_FORMAT_RULES emit exactly this subset.
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'));
 }
-function mdToHtml(text: string): string {
-  return escapeHtml(text)
+function inlineMd(s: string): string {
+  return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+function mdToHtml(text: string): string {
+  const out: string[] = [];
+  let steps: string[] = [];
+  const flush = () => {
+    if (steps.length === 0) return;
+    out.push(`<div class="sc-steps">${steps.join('')}</div>`);
+    steps = [];
+  };
+  for (const raw of escapeHtml(text).split('\n')) {
+    const line = raw.trim();
+    const ol = /^(\d{1,2})[.)]\s+(.*)$/.exec(line);
+    const ul = /^[-*•]\s+(.*)$/.exec(line);
+    if (ol) {
+      steps.push(`<div class="sc-step"><span class="sc-step-n">${ol[1]}</span><span class="sc-step-t">${inlineMd(ol[2]!)}</span></div>`);
+    } else if (ul) {
+      steps.push(`<div class="sc-step"><span class="sc-step-b"></span><span class="sc-step-t">${inlineMd(ul[1]!)}</span></div>`);
+    } else {
+      flush();
+      if (line) out.push(`<p class="sc-p">${inlineMd(line)}</p>`);
+    }
+  }
+  flush();
+  return out.join('');
 }
 function bubbleEl(m: Msg): HTMLDivElement {
   const b = document.createElement('div');
@@ -226,6 +261,51 @@ function render(): void {
 // P2 Sense — the probe result backing the LAST question (its resolved elements power show-me).
 let lastProbe: SenseProbeResult | null = null;
 const senseActive = () => Boolean(cfg.key) && !cfg.preview && cfg.sense;
+// P2-M5 Reason — active on real embeds when the founder's toggle is on (structure-only by default).
+const reasonActive = () => Boolean(cfg.key) && !cfg.preview && cfg.reason;
+
+/** Capture the Reason evidence package: the structured snapshot (+ the page image where the
+ *  founder enabled the tier). Null when capture fails — the question proceeds without Reason. */
+async function buildReasonPayload(trigger: ReasonTrigger): Promise<ReasonAskPayload | null> {
+  const snapshot = captureSnapshot(cfg.reasonValues, lastProbe);
+  if (!snapshot) return null;
+  const image = cfg.reasonImage ? await renderPageImage(SCRIPT_SRC, cfg.reasonValues) : null;
+  log.debug('reason: captured page state', { trigger, elements: snapshot.elements.length, image: Boolean(image) });
+  return { trigger, snapshot, ...(image ? { image } : {}) };
+}
+
+interface AnswerResponse {
+  covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
+  position?: AnswerPosition | null; escalate?: boolean;
+}
+
+async function postAnswer(
+  question: string,
+  history: Array<{ role: string; content: string }>,
+  reasonPayload: ReasonAskPayload | null,
+): Promise<{ ok: boolean; status: number; data: AnswerResponse }> {
+  const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
+    body: JSON.stringify({
+      question,
+      history,
+      context: {
+        path: location.pathname,
+        title: document.title,
+        ...(lastProbe && lastProbe.hypotheses.length > 0
+          ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
+          : {}),
+        // P2-M5 Reason — either the captured evidence, or a capability flag so the server knows a
+        // fast-path decline may be escalated (it then skips logging and asks us to retry).
+        ...(reasonPayload ? { reason: reasonPayload } : reasonActive() ? { reason: { available: true } } : {}),
+      },
+      ...(cfg.preview ? { preview: true } : {}),
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AnswerResponse;
+  return { ok: res.ok, status: res.status, data };
+}
 
 async function ask(question: string): Promise<void> {
   messages.push({ role: 'user', content: question });
@@ -239,28 +319,23 @@ async function ask(question: string): Promise<void> {
   // shard is normally cached from panel open; a short budget covers the cold case. null = Sense
   // has nothing to say → the context is simply omitted (the copilot behaves exactly as before).
   lastProbe = senseActive() ? await probeForAsk(cfg.apiBase, cfg.key, location.pathname, 800) : null;
+  // P2-M5 Reason — the selective trigger (§5.2): diagnostic wording, or a blocked page state.
+  // Clearly-diagnostic questions capture NOW and go straight to the reasoning path (no double
+  // latency); everything else stays on the fast path. The user does nothing and sees nothing.
+  let reasonPayload: ReasonAskPayload | null = null;
+  if (reasonActive()) {
+    const trigger = reasonTrigger(question, lastProbe);
+    if (trigger) reasonPayload = await buildReasonPayload(trigger);
+  }
   try {
-    const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
-      body: JSON.stringify({
-        question,
-        history,
-        context: {
-          path: location.pathname,
-          title: document.title,
-          ...(lastProbe && lastProbe.hypotheses.length > 0
-            ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
-            : {}),
-        },
-        ...(cfg.preview ? { preview: true } : {}),
-      }),
-    });
-    const data = (await res.json().catch(() => ({}))) as {
-      covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
-      position?: AnswerPosition | null;
-    };
-    if (!res.ok) { log.warn('answer request failed', res.status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${res.status})`, error: true }); }
+    let { ok, status, data } = await postAnswer(question, history, reasonPayload);
+    // The third trigger — fast-path failure: the server declined but says Reason could try. One
+    // capture + one retry (never chains); the typing indicator simply stays up a little longer.
+    if (ok && data.covered === false && data.escalate && reasonActive() && !reasonPayload) {
+      reasonPayload = await buildReasonPayload('escalation');
+      if (reasonPayload) ({ ok, status, data } = await postAnswer(question, history, reasonPayload));
+    }
+    if (!ok) { log.warn('answer request failed', status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${status})`, error: true }); }
     else if (data.covered) {
       messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
       // P2-M3 "show me" (config-gated): the answer positioned the user → highlight that step's
@@ -338,6 +413,7 @@ interface ServerConfig {
   accent?: string | null; title?: string | null; greeting?: string | null;
   position?: string | null; launcher?: string | null; launcherText?: string | null;
   sense?: boolean; showMe?: boolean; // P2 Sense — Studio-controlled flags
+  reason?: boolean; reasonImage?: boolean; reasonValues?: boolean; // P2-M5 Reason — Studio-controlled
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -379,6 +455,10 @@ function applyServerConfig(s: ServerConfig): void {
   // P2 Sense — no data-sync-* override for these: they're workspace policy, not page styling.
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
+  // P2-M5 Reason — workspace policy too; the image tier and unmasking require an explicit true.
+  if (s.reason === false) cfg.reason = false;
+  cfg.reasonImage = s.reasonImage === true;
+  cfg.reasonValues = s.reasonValues === true;
 
   titleEl.textContent = cfg.title; // greeting is read from cfg at render()
   if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);

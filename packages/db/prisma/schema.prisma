@@ -95,6 +95,15 @@ model Workspace {
   // P2-M3 "show me" — when on, the widget also HIGHLIGHTS the current step's element on the host
   // page alongside a positional answer (off = text-only). Served to the widget via /v1/copilot/config.
   copilotShowMe         Boolean  @default(false)
+  // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-reason.md §5.3):
+  // `reasonEnabled` gates the whole diagnostic path (ask-time structured page-state capture, values
+  // masked). `reasonImageEnabled` adds the DOM-rendered page image (the most sensitive capture —
+  // OFF by default; flipping it surfaces the disclosure snippet in Studio). `reasonIncludeValues`
+  // unmasks typed field values in the capture (hard floors apply regardless: passwords are never
+  // captured, card/SSN patterns always masked). All served to the widget via /v1/copilot/config.
+  reasonEnabled         Boolean  @default(true)
+  reasonImageEnabled    Boolean  @default(false)
+  reasonIncludeValues   Boolean  @default(false)
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]
@@ -213,6 +222,12 @@ model CopilotQuery {
   senseStep         Int? // 1-based step index within the workflow
   senseConfidence   Float?
   senseUsed         String?
+  // P2-M5 Reason — why the diagnostic path fired for this question: intent (diagnostic wording) |
+  // blocked (the current step's target was disabled) | escalation (the fast path declined and the
+  // widget retried with evidence). Null = the fast path answered. `reasonImage` = whether the
+  // user's rendered page image rode along on the diagnostic call.
+  reasonTrigger     String?
+  reasonImage       Boolean?
   createdAt   DateTime @default(now())
 
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
