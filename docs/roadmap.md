@@ -15,7 +15,7 @@
 VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 │
 ├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨   12 done · 1 in progress
-├─ PHASE 2 · Sense — in-context help            🟩🟩🟩🟩🟩                   5 done · user-verified E2E
+├─ PHASE 2 · Sense — in-context help            🟩🟩🟩🟩🟩⬜                 5 done · 1 in design (Reason)
 ├─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
 └─ PHASE 4 · Autopilot — agentic execution      ⬜                          to be planned (after Phase 3)
 
@@ -50,7 +50,7 @@ VERSION 2 — Portal & articles · modalities · depth  ⬜×13                 
 | Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
 |---|:---:|:---:|:---:|:---:|
 | **Phase 1 — Copilot** | 13 | **12** | 1 | 0 |
-| **Phase 2 — Sense (in-context help)** | 5 | **5** | 0 | 0 |
+| **Phase 2 — Sense (in-context help)** | 6 | **5** | 0 | 1 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
 | **Phase 4 — Autopilot** | 4 | 0 | 0 | 4 |
 | **Version 2 — Portal & articles · modalities · depth** | 13 | 0 | 0 | 13 |
@@ -104,6 +104,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P2-M2** | **Positional answering** (`/answer` takes hypotheses; three-tier relevance — ignore / positional / deictic-primary; unstick-then-path; step-level citations; tie → ask) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
 | **P2-M3** | **"Show me" highlight** — config-gated single-step element highlight on the host page (on → show, off → text-only) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
 | **P2-M4** | **Step-level friction analytics** (must-have) — localization outcomes logged (`used\|ignored\|none`) → Studio per-step friction view + passive drift signals | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
+| **P2-M5** | **Reason — diagnostic reasoning** ("why can't I proceed?"): ask-time structured page-state capture (roles/states/validity/hint-text, values masked) + the founder's expected-state step screenshot → a stronger model diagnoses expected-vs-actual in an agentic read-tool loop (the skeleton Phase 4 inherits) | 📝 **Draft** — design LOCKED 2026-07-09 ([`phase-2-reason.md`](phase-2-reason.md)); ready to build | — (new) |
 
 **Depends on:** Phase 1 only — R13 ranked locators + routes + `expected_outcome` (already in the capture), the answer engine, and the P1-M8 context seam. **No Phase-3 gate needed:** probing is read-only, so a mislocalization = a slightly-off answer (recoverable) — nothing acts on the page. **Feeds:** **Phase 4 Autopilot** (mid-workflow entry — "finish from step 3" — consumes step localization; P4-M0's guided walkthrough builds on P2-M3; the sense plan is the base of P4's `ExecutionPlan`), **Phase 3** (locators that stop resolving on real users' pages = passive production drift signals), and founder analytics (per-step friction: "users get stuck on step 3 of X — re-record it or fix the UX").
 
@@ -203,7 +204,8 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 | [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
 | [`phase-1-modules-map.md`](phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map + P1-M# cross-ref. |
 | [`v2-portal.md`](v2-portal.md) | **V2 portal track (by-products)** — the forward feature list for the help portal & articles: render approved workflows + per-audience approval + presentation overlay + productization; modules V2 · P0…P6, all to build. *(Moved out of Version 1 on 2026-07-08 — the previous Phase 2.)* |
-| [`phase-2-sense.md`](phase-2-sense.md) | **Phase 2 (Sense / in-context help)** — the copilot localizes the end-user to workflow + step (ask-time read-only probe, hybrid client-score → LLM-disambiguate) and answers positionally; modules P2-M0…M4 + locked design decisions + risks. Draft — design locked 2026-07-08. |
+| [`phase-2-sense.md`](phase-2-sense.md) | **Phase 2 (Sense / in-context help)** — the copilot localizes the end-user to workflow + step (ask-time read-only probe, hybrid client-score → LLM-disambiguate) and answers positionally; modules P2-M0…M4. **✅ Built + user-verified E2E 2026-07-09**; as-built + E2E hardening in §8. |
+| [`phase-2-reason.md`](phase-2-reason.md) | **P2-M5 (Reason / diagnostic reasoning)** — "why can't I proceed?": selective trigger → ask-time structured page-state capture (+ optional clone-masked page image, day-one build / default-off) + the founder's expected state (true screenshot + DOM snapshot) → stronger-model agentic read-tool diagnosis. **Design LOCKED 2026-07-09, ready to build**; §3.1 image value analysis · §3.2 capture UX · §7 plain-language end-to-end flow. |
 | [`phase-4-autopilot.md`](phase-4-autopilot.md) | **Phase 4 (Autopilot)** — agentic execution: the copilot offers to execute approved workflows in the end-user's live session (grounded actions); understanding + candidate modules P4-M0…M3 + design questions + risks. Draft; gated behind Phase 3. |
 | [`kb-step-distillation.md`](kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
 | [`internals/`](internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements this map's *why/what*). Start at `internals/connections.md`. Follows the code — source wins on conflict. |

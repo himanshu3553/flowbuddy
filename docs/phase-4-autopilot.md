@@ -63,7 +63,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 
 **Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with two drivers — Phase 3's sandbox runner and Phase 4's widget driver. The `retrieval.ts` single-seam pattern, applied to execution.
 
-**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1.
+**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`phase-2-reason.md`](phase-2-reason.md) §4) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
 
 ---
 
