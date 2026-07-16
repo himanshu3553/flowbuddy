@@ -42,6 +42,7 @@ services:
   - type: keyvalue
     name: flowbuddy-dev-redis
     plan: free # ⚠️ no persistence — queued jobs are lost on restart
+    maxmemoryPolicy: noeviction # BullMQ requirement — default allkeys-lru can silently evict queued jobs
     ipAllowList: [] # only reachable from Render services
 
   # --- API + synthesis worker in ONE free web service ---

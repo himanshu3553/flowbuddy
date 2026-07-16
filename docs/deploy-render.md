@@ -48,9 +48,10 @@ Object storage (screenshots / audio / DOM) lives in **Cloudflare R2** (S3-compat
 
 ## 3. Cloudflare R2 setup
 
-1. Cloudflare → **R2** → **Create bucket** → name it exactly `flowbuddy-artifacts`.
+1. Cloudflare → **R2** → **Create bucket** → name it exactly `flowbuddy-artifacts-dev`
+   (`flowbuddy-artifacts` without the suffix is the **production** bucket — see `deploy-production.md`).
    **Pre-create it** — the API runs `HeadBucket` at boot, so it never needs bucket-create permission.
-2. R2 → **Manage R2 API Tokens** → **Create API token** → permission **Object Read & Write**, scoped to that bucket.
+2. R2 → **Manage R2 API Tokens** → **Create API token** → permission **Object Read & Write**, scoped to that bucket (an account-wide Object R/W token works too).
 3. Note three values:
    - **Access Key ID**
    - **Secret Access Key**
@@ -92,7 +93,7 @@ Render prompts for every `sync: false` value. Set them as below. **URLs are not 
 | `R2_ENDPOINT` | `flowbuddy-dev-r2` group | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
 | `R2_ACCESS_KEY_ID` | `flowbuddy-dev-r2` group | R2 token access key |
 | `R2_SECRET_ACCESS_KEY` | `flowbuddy-dev-r2` group | R2 token secret |
-| `R2_BUCKET` | `flowbuddy-dev-r2` group | `flowbuddy-artifacts` |
+| `R2_BUCKET` | `flowbuddy-dev-r2` group | `flowbuddy-artifacts-dev` |
 | `OPENAI_API_KEY` | **`flowbuddy-dev-api`** only | your `sk-…` (synthesis + the copilot answer engine; the Studio makes no OpenAI calls — its tester embeds the real widget → flowbuddy-dev-api) |
 | `EMBED_MODEL` | `flowbuddy-dev-api` (blueprint sets it) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy (Render Postgres supports it). |
 | `FLOWBUDDY_STUDIO_URL` | **`flowbuddy-dev-api`** | the real `flowbuddy-dev-web` URL (see step 8) — the Studio origin is exempt from workspace origin allowlists so the Copilot page's real-widget tester keeps working after a customer restricts origins. ⚠️ Unset = the tester 403s for allowlisted workspaces. |
@@ -238,7 +239,7 @@ default `warn` in prod) — changing it means a rebuild, not just an env edit. F
 | Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via **`flowbuddy-dev-api`** `/v1/copilot/answer`, **not** the web process. So the cause is on `flowbuddy-dev-api`: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set (the Studio origin must be allowlist-exempt) | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real `flowbuddy-dev-web` URL) on **`flowbuddy-dev-api`**; `flowbuddy-dev-web` needs **no** OpenAI key |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
-| `Eviction policy is allkeys-lru … should be "noeviction"` | Free Key Value default eviction (BullMQ prefers `noeviction`) | Non-fatal for testing; set `maxmemoryPolicy: noeviction` if you want it clean |
+| `Eviction policy is allkeys-lru … should be "noeviction"` | Free Key Value default eviction (BullMQ prefers `noeviction`) | The blueprint sets `maxmemoryPolicy: noeviction` since 2026-07-17; on an instance created before that, flip it in the dashboard (Key Value → Settings → Maxmemory Policy) |
 
 ---
 
@@ -316,7 +317,7 @@ with these rename-specific notes:
 1. **Split the worker out** again into its own `type: worker` service (`dockerCommand: pnpm --filter @flowbuddy/api worker`; set `flowbuddy-dev-api` back to plain `start`). *(The standalone-worker blueprint is in git history — commit `3488326`.)*
 2. **Move migrations** to a `preDeployCommand` on `flowbuddy-dev-api` (`pnpm --filter @flowbuddy/db exec prisma migrate deploy`) — paid plans support it; free plans don't, which is why the free config runs migrations in the start command.
 3. **Paid plans:** Postgres → `basic-256mb`; web/worker/key-value → `starter` (or higher).
-4. Optionally set the Key Value `maxmemoryPolicy: noeviction`.
+4. Key Value `maxmemoryPolicy: noeviction` — already set in the blueprint (since 2026-07-17).
 
 ---
 
