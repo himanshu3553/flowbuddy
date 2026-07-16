@@ -32,13 +32,21 @@
 import { CSS } from './styles.js';
 import { log, setDebug } from './log.js';
 // P2 Sense — panel-open shard fetch + ask-time read-only probe + the show-me highlight.
-import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeResult } from './sense.js';
+import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeResult, type SenseWorkflow } from './sense.js';
+// P4-M0 Guided walkthrough — "Walk me through it" on positional answers (zero-acting; the user
+// does everything, the widget highlights + observes). Resumes across full-page navigations.
+import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActive } from './walkthrough.js';
 // P2-M5 Reason — the selective diagnostic trigger + structured page-state capture (+ lazy image tier).
 import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
 
 interface Citation { segmentTitle: string | null }
 interface AnswerPosition { sourceId: string; segmentIndex: number; step: number }
-interface Msg { role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean; error?: boolean; queryId?: string; feedback?: 'up' | 'down' }
+interface Msg {
+  role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean;
+  error?: boolean; queryId?: string; feedback?: 'up' | 'down';
+  // P4-M0 — a positional answer that maps to a walkable workflow carries the offer.
+  walkOffer?: { workflow: SenseWorkflow; startStep: number };
+}
 
 const script = document.currentScript as HTMLScriptElement | null;
 // The widget's own URL — the P2-M5 lazy renderer bundle is derived from it (a sibling file).
@@ -69,6 +77,9 @@ const cfg = {
   // (harmless read-only probe), showMe defaults OFF (it draws on the host page).
   sense: true,
   showMe: false,
+  // P4-M0 guided walkthrough — arrives from /v1/copilot/config; defaults OFF (it draws on the
+  // host page and observes progression, so the founder knowingly enables it). Needs Sense.
+  walkthrough: false,
   // P2-M5 Reason — all three arrive from /v1/copilot/config. reason defaults ON (structure-only,
   // masked); the image tier and value unmasking default OFF (the founder knowingly enables them).
   reason: true,
@@ -249,6 +260,27 @@ function render(): void {
       pill.appendChild(document.createTextNode('Honest decline'));
       row.appendChild(pill);
     }
+    // P4-M0 — the walkthrough offer (explicit consent = this click; nothing happens without it).
+    if (m.walkOffer && !walkthroughActive()) {
+      const offer = m.walkOffer;
+      const btn = el('button', 'sc-walk-offer', 'Walk me through it');
+      btn.addEventListener('click', () => {
+        open = false; // hand the page to the user — the step card takes over from the panel
+        startWalkthrough(
+          root,
+          { apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason },
+          offer.workflow,
+          offer.startStep,
+          m.queryId,
+          {
+            onExit: () => { open = true; render(); }, // exiting the walkthrough brings the chat back
+            onExplain: explainBlocker, // blocked/invalid → the Reason diagnostic path, in chat
+          },
+        );
+        render();
+      });
+      row.appendChild(btn);
+    }
     if (m.role === 'assistant' && !m.error && m.queryId) {
       const fb = el('div', 'sc-feedback');
       for (const v of ['up', 'down'] as const) {
@@ -350,11 +382,13 @@ async function ask(question: string): Promise<void> {
     }
     if (!ok) { log.warn('answer request failed', status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${status})`, error: true }); }
     else if (data.covered) {
-      messages.push({ role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId });
+      const answered: Msg = { role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId };
+      messages.push(answered);
       // P2-M3 "show me" (config-gated): the answer positioned the user → highlight that step's
       // element, resolved by THIS question's probe (never a stale one). Fallback: the probe keeps
-      // ONE element per workflow, so a step-number disagreement still highlights the right spot.
-      if (data.position) {
+      // one element PER STEP, so a step-number disagreement still highlights a workflow match.
+      // Suppressed while a walkthrough runs — its sticky highlight owns the page.
+      if (data.position && !walkthroughActive()) {
         const key = `${data.position.sourceId}:${data.position.segmentIndex}:${data.position.step}`;
         if (!cfg.showMe) log.debug('show-me: off (enable it in Studio → Copilot → Settings, then reload this page)');
         else if (!lastProbe) log.debug('show-me: no probe result for this question');
@@ -367,6 +401,14 @@ async function ask(question: string): Promise<void> {
           else log.debug('show-me: no live element for', key);
         }
       }
+      // P4-M0 — offer to walk the user through the rest (config-gated; needs a position + a shard
+      // workflow to walk; the shard is cached from panel open, so this is normally instant).
+      if (data.position && cfg.walkthrough && senseActive() && !walkthroughActive()) {
+        const workflows = await ensureShard(cfg.apiBase, cfg.key, location.pathname, 800);
+        const offer = walkthroughOffer(data.position, workflows);
+        if (offer) answered.walkOffer = offer;
+        else log.debug('walkthrough: position has no walkable shard workflow');
+      }
     }
     else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true, queryId: data.queryId });
   } catch (e) {
@@ -376,6 +418,16 @@ async function ask(question: string): Promise<void> {
     loading = false;
     render();
   }
+}
+
+// P4-M0 → P2-M5 — the walkthrough's "Explain what's blocking me" escalation: open the chat and
+// ask the diagnostic question on the user's behalf (their click IS the question). The wording is
+// deliberately diagnostic so Reason's intent trigger fires → structured page-state capture →
+// the full expected-vs-actual diagnosis, through the exact same path a typed question takes.
+function explainBlocker(): void {
+  open = true;
+  render();
+  if (!loading) void ask("Why can't I proceed with this step?");
 }
 
 async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
@@ -482,6 +534,7 @@ interface ServerConfig {
   accent?: string | null; title?: string | null; greeting?: string | null;
   position?: string | null; launcher?: string | null; launcherText?: string | null;
   sense?: boolean; showMe?: boolean; // P2 Sense — Studio-controlled flags
+  walkthrough?: boolean; // P4-M0 guided walkthrough — Studio-controlled
   reason?: boolean; reasonImage?: boolean; reasonValues?: boolean; // P2-M5 Reason — Studio-controlled
 }
 
@@ -524,6 +577,7 @@ function applyServerConfig(s: ServerConfig): void {
   // P2 Sense — no data-sync-* override for these: they're workspace policy, not page styling.
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
+  cfg.walkthrough = s.walkthrough === true; // P4-M0 — workspace policy too (explicit true only)
   // P2-M5 Reason — workspace policy too; the image tier and unmasking require an explicit true.
   if (s.reason === false) cfg.reason = false;
   cfg.reasonImage = s.reasonImage === true;
@@ -550,6 +604,14 @@ async function boot(): Promise<void> {
   const server = await fetchServerConfig();
   if (server) applyServerConfig(server);
   mount();
+  // P4-M0 — pick a mid-workflow walkthrough back up after a full-page navigation. Storage-gated
+  // inside (no session = no fetch, nothing runs) and best-effort like everything else at boot.
+  if (cfg.walkthrough && senseActive()) {
+    void resumeWalkthrough(root, { apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason }, {
+      onExit: () => { open = true; render(); },
+      onExplain: explainBlocker,
+    });
+  }
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void boot());
 else void boot();

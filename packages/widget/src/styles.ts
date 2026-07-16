@@ -128,6 +128,57 @@ export const CSS = `
 .sc-thumb-on { opacity: 1; }
 .sc-thumb:disabled { cursor: default; }
 
+/* P4-M0 guided walkthrough — the offer pill (in-chat) + the step card (a fixed shadow-root
+   overlay docked at the launcher corner; like the panel, it NEVER touches the host layout). */
+.sc-walk-offer {
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  border: none; border-radius: 999px; padding: 6px 14px; margin: 4px 2px 0; cursor: pointer;
+  background: var(--sc-accent); color: var(--sc-accent-fg);
+  font-family: var(--sc-font); font-size: 12px; font-weight: 600;
+  transition: opacity .15s ease;
+}
+.sc-walk-offer:hover { opacity: .9; }
+.sc-walk-card {
+  /* Below the panel (2147483000): an open chat — e.g. the Explain escalation's diagnosis — covers
+     the card; closing the chat reveals it again. Above everything else on the host page. */
+  position: fixed; right: var(--sc-right); left: var(--sc-left); bottom: 86px; z-index: 2147482999;
+  width: 300px; max-width: calc(100vw - 32px);
+  background: var(--sc-surface); border: 1px solid var(--sc-border); border-radius: 14px;
+  box-shadow: 0 8px 26px rgba(40,50,90,.16); padding: 12px 14px;
+  font-family: var(--sc-font); color: var(--sc-fg);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sc-walk-head { display: flex; align-items: center; gap: 8px; }
+.sc-walk-chip {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 30px; height: 20px; padding: 0 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--sc-accent) 11%, transparent); color: var(--sc-accent);
+  font-family: var(--sc-mono); font-size: 10.5px; font-weight: 600; line-height: 1;
+}
+.sc-walk-title {
+  flex: 1; min-width: 0; font-size: 12px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sc-walk-exit { flex: none; background: transparent; border: none; color: var(--sc-muted-fg); font-size: 13px; cursor: pointer; padding: 2px; opacity: .75; }
+.sc-walk-exit:hover { opacity: 1; }
+.sc-walk-instr { font-size: 13px; line-height: 1.45; }
+.sc-walk-status { font-family: var(--sc-mono); font-size: 10.5px; color: var(--sc-muted-fg); min-height: 14px; }
+.sc-walk-status.sc-walk-stalled { color: #9c5c4d; } /* the decline terracotta — a safe-stop, not an error */
+.sc-walk-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.sc-walk-btn.sc-walk-explain {
+  margin-right: auto; border-color: var(--sc-accent); color: var(--sc-accent);
+  background: color-mix(in srgb, var(--sc-accent) 8%, transparent);
+}
+.sc-walk-btn {
+  border: 1px solid var(--sc-border); border-radius: 9px; padding: 6px 12px; cursor: pointer;
+  background: var(--sc-surface); color: var(--sc-fg);
+  font-family: var(--sc-font); font-size: 12px; font-weight: 600;
+  transition: opacity .15s ease;
+}
+.sc-walk-btn:hover:not(:disabled) { opacity: .85; }
+.sc-walk-btn:disabled { opacity: .4; cursor: default; }
+.sc-walk-btn.sc-walk-next { background: var(--sc-accent); color: var(--sc-accent-fg); border-color: var(--sc-accent); }
+
 /* P2-M3 "show me" — the config-gated single-step highlight drawn over the host page (fixed =
    viewport coords from getBoundingClientRect; pointer-events none so it never intercepts). */
 .sc-spotlight {

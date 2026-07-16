@@ -43,7 +43,8 @@ export interface SenseHypothesisWire {
 export interface SenseProbeResult {
   tie: boolean;
   hypotheses: SenseHypothesisWire[];
-  /** `${sourceId}:${segmentIndex}:${step}` → the resolved element (powers the show-me highlight). */
+  /** `${sourceId}:${segmentIndex}:${step}` → EVERY resolved step's element (powers the show-me
+   *  highlight and the P4-M0 walkthrough's initial aim; walkthrough.ts re-resolves live after). */
   elements: Map<string, Element>;
 }
 
@@ -60,12 +61,12 @@ export function maskText(s: string): string {
 }
 
 // ── Route matching (mirrors the server/retrieval rules: segment-boundary, root matches nothing) ─
-function normalizePath(p: string): string {
+export function normalizePath(p: string): string {
   const s = (p || '').trim().replace(/\/+$/, '');
   return s === '' ? '/' : s;
 }
 /** 2 = exact, 1 = segment-boundary prefix (either direction), 0 = no match. */
-function matchStrength(stepRoute: string, ctx: string): number {
+export function matchStrength(stepRoute: string, ctx: string): number {
   if (!stepRoute || ctx === '/') return 0;
   const route = normalizePath(stepRoute);
   if (route === '/') return 0;
@@ -101,7 +102,7 @@ function resolveLocator(loc: SenseLocator): Element | null {
   }
 }
 
-function resolveStep(step: SenseStep): Element | null {
+export function resolveStep(step: SenseStep): Element | null {
   for (const loc of step.locators) {
     const el = resolveLocator(loc);
     if (el) return el;
@@ -110,17 +111,75 @@ function resolveStep(step: SenseStep): Element | null {
 }
 
 // ── Element evidence (booleans only) ───────────────────────────────────────────────────────────
-function isVisible(el: Element): boolean {
+export function isVisible(el: Element): boolean {
   const rect = el.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return false;
   const style = getComputedStyle(el);
   return style.display !== 'none' && style.visibility !== 'hidden';
 }
-function isFilled(el: Element): boolean {
+export function isFilled(el: Element): boolean {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+    return el.checked; // a checkbox's .value is always "on" — an unchecked box is IN FRONT of the user
+  }
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
     return el.value.trim() !== '';
   }
   return false;
+}
+
+// ── Alert/error surfaces (shared: Sense's error snippet + Reason's [alert] capture pass) ───────
+// Detection is GENERIC, never per-app: web standards (role=alert, assertive live regions),
+// error-styled class names, and the one near-universal visual convention — red-family TEXT on a
+// short visible block (catches utility-CSS banners: Tailwind's text-red-600 carries no "error" in
+// any class name and usually no role, yet it's how half of modern SaaS reports a rejection).
+const ALERT_STANDARDS_SELECTOR =
+  '[role="alert"], [aria-live="assertive"], [class*="error" i], [class*="danger" i], [class*="alert" i]';
+const RED_TEXT_CANDIDATE_SELECTOR = 'div, p, span, output, small, li, strong, em';
+const MAX_RED_TEXT_CANDIDATES = 400;
+
+function isRedFamily(color: string): boolean {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(color);
+  if (!m) return false;
+  const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return r >= 150 && r > g * 1.4 && r > b * 1.4; // red-dominant, not brown/orange-muddy
+}
+/** Does this element carry its OWN short text (a direct text-node child)? Color inherits, so
+ *  without this a red-themed wrapper with no text of its own would false-positive. */
+function hasOwnText(el: Element): boolean {
+  for (const n of el.childNodes) {
+    if (n.nodeType === Node.TEXT_NODE && (n.nodeValue ?? '').trim().length >= 2) return true;
+  }
+  return false;
+}
+
+/** Visible alert/error surfaces on the page, document order, outermost-first (nested duplicates
+ *  dropped). Read-only, bounded, ~ms. */
+export function findAlertSurfaces(max = 8): Element[] {
+  const out: Element[] = [];
+  const push = (el: Element): void => {
+    if (out.length >= max) return;
+    if (!isVisible(el) || el.closest('#sync-copilot-root')) return;
+    if ((el.textContent ?? '').trim().length < 2) return;
+    if (out.some((c) => c.contains(el) || el.contains(c))) return; // outermost wins
+    out.push(el);
+  };
+  try {
+    document.querySelectorAll(ALERT_STANDARDS_SELECTOR).forEach(push);
+    if (out.length < max) {
+      const candidates = document.querySelectorAll(RED_TEXT_CANDIDATE_SELECTOR);
+      const n = Math.min(candidates.length, MAX_RED_TEXT_CANDIDATES);
+      for (let i = 0; i < n && out.length < max; i++) {
+        const el = candidates[i]!;
+        if ((el.textContent ?? '').length > 300) continue; // text blocks, not page containers
+        if (!hasOwnText(el)) continue;
+        if (!isRedFamily(getComputedStyle(el).color)) continue;
+        push(el);
+      }
+    }
+  } catch {
+    /* detection must never break a probe or capture */
+  }
+  return out;
 }
 
 /** The masked on-screen error near the current step, if one is showing (the "why stuck" signal). */
@@ -140,6 +199,13 @@ function findError(el: Element): string | undefined {
     const scope = el.closest('form, [role="dialog"], section') ?? document.body;
     const alert = scope.querySelector('[role="alert"], [aria-live="assertive"]');
     if (alert?.textContent?.trim()) text = alert.textContent;
+  }
+  // Last resort: any live alert surface on the page (incl. red-styled utility-CSS banners that
+  // carry no role/class signal) — so even FAST-PATH answers know a rejection is on screen and
+  // stop advising the user to click again.
+  if (!text) {
+    const surface = findAlertSurfaces(1)[0];
+    if (surface?.textContent?.trim()) text = surface.textContent;
   }
   const clean = text.trim().replace(/\s+/g, ' ');
   return clean ? maskText(clean).slice(0, 200) : undefined;
@@ -170,6 +236,9 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       if (step.locators.length === 0) continue;
       const el = resolveStep(step);
       if (!el) continue;
+      // Keep EVERY resolved step's element (P4-M0 walkthrough aims at any step; show-me reads the
+      // current one). The map is a snapshot — consumers re-check isConnected before using it.
+      elements.set(`${wf.sourceId}:${wf.segmentIndex}:${step.index}`, el);
       const stepFilled = step.kind === 'input' && isFilled(el);
       if (stepFilled) filled.push(step.index);
       if (m > 0 && isVisible(el)) {
@@ -200,7 +269,6 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       ...(cur ? { error: findError(cur.el) } : {}),
     };
     if (h.error === undefined) delete h.error;
-    if (cur) elements.set(`${wf.sourceId}:${wf.segmentIndex}:${stepIndex}`, cur.el);
     scored.push({ h, score, el: cur?.el ?? null });
   }
 
@@ -283,10 +351,14 @@ export async function probeForAsk(
 }
 
 // ── P2-M3 "show me" — the config-gated single-step highlight ───────────────────────────────────
-let spot: { box: HTMLDivElement; target: Element; reposition: () => void; timer: number } | null = null;
+// P4-M0 adds a STICKY mode: a walkthrough highlight stays up until the walkthrough itself moves or
+// ends, so incidental clearSpotlight() calls (a new question, closing the panel) can't kill it —
+// only a forced clear (or the target leaving the DOM) removes a sticky box.
+let spot: { box: HTMLDivElement; target: Element; reposition: () => void; timer: number; sticky: boolean } | null = null;
 
-export function clearSpotlight(): void {
+export function clearSpotlight(force = false): void {
   if (!spot) return;
+  if (spot.sticky && !force) return; // a walkthrough highlight survives casual clears
   clearTimeout(spot.timer);
   window.removeEventListener('scroll', spot.reposition, true);
   window.removeEventListener('resize', spot.reposition);
@@ -294,9 +366,11 @@ export function clearSpotlight(): void {
   spot = null;
 }
 
-/** Highlight `target` on the host page for a few seconds (scrolls it into view first). */
-export function spotlight(root: ShadowRoot, target: Element): void {
-  clearSpotlight();
+/** Highlight `target` on the host page (scrolls it into view first). Default = show-me semantics
+ *  (auto-clears after 6s); `sticky` = walkthrough semantics (stays until forced clear/re-aim). */
+export function spotlight(root: ShadowRoot, target: Element, opts?: { sticky?: boolean }): void {
+  clearSpotlight(true); // re-aiming always replaces whatever box is up
+  const sticky = opts?.sticky === true;
   try {
     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   } catch {
@@ -306,7 +380,7 @@ export function spotlight(root: ShadowRoot, target: Element): void {
   box.className = 'sc-spotlight';
   root.appendChild(box);
   const reposition = () => {
-    if (!target.isConnected) return clearSpotlight();
+    if (!target.isConnected) return clearSpotlight(true); // a gone target is gone, sticky or not
     const r = target.getBoundingClientRect();
     box.style.top = `${r.top - 4}px`;
     box.style.left = `${r.left - 4}px`;
@@ -316,6 +390,6 @@ export function spotlight(root: ShadowRoot, target: Element): void {
   reposition();
   window.addEventListener('scroll', reposition, true);
   window.addEventListener('resize', reposition);
-  const timer = window.setTimeout(clearSpotlight, 6000);
-  spot = { box, target, reposition, timer };
+  const timer = sticky ? 0 : window.setTimeout(() => clearSpotlight(), 6000);
+  spot = { box, target, reposition, timer, sticky };
 }

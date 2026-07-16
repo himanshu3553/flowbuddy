@@ -11,6 +11,7 @@ import {
   setCopilotAppearance,
   setSenseEnabled,
   setCopilotShowMe,
+  setCopilotWalkthrough,
   setReasonEnabled,
   setReasonImageEnabled,
   setReasonIncludeValues,
@@ -101,6 +102,7 @@ export function CopilotWorkspace({
   showCitations = true,
   senseEnabled = true,
   showMe = false,
+  walkthrough = false,
   reasonEnabled = true,
   reasonImageEnabled = false,
   reasonIncludeValues = false,
@@ -117,6 +119,7 @@ export function CopilotWorkspace({
   showCitations?: boolean;
   senseEnabled?: boolean;
   showMe?: boolean;
+  walkthrough?: boolean;
   reasonEnabled?: boolean;
   reasonImageEnabled?: boolean;
   reasonIncludeValues?: boolean;
@@ -138,6 +141,8 @@ export function CopilotWorkspace({
   const [cite, setCite] = useState(showCitations);
   const [sense, setSense] = useState(senseEnabled);
   const [showMeOn, setShowMeOn] = useState(showMe);
+  // P4-M0 — the guided-walkthrough offer (needs Sense, like "show me").
+  const [walkOn, setWalkOn] = useState(walkthrough);
   // P2-M5 Reason — the founder toggle ladder (diagnostic answers · page image · typed values).
   const [reason, setReason] = useState(reasonEnabled);
   const [reasonImg, setReasonImg] = useState(reasonImageEnabled);
@@ -192,6 +197,24 @@ export function CopilotWorkspace({
         toast.success(value ? '"Show me" on — the widget highlights the current step.' : '"Show me" off.');
       } catch {
         setShowMeOn(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  // P4-M0 — the guided-walkthrough toggle ("Walk me through it" on positional answers).
+  function toggleWalkthrough(value: boolean) {
+    setWalkOn(value); // optimistic
+    start(async () => {
+      try {
+        await setCopilotWalkthrough(value);
+        router.refresh();
+        toast.success(
+          value
+            ? 'Guided walkthrough on — positional answers offer "Walk me through it".'
+            : 'Guided walkthrough off.',
+        );
+      } catch {
+        setWalkOn(!value);
         toast.error('Could not save the setting. Please try again.');
       }
     });
@@ -647,7 +670,7 @@ export function CopilotWorkspace({
                   aria-label="Enable Sense (in-context help)"
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div>
                   <p className="text-sm font-medium">&ldquo;Show me&rdquo; highlight</p>
                   <p className="text-xs text-muted-foreground">
@@ -660,6 +683,22 @@ export function CopilotWorkspace({
                   onCheckedChange={toggleShowMe}
                   disabled={pending || !sense}
                   aria-label='"Show me" highlight'
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium">Guided walkthrough</p>
+                  <p className="text-xs text-muted-foreground">
+                    Offer &ldquo;Walk me through it&rdquo; on positional answers —
+                    highlights each remaining step and follows the user&rsquo;s
+                    progress. The user does everything; Sync never acts.
+                  </p>
+                </div>
+                <Switch
+                  checked={walkOn}
+                  onCheckedChange={toggleWalkthrough}
+                  disabled={pending || !sense}
+                  aria-label="Guided walkthrough"
                 />
               </div>
             </div>
@@ -693,11 +732,12 @@ export function CopilotWorkspace({
               </div>
               <div className="flex items-center justify-between gap-4 py-3">
                 <div>
-                  <p className="text-sm font-medium">Include page image</p>
+                  <p className="text-sm font-medium">Include page image (recommended)</p>
                   <p className="text-xs text-muted-foreground">
-                    Also render a masked image of the user&rsquo;s page for
-                    visual issues (layout, overlays, low-semantics UIs). The
-                    most sensitive capture — add the disclosure below to your
+                    Also render a masked image of the user&rsquo;s page —
+                    diagnosis quality lives here: error banners, requirement
+                    checklists, and anything shown only visually. The most
+                    sensitive capture — add the disclosure below to your
                     privacy policy.
                   </p>
                 </div>

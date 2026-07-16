@@ -26,6 +26,7 @@ export function CopilotConsole({
   showCitations,
   senseEnabled,
   showMe,
+  walkthrough,
   reasonEnabled,
   reasonImageEnabled,
   reasonIncludeValues,
@@ -42,6 +43,7 @@ export function CopilotConsole({
   showCitations: boolean;
   senseEnabled: boolean;
   showMe: boolean;
+  walkthrough: boolean;
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
   reasonIncludeValues: boolean;
@@ -72,6 +74,7 @@ export function CopilotConsole({
         showCitations={showCitations}
         senseEnabled={senseEnabled}
         showMe={showMe}
+        walkthrough={walkthrough}
         reasonEnabled={reasonEnabled}
         reasonImageEnabled={reasonImageEnabled}
         reasonIncludeValues={reasonIncludeValues}

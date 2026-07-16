@@ -154,7 +154,7 @@ const MAX_QUESTION_CHARS = 2000;
 async function copilotGate(
   req: FastifyRequest,
   reply: FastifyReply,
-  route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense',
+  route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense' | 'walkthrough',
 ): Promise<{
   workspaceId: string;
   showCitations: boolean;
@@ -662,6 +662,98 @@ app.post('/v1/copilot/feedback', async (req, reply) => {
 });
 
 /**
+ * P4-M0 — walkthrough run analytics. One row per guided-walkthrough RUN: `started` creates it
+ * (the workflow key is verified against CopilotApproval FIRST — no-leak: unapproved keys are never
+ * logged, and the stored title comes from the approval snapshot, never the wire), progress events
+ * bump counters, terminal events set the outcome. Every field of the body is UNTRUSTED (any page
+ * holding the public key can post here) — type-checked and clamped like the sense hypotheses.
+ * Best-effort on the widget side: a 4xx here never affects the walkthrough itself.
+ */
+app.post('/v1/copilot/walkthrough', async (req, reply) => {
+  const gate = await copilotGate(req, reply, 'walkthrough');
+  if (!gate) return reply;
+
+  const b = (req.body ?? {}) as {
+    runId?: unknown; event?: unknown; sourceId?: unknown; segmentIndex?: unknown;
+    step?: unknown; totalSteps?: unknown; mode?: unknown; queryId?: unknown;
+  };
+  const event = typeof b.event === 'string' ? b.event : '';
+  if (!['started', 'step_advanced', 'completed', 'aborted', 'stalled'].includes(event)) {
+    return reply.code(400).send({ error: 'unknown event' });
+  }
+  const sourceId = typeof b.sourceId === 'string' ? b.sourceId.slice(0, 40) : '';
+  const segmentIndex = Number(b.segmentIndex);
+  const totalSteps = Number(b.totalSteps);
+  const step = Number(b.step);
+  if (
+    !/^[a-z0-9-]{1,40}$/i.test(sourceId) || // KnowledgeSource ids are UUIDs (hyphens!)
+    !Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999 ||
+    !Number.isInteger(totalSteps) || totalSteps < 1 || totalSteps > 200 ||
+    !Number.isInteger(step) || step < 1 || step > totalSteps
+  ) {
+    return reply.code(400).send({ error: 'invalid walkthrough payload' });
+  }
+
+  if (event === 'started') {
+    // The trust gate, applied to run logging: only approved workflows are ever recorded.
+    const approval = await prisma.copilotApproval.findFirst({
+      where: { workspaceId: gate.workspaceId, sourceId, segmentIndex },
+      select: { segmentTitle: true },
+    });
+    if (!approval) {
+      req.log.debug({ workspaceId: gate.workspaceId }, 'walkthrough started for unapproved workflow — dropped');
+      return reply.code(404).send({ error: 'workflow not available' });
+    }
+    // queryId is stored only if it names THIS workspace's query (a spoofed id must never create a
+    // cross-tenant join for the Studio's analytics to trip over).
+    let queryId: string | null = null;
+    if (typeof b.queryId === 'string' && /^[a-z0-9]{1,40}$/i.test(b.queryId)) {
+      const q = await prisma.copilotQuery.findFirst({
+        where: { id: b.queryId, workspaceId: gate.workspaceId },
+        select: { id: true },
+      });
+      queryId = q?.id ?? null;
+    }
+    const run = await prisma.copilotWalkthrough.create({
+      data: {
+        workspaceId: gate.workspaceId,
+        sourceId,
+        segmentIndex,
+        segmentTitle: approval.segmentTitle, // approval snapshot — never the wire
+        queryId,
+        startStep: step,
+        totalSteps,
+        lastStep: step,
+      },
+      select: { id: true },
+    });
+    return { ok: true, runId: run.id };
+  }
+
+  const runId = typeof b.runId === 'string' ? b.runId : '';
+  if (!runId) return reply.code(400).send({ error: 'runId required' });
+  const mode = b.mode === 'auto' || b.mode === 'manual' ? b.mode : null;
+  const data =
+    event === 'step_advanced'
+      ? {
+          lastStep: step,
+          outcome: 'active', // a stall the user advanced past is a recovery, not a terminal state
+          ...(mode === 'manual' ? { manualAdvances: { increment: 1 } } : { autoAdvances: { increment: 1 } }),
+        }
+      : event === 'stalled'
+        ? { outcome: 'stalled', stalledAtStep: step, lastStep: step }
+        : { outcome: event, lastStep: step }; // completed | aborted
+
+  // Scope the update to this workspace's runs only (same discipline as /feedback).
+  const updated = await prisma.copilotWalkthrough.updateMany({
+    where: { id: runId, workspaceId: gate.workspaceId },
+    data,
+  });
+  if (updated.count === 0) return reply.code(404).send({ error: 'run not found' });
+  return { ok: true };
+});
+
+/**
  * Widget appearance config — the widget fetches this at mount so Studio Appearance changes reach
  * every embed WITHOUT customers re-copying the snippet (the DB is the source of truth; explicit
  * `data-sync-*` attrs on the script tag still win as per-page overrides). Auth = the public key +
@@ -684,6 +776,7 @@ app.get('/v1/copilot/config', async (req, reply) => {
       copilotLauncherText: true,
       senseEnabled: true,
       copilotShowMe: true,
+      copilotWalkthrough: true,
       reasonEnabled: true,
       reasonImageEnabled: true,
       reasonIncludeValues: true,
@@ -702,6 +795,8 @@ app.get('/v1/copilot/config', async (req, reply) => {
     // P2 Sense — `sense` gates the widget's plan fetch/probe; `showMe` gates the P2-M3 highlight.
     sense: ws.senseEnabled,
     showMe: ws.copilotShowMe,
+    // P4-M0 — gates the "Walk me through it" offer (the widget also requires sense to be on).
+    walkthrough: ws.copilotWalkthrough,
     // P2-M5 Reason — `reason` gates the diagnostic capture; the image tier and value unmasking
     // are separate founder opt-ins (the server re-enforces all three on /answer regardless).
     reason: ws.reasonEnabled,

@@ -8,6 +8,8 @@ export interface CopilotSettings {
   // P2 Sense — the per-workspace master toggle + the "show me" highlight config (P2-M3).
   senseEnabled: boolean;
   showMe: boolean;
+  // P4-M0 — the guided-walkthrough offer on positional answers (needs Sense).
+  walkthrough: boolean;
   // P2-M5 Reason — diagnostic answers (structure, masked) + the image tier + value unmasking.
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
@@ -29,6 +31,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     copilotShowCitations: true,
     senseEnabled: true,
     copilotShowMe: true,
+    copilotWalkthrough: true,
     reasonEnabled: true,
     reasonImageEnabled: true,
     reasonIncludeValues: true,
@@ -53,6 +56,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     showCitations: ws.copilotShowCitations,
     senseEnabled: ws.senseEnabled,
     showMe: ws.copilotShowMe,
+    walkthrough: ws.copilotWalkthrough,
     reasonEnabled: ws.reasonEnabled,
     reasonImageEnabled: ws.reasonImageEnabled,
     reasonIncludeValues: ws.reasonIncludeValues,

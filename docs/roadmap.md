@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1), [`phase-2-sense.md`](phase-2-sense.md) (Phase 2), [`phase-4-autopilot.md`](phase-4-autopilot.md) (Phase 4); the V2 portal track: [`v2-portal.md`](v2-portal.md). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-08 · **Branch:** `dev`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-15 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -17,7 +17,7 @@ VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 ├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨   12 done · 1 in progress
 ├─ PHASE 2 · Sense — in-context help            🟩🟩🟩🟩🟩🟩                 6 done · ALL user-verified
 ├─ PHASE 3 · Self-validation & freshness (moat) ⬜                          to be planned
-└─ PHASE 4 · Autopilot — agentic execution      ⬜                          to be planned (after Phase 3)
+└─ PHASE 4 · Autopilot — agentic execution      🟩⬜⬜⬜                     1 done (M0 walkthrough) · 3 to plan
 
 VERSION 2 — Portal & articles · modalities · depth  ⬜×13                   deferred
 ```
@@ -50,9 +50,9 @@ VERSION 2 — Portal & articles · modalities · depth  ⬜×13                 
 | Scope | Modules | ✅ Done | 🔄 In Progress | 📝 Draft |
 |---|:---:|:---:|:---:|:---:|
 | **Phase 1 — Copilot** | 13 | **12** | 1 | 0 |
-| **Phase 2 — Sense (in-context help)** | 6 | **5** | 0 | 1 |
+| **Phase 2 — Sense (in-context help)** | 6 | **6** | 0 | 0 |
 | **Phase 3 — Self-validation** | 1 | 0 | 0 | 1 |
-| **Phase 4 — Autopilot** | 4 | 0 | 0 | 4 |
+| **Phase 4 — Autopilot** | 4 | **1** | 0 | 3 |
 | **Version 2 — Portal & articles · modalities · depth** | 13 | 0 | 0 | 13 |
 
 ---
@@ -130,12 +130,12 @@ A throwaway, lightweight spike answered one question before building any product
 
 | Module | What it is | Status |
 |:---|:---|:---|
-| **P4-M0** | **"Show me" guided mode** — highlight each step's element on the user's live page + step-through; no acting (the zero-risk stepping stone) | 📝 **Draft** |
+| **P4-M0** | **Guided walkthrough** — "Walk me through it" on positional answers: highlight each remaining step + follow the user's progress (auto-detect + Next fallback, cross-nav resume, run analytics); no acting (the zero-risk stepping stone) | ✅ **Done** — built 2026-07-15 ([`phase-4-autopilot.md`](phase-4-autopilot.md) §8 as-built); default OFF, needs Sense |
 | **P4-M1** | **Autopilot gate** — the `autopilot` audience flag + validated-current certification (offer execution only on approved **and** green-validated workflows) | 📝 **Draft** |
 | **P4-M2** | **Widget execution driver** — consent UX, visible step-by-step run, per-input prompts, pause/abort/takeover, resume across navigations | 📝 **Draft** |
 | **P4-M3** | **Safety rails + telemetry** — destructive-step confirmation, safe-stop semantics, execution audit log, drift feedback to Phase 3 | 📝 **Draft** |
 
-**Depends on:** **Phase 3** — its replay core is the execution engine (one shared core, two drivers) and its validation signal is the safety certification (a workflow Phase 3 can't replay green is never offered for execution); an Autopilot safe-stop in production feeds back as a live drift signal. **Phase 2 (Sense)** — mid-workflow entry ("finish from step 3") consumes Sense's workflow/step localization. Also consumes Phase 1's R13 ranked locators, `post_action`/`expected_outcome`, routes, and the in-page widget as the execution surface. **Build strictly after Phase 3.**
+**Depends on:** **Phase 3** — its replay core is the execution engine (one shared core, two drivers) and its validation signal is the safety certification (a workflow Phase 3 can't replay green is never offered for execution); an Autopilot safe-stop in production feeds back as a live drift signal. **Phase 2 (Sense)** — mid-workflow entry ("finish from step 3") consumes Sense's workflow/step localization. Also consumes Phase 1's R13 ranked locators, `post_action`/`expected_outcome`, routes, and the in-page widget as the execution surface. **Sequencing (decided 2026-07-15): the phase opened ahead of Phase 3** — P4-M0 is zero-acting and has no Phase-3 dependency; the acting modules (M1–M3) design the eligibility gate with pluggable signals so Phase-3 certification slots in when it lands.
 
 ---
 

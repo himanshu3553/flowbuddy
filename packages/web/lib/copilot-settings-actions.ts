@@ -112,6 +112,19 @@ export async function setCopilotShowMe(showMe: boolean): Promise<void> {
   revalidatePath('/dashboard/copilot');
 }
 
+/** P4-M0 guided walkthrough — offer "Walk me through it" on positional answers: the widget
+ *  highlights each remaining step and follows the user's progress (the user does everything;
+ *  Sync never acts). */
+export async function setCopilotWalkthrough(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { copilotWalkthrough: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
 /** P2-M5 Reason — diagnostic answers (ask-time structured page-state capture, values masked). */
 export async function setReasonEnabled(enabled: boolean): Promise<void> {
   const ctx = await getCurrentWorkspace();

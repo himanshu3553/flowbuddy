@@ -28,6 +28,7 @@ export default async function CopilotSettingsPage() {
     showCitations,
     senseEnabled,
     showMe,
+    walkthrough,
     reasonEnabled,
     reasonImageEnabled,
     reasonIncludeValues,
@@ -85,6 +86,7 @@ export default async function CopilotSettingsPage() {
           showCitations={showCitations}
           senseEnabled={senseEnabled}
           showMe={showMe}
+          walkthrough={walkthrough}
           reasonEnabled={reasonEnabled}
           reasonImageEnabled={reasonImageEnabled}
           reasonIncludeValues={reasonIncludeValues}

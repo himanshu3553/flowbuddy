@@ -273,9 +273,9 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 ---
 
-## 11. Phase 2 — Sense (positional answers) & Reason (diagnostics)
+## 11. Sense (positional answers) · Reason (diagnostics) · Guided walkthrough (P4-M0)
 
-Both ride the Part-10 embed (or your own test app — remember to copy **both** widget bundles there after a rebuild). Sense + Reason are ON by default per workspace (Studio → Copilot → Settings); the page image + typed values are separate founder opt-ins.
+All three ride the Part-10 embed (or your own test app — remember to copy **both** widget bundles there after a rebuild). Sense + Reason are ON by default per workspace (Studio → Copilot → Settings); the page image, typed values, "Show me" and **Guided walkthrough** are separate founder opt-ins.
 
 **Sense (in-context help):**
 1. Open a recorded flow mid-workflow (e.g. the sign-in form), fill some fields, open the copilot and ask *"what do I do next?"*.
@@ -289,7 +289,20 @@ Both ride the Part-10 embed (or your own test app — remember to copy **both** 
 2. Expect a plain-language diagnosis naming **every** blocker, formatted as numbered step rows with **bolded** UI names — no constraint jargon (`valueMissing` …), no re-instructing things that are already fine.
 3. With **"Include page image"** ON, visual-only state (a color-coded requirements checklist) is diagnosed too; DevTools → Network shows the lazy `sync-copilot-render.js` fetch on the first diagnostic question.
 
-✅ **PASS:** correct blocker(s) in plain words; `CopilotQuery.reasonTrigger` = `intent`/`blocked` (+ `reasonImage=true` when the tier is on); a plain "how do I…" on the same page stays fast-path (`reasonTrigger` null).
+4. **Rejected-action diagnosis (2026-07-16):** complete the form correctly, submit, and get a server rejection (e.g. sign up with an email that already has an account) → ask *"now what happened?"* — it must fire Reason (`reasonTrigger` set) and the answer must lead with the on-page error banner ("this email already has an account — sign in instead…"), NOT re-diagnose the healthy form, and never claim the enabled button is blocked. Then ask a **fast-path follow-up** (*"whats next?"*) over the same banner — even without Reason, the answer must acknowledge the rejection (the probe's error snippet now carries red-styled banners), never "go ahead and click it". Diagnostic answers must also never speculate ("server issue", "check your internet") — a decline says what was checked, nothing invented.
+
+✅ **PASS:** correct blocker(s) in plain words; the rejection banner beats form theories; `CopilotQuery.reasonTrigger` = `intent`/`blocked` (+ `reasonImage=true` when the tier is on); a plain "how do I…" on the same page stays fast-path (`reasonTrigger` null).
+
+**Guided walkthrough (P4-M0 — zero-acting):**
+1. Studio → Copilot → Settings → flip **Guided walkthrough** ON (toast; switch is disabled while Sense is off) → reload the host page (config is mount-time).
+2. Mid-workflow, ask a positional question → the answer carries a **"Walk me through it"** pill. Click it: the panel closes, the step card shows **your current step k/N** (not 1), and the step's element gets a persistent highlight.
+3. Complete the step yourself (fill the field / click the button) → the card shows **"Detected ✓ — hit Next to continue"** and **stays put** — the pointer must move **only** on your Next click, never on its own. A navigating step survives the full-page load and **resumes on the next page with the step acknowledged** ("Detected ✓ — hit Next"; peek at `sessionStorage["sync.walkthrough.v1"]` before the nav). Try **Back**, and a stall: delete the highlighted element in DevTools → after ~3s the card safe-stops with Retry/Back/Exit. The final step ends with "hit Next to finish" → Next shows the Done card.
+4. **State-awareness** (the first-E2E fixes): (a) an **invalid field** (e.g. a malformed `type=email`) must NOT advance — the status says the field doesn't look right and names the constraint; (b) an **unchecked checkbox** step must not count as done (and skip-ahead must park on it, not blow past); (c) with a **disabled submit button** as the current step, the status must read *"This button is disabled — check step k (…) first"* — never "click it" — and flip to "click the highlighted element" within ~half a second of the button enabling.
+5. **Explain escalation** (Reason toggle ON): on a blocked/invalid/stalled card, the **"Explain what's blocking me"** button appears → click → the chat opens and asks *"Why can't I proceed with this step?"* for you → a full Reason diagnosis (that row logs `reasonTrigger='intent'`). With Reason OFF the button must not appear anywhere.
+6. **Self-correcting pointer:** the card must always point at the **first unfinished input step on the page** — try to trick it: hard-reload mid-run so the form resets (resumes at the first empty field, not the stored step); clear an *earlier* field while the pointer is further ahead (pointer snaps back within ~0.5s); press **Next** over a genuinely empty field (explicit skip — the pointer must NOT drag you back to it; **Back** onto it re-engages the gate). A resume after a real mid-workflow navigation — earlier steps on a previous page — still resumes where you left off. For any weirdness, reload with `data-sync-debug="1"` on the snippet: every pointer decision (advance/correction, from→to) is logged.
+7. Finish the workflow → "Done — you finished …" card; Prisma studio → `CopilotWalkthrough` has one row: correct `startStep/lastStep/totalSteps`, `autoAdvances`/`manualAdvances` split, `outcome='completed'` (your abort/stall experiments each leave their own row/outcome).
+
+✅ **PASS:** offer only appears when the toggle is on + the answer is positional; the walkthrough starts at the probe's step; **the pointer never moves forward on its own — detection only shows "Detected ✓ — hit Next"** (genuine completions: checked/filled-and-valid, never a disabled click); blocked buttons are explained instead of demanded; Reason diagnosis on request; acknowledgments survive a hard navigation; safe-stops instead of guessing; every run lands one honest `CopilotWalkthrough` row (`autoAdvances` = detection-confirmed Nexts, `manualAdvances` = override Nexts).
 
 ---
 
@@ -332,6 +345,7 @@ Both ride the Part-10 embed (or your own test app — remember to copy **both** 
 | Feedback | API + Studio | thumbs recorded + shown |
 | Sense | Widget + API | positional answer anchored on the measured current step; `senseUsed` logged |
 | Reason | Widget + API + Synthesis | diagnostic question → plain-language blocker diagnosis; `reasonTrigger`/`reasonImage` logged; simple questions stay on the fast path |
+| Walkthrough (P4-M0) | Widget + API | offer on positional answers (toggle-gated) → starts at the measured step, auto-advances on real completions, resumes across a hard nav, safe-stops on a missing element; one `CopilotWalkthrough` row per run |
 | Security | API | origin allowlist + rate limit enforced |
 | Redaction | Synthesis | PII scrubbed from KB text/narration/transcript |
 | Idempotency | Worker | reprocess doesn't duplicate; approval survives |

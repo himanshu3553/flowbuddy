@@ -2,9 +2,9 @@
 
 > **Phase 4 moves the copilot from *telling* to *doing*.** Today (Phase 1) an end-user asks "how do I X?" and gets a grounded, cited answer. Autopilot adds the next step: after the answer, the widget offers **"Want me to do this for you?"** — and on consent, **executes the approved workflow in the end-user's live session**, resolving each recorded step's element on the real page, acting, and verifying, with the user watching and in control the whole time. Working name **Autopilot** (a.k.a. **AI Agents / agentic mode**). Roadmap/status: [`roadmap.md`](roadmap.md) §5.
 
-- **Status:** 📝 **Draft — to be planned.** Built **after Phase 3** (self-validation), whose replay engine + freshness signal it consumes. No investment before then.
-- **Last updated:** 2026-07-08 · **Branch:** `dev`
-- **Companion docs:** roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 (the substrate) → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 2 (Sense — localization + the plan artifact) → [`phase-2-sense.md`](phase-2-sense.md) · Phase 3 (the engine + certification) → [`roadmap.md`](roadmap.md) §4 · why copilot-first → [`product.md`](product.md) §5
+- **Status:** 🔄 **In progress — P4-M0 (guided walkthrough) ✅ built 2026-07-15 (§8 as-built); P4-M1…M3 to plan.** Sequencing decision (2026-07-15): the phase opened **ahead of Phase 3** — P4-M0 has no Phase-3 dependency (zero-acting), and P4-M1's eligibility gate will accept pluggable signals so Phase-3 certification slots in later without rework. The acting modules (M2) still consume the shared replay core (§3).
+- **Last updated:** 2026-07-15 · **Branch:** `dev`
+- **Companion docs:** roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 (the substrate) → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 2 (Sense — localization + the plan artifact) → [`phase-2-sense.md`](phase-2-sense.md) · Phase 3 (the engine + certification) → [`roadmap.md`](roadmap.md) §4 · why copilot-first → [`product.md`](product.md) §5 · competitive reference (Claude for Chrome) → [`competitive-claude-chrome.md`](competitive-claude-chrome.md)
 - **The trust story in one line — grounded actions.** Generic browser agents *improvise* how to do a task; Autopilot **only executes workflows the founder recorded and approved** — the grounded-authorship guarantee extended from answers to actions. When a step can't be verified, Autopilot **stops safely and says so** instead of guessing forward (decline-over-hallucinate, applied to execution).
 
 ---
@@ -71,7 +71,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 
 | Module | What it is | Notes |
 |:---|:---|:---|
-| **P4-M0** | **Guided walkthrough** — sequential, progression-aware step-through of the whole remaining workflow (highlight step k → detect completion → advance to k+1); no acting | Builds on **Sense's P2-M3** (the config-gated single-step highlight) + Sense's localization. Same locator resolution, zero side effects. Ships first. |
+| **P4-M0** | **Guided walkthrough** — sequential, progression-aware step-through of the whole remaining workflow (highlight step k → detect completion → advance to k+1); no acting | ✅ **Built 2026-07-15** (§8 as-built). Builds on **Sense's P2-M3** (the config-gated single-step highlight) + Sense's localization. Same locator resolution, zero side effects. Shipped first. |
 | **P4-M1** | **Autopilot gate** — the `autopilot` audience flag + the validated-current certification check (offer execution only on approved **and** green-validated workflows) | Mirrors `CopilotApproval`; consumes the Phase-3 signal. |
 | **P4-M2** | **Widget execution driver** — consent UX, visible step-by-step run, per-input prompts, pause/abort/takeover, resume across full-page navigations | The end-user-facing heart of the phase. |
 | **P4-M3** | **Safety rails + telemetry** — destructive-step confirmation, safe-stop semantics, per-run audit log, drift feedback to Phase 3 | A bad action is worse than a bad answer — this module is why founders can trust the toggle. |
@@ -81,6 +81,8 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 ---
 
 ## 5. Design questions to answer (carry into phase planning)
+
+> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt Sync analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](competitive-claude-chrome.md) §3, §5.
 
 1. **Consent & visibility UX** — confirm once at the start, or before each step? Default posture: **visible guided execution** (highlight → act, the user watches each step) over invisible automation — slower, but it *builds* trust instead of asking for it. Where does "show me" end and "do it" begin in the UI?
 2. **Destructive steps** — submits / deletes / payments: always require a per-step confirmation? Founder-configurable per workflow? Are some step types (payment fields) excluded from autopilot outright?
@@ -111,6 +113,84 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 - **`AutopilotApproval`** — the third audience flag, keyed `@@unique([sourceId, segmentIndex])` + `workspaceId` (mirrors `CopilotApproval`; survives reprocess). *(Or: generalize into one per-audience table alongside the V2 portal's `PortalPublication` (V2 · P0) — decide at build time.)*
 - **`ExecutionPlan`** — the compiled, replay-ready artifact per approved workflow: ordered steps `{ locators, route, expectedOutcome, inputSlots, destructive? }`; produced at approval/validation time; shared with the Phase-3 runner.
 - **`ExecutionRun`** — the audit log: workspace, workflow key, started/finished, steps completed, outcome (`completed | aborted | safe_stop` + reason), end-user feedback. Safe-stop reasons feed Phase-3 drift signals.
+
+---
+
+## 8. P4-M0 — Guided walkthrough: as-built (2026-07-15)
+
+**What shipped:** under a positional answer the widget offers **"Walk me through it"**; on the user's click the chat panel closes, a compact **step card** (shadow-root overlay, docked at the launcher corner) shows *instruction k/N*, the step's element gets a **sticky spotlight** (the P2-M3 highlight minus the 6s auto-clear), and the widget **observes** the user completing each step — through the whole remaining workflow, **surviving full-page navigations**. **Advancement is manual-only (user decision 2026-07-15): detection ACKNOWLEDGES — "Detected ✓ — hit Next to continue" — and the pointer moves forward exclusively on the user's Next click**, including after a recorded navigation (the card resumes on the new page with the step acknowledged, waiting for Next). The user performs every action; the widget never clicks, fills, or navigates. Config-gated per workspace (`copilotWalkthrough`, default OFF, requires Sense), served via `GET /v1/copilot/config`.
+
+**Posture — user-initiated, zero-acting, session-scoped observation.** Observers attach on the offer click and detach on done/exit/TTL: read-only re-resolution of the current step's element, a document capture-phase click listener used solely to test "was that the highlighted element?", and `location.pathname` (popstate/hashchange + a 400ms poll — no history monkey-patching). Nothing leaves the page except run analytics (workflow key + step numbers + auto/manual + outcome — never page content, values, or selectors). This deliberately extends Phase 2's ask-time-only glance into a **bounded session the user explicitly asked for**; outside an active walkthrough nothing observes and nothing is fetched at page load.
+
+**Completion detection (evidence or nothing — and detection only ever acknowledges; ALL forward
+motion is the user's Next). State-aware since the first E2E (2026-07-15): every verdict consults
+Reason's element-state vocabulary** (`readElementState` in `reason.ts` — the same reading the
+diagnostic model gets: `disabled`/`checked`/`filled`/`valid` + the failed-constraint name), so the
+card never says "click it" at a disabled button and never counts an invalid or unchecked field as
+done:
+
+| Step kind | Detection signal (→ "Detected ✓ — hit Next") | Without it |
+|---|---|---|
+| `input` | `input`/`change`/blur/Enter (800ms debounce) + **genuinely done**: checkbox/radio = `checked`; fields = `filled` AND not provably invalid (constraint API / `aria-invalid`); re-verified LIVE at Next-click time. Filled-but-invalid → status names the failed constraint in words ("the format doesn't look right") | Next = explicit skip |
+| `action` + `postRoute` | observed click (**disabled targets never count**) → *awaiting-nav* (persisted synchronously before unload) → route watcher (SPA) or resume handshake (hard nav) confirms the landing; a matching route **without** an observed click also counts (outcome over mechanism). Evidence is persisted, so the ack survives the very page load the click causes | Next = override |
+| `action`, no `postRoute` | click → mutation-quiet settle → next step resolves+visible, or the clicked control left the DOM | Next = override |
+| `locators: []` | none — instruction-only card | Next only |
+
+**Analytics still measure detection quality with no wire change:** Next on a verified-done step logs
+`step_advanced` mode=`auto` (detection-confirmed); Next on an unverified step logs `manual`
+(override/skip) — the auto:manual ratio remains P4-M2's detection-quality signal.
+
+A **disabled action target** gets *"This button is disabled — check step k ('…') first"*, naming the
+first earlier input step that isn't genuinely done; a **400ms state tick** (active-session only,
+read-only, shared with the route poll) keeps every status live (button enables → "click it"; field
+turns valid → "Detected ✓"; programmatic fills caught; an ack rolls back if the state regresses),
+**re-resolves the element if an SPA re-render replaced it**, and clears an awaiting-nav whose timer
+died with a reload. An unresolvable on-route step after
+a 0/750/2000ms retry ladder = **safe-stop**: stalled card (Retry/Back/Exit), `stalled` event, **never
+guesses forward**. A step on another route = text-only "head there and I'll pick it up" (navigating
+for the user would be acting).
+
+**The pointer is self-correcting backwards (redesigned after the second E2E round).** While all
+forward motion is the user's Next, every tick, every Next, and every resume still converges the
+pointer **back** to the **earliest on-this-route input step that is verifiably not done** (empty /
+invalid / unchecked) — page evidence beats stored position, so a stale resumed session, a hydration
+race, or any other drift snaps back to truth within ~400ms. Only *input* steps can pull the pointer
+back (their state is readable; a completed click leaves no evidence, so action steps never cause
+false pullbacks), and completion is never declared over a pending one. **Next on a still-pending
+step = an explicit user override** — the step is remembered as skipped and the pointer never drags
+them back to it (Back onto it re-engages the gate). Every pointer decision logs under
+`data-sync-debug` (mode, from→to, corrections).
+
+**The Reason escalation — "Explain what's blocking me."** On blocked/invalid/stalled states (and
+only when the founder's Reason toggle is on), the card offers one extra button: it reopens the chat
+and asks *"Why can't I proceed with this step?"* on the user's behalf — Reason's existing intent
+trigger fires, `captureSnapshot` grabs the structured page state (± the image tier), and the full
+expected-vs-actual diagnosis arrives in chat through the exact pipeline a typed question takes
+(zero new server surface; the walkthrough keeps observing underneath — the open panel covers the
+card via z-order). **Division of labor:** local state checks *gate* (instant, free, every tick);
+the diagnostic loop *explains* (seconds + tokens, user-invoked). This also covers the honest
+limitation of DOM-only checks: purely-visual custom validation (a JS rule that never sets
+`aria-invalid` or native constraints) is invisible to the gate but well within the diagnosis's
+reach — expected-vs-actual over the founder's TRUE step evidence.
+
+**Cross-nav resume:** the session persists in `sessionStorage` (`sync.walkthrough.v1` — the widget's ONLY storage; founder-derived plan data, keyed to the public key, 30-min TTL from last transition). On boot, a stored session (checked **before** any fetch) pulls the route's shard and reconciles: fresh copy swapped in when served; a workflow **absent from a shard its route belongs to = revoked → ends silently** (absence = not approved, applied to resumption); fetch failure proceeds on the persisted copy bounded by the TTL. The stored pointer is **never trusted blindly** — resume runs the same self-correction as every tick (see above), so a reload that reset the form resumes at the first unfinished step, never at the stale one, while true mid-workflow resumes (earlier steps on previous routes don't resolve here) pick up exactly where the user left off.
+
+**Run analytics:** `POST /v1/copilot/walkthrough` (own rate bucket; every field clamped like the sense wire; `started` verifies the key against `CopilotApproval` — no-leak, title from the approval snapshot) → one **`CopilotWalkthrough`** row per run: `startStep/lastStep/totalSteps`, `autoAdvances`/`manualAdvances` (the auto:manual ratio measures detection quality for P4-M2), `outcome` `active|completed|aborted|stalled` (+`stalledAtStep`; a run advancing past a stall recovers to `active`). A row still `active` past the TTL reads as abandoned — no sweeper by design.
+
+**Where everything lives:**
+
+| Piece | Where |
+|---|---|
+| The module (state machine · card · detection · storage · resume) | `packages/widget/src/walkthrough.ts` |
+| Probe keeps EVERY step's element · exported primitives · sticky spotlight · `isFilled` = `checked` for checkbox/radio | `packages/widget/src/sense.ts` |
+| `readElementState` — the shared element-state vocabulary (Reason ships it; the walkthrough gates on it) | `packages/widget/src/reason.ts` |
+| Offer pill on positional answers · config flag · boot resume · show-me suppressed mid-run | `packages/widget/src/index.ts` |
+| Card + offer styles (design tokens, shadow-root, overlay-only) | `packages/widget/src/styles.ts` (`.sc-walk-*`) |
+| Config field + `walkthrough` gate bucket + the run endpoint | `packages/api/src/server.ts` |
+| `Workspace.copilotWalkthrough` + `CopilotWalkthrough` (migration `20260715155642_walkthrough_guided`) | `packages/db/prisma/schema.prisma` |
+| Studio toggle (under "Show me", disabled without Sense, toasts) | `packages/web/components/dashboard/copilot-workspace.tsx` + `lib/copilot-settings{,-actions}.ts` |
+
+**Deliberate cuts (fast-follows, not gaps):** the offer rides only answers that carry a `position` (citation-only entry later); no per-step `expected_outcome` in the sense plan — detection uses `isFilled`/click/`postRoute`/next-step-resolves (richer outcome markers arrive with P4-M1/Phase-3's `ExecutionPlan`); the Studio "Walkthroughs" analytics card reads the table later — the data lands from day one.
 
 ---
 

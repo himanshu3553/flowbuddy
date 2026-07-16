@@ -8,7 +8,7 @@
 // the posture). Values are MASKED by default everywhere; hard floors regardless of settings:
 // passwords are never captured, card/SSN patterns always masked.
 
-import { maskText } from './sense.js';
+import { findAlertSurfaces, maskText } from './sense.js';
 import type { SenseProbeResult } from './sense.js';
 import { log } from './log.js';
 
@@ -44,6 +44,7 @@ export interface ReasonAskPayload {
 // ── Budgets (must stay within the server's validation caps) ─────────────────────────────────────
 const MAX_ELEMENTS = 60;
 const MAX_TEXTS = 40;
+const MAX_ALERT_TEXTS = 8; // the front of the text budget reserved for live alert/error surfaces
 const MAX_NAME_CHARS = 80;
 const MAX_TEXT_CHARS = 160;
 const MAX_VALUE_CHARS = 120;
@@ -52,7 +53,7 @@ const MAX_VALUE_CHARS = 120;
 // Diagnostic intent: "why / can't / stuck / not working"-class wording. Deliberately narrow — a
 // plain "how do I X" must stay on the fast path (pennies, ~2s).
 const DIAGNOSTIC_RE =
-  /\bwhy\b|can'?\s?not\b|\bcan'?t\b|\bwon'?t\b|\bdoesn'?t\b|\bisn'?t work|\bnot work|\bstuck\b|\bdisabled\b|\bgr[ae]y(ed)?([ -]?out)?\b|\bblocked\b|\bunable\b|\bbroken\b|nothing (is )?happen|what('?s| is) wrong|\bfail(s|ed|ing)?\b/i;
+  /\bwhy\b|can'?\s?not\b|\bcan'?t\b|\bwon'?t\b|\bdoesn'?t\b|\bisn'?t work|\bnot work|\bstuck\b|\bdisabled\b|\bgr[ae]y(ed)?([ -]?out)?\b|\bblocked\b|\bunable\b|\bbroken\b|nothing (is )?happen|what('?s| is) wrong|\bfail(s|ed|ing)?\b|what (just )?happened|went wrong|didn'?t work|\berror\b|\brejected\b/i;
 
 /** Hard floors for unmasked values (§5.4): card/SSN patterns are masked REGARDLESS of settings. */
 function maskHardFloors(s: string): string {
@@ -236,6 +237,15 @@ function readElement(el: Element, includeValues: boolean, currentStepEl: Element
 }
 
 /**
+ * P4-M0 — the walkthrough's LOCAL state gate reuses this exact vocabulary (one reading of element
+ * state everywhere: Reason ships it to the diagnostic model, the walkthrough consults it in-page).
+ * No values, no current-step marker — just disabled/checked/filled/valid(+invalidReason).
+ */
+export function readElementState(el: Element): ReasonElementWire {
+  return readElement(el, false, null);
+}
+
+/**
  * Capture the structured page-state snapshot: interactive controls (explicit state) + visible
  * text (labels, hints, requirement/error lines), both in reading order, both budgeted and masked.
  * Read-only, synchronous, ~ms. Never throws — a capture failure returns null and the question
@@ -258,19 +268,26 @@ export function captureSnapshot(includeValues: boolean, probe: SenseProbeResult 
     }
 
     // Visible text: prefer the current step's form/dialog scope (the requirement checklist lives
-    // there), fall back to the whole page; alerts are collected document-wide regardless.
-    // Collected as TEXT NODES in reading order — markup-agnostic on purpose: hint lines and
-    // requirement checklists are routinely plain <div>/<span> rows that no tag selector catches.
+    // there), fall back to the whole page. Collected as TEXT NODES in reading order —
+    // markup-agnostic on purpose: hint lines and requirement checklists are routinely plain
+    // <div>/<span> rows that no tag selector catches.
     const scope = currentStepEl?.closest('form, [role="dialog"], main, section') ?? document.body;
     const texts: string[] = [];
     const seen = new Set<string>();
-    const pushText = (raw: string) => {
+    const pushText = (raw: string, tag = '') => {
       if (texts.length >= MAX_TEXTS) return;
       const t = clean(maskText(raw), MAX_TEXT_CHARS);
       if (t.length < 2 || seen.has(t)) return;
       seen.add(t);
-      texts.push(t);
+      texts.push(tag ? `${tag} ${t}` : t);
     };
+    // Alert/error surfaces FIRST — when the page is reporting a problem, that message usually IS
+    // the diagnosis, so it must never lose the text budget to marketing copy or fall outside a
+    // narrow scope. Shared detector (sense.ts findAlertSurfaces): standards signals + error-styled
+    // classes + red-family text blocks (utility-CSS banners), tagged "[alert]" for the model.
+    for (const el of findAlertSurfaces(MAX_ALERT_TEXTS)) {
+      pushText(el.textContent ?? '', '[alert]');
+    }
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node && texts.length < MAX_TEXTS; node = walker.nextNode()) {
       const parent = node.parentElement;
@@ -280,11 +297,6 @@ export function captureSnapshot(includeValues: boolean, probe: SenseProbeResult 
       if (parent.closest(CONTROL_SELECTOR)) continue;
       if (!visible(parent)) continue;
       pushText(node.nodeValue ?? '');
-    }
-    if (scope !== document.body) {
-      document.querySelectorAll('[role="alert"], [aria-live="assertive"]').forEach((el) => {
-        if (visible(el) && !el.closest('#sync-copilot-root')) pushText(el.textContent ?? '');
-      });
     }
 
     return {

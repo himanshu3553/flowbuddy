@@ -95,6 +95,10 @@ model Workspace {
   // P2-M3 "show me" — when on, the widget also HIGHLIGHTS the current step's element on the host
   // page alongside a positional answer (off = text-only). Served to the widget via /v1/copilot/config.
   copilotShowMe         Boolean  @default(false)
+  // P4-M0 guided walkthrough — when on, positional answers offer "Walk me through it": the widget
+  // highlights each remaining step and follows the user's progress (the user does everything;
+  // Sync never acts). Needs Sense. Served to the widget via /v1/copilot/config.
+  copilotWalkthrough    Boolean  @default(false)
   // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-reason.md §5.3):
   // `reasonEnabled` gates the whole diagnostic path (ask-time structured page-state capture, values
   // masked). `reasonImageEnabled` adds the DOM-rendered page image (the most sensitive capture —
@@ -102,7 +106,9 @@ model Workspace {
   // unmasks typed field values in the capture (hard floors apply regardless: passwords are never
   // captured, card/SSN patterns always masked). All served to the widget via /v1/copilot/config.
   reasonEnabled         Boolean  @default(true)
-  reasonImageEnabled    Boolean  @default(false)
+  // Image tier default ON since 2026-07-16 (visual-only state — met/unmet checklists, banners — is
+  // where diagnosis quality lives); the founder still owns the toggle + the disclosure snippet.
+  reasonImageEnabled    Boolean  @default(true)
   reasonIncludeValues   Boolean  @default(false)
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
@@ -111,6 +117,7 @@ model Workspace {
   coverageGaps     CoverageGap[]
   copilotApprovals CopilotApproval[]
   copilotQueries   CopilotQuery[]
+  walkthroughs     CopilotWalkthrough[]
 }
 
 model ApiToken {
@@ -232,6 +239,33 @@ model CopilotQuery {
 
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   citations QueryCitation[]
+
+  @@index([workspaceId])
+}
+
+model CopilotWalkthrough {
+  // P4-M0: one row per guided-walkthrough RUN (a session, not a query — the optional queryId keeps
+  // the join to the question that offered it). Written by POST /v1/copilot/walkthrough: `started`
+  // creates the row (workflow key verified against CopilotApproval first — no-leak), progress
+  // events bump lastStep + the auto/manual counters, terminal events set the outcome. A row still
+  // `active` past the widget's 30-min session TTL reads as abandoned (no sweeper by design).
+  id             String   @id @default(cuid())
+  workspaceId    String
+  sourceId       String // KnowledgeSource the workflow belongs to
+  segmentIndex   Int // the workflow within that source
+  segmentTitle   String? // snapshot at start (display/audit, approval-sourced — never the wire)
+  queryId        String? // originating CopilotQuery, when known
+  startStep      Int // where the user entered (mid-workflow entry via Sense)
+  totalSteps     Int
+  lastStep       Int // furthest step reached
+  autoAdvances   Int      @default(0) // steps detected automatically (measures detection quality for P4-M2)
+  manualAdvances Int      @default(0) // steps advanced via the Next button
+  outcome        String   @default("active") // active | completed | aborted | stalled
+  stalledAtStep  Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
 }
