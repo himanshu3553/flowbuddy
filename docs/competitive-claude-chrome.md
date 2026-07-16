@@ -1,6 +1,6 @@
-# Sync — Competitive analysis: Claude for Chrome
+# FlowBuddy — Competitive analysis: Claude for Chrome
 
-> **Claude for Chrome ("Claude in Chrome") is Anthropic's user-side browser agent** — a Chrome extension that lets Claude see, click, type, and run multi-step workflows in the end-user's own browser session. It is the closest large-scale product to Sync's Phase-4 Autopilot ambition, and the clearest proof that in-browser agents are going mainstream. **It plays a different game than Sync** — horizontal + user-installed vs. vertical + vendor-embedded — and that asymmetry is the strategy.
+> **Claude for Chrome ("Claude in Chrome") is Anthropic's user-side browser agent** — a Chrome extension that lets Claude see, click, type, and run multi-step workflows in the end-user's own browser session. It is the closest large-scale product to FlowBuddy's Phase-4 Autopilot ambition, and the clearest proof that in-browser agents are going mainstream. **It plays a different game than FlowBuddy** — horizontal + user-installed vs. vertical + vendor-embedded — and that asymmetry is the strategy.
 
 - **Status:** 📄 **Living competitive reference** — re-check on major Anthropic releases.
 - **Last updated:** 2026-07-15 · **Branch:** `dev`
@@ -47,43 +47,43 @@ Two operating modes:
 
 **Published prompt-injection numbers** (their flagship risk): 23.6% attack success rate unmitigated → 11.2% after the first mitigation wave (site permissions, action confirmations, classifiers, category blocking, RL-trained refusal; 0% on a browser-specific challenge set) → **<0.08%** claimed for the shipped configuration. They openly document that screenshots capture whatever is visible in a tab, and steer users away from banking/legal/medical contexts.
 
-## 4. Head-to-head with Sync
+## 4. Head-to-head with FlowBuddy
 
-**Framing: different games on the same board.** Claude for Chrome is a *horizontal, user-side* agent — the individual installs it, pays Anthropic, points it anywhere. Sync is a *vertical, vendor-side* copilot — the SaaS embeds it; every user gets it free, grounded only in approved knowledge. Claude sits in the user's browser; Sync sits in the vendor's product.
+**Framing: different games on the same board.** Claude for Chrome is a *horizontal, user-side* agent — the individual installs it, pays Anthropic, points it anywhere. FlowBuddy is a *vertical, vendor-side* copilot — the SaaS embeds it; every user gets it free, grounded only in approved knowledge. Claude sits in the user's browser; FlowBuddy sits in the vendor's product.
 
-### Where Sync is structurally better
+### Where FlowBuddy is structurally better
 
 | # | Edge | Why Claude can't match it |
 |---|---|---|
-| 1 | **Distribution** | A SaaS vendor cannot deploy Claude for Chrome to its customers — it needs each end user to pay Anthropic, install an extension, and grant invasive permissions. Sync = one `<script>`, 100% of users, zero install, free to them. Anthropic has no vendor-embeddable offering. |
-| 2 | **Grounding** | Claude improvises any UI from general knowledge; nothing stops a confident wrong path. Sync answers **only** from founder-recorded, approved workflows. For support, approved-KB grounding beats frontier improvisation on trust. |
+| 1 | **Distribution** | A SaaS vendor cannot deploy Claude for Chrome to its customers — it needs each end user to pay Anthropic, install an extension, and grant invasive permissions. FlowBuddy = one `<script>`, 100% of users, zero install, free to them. Anthropic has no vendor-embeddable offering. |
+| 2 | **Grounding** | Claude improvises any UI from general knowledge; nothing stops a confident wrong path. FlowBuddy answers **only** from founder-recorded, approved workflows. For support, approved-KB grounding beats frontier improvisation on trust. |
 | 3 | **Expected-vs-actual ground truth** | Reason (P2-M5) compares live page state against the founder's TRUE reference screenshots + locators; Phase 3 adds validated-current certification. Claude has no reference for what the product *should* look like. This is the compounding data asset. |
 | 4 | **Vendor control + telemetry** | Live-served appearance, approval gates, admin control, "where users get stuck" analytics. Claude gives the vendor nothing — no visibility, no branding, and its screenshots of the vendor's app flow to a third party the vendor never contracted with. |
-| 5 | **Safety surface** | Sync's copilot is read-only today (locator probes, masked values). Phase 4's "execute only recorded + approved workflows, human-in-the-loop" is categorically stronger than "improvise on any site, filtered by classifiers." |
+| 5 | **Safety surface** | FlowBuddy's copilot is read-only today (locator probes, masked values). Phase 4's "execute only recorded + approved workflows, human-in-the-loop" is categorically stronger than "improvise on any site, filtered by classifiers." |
 | 6 | **Cost model** | Vendor pays once; end users pay nothing. Claude gates every end user behind a subscription. |
 
-### Where Sync lags
+### Where FlowBuddy lags
 
 | # | Gap | Reality check |
 |---|---|---|
-| 1 | **Claude acts today, at GA quality** | Clicks, fills, uploads, tabs, scheduled jobs, recorded-workflow replay — shipping now. Sync's acting Autopilot is still to build (P4-M1…M3); the **P4-M0 guided walkthrough shipped 2026-07-15** (guide, not act), and the goal-agent design (Tell→Guide→Do, [`phase-5-converse.md`](phase-5-converse.md)) is drafted. Every month without "Do" makes "why not just use Claude?" easier to ask. |
-| 2 | **End-user record-and-replay** | Claude in Chrome lets *any user* record a workflow and replay it. Validates Sync's capture→replay architecture — and shrinks the runway to ship the vendor-grade (approved, validated, drift-checked) version. |
+| 1 | **Claude acts today, at GA quality** | Clicks, fills, uploads, tabs, scheduled jobs, recorded-workflow replay — shipping now. FlowBuddy's acting Autopilot is still to build (P4-M1…M3); the **P4-M0 guided walkthrough shipped 2026-07-15** (guide, not act), and the goal-agent design (Tell→Guide→Do, [`phase-5-converse.md`](phase-5-converse.md)) is drafted. Every month without "Do" makes "why not just use Claude?" easier to ask. |
+| 2 | **End-user record-and-replay** | Claude in Chrome lets *any user* record a workflow and replay it. Validates FlowBuddy's capture→replay architecture — and shrinks the runway to ship the vendor-grade (approved, validated, drift-checked) version. |
 | 3 | **Agent-loop maturity** | Hybrid perception, batched read-only calls, plan-mode permission discipline, CAPTCHA/login handoff, model switching — years of harness engineering. (Cf. the recorder's known full-page-nav capture gap.) |
 | 4 | **Published, quantified safety** | ASR metrics (23.6% → 11.2% → <0.08%), classifier layers, hard-blocked categories, org admin controls. Enterprise buyers will benchmark Autopilot's safety story against exactly this. |
-| 5 | **Cross-app breadth** | Claude spans calendar → CRM → docs → email in one workflow. Sync is single-product by design — correct for the wedge, but a real ceiling. |
+| 5 | **Cross-app breadth** | Claude spans calendar → CRM → docs → email in one workflow. FlowBuddy is single-product by design — correct for the wedge, but a real ceiling. |
 
-## 5. How Sync beats Claude in this game
+## 5. How FlowBuddy beats Claude in this game
 
-1. **Don't play their game — make them unable to play yours.** The winning position is "the agent layer the *vendor* ships." Claude structurally can't be embedded, can't be grounded to approved-only, can't give the vendor control or analytics, can't be free to the end user. Sales line: *Claude is your user's agent; Sync is your product's agent.*
-2. **Compress the road to Phase 3 + 4.** The biggest strategic risk is that grounded, vendor-approved execution stays on paper while user-side improvised execution becomes normal. Reason's agent loop is already Phase 4's skeleton; R13 ranked locators are the replay substrate. One narrow, certified, human-in-the-loop workflow executing in an end-user session flips the comparison from "Sync talks, Claude acts" to "Claude guesses, Sync executes the vendor-certified path."
+1. **Don't play their game — make them unable to play yours.** The winning position is "the agent layer the *vendor* ships." Claude structurally can't be embedded, can't be grounded to approved-only, can't give the vendor control or analytics, can't be free to the end user. Sales line: *Claude is your user's agent; FlowBuddy is your product's agent.*
+2. **Compress the road to Phase 3 + 4.** The biggest strategic risk is that grounded, vendor-approved execution stays on paper while user-side improvised execution becomes normal. Reason's agent loop is already Phase 4's skeleton; R13 ranked locators are the replay substrate. One narrow, certified, human-in-the-loop workflow executing in an end-user session flips the comparison from "FlowBuddy talks, Claude acts" to "Claude guesses, FlowBuddy executes the vendor-certified path."
 3. **Steal their permissions UX wholesale for Phase 4.** Ask-before-acting vs. act-within-approved-boundaries, per-action confirmation for irreversible steps, hard-blocked categories, admin allowlists, reviewable action history — a proven, user-tested control vocabulary. Adopting its analogues (and citing the analogy) borrows their safety credibility. Cross-referenced from [`phase-4-autopilot.md`](phase-4-autopilot.md) §5.
-4. **Publish safety numbers early — and win by construction.** Sync's action space is closed; Claude's is open. "Injection attempts in page content cannot alter the action set — 0% action-hijack *by construction*" is a claim Anthropic cannot make. Make it explicit, tested, and marketed.
-5. **Turn their weaknesses into features.** Screenshots-leak-everything and zero-vendor-visibility are Sync talking points: values masked, end-user-silent by policy, vendor in the loop. Position Sync as the *compliant* way to give users agentic help inside a SaaS.
+4. **Publish safety numbers early — and win by construction.** FlowBuddy's action space is closed; Claude's is open. "Injection attempts in page content cannot alter the action set — 0% action-hijack *by construction*" is a claim Anthropic cannot make. Make it explicit, tested, and marketed.
+5. **Turn their weaknesses into features.** Screenshots-leak-everything and zero-vendor-visibility are FlowBuddy talking points: values masked, end-user-silent by policy, vendor in the loop. Position FlowBuddy as the *compliant* way to give users agentic help inside a SaaS.
 
 ## 6. Watch items
 
-- **An embeddable/white-label agent SDK for site owners** from Anthropic would be the moment they enter Sync's lane. No sign of it today — the extension is user-side only. Until then it *helps* Sync: it normalizes in-browser agents while leaving the vendor-side seat empty.
-- **End-user bypass:** users with Claude for Chrome may skip the vendor's copilot. Counter: Sync is grounded, free, in-product, zero-friction.
+- **An embeddable/white-label agent SDK for site owners** from Anthropic would be the moment they enter FlowBuddy's lane. No sign of it today — the extension is user-side only. Until then it *helps* FlowBuddy: it normalizes in-browser agents while leaving the vendor-side seat empty.
+- **End-user bypass:** users with Claude for Chrome may skip the vendor's copilot. Counter: FlowBuddy is grounded, free, in-product, zero-friction.
 - **Their cadence:** 10 months preview→GA. Assume capability gaps quoted here have a short shelf life; re-verify before repeating them externally.
 
 ## 7. Sources

@@ -67,7 +67,7 @@ export function Sidebar({
       {/* logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 8px 16px' }}>
         <div style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--primary-gradient-logo)', boxShadow: '0 2px 8px rgba(58,80,221,.35)' }} />
-        <div style={{ font: '800 16px var(--font-sans)', color: 'var(--ink)', letterSpacing: '-0.02em' }}>Sync</div>
+        <div style={{ font: '800 16px var(--font-sans)', color: 'var(--ink)', letterSpacing: '-0.02em' }}>FlowBuddy</div>
       </div>
       {/* workspace switcher */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: 10, background: 'var(--paper-2)', cursor: 'pointer' }}>

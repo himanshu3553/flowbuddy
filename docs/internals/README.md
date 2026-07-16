@@ -1,9 +1,9 @@
-# Sync — Internals (how the black box actually works)
+# FlowBuddy — Internals (how the black box actually works)
 
 > **What this folder is.** A low-level, engineering-first tour of the running system: what each
 > module does, **how it works inside**, what data flows in and out of it, and how the modules are
 > wired together. It is the counterpart to the product docs in [`../`](../) — those explain *what
-> Sync is and why* (copilot-first, the 3-module model, the roadmap); **these explain *how it runs*.**
+> FlowBuddy is and why* (copilot-first, the 3-module model, the roadmap); **these explain *how it runs*.**
 >
 > No code walkthroughs — these describe **mechanics and data flow** so you can reason about the
 > system without reading source. Where a detail maps to a specific file, the file is linked so you
@@ -54,7 +54,7 @@ flowchart TB
         STU["Studio<br/>(Next.js web app)"]
     end
 
-    subgraph backend["Sync backend"]
+    subgraph backend["FlowBuddy backend"]
         API["Ingestion + Copilot API<br/>(Fastify :8787)"]
         WRK["KB build worker<br/>(BullMQ consumer)"]
     end
@@ -101,7 +101,7 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
   public **embed key** (customer's browser → copilot), and the **Studio login** (operator → console)
   are distinct and never interchangeable. See [connections.md](connections.md) §"Three identities".
 - **One logger across the Node services (cross-cutting, since 2026-07-08).** `api` (incl. the worker),
-  `synthesis`, and `web` server-side all log through **`@sync/logger`** (Pino — `createLogger('<service>')`,
+  `synthesis`, and `web` server-side all log through **`@flowbuddy/logger`** (Pino — `createLogger('<service>')`,
   env-driven level, JSON in prod / pretty in dev, secret redaction); Fastify is wired to it via
   `loggerInstance`. Browser surfaces (widget/extension/web-client) use tiny local console loggers.
   It's infrastructure, not a module, so it has no doc of its own — canonical reference:
@@ -113,5 +113,5 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 have tracked: retrieval consolidated into `synthesis/retrieval.ts` + **hybrid keyword∪pgvector (P1-M3)**,
 the **Approach-B real-widget preview** (one answer path), **live-served widget appearance**
 (`GET /v1/copilot/config`), the recorder **v0.3.0** stop→upload resilience + R12/R13, the **Phase-2
-sweep** (the `Article`/`Step` tables are gone), and **`@sync/logger`**. If a mechanic here disagrees
+sweep** (the `Article`/`Step` tables are gone), and **`@flowbuddy/logger`**. If a mechanic here disagrees
 with the source, the source wins — please update the doc.*

@@ -1,4 +1,4 @@
-// Sync data model (Phase 1a). Postgres via Prisma.
+// FlowBuddy data model (Phase 1a). Postgres via Prisma.
 // Auth.js tables (User/Account/Session/VerificationToken) + app tables.
 
 generator client {
@@ -78,7 +78,7 @@ model Workspace {
   copilotAllowedOrigins String[] @default([])
   // Trust setting: show the "Source: <workflow>" citation chip on grounded answers (default on).
   copilotShowCitations  Boolean  @default(true)
-  // Appearance (host branding) — flows into the embed snippet's data-sync-* attrs (null = widget default).
+  // Appearance (host branding) — flows into the embed snippet's data-flowbuddy-* attrs (null = widget default).
   copilotAccent         String?
   copilotTitle          String?
   copilotGreeting       String?
@@ -97,7 +97,7 @@ model Workspace {
   copilotShowMe         Boolean  @default(false)
   // P4-M0 guided walkthrough — when on, positional answers offer "Walk me through it": the widget
   // highlights each remaining step and follows the user's progress (the user does everything;
-  // Sync never acts). Needs Sense. Served to the widget via /v1/copilot/config.
+  // FlowBuddy never acts). Needs Sense. Served to the widget via /v1/copilot/config.
   copilotWalkthrough    Boolean  @default(false)
   // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-reason.md §5.3):
   // `reasonEnabled` gates the whole diagnostic path (ask-time structured page-state capture, values

@@ -28,13 +28,13 @@ export function ConnectClient({ email }: { email: string }) {
     function onMessage(e: MessageEvent) {
       if (e.source !== window) return;
       const d = e.data as { source?: string; type?: string } | null;
-      if (d?.source !== 'sync-ext') return;
+      if (d?.source !== 'flowbuddy-ext') return;
       if (d.type === 'present') setExtPresent(true);
       if (d.type === 'connected') setPhase('done');
     }
     window.addEventListener('message', onMessage);
     // Ask the bridge to announce itself (covers the case where it loaded before us).
-    window.postMessage({ source: 'sync-page', type: 'ping' }, window.location.origin);
+    window.postMessage({ source: 'flowbuddy-page', type: 'ping' }, window.location.origin);
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
@@ -48,7 +48,7 @@ export function ConnectClient({ email }: { email: string }) {
       return;
     }
     window.postMessage(
-      { source: 'sync-page', type: 'connect', ...res.payload },
+      { source: 'flowbuddy-page', type: 'connect', ...res.payload },
       window.location.origin,
     );
     // The bridge acks with 'connected'; fall back to success if the ack is missed.
@@ -63,7 +63,7 @@ export function ConnectClient({ email }: { email: string }) {
             S
           </span>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">
-            Connect the Sync Recorder
+            Connect the FlowBuddy Recorder
           </h1>
           <p className="text-sm text-muted-foreground">
             Link the browser extension to your account — no tokens to copy.
@@ -85,7 +85,7 @@ export function ConnectClient({ email }: { email: string }) {
               <>
                 {!extPresent && (
                   <p className="rounded-control border bg-secondary p-3 text-sm text-muted-foreground">
-                    The Sync Recorder extension isn&apos;t detected on this page.
+                    The FlowBuddy Recorder extension isn&apos;t detected on this page.
                     Install/enable it (chrome://extensions), then reload this
                     page.
                   </p>

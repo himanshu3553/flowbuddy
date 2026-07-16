@@ -116,14 +116,14 @@ uploaded ──(worker picks up)──▶ processing ──(KB built)──▶ r
 ```
 
 (`done` is a tolerated legacy value for pre-KB-layer rows.) Defined as `RecSessionStatus` in
-[`@sync/shared/jobs.ts`](../../packages/shared/src/jobs.ts). `ready` means *KB built + segmented,
+[`@flowbuddy/shared/jobs.ts`](../../packages/shared/src/jobs.ts). `ready` means *KB built + segmented,
 workflows available to approve* — there are no articles in the copilot-first product.
 
 ---
 
 ## 4. Object storage layout
 
-One bucket (`sync-artifacts` by default). Keys are **workspace- and session-prefixed**:
+One bucket (`flowbuddy-artifacts` by default). Keys are **workspace- and session-prefixed**:
 
 ```
 workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>
@@ -150,7 +150,7 @@ another's prefix.
 ## 5. Redis / the queue
 
 A single BullMQ queue, name **`synthesis`** (`SYNTHESIS_QUEUE` in
-[`@sync/shared/jobs.ts`](../../packages/shared/src/jobs.ts)). Job body:
+[`@flowbuddy/shared/jobs.ts`](../../packages/shared/src/jobs.ts)). Job body:
 `{ sessionId, workspaceId }` — pointers only ([connections.md](connections.md) Seam C). The
 [API](ingestion-api.md) is the producer; the [worker](knowledge-base.md) is the consumer
 (`concurrency: 2`). The connection is built from `REDIS_URL` (TLS auto-enabled for `rediss:`). Redis
@@ -180,7 +180,7 @@ order: `init` → `add_step_highlight` → `kb_layer` (the `KnowledgeSource`/`Kn
 `copilot_query` (analytics). Each migration name maps cleanly to a module milestone above.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
-`pnpm --filter @sync/db exec prisma studio` (browse). See [`../dev-setup.md`](../dev-setup.md).
+`pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../dev-setup.md).
 
 ---
 

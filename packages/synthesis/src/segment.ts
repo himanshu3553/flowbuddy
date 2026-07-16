@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
-import type { CapturedEvent, Marker } from '@sync/shared';
-import { createLogger } from '@sync/logger';
+import type { CapturedEvent, Marker } from '@flowbuddy/shared';
+import { createLogger } from '@flowbuddy/logger';
 
 const log = createLogger('segment');
 

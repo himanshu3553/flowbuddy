@@ -1,29 +1,29 @@
-// Sync embeddable copilot widget (P1-M7). One <script> renders a shadow-DOM chat panel that calls
+// FlowBuddy embeddable copilot widget (P1-M7). One <script> renders a shadow-DOM chat panel that calls
 // the copilot answer endpoint and shows grounded answers + citations (or an honest decline).
 //
 // Embed:
-//   <script src=".../sync-copilot.js"
-//           data-sync-api="https://api.example.com"
-//           data-sync-key="<workspace key>"
-//           data-sync-title="Help"            (optional — per-page override, see below)
-//           data-sync-accent="#4f46e5"        (optional — brand the widget to the host)
-//           data-sync-position="left"          (optional — "left" | "right", default right)
-//           data-sync-preview="1"></script>    (optional — Studio tester mode, see below)
+//   <script src=".../flowbuddy-copilot.js"
+//           data-flowbuddy-api="https://api.example.com"
+//           data-flowbuddy-key="<workspace key>"
+//           data-flowbuddy-title="Help"            (optional — per-page override, see below)
+//           data-flowbuddy-accent="#4f46e5"        (optional — brand the widget to the host)
+//           data-flowbuddy-position="left"          (optional — "left" | "right", default right)
+//           data-flowbuddy-preview="1"></script>    (optional — Studio tester mode, see below)
 //
-// data-sync-preview marks a STUDIO PREVIEW embed (the Copilot page's real-widget tester): the mount
+// data-flowbuddy-preview marks a STUDIO PREVIEW embed (the Copilot page's real-widget tester): the mount
 // heartbeat is suppressed and answer calls are flagged `preview` so the API skips embed detection
 // and analytics — a founder trying the widget must never read as a customer install. The panel also
-// starts open AND the launcher stays visible below it (panel lifted via --sc-panel-bottom), so both
+// starts open AND the launcher stays visible below it (panel lifted via --fb-panel-bottom), so both
 // the conversation and every launcher appearance control are on screen at once.
-// (data-sync-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
+// (data-flowbuddy-key is the workspace's PUBLIC embeddable key — safe in client HTML, distinct from the secret recorder token; P1-M9.)
 //
 // APPEARANCE (2026-07-07): the widget fetches its look (accent/title/greeting/position/launcher)
 // from `GET /v1/copilot/config` at mount, so Studio → Copilot → Appearance changes reach every
 // embed live — customers never re-copy the snippet. Precedence per field:
-//   explicit data-sync-* attr (or window.SyncCopilot) > server config > built-in default.
+//   explicit data-flowbuddy-* attr (or window.FlowBuddy) > server config > built-in default.
 // Attrs stay supported as deliberate per-page overrides; the fetch is best-effort (short timeout,
 // any failure falls back to attrs/defaults) so the widget always appears.
-// The default theme is the Sync indigo brand (matches Sync Studio); an accent (from Studio or the attr) overrides it with the host's own brand color (text on it is white).
+// The default theme is the FlowBuddy indigo brand (matches FlowBuddy Studio); an accent (from Studio or the attr) overrides it with the host's own brand color (text on it is white).
 //
 // DRAG + EXPAND (2026-07-13): the open panel drags by its header (viewport-clamped; the spot
 // lasts for the page view), and a header toggle expands it vertically to near-full viewport
@@ -51,20 +51,20 @@ interface Msg {
 const script = document.currentScript as HTMLScriptElement | null;
 // The widget's own URL — the P2-M5 lazy renderer bundle is derived from it (a sibling file).
 const SCRIPT_SRC = script?.src || '';
-const g = (window as unknown as { SyncCopilot?: Record<string, string> }).SyncCopilot ?? {};
+const g = (window as unknown as { FlowBuddy?: Record<string, string> }).FlowBuddy ?? {};
 // Explicit host-page values (attr or window global) — recorded separately from the resolved cfg
 // because an explicit value must keep winning over the server config fetched at mount.
 const explicit = {
-  title: script?.dataset.syncTitle || g.title || '',
-  greeting: script?.dataset.syncGreeting || g.greeting || '',
-  accent: script?.dataset.syncAccent || g.accent || '',
-  position: (script?.dataset.syncPosition || g.position || '').toLowerCase(),
-  launcher: (script?.dataset.syncLauncher || g.launcher || '').toLowerCase(),
-  launcherText: script?.dataset.syncLauncherText || g.launcherText || '',
+  title: script?.dataset.flowbuddyTitle || g.title || '',
+  greeting: script?.dataset.flowbuddyGreeting || g.greeting || '',
+  accent: script?.dataset.flowbuddyAccent || g.accent || '',
+  position: (script?.dataset.flowbuddyPosition || g.position || '').toLowerCase(),
+  launcher: (script?.dataset.flowbuddyLauncher || g.launcher || '').toLowerCase(),
+  launcherText: script?.dataset.flowbuddyLauncherText || g.launcherText || '',
 };
 const cfg = {
-  apiBase: (script?.dataset.syncApi || g.apiBase || 'http://localhost:8787').replace(/\/+$/, ''),
-  key: script?.dataset.syncKey || g.key || '',
+  apiBase: (script?.dataset.flowbuddyApi || g.apiBase || 'http://localhost:8787').replace(/\/+$/, ''),
+  key: script?.dataset.flowbuddyKey || g.key || '',
   title: explicit.title || 'Ask AI',
   greeting: explicit.greeting || 'How can I help you today?',
   accent: explicit.accent,
@@ -72,7 +72,7 @@ const cfg = {
   // Launcher look: 'icon' (chat bubble, default), 'text' (filled pill), or 'text-outline' (bordered pill).
   launcher: explicit.launcher || 'icon',
   launcherText: explicit.launcherText || 'Ask me anything',
-  preview: (script?.dataset.syncPreview || g.preview || '') === '1',
+  preview: (script?.dataset.flowbuddyPreview || g.preview || '') === '1',
   // P2 Sense — both flags arrive from /v1/copilot/config (Studio-controlled); sense defaults ON
   // (harmless read-only probe), showMe defaults OFF (it draws on the host page).
   sense: true,
@@ -86,8 +86,8 @@ const cfg = {
   reasonImage: false,
   reasonValues: false,
   // Opt-in diagnostics (off by default — the widget must never spam a customer's console).
-  debug: /^(1|true|yes)$/i.test(script?.dataset.syncDebug || '') ||
-    (window as unknown as { SyncCopilotDebug?: boolean }).SyncCopilotDebug === true,
+  debug: /^(1|true|yes)$/i.test(script?.dataset.flowbuddyDebug || '') ||
+    (window as unknown as { FlowBuddyDebug?: boolean }).FlowBuddyDebug === true,
 };
 
 // Enable console diagnostics before anything else runs, so early boot steps are visible when asked for.
@@ -123,7 +123,7 @@ function mdToHtml(text: string): string {
   let steps: string[] = [];
   const flush = () => {
     if (steps.length === 0) return;
-    out.push(`<div class="sc-steps">${steps.join('')}</div>`);
+    out.push(`<div class="fb-steps">${steps.join('')}</div>`);
     steps = [];
   };
   for (const raw of escapeHtml(text).split('\n')) {
@@ -131,12 +131,12 @@ function mdToHtml(text: string): string {
     const ol = /^(\d{1,2})[.)]\s+(.*)$/.exec(line);
     const ul = /^[-*•]\s+(.*)$/.exec(line);
     if (ol) {
-      steps.push(`<div class="sc-step"><span class="sc-step-n">${ol[1]}</span><span class="sc-step-t">${inlineMd(ol[2]!)}</span></div>`);
+      steps.push(`<div class="fb-step"><span class="fb-step-n">${ol[1]}</span><span class="fb-step-t">${inlineMd(ol[2]!)}</span></div>`);
     } else if (ul) {
-      steps.push(`<div class="sc-step"><span class="sc-step-b"></span><span class="sc-step-t">${inlineMd(ul[1]!)}</span></div>`);
+      steps.push(`<div class="fb-step"><span class="fb-step-b"></span><span class="fb-step-t">${inlineMd(ul[1]!)}</span></div>`);
     } else {
       flush();
-      if (line) out.push(`<p class="sc-p">${inlineMd(line)}</p>`);
+      if (line) out.push(`<p class="fb-p">${inlineMd(line)}</p>`);
     }
   }
   flush();
@@ -144,7 +144,7 @@ function mdToHtml(text: string): string {
 }
 function bubbleEl(m: Msg): HTMLDivElement {
   const b = document.createElement('div');
-  b.className = 'sc-bubble';
+  b.className = 'fb-bubble';
   if (m.role === 'assistant') b.innerHTML = mdToHtml(m.content);
   else b.textContent = m.content; // user input is never treated as markdown
   return b;
@@ -157,9 +157,9 @@ function bubbleEl(m: Msg): HTMLDivElement {
 const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap';
 function ensureBrandFonts(): void {
-  if (document.getElementById('sync-copilot-fonts')) return;
+  if (document.getElementById('flowbuddy-copilot-fonts')) return;
   const link = document.createElement('link');
-  link.id = 'sync-copilot-fonts';
+  link.id = 'flowbuddy-copilot-fonts';
   link.rel = 'stylesheet';
   link.href = FONTS_HREF;
   document.head.appendChild(link);
@@ -178,53 +178,53 @@ const COLLAPSE_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>';
 
 const host = el('div');
-host.id = 'sync-copilot-root';
+host.id = 'flowbuddy-copilot-root';
 // Host theming (optional) — applied as inline CSS vars that inherit into the shadow tree.
-if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);
+if (cfg.accent) host.style.setProperty('--fb-accent', cfg.accent);
 if (cfg.position === 'left') {
-  host.style.setProperty('--sc-right', 'auto');
-  host.style.setProperty('--sc-left', '20px');
+  host.style.setProperty('--fb-right', 'auto');
+  host.style.setProperty('--fb-left', '20px');
 }
 // Preview keeps the launcher visible under the open panel (so launcher style/text/position edits
 // show immediately in the Studio tester) — lift the panel clear of the 56px launcher.
-if (cfg.preview) host.style.setProperty('--sc-panel-bottom', '86px');
+if (cfg.preview) host.style.setProperty('--fb-panel-bottom', '86px');
 const root = host.attachShadow({ mode: 'open' });
 const styleEl = document.createElement('style');
 styleEl.textContent = CSS;
 root.appendChild(styleEl);
 
 const launcherIsText = cfg.launcher === 'text' || cfg.launcher === 'text-outline';
-const launcher = el('button', 'sc-launcher', launcherIsText ? cfg.launcherText : '💬');
+const launcher = el('button', 'fb-launcher', launcherIsText ? cfg.launcherText : '💬');
 if (launcherIsText) {
-  launcher.classList.add('sc-launcher-pill');
-  if (cfg.launcher === 'text-outline') launcher.classList.add('sc-launcher-outline');
+  launcher.classList.add('fb-launcher-pill');
+  if (cfg.launcher === 'text-outline') launcher.classList.add('fb-launcher-outline');
 }
 launcher.setAttribute('aria-label', 'Open help copilot');
 
-const panel = el('div', 'sc-panel');
-const header = el('div', 'sc-header');
-const badge = el('span', 'sc-badge');
+const panel = el('div', 'fb-panel');
+const header = el('div', 'fb-header');
+const badge = el('span', 'fb-badge');
 badge.innerHTML = BOT_SVG; // static markup, not user content
 header.appendChild(badge);
-const titleWrap = el('span', 'sc-titles');
-const titleEl = el('span', 'sc-title', cfg.title);
+const titleWrap = el('span', 'fb-titles');
+const titleEl = el('span', 'fb-title', cfg.title);
 titleWrap.appendChild(titleEl);
-titleWrap.appendChild(el('span', 'sc-subtitle', 'grounded in your approved workflows'));
+titleWrap.appendChild(el('span', 'fb-subtitle', 'grounded in your approved workflows'));
 header.appendChild(titleWrap);
-const expandBtn = el('button', 'sc-expand');
+const expandBtn = el('button', 'fb-expand');
 expandBtn.innerHTML = EXPAND_SVG; // static markup, not user content
 expandBtn.setAttribute('aria-label', 'Expand panel');
 header.appendChild(expandBtn);
-const closeBtn = el('button', 'sc-close', '✕');
+const closeBtn = el('button', 'fb-close', '✕');
 header.appendChild(closeBtn);
 
-const list = el('div', 'sc-messages');
-const form = el('form', 'sc-input');
+const list = el('div', 'fb-messages');
+const form = el('form', 'fb-input');
 const input = el('input');
 input.type = 'text';
 input.placeholder = 'Ask anything…';
 input.maxLength = 400; // the API rejects oversized questions; keep honest input bounded at the source
-const send = el('button', 'sc-send');
+const send = el('button', 'fb-send');
 send.type = 'submit';
 send.setAttribute('aria-label', 'Send');
 send.innerHTML = ARROW_UP_SVG; // static markup, not user content
@@ -242,28 +242,28 @@ function render(): void {
   // Real embeds swap launcher ↔ panel; the Studio preview shows BOTH (panel lifted above).
   launcher.style.display = open && !cfg.preview ? 'none' : 'flex';
   list.replaceChildren();
-  if (messages.length === 0) list.appendChild(el('div', 'sc-greeting', cfg.greeting));
+  if (messages.length === 0) list.appendChild(el('div', 'fb-greeting', cfg.greeting));
   for (const m of messages) {
-    const row = el('div', `sc-msg sc-${m.role}${m.decline ? ' sc-decline' : ''}${m.error ? ' sc-error' : ''}`);
+    const row = el('div', `fb-msg fb-${m.role}${m.decline ? ' fb-decline' : ''}${m.error ? ' fb-error' : ''}`);
     row.appendChild(bubbleEl(m));
     const titles = [...new Set((m.citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
     if (titles.length) {
       // "Source" pill (accent dot + mono label). Titles are user content — text nodes only.
-      const pill = el('div', 'sc-cites');
-      pill.appendChild(el('span', 'sc-dot'));
+      const pill = el('div', 'fb-cites');
+      pill.appendChild(el('span', 'fb-dot'));
       pill.appendChild(document.createTextNode('Source: ' + titles.join(' · ')));
       row.appendChild(pill);
     }
     if (m.decline) {
-      const pill = el('div', 'sc-flag');
-      pill.appendChild(el('span', 'sc-dot'));
+      const pill = el('div', 'fb-flag');
+      pill.appendChild(el('span', 'fb-dot'));
       pill.appendChild(document.createTextNode('Honest decline'));
       row.appendChild(pill);
     }
     // P4-M0 — the walkthrough offer (explicit consent = this click; nothing happens without it).
     if (m.walkOffer && !walkthroughActive()) {
       const offer = m.walkOffer;
-      const btn = el('button', 'sc-walk-offer', 'Walk me through it');
+      const btn = el('button', 'fb-walk-offer', 'Walk me through it');
       btn.addEventListener('click', () => {
         open = false; // hand the page to the user — the step card takes over from the panel
         startWalkthrough(
@@ -282,9 +282,9 @@ function render(): void {
       row.appendChild(btn);
     }
     if (m.role === 'assistant' && !m.error && m.queryId) {
-      const fb = el('div', 'sc-feedback');
+      const fb = el('div', 'fb-feedback');
       for (const v of ['up', 'down'] as const) {
-        const b = el('button', `sc-thumb${m.feedback === v ? ' sc-thumb-on' : ''}`, v === 'up' ? '👍' : '👎');
+        const b = el('button', `fb-thumb${m.feedback === v ? ' fb-thumb-on' : ''}`, v === 'up' ? '👍' : '👎');
         if (m.feedback) b.disabled = true;
         b.addEventListener('click', () => void sendFeedback(m, v));
         fb.appendChild(b);
@@ -294,8 +294,8 @@ function render(): void {
     list.appendChild(row);
   }
   if (loading) {
-    const row = el('div', 'sc-msg sc-assistant');
-    row.appendChild(el('div', 'sc-bubble sc-typing', '…'));
+    const row = el('div', 'fb-msg fb-assistant');
+    row.appendChild(el('div', 'fb-bubble fb-typing', '…'));
     list.appendChild(row);
   }
   list.scrollTop = list.scrollHeight;
@@ -331,7 +331,7 @@ async function postAnswer(
 ): Promise<{ ok: boolean; status: number; data: AnswerResponse }> {
   const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
+    headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
     body: JSON.stringify({
       question,
       history,
@@ -437,7 +437,7 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
   try {
     await fetch(`${cfg.apiBase}/v1/copilot/feedback`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-Sync-Key': cfg.key } : {}) },
+      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
       body: JSON.stringify({ queryId: m.queryId, feedback: fb }),
     });
   } catch { /* best-effort */ }
@@ -467,7 +467,7 @@ function applyDragPos(): void {
 
 function setExpanded(on: boolean): void {
   expanded = on;
-  panel.classList.toggle('sc-expanded', on);
+  panel.classList.toggle('fb-expanded', on);
   expandBtn.innerHTML = on ? COLLAPSE_SVG : EXPAND_SVG; // static markup, not user content
   expandBtn.setAttribute('aria-label', on ? 'Collapse panel' : 'Expand panel');
   // The taller panel may not fit at the dragged spot — pull it back inside the viewport.
@@ -480,7 +480,7 @@ header.addEventListener('pointerdown', (e) => {
   const r = panel.getBoundingClientRect();
   drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
   header.setPointerCapture(e.pointerId);
-  panel.classList.add('sc-dragging');
+  panel.classList.add('fb-dragging');
   e.preventDefault(); // no text selection while dragging
 });
 header.addEventListener('pointermove', (e) => {
@@ -488,7 +488,7 @@ header.addEventListener('pointermove', (e) => {
   dragPos = clampPos(e.clientX - drag.dx, e.clientY - drag.dy);
   applyDragPos();
 });
-const endDrag = (): void => { drag = null; panel.classList.remove('sc-dragging'); };
+const endDrag = (): void => { drag = null; panel.classList.remove('fb-dragging'); };
 header.addEventListener('pointerup', endDrag);
 header.addEventListener('pointercancel', endDrag);
 expandBtn.addEventListener('click', () => setExpanded(!expanded));
@@ -522,7 +522,7 @@ function pingSeen(): void {
   if (!cfg.key || cfg.preview) return; // a Studio preview must never stamp embed detection
   void fetch(`${cfg.apiBase}/v1/copilot/seen`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Sync-Key': cfg.key },
+    headers: { 'content-type': 'application/json', 'X-FlowBuddy-Key': cfg.key },
     keepalive: true,
   }).catch(() => { /* best-effort */ });
 }
@@ -551,7 +551,7 @@ async function fetchServerConfig(): Promise<ServerConfig | null> {
   const timer = setTimeout(() => ctl.abort(), 1500);
   try {
     const res = await fetch(`${cfg.apiBase}/v1/copilot/config`, {
-      headers: { 'X-Sync-Key': cfg.key },
+      headers: { 'X-FlowBuddy-Key': cfg.key },
       signal: ctl.signal,
     });
     if (!res.ok) { log.debug('appearance config fetch non-ok', res.status); return null; }
@@ -574,7 +574,7 @@ function applyServerConfig(s: ServerConfig): void {
     cfg.launcher = s.launcher;
   }
   if (!explicit.launcherText && s.launcherText?.trim()) cfg.launcherText = s.launcherText.trim();
-  // P2 Sense — no data-sync-* override for these: they're workspace policy, not page styling.
+  // P2 Sense — no data-flowbuddy-* override for these: they're workspace policy, not page styling.
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
   cfg.walkthrough = s.walkthrough === true; // P4-M0 — workspace policy too (explicit true only)
@@ -584,18 +584,18 @@ function applyServerConfig(s: ServerConfig): void {
   cfg.reasonValues = s.reasonValues === true;
 
   titleEl.textContent = cfg.title; // greeting is read from cfg at render()
-  if (cfg.accent) host.style.setProperty('--sc-accent', cfg.accent);
+  if (cfg.accent) host.style.setProperty('--fb-accent', cfg.accent);
   if (cfg.position === 'left') {
-    host.style.setProperty('--sc-right', 'auto');
-    host.style.setProperty('--sc-left', '20px');
+    host.style.setProperty('--fb-right', 'auto');
+    host.style.setProperty('--fb-left', '20px');
   } else {
-    host.style.removeProperty('--sc-right');
-    host.style.removeProperty('--sc-left');
+    host.style.removeProperty('--fb-right');
+    host.style.removeProperty('--fb-left');
   }
   const isText = cfg.launcher === 'text' || cfg.launcher === 'text-outline';
   launcher.textContent = isText ? cfg.launcherText : '💬';
-  launcher.classList.toggle('sc-launcher-pill', isText);
-  launcher.classList.toggle('sc-launcher-outline', cfg.launcher === 'text-outline');
+  launcher.classList.toggle('fb-launcher-pill', isText);
+  launcher.classList.toggle('fb-launcher-outline', cfg.launcher === 'text-outline');
 }
 
 function mount(): void { document.body.appendChild(host); render(); pingSeen(); }

@@ -263,7 +263,7 @@ export function captureSnapshot(includeValues: boolean, probe: SenseProbeResult 
     for (let i = 0; i < controls.length && elements.length < MAX_ELEMENTS; i++) {
       const el = controls[i]!;
       if (!visible(el)) continue;
-      if (el.closest('#sync-copilot-root')) continue; // never capture the widget itself
+      if (el.closest('#flowbuddy-copilot-root')) continue; // never capture the widget itself
       elements.push(readElement(el, includeValues, currentStepEl));
     }
 
@@ -292,7 +292,7 @@ export function captureSnapshot(includeValues: boolean, probe: SenseProbeResult 
     for (let node = walker.nextNode(); node && texts.length < MAX_TEXTS; node = walker.nextNode()) {
       const parent = node.parentElement;
       if (!parent || (node.nodeValue ?? '').trim().length < 2) continue;
-      if (parent.closest('script, style, noscript, #sync-copilot-root')) continue;
+      if (parent.closest('script, style, noscript, #flowbuddy-copilot-root')) continue;
       // Control captions already ride each control's `name` — skip them here to save budget.
       if (parent.closest(CONTROL_SELECTOR)) continue;
       if (!visible(parent)) continue;
@@ -323,15 +323,15 @@ function loadRenderer(scriptSrc: string): Promise<RendererGlobal | null> {
   if (rendererPromise) return rendererPromise;
   rendererPromise = new Promise((resolve) => {
     // The renderer bundle sits next to the widget bundle (same host, sibling file).
-    const url = scriptSrc.replace(/sync-copilot(\.min)?\.js(\?.*)?$/, 'sync-copilot-render.js');
+    const url = scriptSrc.replace(/flowbuddy-copilot(\.min)?\.js(\?.*)?$/, 'flowbuddy-copilot-render.js');
     if (!scriptSrc || url === scriptSrc) return resolve(null);
-    const existing = (window as unknown as { SyncCopilotRender?: RendererGlobal }).SyncCopilotRender;
+    const existing = (window as unknown as { FlowBuddyRender?: RendererGlobal }).FlowBuddyRender;
     if (existing) return resolve(existing);
     const s = document.createElement('script');
     s.src = url;
     s.async = true;
     s.onload = () =>
-      resolve((window as unknown as { SyncCopilotRender?: RendererGlobal }).SyncCopilotRender ?? null);
+      resolve((window as unknown as { FlowBuddyRender?: RendererGlobal }).FlowBuddyRender ?? null);
     s.onerror = () => {
       log.debug('reason: renderer bundle failed to load — structure-only');
       resolve(null);

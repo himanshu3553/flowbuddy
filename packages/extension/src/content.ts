@@ -406,9 +406,9 @@ const SENSITIVE_TYPES = new Set(['password', 'email', 'tel']);
 const SENSITIVE_AUTOCOMPLETE = new Set([
   'current-password', 'new-password', 'cc-number', 'cc-csc', 'cc-exp', 'cc-name', 'one-time-code',
 ]);
-// Sensitive field patterns + an explicit `data-sync-redact` opt-in for the host app to mark fields.
+// Sensitive field patterns + an explicit `data-flowbuddy-redact` opt-in for the host app to mark fields.
 const REDACT_SELECTORS = [
-  '[data-sync-redact]',
+  '[data-flowbuddy-redact]',
   '[autocomplete*="cc-" i]',
   '[name*="card" i]', '[name*="cvv" i]', '[name*="cvc" i]', '[name*="ssn" i]',
   '[name*="secret" i]', '[name*="token" i]', '[id*="ssn" i]',

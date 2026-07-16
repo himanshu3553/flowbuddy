@@ -1,7 +1,7 @@
-# Handoff: Sync Recorder — Extension UI Revamp
+# Handoff: FlowBuddy Recorder — Extension UI Revamp
 
 ## Overview
-This package specifies a UI revamp for the **Sync Recorder**, the Chrome browser-action popup that is Sync's *capture surface*. The builder opens the popup, narrates their way through a real product workflow, and the recorder captures screen + voice + DOM + events + routes, segments the session into named workflows, and uploads it securely. Studio then distils that recording into the Knowledge Base.
+This package specifies a UI revamp for the **FlowBuddy Recorder**, the Chrome browser-action popup that is FlowBuddy's *capture surface*. The builder opens the popup, narrates their way through a real product workflow, and the recorder captures screen + voice + DOM + events + routes, segments the session into named workflows, and uploads it securely. Studio then distils that recording into the Knowledge Base.
 
 The revamp covers the **four core popup states**:
 
@@ -15,10 +15,10 @@ The revamp covers the **four core popup states**:
 ## About the Design Files
 The files in this bundle are **design references created in HTML** — a prototype showing the intended look, copy, and behavior of the recorder popup. **They are not production code to copy directly.**
 
-The task is to **recreate these designs inside the Sync Recorder extension's real codebase**, using its established framework and patterns (React/Preact/vanilla — whatever the extension is built in) and the canonical **Sync design system** (tokens summarised below and included under `tokens/`). If the extension has no component system yet, choose the most appropriate approach for a Chrome MV3 popup and implement the design tokens as CSS custom properties.
+The task is to **recreate these designs inside the FlowBuddy Recorder extension's real codebase**, using its established framework and patterns (React/Preact/vanilla — whatever the extension is built in) and the canonical **FlowBuddy design system** (tokens summarised below and included under `tokens/`). If the extension has no component system yet, choose the most appropriate approach for a Chrome MV3 popup and implement the design tokens as CSS custom properties.
 
 - **`recorder_extension_states.html`** — the visual reference. All four states side by side, each popup at its native **360px** width, rendered with the canonical brand fonts. Open it in a browser to see the target.
-- **`tokens/`** — the canonical Sync design tokens (colors, typography, spacing, elevation, fonts) as CSS custom properties. Implement against these, not the literal hexes baked into the reference HTML.
+- **`tokens/`** — the canonical FlowBuddy design tokens (colors, typography, spacing, elevation, fonts) as CSS custom properties. Implement against these, not the literal hexes baked into the reference HTML.
 
 ## Fidelity
 **Mid-to-high fidelity.** Layout, spacing, copy, states, and color intent are final and should be matched precisely. Two deliberate normalisations to apply when implementing:
@@ -26,7 +26,7 @@ The task is to **recreate these designs inside the Sync Recorder extension's rea
 1. **Fonts** — the reference renders in the canonical brand faces **Plus Jakarta Sans** (UI) + **JetBrains Mono** (labels/status/timers). Use these, not `system-ui`.
 2. **Brand blue** — the reference uses the literal wireframe hex `#3a5bd9`. **Use the canonical token `--primary` = `--indigo-500` = `#3b50e0`** instead; the two are visually interchangeable and `#3b50e0` is the system source of truth.
 
-Placeholder marks to replace with real assets: the **logo mark** (currently a 20×20 indigo square → use the Sync logo mark) and the **org avatar** (24×24 grey circle → org/workspace avatar).
+Placeholder marks to replace with real assets: the **logo mark** (currently a 20×20 indigo square → use the FlowBuddy logo mark) and the **org avatar** (24×24 grey circle → org/workspace avatar).
 
 ---
 
@@ -34,7 +34,7 @@ Placeholder marks to replace with real assets: the **logo mark** (currently a 20
 - **Popup width:** 360px (Chrome popup native). Height is content-driven.
 - **Card:** `background #fff`; `border 1px solid #d8d8d8`; `border-radius 14px`; `box-shadow 0 6px 22px rgba(0,0,0,.10)`; `overflow hidden`.
 - **Header:** flex row, `align-items center`, `gap 9px`, `padding 12px 14px`, `border-bottom 1px solid #f0f0f0`.
-  - Default header (F10/F12/F13): logo mark `20×20`, `radius 6px`, fill `--primary` · title **"Sync Recorder"** `700 13px` `#1c1c1c` · trailing gear `⚙` `13px` `#c4c4c4` pushed right (`margin-left:auto`).
+  - Default header (F10/F12/F13): logo mark `20×20`, `radius 6px`, fill `--primary` · title **"FlowBuddy Recorder"** `700 13px` `#1c1c1c` · trailing gear `⚙` `13px` `#c4c4c4` pushed right (`margin-left:auto`).
   - Recording header (F11): see F11 below — warm tint + REC timer.
 - **Body:** `padding 14px`.
 - **Micro-labels** ("CAPTURES", "RECENT", "CURRENT WORKFLOW"): `700 9.5px` JetBrains Mono, `letter-spacing .03em`, color `#aaa`, uppercase.
@@ -76,7 +76,7 @@ Placeholder marks to replace with real assets: the **logo mark** (currently a 20
 ### F12 · Uploading
 **Purpose:** Confirm capture is complete; show secure upload progress.
 
-**Header:** default (Sync Recorder).
+**Header:** default (FlowBuddy Recorder).
 
 **Body:**
 1. **Centered summary block** (`padding 8px 0 14px`): spinner `46×46`, `border 3px #eef1fd` with `border-top-color --primary` (rotating), `margin 0 auto 12px`. Title **"Recording complete"** `700 14px` `#1c1c1c`. Meta **"12:10 · 5 workflows · narration saved"** `11.5px` `#8a8a8a` (`margin-top 3px`).
@@ -90,7 +90,7 @@ Placeholder marks to replace with real assets: the **logo mark** (currently a 20
 ### F13 · Upload interrupted (retry)
 **Purpose:** Recover gracefully when the upload drops. **This is a warning, not an error** — captured data is safe.
 
-**Header:** default (Sync Recorder).
+**Header:** default (FlowBuddy Recorder).
 
 **Body:**
 1. **Warning banner** — flex `gap 11px`, `border 1px #ecdfc2`, `background #fbf7ec`, `radius 10px`, `padding 12px 13px`, `margin-bottom 13px`. Glyph **⚠** `18px` `#b89030`. Title **"Upload interrupted"** `700 12.5px` `#6a5a30`; body **"Your narration is safe — nothing is lost."** `11px/1.45` `#8a7a4e` (`margin-top 2px`).
@@ -145,12 +145,12 @@ Full source in **`tokens/`**. Key values used by these screens:
 **Elevation** — popup shadow `0 6px 22px rgba(0,0,0,.10)` (close to `--shadow-widget`). Focus ring `0 0 0 3px rgba(58,80,221,.18)`.
 
 ## Assets
-- **Logo mark** — replace the 20×20 indigo square with the real Sync mark (`assets/logo-mark.svg` exists in the parent project).
+- **Logo mark** — replace the 20×20 indigo square with the real FlowBuddy mark (`assets/logo-mark.svg` exists in the parent project).
 - **Org avatar** — 24×24 circular workspace avatar (placeholder grey).
-- **Icons** — gear `⚙`, retry `↻`, warning `⚠` are placeholders; swap for the product icon set (**Material Symbols Outlined** in the Sync system) or the extension's existing icons.
+- **Icons** — gear `⚙`, retry `↻`, warning `⚠` are placeholders; swap for the product icon set (**Material Symbols Outlined** in the FlowBuddy system) or the extension's existing icons.
 - No raster images; everything else is CSS shapes (dots, bars, spinner, progress).
 
 ## Files
 - `recorder_extension_states.html` — the four-state visual reference (this folder).
-- `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/elevation.css`, `tokens/fonts.css` — canonical Sync design tokens.
-- Source of truth in the parent project: **`Sync Studio Wireframes.dc.html`**, Section **06 · Recorder Extension**, frames F10–F13.
+- `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/elevation.css`, `tokens/fonts.css` — canonical FlowBuddy design tokens.
+- Source of truth in the parent project: **`FlowBuddy Studio Wireframes.dc.html`**, Section **06 · Recorder Extension**, frames F10–F13.

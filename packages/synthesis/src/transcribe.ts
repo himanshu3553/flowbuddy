@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { SessionManifest } from '@sync/shared';
+import type { SessionManifest } from '@flowbuddy/shared';
 import type { ArtifactReader } from './types';
 
 export interface TranscriptSegment { start: number; end: number; text: string; } // ms

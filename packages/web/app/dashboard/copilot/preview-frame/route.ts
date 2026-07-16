@@ -6,7 +6,7 @@ import { resolveAppearance, type CopilotAppearance } from '@/lib/copilot-appeara
  * The real-widget tester's host page (Approach B). The Copilot page renders this route in an
  * iframe: a miniature stand-in for a customer's app page that embeds the ACTUAL widget bundle with
  * the workspace's real public key against the real API — same artifact, same request path an
- * end-user hits. `data-sync-preview="1"` keeps the session honest: no embed-detection stamp, no
+ * end-user hits. `data-flowbuddy-preview="1"` keeps the session honest: no embed-detection stamp, no
  * analytics writes (see packages/widget + the api /answer route).
  *
  * Appearance rides in as query params (cosmetic, session-scoped — the saved values come from the
@@ -26,9 +26,9 @@ export async function GET(req: Request) {
   if (!ctx) return new Response('Unauthorized', { status: 401 });
 
   const { publicKey } = await getOrCreateCopilotKey(ctx.workspace.id);
-  const apiBase = process.env.SYNC_API_URL || 'http://localhost:8787';
+  const apiBase = process.env.FLOWBUDDY_API_URL || 'http://localhost:8787';
   // Deployed: the hosted bundle customers embed (maximal fidelity). Local: the monorepo fallback.
-  const widgetSrc = process.env.SYNC_WIDGET_URL || '/widget/sync-copilot.js';
+  const widgetSrc = process.env.FLOWBUDDY_WIDGET_URL || '/widget/flowbuddy-copilot.js';
 
   const q = new URL(req.url).searchParams;
   const raw: CopilotAppearance = {
@@ -60,15 +60,15 @@ export async function GET(req: Request) {
 </head>
 <body>
   <script src="${esc(widgetSrc)}"
-    data-sync-api="${esc(apiBase)}"
-    data-sync-key="${esc(publicKey)}"
-    data-sync-title="${esc(a.title)}"
-    data-sync-greeting="${esc(a.greeting)}"
-    data-sync-accent="${esc(a.accent)}"
-    data-sync-position="${esc(a.position)}"
-    data-sync-launcher="${esc(a.launcherStyle)}"
-    data-sync-launcher-text="${esc(a.launcherText)}"
-    data-sync-preview="1"></script>
+    data-flowbuddy-api="${esc(apiBase)}"
+    data-flowbuddy-key="${esc(publicKey)}"
+    data-flowbuddy-title="${esc(a.title)}"
+    data-flowbuddy-greeting="${esc(a.greeting)}"
+    data-flowbuddy-accent="${esc(a.accent)}"
+    data-flowbuddy-position="${esc(a.position)}"
+    data-flowbuddy-launcher="${esc(a.launcherStyle)}"
+    data-flowbuddy-launcher-text="${esc(a.launcherText)}"
+    data-flowbuddy-preview="1"></script>
 </body>
 </html>`;
 

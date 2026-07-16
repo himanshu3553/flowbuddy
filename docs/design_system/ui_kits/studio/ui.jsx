@@ -1,4 +1,4 @@
-/* Sync Studio UI-kit primitives — globals (loaded via text/babel), inline-styled
+/* FlowBuddy Studio UI-kit primitives — globals (loaded via text/babel), inline-styled
    on the shared tokens. These mirror the production /components API so the kit
    renders standalone (no compiler bundle needed). React is global (UMD). */
 
@@ -104,7 +104,7 @@ function Sidebar({ active = 'Home', onNavigate }) {
     <aside style={{ width: 'var(--sidebar-w)', flex: '0 0 var(--sidebar-w)', background: '#fff', borderRight: '1px solid var(--border)', padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 8px 16px' }}>
         <div style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--primary-gradient-logo)', boxShadow: '0 2px 8px rgba(58,80,221,.35)' }} />
-        <div style={{ font: '800 16px var(--font-sans)', color: 'var(--ink)', letterSpacing: '-.02em' }}>Sync</div>
+        <div style={{ font: '800 16px var(--font-sans)', color: 'var(--ink)', letterSpacing: '-.02em' }}>FlowBuddy</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: 10, background: 'var(--paper-2)', cursor: 'pointer' }}>
         <div style={{ width: 20, height: 20, borderRadius: 6, background: 'linear-gradient(150deg,#e6a23c,#d98a2b)' }} />

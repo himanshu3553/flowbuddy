@@ -1,4 +1,4 @@
-# Sync — Product (What it is, who it's for, why copilot-first)
+# FlowBuddy — Product (What it is, who it's for, why copilot-first)
 
 > **One-liner:** Add a trustworthy AI help **copilot** to your SaaS in minutes — record your product once, approve the workflows it's allowed to use, drop in one `<script>`, and your customers get in-app answers grounded **only** in what you approved. (The same recordings also produce a help portal + articles, as decoupled by-products.)
 
@@ -10,12 +10,12 @@
 
 ---
 
-## 1. What Sync does (plain English)
+## 1. What FlowBuddy does (plain English)
 
-Most help tools make you write articles, then hope customers find them. Sync flips that around:
+Most help tools make you write articles, then hope customers find them. FlowBuddy flips that around:
 
-1. You **show** Sync how your product works — once, by recording yourself using it and narrating.
-2. Sync **learns** it and turns it into a structured Knowledge Base.
+1. You **show** FlowBuddy how your product works — once, by recording yourself using it and narrating.
+2. FlowBuddy **learns** it and turns it into a structured Knowledge Base.
 3. You **approve** which workflows the copilot may use.
 4. Your customers get an **in-app assistant** that answers their questions instantly — grounded in what you actually showed it, **never made-up** — with sources, honest "I don't know yet" on gaps, and awareness of the screen they're on.
 
@@ -45,7 +45,7 @@ Every SaaS product needs to help its users *in the moment they're stuck* — and
 
 ## 3. Who it's for
 
-Sync has **two audiences** over one shared knowledge base: **the buyer/builder** (installs Sync, wants to deflect tickets without writing docs) and **the end-user** (their customer, inside their product, wants an accurate answer right now).
+FlowBuddy has **two audiences** over one shared knowledge base: **the buyer/builder** (installs FlowBuddy, wants to deflect tickets without writing docs) and **the end-user** (their customer, inside their product, wants an accurate answer right now).
 
 **Initial segment: Small SaaS / founders.** Founder-led or small eng team, no dedicated technical writer.
 
@@ -70,7 +70,7 @@ Sync has **two audiences** over one shared knowledge base: **the buyer/builder**
 
 A SaaS builder installs a **Chrome extension** and records themselves using their own product — clicking through real workflows while narrating *what* they're doing and *why*. One session can cover many workflows ("reset a password… now upgrade a plan…").
 
-Sync captures that session in **multiple synchronized layers** (screen, voice, DOM, interaction events, routes) and builds an **explicit, structured Knowledge Base**. The builder **approves** which workflows the copilot may use — one click each — and drops a **single `<script>`** into their product. Their customers immediately get an **in-app copilot** that answers from the approved knowledge, in context, with citations.
+FlowBuddy captures that session in **multiple synchronized layers** (screen, voice, DOM, interaction events, routes) and builds an **explicit, structured Knowledge Base**. The builder **approves** which workflows the copilot may use — one click each — and drops a **single `<script>`** into their product. Their customers immediately get an **in-app copilot** that answers from the approved knowledge, in context, with citations.
 
 That knowledge base powers, in priority order:
 
@@ -86,7 +86,7 @@ That knowledge base powers, in priority order:
 
 ## 5. Direction & locked decisions (copilot-first)
 
-> **The 2026-06-22 pivot, in one paragraph.** Sync's primary product is the **embeddable in-app copilot**; the help portal and human-facing articles are **decoupled by-products** revisited after the copilot ships. This is a **re-prioritization, not a rebuild** — the expensive, defensible foundation (capture → Knowledge Base → retrieval/grounding) is exactly what a copilot needs and already existed. The pivot mostly **adds a delivery layer**.
+> **The 2026-06-22 pivot, in one paragraph.** FlowBuddy's primary product is the **embeddable in-app copilot**; the help portal and human-facing articles are **decoupled by-products** revisited after the copilot ships. This is a **re-prioritization, not a rebuild** — the expensive, defensible foundation (capture → Knowledge Base → retrieval/grounding) is exactly what a copilot needs and already existed. The pivot mostly **adds a delivery layer**.
 
 **Locked decisions (2026-06-22):**
 
@@ -114,7 +114,7 @@ That knowledge base powers, in priority order:
   1. **Grounded, context-aware copilot** — an in-app assistant grounded **only** in the customer's own approved recordings (never the model's general knowledge), that answers *for the screen the user is on* and **cites its source**. The KB's richness (selectors/routes/expected-outcomes, not lossy prose) is what makes context-awareness and future actionability possible.
   2. **Self-validation / freshness** — knowledge that re-checks itself and flags drift. Hardest to copy; directly answers "products change faster than docs." (Also the namesake: keeping the KB *in sync* with the product.)
   3. **The compounding feedback loop** — copilot questions, thumbs, and honest declines tell the founder exactly what to record next. The product improves with use.
-  4. **Grounded agentic execution (Autopilot, Phase 4)** — the copilot doesn't just answer, it **does**: it executes the task in the end-user's session — but **only** workflows the founder recorded and approved, certified fresh by self-validation. Generic browser agents improvise actions and can't make that guarantee; Sync's grounding model extends from answers to actions.
+  4. **Grounded agentic execution (Autopilot, Phase 4)** — the copilot doesn't just answer, it **does**: it executes the task in the end-user's session — but **only** workflows the founder recorded and approved, certified fresh by self-validation. Generic browser agents improvise actions and can't make that guarantee; FlowBuddy's grounding model extends from answers to actions.
 
 **Grounded authorship (core principle).** Everything the copilot says — and everything the Phase-2 portal will publish (a rendered approved workflow, optionally prose-polished) — comes *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
 
@@ -124,16 +124,16 @@ That knowledge base powers, in priority order:
 
 ## 7. The four surfaces
 
-Sync ships as **four distinct surfaces** over one shared structured knowledge base. The **copilot is the headline**; the portal is a decoupled **Version 2** by-product.
+FlowBuddy ships as **four distinct surfaces** over one shared structured knowledge base. The **copilot is the headline**; the portal is a decoupled **Version 2** by-product.
 
 | Surface | Who | Purpose |
 |---|---|---|
-| **Sync Recorder** (Chrome extension) | the builder | effortless multi-layer capture of narrated product workflows |
+| **FlowBuddy Recorder** (Chrome extension) | the builder | effortless multi-layer capture of narrated product workflows |
 | **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; *(Phase-2 by-product: approve/publish workflows to the portal)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
 | **Help Portal** (public web) — *Version 2 by-product* | the builder's customers | browse + search published help articles |
 
-- **Recorder** — one-click "Connect with Sync"; start/stop; **mark new workflow**; **event/DOM-primary** capture (event + DOM + hi-res screenshot + post-action snapshot for `expected_outcome` + continuous audio); **PII masked before upload**; **capture reliability** (survives navigations, retry on upload failure, narration preserved). *(V1 capture is workflow-only; narration-only + video are Version 2.)*
+- **Recorder** — one-click "Connect with FlowBuddy"; start/stop; **mark new workflow**; **event/DOM-primary** capture (event + DOM + hi-res screenshot + post-action snapshot for `expected_outcome` + continuous audio); **PII masked before upload**; **capture reliability** (survives navigations, retry on upload failure, narration preserved). *(V1 capture is workflow-only; narration-only + video are Version 2.)*
 - **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate, **live-served appearance**), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), and the KB browser. *(Currently copilot-only; the Phase-2 portal-authoring surface — approve-for-portal + a presentation overlay over the same workflows — returns later.)*
 - **Copilot widget ⭐** — one `<script>` renders a shadow-DOM launcher + chat panel; grounded in **approved-KB**; **cites its source**; **honest declines**; **context-aware** (biases to the host route); multi-turn; 👍/👎 feedback; embed security (public key + origin allowlist + rate limit). *Future:* "show me" actionability and human handoff.
 - **Help Portal (Version 2)** — published structured articles (steps + screenshots + element highlights), hybrid search, theming/custom domains/SEO/gating/"was this helpful?". **Decoupled** from the copilot.

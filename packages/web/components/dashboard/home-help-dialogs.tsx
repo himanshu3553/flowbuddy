@@ -92,15 +92,15 @@ function FooterCallout({
   );
 }
 
-const howSyncWorks: Step[] = [
+const howFlowBuddyWorks: Step[] = [
   {
     icon: Video,
     title: 'Record your product',
-    body: 'Click through your product while talking out loud. The Sync browser extension captures the screen, your voice and every click.',
+    body: 'Click through your product while talking out loud. The FlowBuddy browser extension captures the screen, your voice and every click.',
   },
   {
     icon: BookOpen,
-    title: 'Sync builds your knowledge base',
+    title: 'FlowBuddy builds your knowledge base',
     body: 'It automatically turns that recording into clean, step-by-step workflows. No manual writing required.',
   },
   {
@@ -124,7 +124,7 @@ const howToRecord: Step[] = [
   {
     icon: Puzzle,
     title: 'Install & connect the recorder',
-    body: 'Add the Sync Recorder to Chrome, then click “Connect with Sync” to link it to your workspace.',
+    body: 'Add the FlowBuddy Recorder to Chrome, then click “Connect with FlowBuddy” to link it to your workspace.',
   },
   {
     icon: Mic,
@@ -135,33 +135,33 @@ const howToRecord: Step[] = [
   {
     icon: Mic,
     title: 'Click through a workflow, narrating',
-    body: 'Do the task for real while talking out loud — what you’re doing and why. Sync captures the screen, your voice, clicks and pages.',
+    body: 'Do the task for real while talking out loud — what you’re doing and why. FlowBuddy captures the screen, your voice, clicks and pages.',
   },
   {
     icon: Flag,
     title: 'Mark each new workflow',
-    body: 'Starting a different task? Hit “Mark new workflow” so Sync keeps them as separate, clean guides.',
+    body: 'Starting a different task? Hit “Mark new workflow” so FlowBuddy keeps them as separate, clean guides.',
   },
   {
     icon: UploadCloud,
     title: 'Stop, and it uploads itself',
-    body: 'Press “Stop & upload.” Your session uploads securely and Sync turns it into your Knowledge Base.',
+    body: 'Press “Stop & upload.” Your session uploads securely and FlowBuddy turns it into your Knowledge Base.',
   },
 ];
 
-/** "How Sync works" — pass the trigger as children (rendered with asChild). */
+/** "How FlowBuddy works" — pass the trigger as children (rendered with asChild). */
 export function HowItWorksDialog({ children }: { children: React.ReactNode }) {
   return (
     <Dialog>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>How Sync works</DialogTitle>
+          <DialogTitle>How FlowBuddy works</DialogTitle>
           <DialogDescription>
             From one recording to live, trustworthy answers — in five steps.
           </DialogDescription>
         </DialogHeader>
-        <Stepper steps={howSyncWorks} />
+        <Stepper steps={howFlowBuddyWorks} />
         <FooterCallout icon={RefreshCw}>
           <b className="font-semibold">It gets better on its own.</b> Every
           question the copilot can’t answer becomes a “record this next” tip so
@@ -181,7 +181,7 @@ export function HowToRecordDialog({ children }: { children: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle>How to record</DialogTitle>
           <DialogDescription>
-            Capture a workflow with the Sync Recorder — about 15 minutes.
+            Capture a workflow with the FlowBuddy Recorder — about 15 minutes.
           </DialogDescription>
         </DialogHeader>
         <Stepper steps={howToRecord} />

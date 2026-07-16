@@ -36,7 +36,7 @@ export default function SignInPage({
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-gradient-logo text-sm font-bold text-white">
             S
           </span>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">Sync Studio</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">FlowBuddy Studio</h1>
           <p className="text-sm text-muted-foreground">
             The in-app help copilot for your SaaS.
           </p>

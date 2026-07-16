@@ -5,19 +5,19 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
-    "@sync/db#build": {
+    "@flowbuddy/db#build": {
       "cache": false
     },
-    "@sync/shared#build": {
+    "@flowbuddy/shared#build": {
       "cache": false
     },
-    "@sync/synthesis#build": {
+    "@flowbuddy/synthesis#build": {
       "cache": false
     },
-    "@sync/logger#build": {
+    "@flowbuddy/logger#build": {
       "cache": false
     },
-    "@sync/api#build": {
+    "@flowbuddy/api#build": {
       "cache": false
     },
     "typecheck": {

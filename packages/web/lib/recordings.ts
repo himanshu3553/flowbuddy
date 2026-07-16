@@ -1,4 +1,4 @@
-import type { SessionManifest, CapturedEvent } from '@sync/shared';
+import type { SessionManifest, CapturedEvent } from '@flowbuddy/shared';
 
 // Server-only helpers that derive HONEST per-recording facts from the raw capture manifest
 // (events, screenshots, audio) — replacing the hardcoded "screen·voice·DOM·events·routes" string

@@ -3,7 +3,7 @@
 // highlights each remaining step of the APPROVED workflow and watches the user complete it —
 // detection only ACKNOWLEDGES ("Detected ✓ — hit Next"); the pointer moves FORWARD exclusively on
 // the user's Next click (manual-only advancement, user decision 2026-07-15). The user performs
-// every action themselves; Sync never clicks, fills, or navigates.
+// every action themselves; FlowBuddy never clicks, fills, or navigates.
 //
 // POSTURE — user-initiated, zero-acting, session-scoped observation. Observation starts only on
 // the user's explicit click and is torn down on done/exit/stall-exit/TTL: (a) read-only
@@ -36,7 +36,7 @@ import {
 import { readElementState, type ReasonElementWire } from './reason.js';
 
 // ── Session (the sessionStorage shape — versioned; foreign/expired/corrupt = discarded) ────────
-const STORE_KEY = 'sync.walkthrough.v1';
+const STORE_KEY = 'flowbuddy.walkthrough.v1';
 const WALK_TTL_MS = 30 * 60_000; // an abandoned tab stops observing within the half hour
 const AWAIT_NAV_TIMEOUT_MS = 10_000; // a click that never navigates goes back to waiting
 const SETTLE_QUIET_MS = 500; // mutation-quiet window = "the page finished reacting" (recorder R2)
@@ -156,7 +156,7 @@ function emit(event: WalkEvent, mode?: 'auto' | 'manual'): void {
   });
   const req = fetch(`${cfgRef.apiBase}/v1/copilot/walkthrough`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Sync-Key': cfgRef.key },
+    headers: { 'content-type': 'application/json', 'X-FlowBuddy-Key': cfgRef.key },
     body,
     keepalive: true, // survives the click→navigation race (same trick as /seen)
   });
@@ -274,24 +274,24 @@ function buildCard(): void {
     if (text != null) e.textContent = text;
     return e;
   };
-  const el = mk('div', 'sc-walk-card');
-  const head = mk('div', 'sc-walk-head');
-  const chip = mk('span', 'sc-walk-chip');
-  const title = mk('span', 'sc-walk-title');
-  const exit = mk('button', 'sc-walk-exit', '✕');
+  const el = mk('div', 'fb-walk-card');
+  const head = mk('div', 'fb-walk-head');
+  const chip = mk('span', 'fb-walk-chip');
+  const title = mk('span', 'fb-walk-title');
+  const exit = mk('button', 'fb-walk-exit', '✕');
   exit.setAttribute('aria-label', 'Exit walkthrough');
   head.appendChild(chip);
   head.appendChild(title);
   head.appendChild(exit);
-  const instr = mk('div', 'sc-walk-instr');
-  const status = mk('div', 'sc-walk-status');
-  const actions = mk('div', 'sc-walk-actions');
+  const instr = mk('div', 'fb-walk-instr');
+  const status = mk('div', 'fb-walk-status');
+  const actions = mk('div', 'fb-walk-actions');
   // The Reason escalation — shown only on blocked/invalid/stalled states (and only when the
   // founder's Reason toggle is on): opens the chat and asks the diagnostic question for the user.
-  const explain = mk('button', 'sc-walk-btn sc-walk-explain', "Explain what's blocking me");
-  const back = mk('button', 'sc-walk-btn', 'Back');
-  const retry = mk('button', 'sc-walk-btn', 'Retry');
-  const next = mk('button', 'sc-walk-btn sc-walk-next', 'Next');
+  const explain = mk('button', 'fb-walk-btn fb-walk-explain', "Explain what's blocking me");
+  const back = mk('button', 'fb-walk-btn', 'Back');
+  const retry = mk('button', 'fb-walk-btn', 'Retry');
+  const next = mk('button', 'fb-walk-btn fb-walk-next', 'Next');
   explain.style.display = 'none';
   retry.style.display = 'none';
   actions.appendChild(explain);
@@ -325,7 +325,7 @@ function removeCard(): void {
 function setStatus(text: string, opts?: { stall?: boolean; explain?: boolean }): void {
   if (!card) return;
   card.status.textContent = text;
-  card.status.classList.toggle('sc-walk-stalled', opts?.stall === true);
+  card.status.classList.toggle('fb-walk-stalled', opts?.stall === true);
   card.retry.style.display = opts?.stall ? '' : 'none';
   // The escalation shows only where a "why" exists AND the founder's Reason toggle allows it.
   card.explain.style.display = opts?.explain && cfgRef?.reason ? '' : 'none';

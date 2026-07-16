@@ -30,7 +30,7 @@ function FirstRun({ openDialog }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Step state="done" title="Install the Sync Recorder" desc="Chrome extension · one-click “Connect with Sync”" statusLabel="DONE" />
+        <Step state="done" title="Install the FlowBuddy Recorder" desc="Chrome extension · one-click “Connect with FlowBuddy”" statusLabel="DONE" />
         <Step state="active" index={2} title="Record your product" desc="Narrate a real workflow — “reset a password… now upgrade a plan…”" action={<Btn onClick={() => openDialog('record')}>Open recorder</Btn>} />
         <Step state="locked" index={3} title="Approve workflows for the copilot" desc="One click each — the copilot answers only from what you approve" />
         <Step state="locked" index={4} title="Embed the copilot" desc="Paste one snippet into your product — go live for your customers" />
@@ -133,10 +133,10 @@ function QRow({ q, meta, tone, up, last }) {
 /* Help dialogs (rendered by the shell over any screen) */
 function HowItWorksDialog({ onClose }) {
   return (
-    <Dialog title="How Sync works" subtitle="From one recording to live, trustworthy answers — in five steps." onClose={onClose}
+    <Dialog title="How FlowBuddy works" subtitle="From one recording to live, trustworthy answers — in five steps." onClose={onClose}
       footer={<div style={{ display: 'flex', alignItems: 'center', gap: 13, border: '1.5px dashed var(--indigo-200)', background: '#f4f6ff', borderRadius: 13, padding: '14px 16px' }}><div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', border: '1px solid var(--indigo-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}><Glyph name="autorenew" fill={1} color="var(--primary)" size={19} /></div><div style={{ font: '12.5px/1.5 var(--font-sans)', color: '#3a4a7a' }}><b>It gets better on its own.</b> Every question the copilot can’t answer becomes a “record this next” tip so your help section keeps improving.</div></div>}>
-      <StepItem index={1} icon="videocam" title="Record your product" desc="Click through your product while talking out loud. The Sync browser extension captures the screen, your voice and every click." />
-      <StepItem index={2} icon="menu_book" title="Sync builds your knowledge base" desc="It automatically turns that recording into clean, step-by-step workflows. No manual writing required." />
+      <StepItem index={1} icon="videocam" title="Record your product" desc="Click through your product while talking out loud. The FlowBuddy browser extension captures the screen, your voice and every click." />
+      <StepItem index={2} icon="menu_book" title="FlowBuddy builds your knowledge base" desc="It automatically turns that recording into clean, step-by-step workflows. No manual writing required." />
       <StepItem index={3} icon="task_alt" title="Approve what the copilot can use" desc="Review the workflows and approve them with one click. The copilot only ever answers from what you approve." />
       <StepItem index={4} icon="code" title="Add the copilot to your app" desc="Copy one line of code and paste it into your product." />
       <StepItem index={5} icon="forum" title="Your customers get instant answers" desc="The copilot answers questions right inside your app — with sources and an honest “I don’t know yet” when it’s unsure." last />
@@ -146,13 +146,13 @@ function HowItWorksDialog({ onClose }) {
 
 function HowToRecordDialog({ onClose }) {
   return (
-    <Dialog title="How to record" subtitle="Capture a workflow with the Sync Recorder — about 15 minutes." width={470} onClose={onClose}
+    <Dialog title="How to record" subtitle="Capture a workflow with the FlowBuddy Recorder — about 15 minutes." width={470} onClose={onClose}
       footer={<div style={{ display: 'flex', alignItems: 'center', gap: 13, border: '1.5px dashed var(--indigo-200)', background: '#f4f6ff', borderRadius: 13, padding: '14px 16px' }}><div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', border: '1px solid var(--indigo-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}><Glyph name="tips_and_updates" fill={1} color="var(--primary)" size={19} /></div><div style={{ font: '12.5px/1.5 var(--font-sans)', color: '#3a4a7a' }}><b>Narrate as you go.</b> Saying what you’re doing and why is what makes the copilot’s answers accurate — and it’s masked for PII before upload.</div></div>}>
-      <StepItem index={1} icon="extension" title="Install & connect the recorder" desc="Add the Sync Recorder to Chrome, then click “Connect with Sync” to link it to your workspace." />
+      <StepItem index={1} icon="extension" title="Install & connect the recorder" desc="Add the FlowBuddy Recorder to Chrome, then click “Connect with FlowBuddy” to link it to your workspace." />
       <StepItem index={2} icon="fiber_manual_record" tone="danger" title="Open your product and press Start" desc="Go to your live product, open the extension, and hit Start recording." />
-      <StepItem index={3} icon="mic" title="Click through a workflow, narrating" desc="Do the task for real while talking out loud — what you’re doing and why. Sync captures the screen, your voice, clicks and pages." />
-      <StepItem index={4} icon="flag" title="Mark each new workflow" desc="Starting a different task? Hit “Mark new workflow” so Sync keeps them as separate, clean guides." />
-      <StepItem index={5} icon="cloud_upload" title="Stop, and it uploads itself" desc="Press “Stop & upload.” Your session uploads securely and Sync turns it into your Knowledge Base." last />
+      <StepItem index={3} icon="mic" title="Click through a workflow, narrating" desc="Do the task for real while talking out loud — what you’re doing and why. FlowBuddy captures the screen, your voice, clicks and pages." />
+      <StepItem index={4} icon="flag" title="Mark each new workflow" desc="Starting a different task? Hit “Mark new workflow” so FlowBuddy keeps them as separate, clean guides." />
+      <StepItem index={5} icon="cloud_upload" title="Stop, and it uploads itself" desc="Press “Stop & upload.” Your session uploads securely and FlowBuddy turns it into your Knowledge Base." last />
     </Dialog>
   );
 }

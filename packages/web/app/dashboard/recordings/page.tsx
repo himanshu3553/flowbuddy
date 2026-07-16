@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { listCandidates } from '@/lib/candidates';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
@@ -99,7 +99,7 @@ export default async function RecordingsPage() {
     <>
       <PageHeader
         title="Recordings"
-        subtitle="Capture sessions the Sync Recorder turns into your Knowledge Base."
+        subtitle="Capture sessions the FlowBuddy Recorder turns into your Knowledge Base."
         actions={<RecordButton />}
       />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
@@ -112,8 +112,8 @@ export default async function RecordingsPage() {
               No recordings yet
             </h2>
             <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Install the Sync Recorder, click “Connect with Sync,” and narrate
-              your way through a real workflow. Sync turns the session into a
+              Install the FlowBuddy Recorder, click “Connect with FlowBuddy,” and narrate
+              your way through a real workflow. FlowBuddy turns the session into a
               structured Knowledge Base.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">

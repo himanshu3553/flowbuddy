@@ -1,4 +1,4 @@
-# Sync — Phase 4: Autopilot (agentic execution)
+# FlowBuddy — Phase 4: Autopilot (agentic execution)
 
 > **Phase 4 moves the copilot from *telling* to *doing*.** Today (Phase 1) an end-user asks "how do I X?" and gets a grounded, cited answer. Autopilot adds the next step: after the answer, the widget offers **"Want me to do this for you?"** — and on consent, **executes the approved workflow in the end-user's live session**, resolving each recorded step's element on the real page, acting, and verifying, with the user watching and in control the whole time. Working name **Autopilot** (a.k.a. **AI Agents / agentic mode**). Roadmap/status: [`roadmap.md`](roadmap.md) §5.
 
@@ -51,7 +51,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 | | **Phase 3 · Self-validation** | **Phase 4 · Autopilot** |
 |---|---|---|
 | Runs where | Customer **sandbox** — never production | End-user's **live production session** |
-| Driven by | Sync's scheduled runner | The **widget**, on end-user consent |
+| Driven by | FlowBuddy's scheduled runner | The **widget**, on end-user consent |
 | Auth | Sandbox credentials (+ MFA — the hard part) | User already signed in (solved for free) |
 | A failed replay is… | **The product working** — a drift flag | **A safety event** — safe-stop, explain, hand back |
 | Purpose | Keep the KB fresh | Complete the user's task |
@@ -82,7 +82,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 
 ## 5. Design questions to answer (carry into phase planning)
 
-> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt Sync analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](competitive-claude-chrome.md) §3, §5.
+> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt FlowBuddy analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](competitive-claude-chrome.md) §3, §5.
 
 1. **Consent & visibility UX** — confirm once at the start, or before each step? Default posture: **visible guided execution** (highlight → act, the user watches each step) over invisible automation — slower, but it *builds* trust instead of asking for it. Where does "show me" end and "do it" begin in the UI?
 2. **Destructive steps** — submits / deletes / payments: always require a per-step confirmation? Founder-configurable per workflow? Are some step types (payment fields) excluded from autopilot outright?
@@ -93,7 +93,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 7. **The execution-plan source** — distilled `KnowledgeItem` steps deliberately **don't** carry locators/`expected_outcome` (those live in the raw `KnowledgeSource.manifest`). Compile a per-workflow **execution plan** (ordered steps: locators + route + expected outcome + input slots) at approval/validation time, rather than parsing the manifest at run time. Likely shared with Phase 3 (the validation runner needs the same artifact).
 8. **Per-user variance** — the founder records as an admin; an end-user's **role / plan / feature flags** may hide the very button the workflow clicks. Treat as a verification failure (safe-stop + explain), and consider surfacing "this action may need permission X" from repeated same-step failures.
 9. **Plan integrity & tenancy** — the widget fetches the plan over the public-key path: key-scoped, origin-checked, rate-limited like `/answer`; the plan must never contain steps from unapproved workflows (**no-leak, applied to execution**). Does the plan need server-side signing to prevent tampering in transit/storage?
-10. **Naming & positioning** — "Autopilot" vs "AI Agents mode" as the end-user-facing label; founder-facing toggle copy ("Allow Sync to perform this workflow for your users"); how the offer is phrased in-chat.
+10. **Naming & positioning** — "Autopilot" vs "AI Agents mode" as the end-user-facing label; founder-facing toggle copy ("Allow FlowBuddy to perform this workflow for your users"); how the offer is phrased in-chat.
 
 ---
 
@@ -159,7 +159,7 @@ back (their state is readable; a completed click leaves no evidence, so action s
 false pullbacks), and completion is never declared over a pending one. **Next on a still-pending
 step = an explicit user override** — the step is remembered as skipped and the pointer never drags
 them back to it (Back onto it re-engages the gate). Every pointer decision logs under
-`data-sync-debug` (mode, from→to, corrections).
+`data-flowbuddy-debug` (mode, from→to, corrections).
 
 **The Reason escalation — "Explain what's blocking me."** On blocked/invalid/stalled states (and
 only when the founder's Reason toggle is on), the card offers one extra button: it reopens the chat
@@ -173,7 +173,7 @@ limitation of DOM-only checks: purely-visual custom validation (a JS rule that n
 `aria-invalid` or native constraints) is invisible to the gate but well within the diagnosis's
 reach — expected-vs-actual over the founder's TRUE step evidence.
 
-**Cross-nav resume:** the session persists in `sessionStorage` (`sync.walkthrough.v1` — the widget's ONLY storage; founder-derived plan data, keyed to the public key, 30-min TTL from last transition). On boot, a stored session (checked **before** any fetch) pulls the route's shard and reconciles: fresh copy swapped in when served; a workflow **absent from a shard its route belongs to = revoked → ends silently** (absence = not approved, applied to resumption); fetch failure proceeds on the persisted copy bounded by the TTL. The stored pointer is **never trusted blindly** — resume runs the same self-correction as every tick (see above), so a reload that reset the form resumes at the first unfinished step, never at the stale one, while true mid-workflow resumes (earlier steps on previous routes don't resolve here) pick up exactly where the user left off.
+**Cross-nav resume:** the session persists in `sessionStorage` (`flowbuddy.walkthrough.v1` — the widget's ONLY storage; founder-derived plan data, keyed to the public key, 30-min TTL from last transition). On boot, a stored session (checked **before** any fetch) pulls the route's shard and reconciles: fresh copy swapped in when served; a workflow **absent from a shard its route belongs to = revoked → ends silently** (absence = not approved, applied to resumption); fetch failure proceeds on the persisted copy bounded by the TTL. The stored pointer is **never trusted blindly** — resume runs the same self-correction as every tick (see above), so a reload that reset the form resumes at the first unfinished step, never at the stale one, while true mid-workflow resumes (earlier steps on previous routes don't resolve here) pick up exactly where the user left off.
 
 **Run analytics:** `POST /v1/copilot/walkthrough` (own rate bucket; every field clamped like the sense wire; `started` verifies the key against `CopilotApproval` — no-leak, title from the approval snapshot) → one **`CopilotWalkthrough`** row per run: `startStep/lastStep/totalSteps`, `autoAdvances`/`manualAdvances` (the auto:manual ratio measures detection quality for P4-M2), `outcome` `active|completed|aborted|stalled` (+`stalledAtStep`; a run advancing past a stall recovers to `active`). A row still `active` past the TTL reads as abandoned — no sweeper by design.
 

@@ -495,7 +495,7 @@ function captureShot(windowId?: number): Promise<string | null> {
 
 async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean; error?: string }> {
   if (!token) {
-    return { ok: false, error: 'Connect the extension to Sync Studio first.' };
+    return { ok: false, error: 'Connect the extension to FlowBuddy Studio first.' };
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || /^(chrome|edge|about|chrome-extension):/.test(tab.url)) {
@@ -753,7 +753,7 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   };
   const timeoutResult = (): UploadResult => ({
     ok: false,
-    error: 'Upload timed out — the Sync server may have been waking up. Retry in a moment.',
+    error: 'Upload timed out — the FlowBuddy server may have been waking up. Retry in a moment.',
   });
 
   // Plain multipart POST — no upload progress (fetch(FormData) exposes none), so the popup shows an
@@ -792,7 +792,7 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
     } catch (e) {
       disarmWatchdog();
       if (timedOut) return timeoutResult();
-      return { ok: false, error: `Could not reach the Sync API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
+      return { ok: false, error: `Could not reach the FlowBuddy API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
     }
   }
   disarmWatchdog();
@@ -854,7 +854,7 @@ async function streamingUpload(
 ): Promise<Response> {
   const enc = new TextEncoder();
   const CRLF = '\r\n';
-  const boundary = `----SyncRecorder${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  const boundary = `----FlowBuddyRecorder${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
 
   const segments = parts.map((p) => {
     let head = `--${boundary}${CRLF}Content-Disposition: form-data; name="${p.name}"`;

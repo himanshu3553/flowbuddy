@@ -1,7 +1,7 @@
-# Handoff: Sync Studio — full UI rebuild (shadcn · indigo rebrand)
+# Handoff: FlowBuddy Studio — full UI rebuild (shadcn · indigo rebrand)
 
 ## Overview
-Sync Studio is the **builder-facing web app** of Sync (copilot-first, Phase 1): record your product → Sync builds a Knowledge Base → approve workflows for the copilot → embed it → answer customers in-app, with a feedback loop telling you what to record next. This handoff covers the **entire Studio UI** (every screen + states), plus the **Sync Recorder** (Chrome extension) and **onboarding** — to be rebuilt in `@sync/web` (Next.js 15 + Tailwind + shadcn/ui) under a new **indigo** brand.
+FlowBuddy Studio is the **builder-facing web app** of FlowBuddy (copilot-first, Phase 1): record your product → FlowBuddy builds a Knowledge Base → approve workflows for the copilot → embed it → answer customers in-app, with a feedback loop telling you what to record next. This handoff covers the **entire Studio UI** (every screen + states), plus the **FlowBuddy Recorder** (Chrome extension) and **onboarding** — to be rebuilt in `@flowbuddy/web` (Next.js 15 + Tailwind + shadcn/ui) under a new **indigo** brand.
 
 ## Files in this bundle
 - **`prototype_full.html`** — self-contained prototype of **every screen** (scroll/pan the canvas). The visual source of truth.
@@ -36,7 +36,7 @@ The prototype promotes the full IA — **grow your nav from 4 → 6 items** (KB 
 Update `navItems` in `components/dashboard/nav.tsx`; active state → `bg-primary/10 text-primary`.
 
 ## Shared shell & components
-- **App shell** = `Sidebar` (`components/dashboard/sidebar.tsx`: `w-60`, `h-14` header, "S" mark + "Sync Studio", indigo active, lucide `h-4 w-4`; optional workspace switcher + user footer via `user-menu.tsx`) + a per-page **Header** (title + subtitle + right-aligned actions) + a content container.
+- **App shell** = `Sidebar` (`components/dashboard/sidebar.tsx`: `w-60`, `h-14` header, "S" mark + "FlowBuddy Studio", indigo active, lucide `h-4 w-4`; optional workspace switcher + user footer via `user-menu.tsx`) + a per-page **Header** (title + subtitle + right-aligned actions) + a content container.
 - **Add these shadcn components** (you don't have them yet): `dialog` (`@radix-ui/react-dialog` already a dep), `avatar`, `progress`, `tabs`, `table` (or keep list rows), `tooltip`, `scroll-area`. Most used: **Dialog, Tabs, Avatar, Table**.
 - **Reusable patterns**: `StatusBadge` (extend the existing one), `EmptyState` (you have it), **MetricCard** (stat tile: value + label + optional delta), **ToggleRow** (Switch — you have it), code block + copy button, **DataRow** (list/table row with thumbnail/title/meta/status/actions).
 
@@ -45,8 +45,8 @@ Update `navItems` in `components/dashboard/nav.tsx`; active state → `bg-primar
 ## Screens (every surface in the prototype)
 
 ### 1 · Home — activation + overview  *(hi-fi)*
-- **First-run** (`f1_home_states.html` State 1): activation `Card` with the **4-step checklist** — Install the Sync Recorder *(done)* → Record your product *(active, "Open recorder")* → Approve workflows *(locked)* → Embed the copilot *(locked)*; a **1/4 progress ring**; header buttons **How it works** + **How to Record**.
-- **Two dialogs** (states 2 & 3, full copy + lucide icons in `f1_home_states.html` and the F1 detail): "How Sync works" (5 steps + "gets better on its own" footer) and "How to record" (5 steps + "narrate as you go" footer). Build as shadcn `Dialog`.
+- **First-run** (`f1_home_states.html` State 1): activation `Card` with the **4-step checklist** — Install the FlowBuddy Recorder *(done)* → Record your product *(active, "Open recorder")* → Approve workflows *(locked)* → Embed the copilot *(locked)*; a **1/4 progress ring**; header buttons **How it works** + **How to Record**.
+- **Two dialogs** (states 2 & 3, full copy + lucide icons in `f1_home_states.html` and the F1 detail): "How FlowBuddy works" (5 steps + "gets better on its own" footer) and "How to record" (5 steps + "narrate as you go" footer). Build as shadcn `Dialog`.
 - **Steady-state** (prototype F2): live "Copilot is live" strip; **MetricCards** (Recordings, Workflows, Approved·live, Questions·7d, Answered %, Helpful %); the **"Record this next" coverage panel** (the feedback loop — keep it first-class); recent copilot questions list; pending-approvals card; copilot-health bars; weekly questions chart.
 - **States:** first-run / steady-state. **Data:** activation signals (see Data contract); metrics; coverage gaps; recent Q&A.
 
@@ -78,12 +78,12 @@ Update `navItems` in `components/dashboard/nav.tsx`; active state → `bg-primar
 - **Data:** time-series metrics; coverageGaps[{question, count, status}]; topWorkflows[{name, citations}]; recentDeclines[].
 
 ### 6 · Onboarding modals  *(wireframe)*
-- **Welcome** (F18): "Welcome to Sync" + 3-step path (Install ~2m / Record ~15m / Approve & embed ~5m) + **Install the recorder** / later; reassurance "answers come only from what you record & approve".
-- **Recording processed** (F19): "Your recording is ready — Sync found N workflows" + checklist of found workflows (all checked) + **Approve all & go live** / Review first. The key activation beat.
+- **Welcome** (F18): "Welcome to FlowBuddy" + 3-step path (Install ~2m / Record ~15m / Approve & embed ~5m) + **Install the recorder** / later; reassurance "answers come only from what you record & approve".
+- **Recording processed** (F19): "Your recording is ready — FlowBuddy found N workflows" + checklist of found workflows (all checked) + **Approve all & go live** / Review first. The key activation beat.
 - Build both as shadcn `Dialog`.
 
-### 7 · Sync Recorder — Chrome extension  *(wireframe; separate package)*
-Not part of `@sync/web`, but specified for completeness (the capture surface). Extension popup states (F10–F13):
+### 7 · FlowBuddy Recorder — Chrome extension  *(wireframe; separate package)*
+Not part of `@flowbuddy/web`, but specified for completeness (the capture surface). Extension popup states (F10–F13):
 - **Idle / ready**: connected as Fiona, **Start recording**, Mask-PII toggle, captured-layers chips, recent sessions.
 - **Recording**: REC + timer, current workflow card, **+ Mark new workflow**, mic level, **Pause** / **Stop & upload**, "PII masked · survives navigation".
 - **Uploading**: "Recording complete — N workflows", secure-upload progress, "resumes if your connection drops".

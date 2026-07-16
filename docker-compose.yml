@@ -1,20 +1,22 @@
 # Local dev infra (matches prod services). Brings up Postgres + Redis so the
 # app can run locally exactly like on Render. App services are added as they land.
+# `name:` pins the compose project (container prefix flowbuddy-*) regardless of the checkout folder.
+name: flowbuddy
 services:
   postgres:
     # pgvector-capable Postgres 16 (drop-in for postgres:16, same data dir) — the P1-M3 hybrid
     # retrieval migration runs CREATE EXTENSION vector; Render Postgres supports it natively.
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: sync
-      POSTGRES_PASSWORD: sync
-      POSTGRES_DB: sync
+      POSTGRES_USER: flowbuddy
+      POSTGRES_PASSWORD: flowbuddy
+      POSTGRES_DB: flowbuddy
     ports:
       - "5432:5432"
     volumes:
-      - sync_pg:/var/lib/postgresql/data
+      - flowbuddy_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sync"]
+      test: ["CMD-SHELL", "pg_isready -U flowbuddy"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -35,8 +37,8 @@ services:
       - "9000:9000"   # S3 API
       - "9001:9001"   # web console
     volumes:
-      - sync_minio:/data
+      - flowbuddy_minio:/data
 
 volumes:
-  sync_pg:
-  sync_minio:
+  flowbuddy_pg:
+  flowbuddy_minio:

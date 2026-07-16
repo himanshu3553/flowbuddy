@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { Bbox, CapturedEvent } from '@sync/shared';
+import type { Bbox, CapturedEvent } from '@flowbuddy/shared';
 import { eventLabel } from './segment';
 import { redactText } from './redact';
 

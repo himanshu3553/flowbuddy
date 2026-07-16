@@ -1,17 +1,17 @@
-# Sync
+# FlowBuddy
 
 > **An embeddable AI help copilot any SaaS can add in minutes.** Record your product once, approve the workflows the copilot may use, drop in one `<script>`, and your customers get in-app answers grounded **only** in what you approved — with citations and honest "I don't know yet" on gaps.
 
-Sync is **copilot-first**. A help portal + articles are decoupled by-products of the same recordings; the in-app copilot is the headline product.
+FlowBuddy is **copilot-first**. A help portal + articles are decoupled by-products of the same recordings; the in-app copilot is the headline product.
 
 ---
 
-## What is Sync?
+## What is FlowBuddy?
 
-Most help tools make you write articles, then hope customers find them. Sync flips that around:
+Most help tools make you write articles, then hope customers find them. FlowBuddy flips that around:
 
-1. **Show** Sync how your product works — once, by recording yourself using it and narrating *what* you do and *why*.
-2. Sync **learns** it and turns it into a structured **Knowledge Base**.
+1. **Show** FlowBuddy how your product works — once, by recording yourself using it and narrating *what* you do and *why*.
+2. FlowBuddy **learns** it and turns it into a structured **Knowledge Base**.
 3. You **approve** which workflows the copilot may use — one click each.
 4. Your customers get an **in-app assistant** that answers instantly — grounded in what you actually showed it, **never made-up**.
 
@@ -46,7 +46,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 
 | Surface | Who | Purpose |
 |---|---|---|
-| **Sync Recorder** (Chrome extension) | the builder | capture narrated product workflows |
+| **FlowBuddy Recorder** (Chrome extension) | the builder | capture narrated product workflows |
 | **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure + monitor it *(article authoring is a parked Phase-2 by-product)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
 | **Help Portal** (public web) — *Phase 2* | the builder's customers | browse + search published help articles |
@@ -63,7 +63,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 - **Queue / cache:** Redis
 - **Object storage:** S3-compatible — MinIO locally, Cloudflare R2 in production
 - **AI:** OpenAI (`whisper-1` transcription · `gpt-4o` segmentation, distillation, and the copilot answer engine · `text-embedding-3-small` for P1-M3 hybrid retrieval)
-- **Widget / extension:** esbuild bundles (both on the indigo design system; the widget's appearance — accent/title/greeting/launcher — is **live-served from Studio** via `GET /v1/copilot/config`, with `data-sync-*` attrs as per-page overrides)
+- **Widget / extension:** esbuild bundles (both on the indigo design system; the widget's appearance — accent/title/greeting/launcher — is **live-served from Studio** via `GET /v1/copilot/config`, with `data-flowbuddy-*` attrs as per-page overrides)
 - **Deploy target:** Render (Dockerized) + Cloudflare R2
 
 ---
@@ -77,7 +77,7 @@ packages/
   synthesis/  # OpenAI pipeline — capture → KB synthesis + the copilot answer engine (answerFromKB)
   api/        # Fastify ingestion + copilot routes  AND  the BullMQ worker (worker entrypoint)
   web/        # Next.js Studio — copilot-first: approval gate + copilot settings/analytics
-  widget/     # embeddable copilot <script> (esbuild → sync-copilot.js)
+  widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js)
   extension/  # Chrome MV3 recorder
 ```
 
@@ -131,16 +131,16 @@ pnpm db:generate            # regenerate the Prisma client
 Run these in separate terminals:
 
 ```bash
-pnpm --filter @sync/api dev        # ingestion API + copilot endpoints → http://localhost:8787
-pnpm --filter @sync/api worker     # the worker (turns recordings into the KB) — REQUIRED
-pnpm --filter @sync/web dev        # Studio → http://localhost:3000
+pnpm --filter @flowbuddy/api dev        # ingestion API + copilot endpoints → http://localhost:8787
+pnpm --filter @flowbuddy/api worker     # the worker (turns recordings into the KB) — REQUIRED
+pnpm --filter @flowbuddy/web dev        # Studio → http://localhost:3000
 ```
 
 Build the client bundles:
 
 ```bash
-pnpm --filter @sync/widget build      # → packages/widget/dist/sync-copilot.js  (serve the demo over HTTP — see Testing step 6, not file://)
-pnpm --filter @sync/extension build   # → packages/extension/dist/  (load unpacked in Chrome at chrome://extensions)
+pnpm --filter @flowbuddy/widget build      # → packages/widget/dist/flowbuddy-copilot.js  (serve the demo over HTTP — see Testing step 6, not file://)
+pnpm --filter @flowbuddy/extension build   # → packages/extension/dist/  (load unpacked in Chrome at chrome://extensions)
 ```
 
 > **The worker must be running** for an upload to become the KB (`status → ready`). Without it, recordings upload but never get processed.
@@ -175,7 +175,7 @@ The copilot answer endpoint enforces a **public embeddable key** + **origin allo
 3. **Record:** open the product you want to document, hit **Start**, narrate while clicking through a workflow (use **Mark new workflow** to separate tasks), then **Stop**. The recorder shows `REC → ↑ → ✓` and uploads.
 4. **Knowledge Base:** the worker transcribes + segments the recording; it turns **`ready`** in Studio. Open its KB page to see the transcript + items grouped by workflow.
 5. **Approve for the copilot:** on the KB page, toggle **"approve for copilot"** on the workflows worth answering.
-6. **Embed & ask:** grab the **public key** from `Studio → Copilot`, set it in [`packages/widget/demo/index.html`](packages/widget/demo/index.html) (`data-sync-key`) with `data-sync-api="http://localhost:8787"`. **Serve the demo over HTTP** (opening it via `file://` shows no launcher — Chrome blocks the script + the API call): `cd packages/widget && python3 -m http.server 8080`, then open **http://localhost:8080/demo/index.html**. Ask a question — you should get a **grounded answer with a citation**, an **honest decline** on something uncovered, and 👍/👎 feedback flowing back to Studio.
+6. **Embed & ask:** grab the **public key** from `Studio → Copilot`, set it in [`packages/widget/demo/index.html`](packages/widget/demo/index.html) (`data-flowbuddy-key`) with `data-flowbuddy-api="http://localhost:8787"`. **Serve the demo over HTTP** (opening it via `file://` shows no launcher — Chrome blocks the script + the API call): `cd packages/widget && python3 -m http.server 8080`, then open **http://localhost:8080/demo/index.html**. Ask a question — you should get a **grounded answer with a citation**, an **honest decline** on something uncovered, and 👍/👎 feedback flowing back to Studio.
 
 Teardown: `docker compose down` (add `-v` to wipe data).
 
@@ -198,7 +198,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Project status
 
-**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `sync-web-uir8.onrender.com`). All Phase-1 modules are done — **P1-M3 hybrid keyword+pgvector retrieval shipped 2026-07-07** and the **P1-M11 capture-reliability backlog completed 2026-07-06** (R13 ranked locators closed it; R5 → V2). The Studio's copilot preview **is the real widget** (iframe, preview mode), and widget appearance is **live-served** from Studio. Only **P1-M12 Cut 2** (screenshot/DOM pixel PII) remains, deferred to Phase 2 as a portal-publish prerequisite.
+**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `flowbuddy-dev-web-uir8.onrender.com`). All Phase-1 modules are done — **P1-M3 hybrid keyword+pgvector retrieval shipped 2026-07-07** and the **P1-M11 capture-reliability backlog completed 2026-07-06** (R13 ranked locators closed it; R5 → V2). The Studio's copilot preview **is the real widget** (iframe, preview mode), and widget appearance is **live-served** from Studio. Only **P1-M12 Cut 2** (screenshot/DOM pixel PII) remains, deferred to Phase 2 as a portal-publish prerequisite.
 
 **Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — direction changed 2026-07-07 to **workflows-as-articles**: the pre-pivot article engine was removed; the portal will render **approved distilled workflows** ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §7). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
 
@@ -211,7 +211,7 @@ Start with the roadmap; each doc links onward.
 | Doc | Role |
 |---|---|
 | [`docs/roadmap.md`](docs/roadmap.md) | **The map** — versions → phases → modules + status + legacy-ID map |
-| [`docs/product.md`](docs/product.md) | What Sync is, who it's for, **why copilot-first** (decision record + grounding model) |
+| [`docs/product.md`](docs/product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model) |
 | [`docs/architecture.md`](docs/architecture.md) | Technical model — the 3 modules, KB schema, data model, decisions |
 | [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog |
 | [`docs/phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules |
@@ -234,6 +234,6 @@ The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio 
 
 - **`command not found: pnpm`** → run `corepack enable`.
 - **"can't reach database"** → is Docker up? `docker compose ps` (postgres should be `healthy`).
-- **Nothing happens after a recording** → the **worker** isn't running (`pnpm --filter @sync/api worker`).
+- **Nothing happens after a recording** → the **worker** isn't running (`pnpm --filter @flowbuddy/api worker`).
 - **Copilot says "no approved content yet"** → approve at least one workflow for the copilot on its KB page in Studio.
 - **Type changes not picked up across packages** → `pnpm build`; for the Prisma client specifically, `pnpm db:generate`.

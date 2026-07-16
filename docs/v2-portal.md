@@ -1,4 +1,4 @@
-# Sync — Version 2 · Portal track: Help Portal & Articles (by-products)
+# FlowBuddy — Version 2 · Portal track: Help Portal & Articles (by-products)
 
 > **The portal track is the human-facing help center built over the same Knowledge Base the copilot uses — a decoupled, second publish target, scheduled in Version 2.** Version 1 is the pure copilot arc (Copilot → Sense → Self-validation → Autopilot); the portal + articles ship after it. This doc is the forward build plan — the features to develop, aligned to what Phase 1 already produces (distilled workflows + the approval gate + hybrid retrieval). Roadmap/status: [`roadmap.md`](roadmap.md) §6. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
@@ -34,7 +34,7 @@ The two structural pieces every other module sits on:
 - **Done when:** a workflow can be approved specifically for the portal, and portal-only edits render on top of it without changing the underlying KB.
 
 ### V2 · P1 — Text → Article (grounded authoring)
-Type a topic; Sync retrieves the relevant distilled steps over the whole-workspace KB via the **hybrid keyword+pgvector engine** (`synthesis/retrieval.ts`), then synthesizes a grounded article or declines. A decline logs a **coverage gap** ("record this next"). Prompt-grounded articles can span multiple recordings; each step's screenshot resolves back to its source recording.
+Type a topic; FlowBuddy retrieves the relevant distilled steps over the whole-workspace KB via the **hybrid keyword+pgvector engine** (`synthesis/retrieval.ts`), then synthesizes a grounded article or declines. A decline logs a **coverage gap** ("record this next"). Prompt-grounded articles can span multiple recordings; each step's screenshot resolves back to its source recording.
 - **Done when:** a topic prompt yields a grounded, cited article from approved KB, or an honest decline that logs a coverage gap.
 
 ### V2 · P2 — Public Help Portal
@@ -64,7 +64,7 @@ Makes the public portal credible for a customer-facing launch.
 - **Public / gated visibility** — public default; gated/private as a fast-follow (the visibility flag lives on `PortalPublication`).
 - **"Was this helpful?"** per-article feedback → analytics foundations (feeds V2 · P6).
 - **SEO** — server-rendered article pages + structured data + a **sitemap**.
-- **🔒 Screenshot / DOM PII redaction (prerequisite to publishing).** The portal renders screenshots publicly, so PII *displayed* on the page (a customer name in a table, "signed in as jane@acme.com") — captured in screenshot **pixels + DOM** — must be redacted before anything goes public: **OCR each screenshot → detect high-confidence PII (email/phone/card/SSN) → blur those regions**; scrub DOM text/attributes at rest. Self-hosted engine (**Microsoft Presidio**, or Tesseract.js + a blur step) so screenshots never leave for a third party; reuse the Phase-1 text detectors (`@sync/synthesis` `redactText`) for the text side. Phase 1 already scrubs the text the copilot reads; the portal adds the public screenshot surface, so this is the remaining piece.
+- **🔒 Screenshot / DOM PII redaction (prerequisite to publishing).** The portal renders screenshots publicly, so PII *displayed* on the page (a customer name in a table, "signed in as jane@acme.com") — captured in screenshot **pixels + DOM** — must be redacted before anything goes public: **OCR each screenshot → detect high-confidence PII (email/phone/card/SSN) → blur those regions**; scrub DOM text/attributes at rest. Self-hosted engine (**Microsoft Presidio**, or Tesseract.js + a blur step) so screenshots never leave for a third party; reuse the Phase-1 text detectors (`@flowbuddy/synthesis` `redactText`) for the text side. Phase 1 already scrubs the text the copilot reads; the portal adds the public screenshot surface, so this is the remaining piece.
 - **Done when:** the portal is themed, supports a custom domain + gated visibility, collects feedback, is SEO-clean, **and published screenshots are PII-redacted**.
 
 ### V2 · P6 — Coverage analytics + collaboration

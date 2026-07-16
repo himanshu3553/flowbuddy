@@ -16,7 +16,7 @@ const s3 = new S3Client({
   forcePathStyle: true,
 });
 
-const bucket = process.env.R2_BUCKET || 'sync-artifacts';
+const bucket = process.env.R2_BUCKET || 'flowbuddy-artifacts';
 
 /** Short-lived signed GET URL so the browser can load a private screenshot. */
 export function signedUrl(key: string, expiresIn = 3600): Promise<string> {

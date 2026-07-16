@@ -1,4 +1,4 @@
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 export interface DayBucket {
   label: string;

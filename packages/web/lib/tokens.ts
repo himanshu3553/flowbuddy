@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 /** Workspace API tokens: we store only the SHA-256 hash; the plaintext is shown once. */
 export function hashToken(token: string): string {

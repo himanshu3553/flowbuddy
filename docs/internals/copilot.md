@@ -25,7 +25,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-06) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@sync/synthesis` stays DB-free). |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-06) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
 | [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` + `/sense-plan` (P2-M0) + `/walkthrough` (P4-M0) routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
@@ -35,7 +35,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 ## 3. Inputs / Outputs
 
 - **`POST /v1/copilot/answer`**
-  - **In:** `X-Sync-Key: <public embed key>`, body `{ question, history?, context?: { path }, preview? }`.
+  - **In:** `X-FlowBuddy-Key: <public embed key>`, body `{ question, history?, context?: { path }, preview? }`.
   - **Out (covered):** `{ covered: true, answer, citations[], queryId }`.
   - **Out (decline):** `{ covered: false, answer: null, citations: [], reason, queryId }`.
   - **`preview: true`** (the Studio real-widget tester) — same engine, but the call skips
@@ -62,7 +62,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 
 ```mermaid
 flowchart TD
-    Q["POST /v1/copilot/answer<br/>X-Sync-Key + {question, history, context.path}"] --> AUTH
+    Q["POST /v1/copilot/answer<br/>X-FlowBuddy-Key + {question, history, context.path}"] --> AUTH
     AUTH{"resolveCopilotKey<br/>key → ws · origin allowlist"} -- fail --> E1["401 / 403"]
     AUTH -- ok --> RL{"checkRateLimit<br/>30 / 60s per key"}
     RL -- over --> E2["429"]
@@ -99,7 +99,7 @@ recorder-token auth used by ingestion. See [connections.md](connections.md) §3.
 `retrieveApprovedKBItems(db, workspaceId, question, { contextPath })` is **the single point that keeps
 the copilot grounded only in approved-KB** — one implementation, one caller (the public answer route;
 since 2026-07-06 the Studio tester is the real widget and arrives through that same route), with the
-Prisma client injected so `@sync/synthesis` stays DB-free:
+Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
 
 1. **Load the approval set.** Fetch `CopilotApproval` rows for the workspace → a `Set` of
    `"sourceId:segmentIndex"` keys. **If empty, return `[]` immediately** (an un-provisioned copilot).

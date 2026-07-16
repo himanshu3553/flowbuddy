@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 /** The signed-in user's workspace (single-user = single-workspace), or null. */
 export async function getCurrentWorkspace() {

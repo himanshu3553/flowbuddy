@@ -4,7 +4,7 @@
 
 type ToastKind = 'rec' | 'done' | 'fail' | 'info';
 
-// Aligned with the Sync Studio shadcn/ui indigo palette (destructive red, green-600, indigo).
+// Aligned with the FlowBuddy Studio shadcn/ui indigo palette (destructive red, green-600, indigo).
 const BG: Record<ToastKind, string> = {
   rec: '#dc2626',
   done: '#16a34a',

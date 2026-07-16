@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 
 /**

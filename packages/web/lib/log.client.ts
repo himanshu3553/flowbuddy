@@ -1,5 +1,5 @@
 /**
- * Browser-side logger for Studio CLIENT components. The Node logger (@sync/logger → pino) must never
+ * Browser-side logger for Studio CLIENT components. The Node logger (@flowbuddy/logger → pino) must never
  * be imported into a client bundle, so client code logs through this tiny console wrapper instead.
  *
  * Level follows the build: `debug` in development, `warn`+ in production (so a customer's browser
@@ -18,8 +18,8 @@ const threshold = ORDER[configured] ?? ORDER.debug;
 const on = (level: Exclude<Level, 'silent'>) => ORDER[level] >= threshold;
 
 export const clientLog = {
-  debug: (...args: unknown[]) => { if (on('debug')) console.debug('[sync]', ...args); },
-  info: (...args: unknown[]) => { if (on('info')) console.info('[sync]', ...args); },
-  warn: (...args: unknown[]) => { if (on('warn')) console.warn('[sync]', ...args); },
-  error: (...args: unknown[]) => { if (on('error')) console.error('[sync]', ...args); },
+  debug: (...args: unknown[]) => { if (on('debug')) console.debug('[flowbuddy]', ...args); },
+  info: (...args: unknown[]) => { if (on('info')) console.info('[flowbuddy]', ...args); },
+  warn: (...args: unknown[]) => { if (on('warn')) console.warn('[flowbuddy]', ...args); },
+  error: (...args: unknown[]) => { if (on('error')) console.error('[flowbuddy]', ...args); },
 };

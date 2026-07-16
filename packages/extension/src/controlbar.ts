@@ -196,7 +196,7 @@ async function pollStatusPill(): Promise<void> {
   if (phase?.name === 'saving') p.textContent = 'Saving narration…';
   else if (uploadProgress === -2) p.textContent = 'Uploading… finishing';
   else if (typeof uploadProgress === 'number' && uploadProgress >= 1) p.textContent = `Uploading… ${uploadProgress}%`;
-  else p.textContent = Date.now() - pillSince > 8000 ? 'Uploading… waking the Sync server' : 'Uploading…';
+  else p.textContent = Date.now() - pillSince > 8000 ? 'Uploading… waking the FlowBuddy server' : 'Uploading…';
 }
 
 function finishPill(ok: boolean): void {
@@ -204,8 +204,8 @@ function finishPill(ok: boolean): void {
   const bar = root?.querySelector('.bar') as HTMLElement | null;
   if (!bar) { removeControlBar(); return; }
   bar.innerHTML = ok
-    ? '<span class="pdot ok"></span><span class="ptext">Uploaded — Sync is processing it</span>'
-    : '<span class="pdot fail"></span><span class="ptext">Upload didn’t finish — open the Sync extension to retry</span>';
+    ? '<span class="pdot ok"></span><span class="ptext">Uploaded — FlowBuddy is processing it</span>'
+    : '<span class="pdot fail"></span><span class="ptext">Upload didn’t finish — open the FlowBuddy extension to retry</span>';
   setTimeout(removeControlBar, ok ? 4000 : 8000);
 }
 

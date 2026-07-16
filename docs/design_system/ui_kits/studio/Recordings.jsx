@@ -12,10 +12,10 @@ function Recordings() {
         {empty ? (
           <Empty media={true}
             title="No recordings yet"
-            desc="Install the Sync Recorder, click “Connect with Sync,” and narrate your way through a real workflow. Sync turns the session into a structured Knowledge Base."
+            desc="Install the FlowBuddy Recorder, click “Connect with FlowBuddy,” and narrate your way through a real workflow. FlowBuddy turns the session into a structured Knowledge Base."
             actions={<><Btn>Install the recorder</Btn><Btn variant="secondary">How it works</Btn></>}
             chips={['Screen', 'Voice', 'DOM', 'Events', 'Routes']}
-            footnote="Captured in sync · PII masked in your browser before upload" />
+            footnote="Captured in FlowBuddy · PII masked in your browser before upload" />
         ) : (
           <div style={{ flex: 1, padding: '18px 24px', overflow: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15 }}>

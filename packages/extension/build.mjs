@@ -21,7 +21,7 @@ const entryPoints = {
 };
 
 // Studio base URL(s), baked at build time. Comma-separated: the FIRST is the primary — the popup's
-// "Connect with Sync" opens it — and ALL of them get the connect-bridge content script, so ONE
+// "Connect with FlowBuddy" opens it — and ALL of them get the connect-bridge content script, so ONE
 // artifact (e.g. the Web Store build) can complete the connect handshake against the deployed
 // Studio AND a local dev Studio. Dev default: localhost only.
 //   prod build: STUDIO_URL="https://<deployed-studio>,http://localhost:3000" pnpm build

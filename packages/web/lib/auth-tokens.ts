@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 /**
  * Single-use auth action tokens (email verification + password reset), stored in the Auth.js

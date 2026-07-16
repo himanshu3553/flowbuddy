@@ -53,7 +53,7 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        /* ---- Sync design tokens (raw brand hexes via CSS vars) ---- */
+        /* ---- FlowBuddy design tokens (raw brand hexes via CSS vars) ---- */
         canvas: 'hsl(var(--canvas))',
         ink: 'var(--ink)',
         faint: 'var(--gray-400)',

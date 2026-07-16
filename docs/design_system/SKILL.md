@@ -1,12 +1,12 @@
 ---
-name: sync-studio-design
-description: Use this skill to generate well-branded interfaces and assets for Sync (the in-app AI help copilot for SaaS) and its builder-facing Studio web app — for production code or throwaway prototypes/mocks. Contains the indigo brand foundations (colors, type, fonts), iconography, reusable components, and a full Studio UI kit.
+name: flowbuddy-studio-design
+description: Use this skill to generate well-branded interfaces and assets for FlowBuddy (the in-app AI help copilot for SaaS) and its builder-facing Studio web app — for production code or throwaway prototypes/mocks. Contains the indigo brand foundations (colors, type, fonts), iconography, reusable components, and a full Studio UI kit.
 user-invocable: true
 ---
 
 Read the `README.md` file within this skill, and explore the other available files.
 
-This is the **Sync Studio design system** — the indigo brand the team is rebuilding Studio in. Key locations:
+This is the **FlowBuddy Studio design system** — the indigo brand the team is rebuilding Studio in. Key locations:
 - `styles.css` (root) — link this one file to inherit all tokens + webfonts.
 - `tokens/` — colors, typography, spacing, elevation as CSS custom properties.
 - `guidelines/` — foundation specimen cards (Colors, Type, Spacing, Brand).
@@ -20,4 +20,4 @@ If working on **production code**, the tokens map 1:1 onto the shadcn theme (`--
 
 Stay true to the voice (plain, calm, second-person; sentence case; mono for status/technical labels; honesty-as-a-feature) and the one-accent discipline (indigo means brand / primary action / approved-live). Never invent new brand colors — derive tinted surfaces from the indigo ramp.
 
-If invoked without other guidance, ask what the user wants to build, ask a few focused questions, then act as an expert Sync designer who outputs HTML artifacts **or** production code depending on the need.
+If invoked without other guidance, ask what the user wants to build, ask a few focused questions, then act as an expert FlowBuddy designer who outputs HTML artifacts **or** production code depending on the need.

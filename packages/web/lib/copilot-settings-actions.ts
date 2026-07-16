@@ -2,7 +2,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 
 export interface SaveOriginsResult {
@@ -114,7 +114,7 @@ export async function setCopilotShowMe(showMe: boolean): Promise<void> {
 
 /** P4-M0 guided walkthrough — offer "Walk me through it" on positional answers: the widget
  *  highlights each remaining step and follows the user's progress (the user does everything;
- *  Sync never acts). */
+ *  FlowBuddy never acts). */
 export async function setCopilotWalkthrough(enabled: boolean): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');

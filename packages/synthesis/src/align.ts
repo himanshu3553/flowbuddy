@@ -1,4 +1,4 @@
-import type { CapturedEvent } from '@sync/shared';
+import type { CapturedEvent } from '@flowbuddy/shared';
 import type { Transcript } from './transcribe';
 
 // Narration explaining an action usually comes slightly before or during it.

@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy · Sync',
+  title: 'Privacy Policy · FlowBuddy',
   description:
-    'How the Sync Recorder browser extension and the Sync copilot collect, use, and protect your data.',
+    'How the FlowBuddy Recorder browser extension and the FlowBuddy copilot collect, use, and protect your data.',
 };
 
 // Where privacy requests should be sent. Change this to a branded address
@@ -49,18 +49,18 @@ export default function PrivacyPage() {
 
         <div className="mt-8 rounded-card border bg-card p-6 shadow-card md:p-8">
           <p className="text-[14px] leading-relaxed text-muted-foreground">
-            Sync (&ldquo;Sync&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) provides
+            FlowBuddy (&ldquo;FlowBuddy&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) provides
             an embeddable AI help copilot for SaaS products. This policy explains
-            what the <strong className="text-ink">Sync Recorder</strong> browser
-            extension and the Sync service collect, how that information is used,
-            and the choices you have. It applies to the extension, the Sync Studio
+            what the <strong className="text-ink">FlowBuddy Recorder</strong> browser
+            extension and the FlowBuddy service collect, how that information is used,
+            and the choices you have. It applies to the extension, the FlowBuddy Studio
             web app, and the embeddable copilot widget.
           </p>
 
-          <Section title="The Sync Recorder extension — single purpose">
+          <Section title="The FlowBuddy Recorder extension — single purpose">
             <p>
-              The Sync Recorder has one purpose: to let you capture a narrated
-              walkthrough of a product so Sync can turn it into a help knowledge
+              The FlowBuddy Recorder has one purpose: to let you capture a narrated
+              walkthrough of a product so FlowBuddy can turn it into a help knowledge
               base. The extension is <strong className="text-ink">dormant until
               you explicitly start a recording</strong> from its toolbar popup. It
               does not monitor your browsing, run in the background, or collect
@@ -98,12 +98,12 @@ export default function PrivacyPage() {
               <li>
                 <strong className="text-ink">Account information</strong> — the
                 name, email address, and password (stored only as a salted hash)
-                you provide to create a Sync Studio account.
+                you provide to create a FlowBuddy Studio account.
               </li>
               <li>
                 <strong className="text-ink">Recording content</strong> — the
                 screenshots, narration audio, and interaction events described
-                above, uploaded to Sync when you record a session.
+                above, uploaded to FlowBuddy when you record a session.
               </li>
               <li>
                 <strong className="text-ink">Copilot usage</strong> — questions
@@ -127,7 +127,7 @@ export default function PrivacyPage() {
                 have explicitly approved.
               </li>
               <li>
-                To provide analytics in Sync Studio (e.g. questions asked,
+                To provide analytics in FlowBuddy Studio (e.g. questions asked,
                 coverage gaps, answer quality).
               </li>
               <li>To operate, secure, debug, and improve the service.</li>
@@ -165,7 +165,7 @@ export default function PrivacyPage() {
 
           <Section title="Sharing and service providers">
             <p>
-              We share data only with vendors that help us run Sync, under
+              We share data only with vendors that help us run FlowBuddy, under
               confidentiality obligations:
             </p>
             <ul className="ml-5 list-disc space-y-1.5">
@@ -188,7 +188,7 @@ export default function PrivacyPage() {
           <Section title="Data retention and deletion">
             <p>
               Recordings and the knowledge derived from them are retained until you
-              delete them. You can delete a recording from Sync Studio, which
+              delete them. You can delete a recording from FlowBuddy Studio, which
               removes its associated artifacts. To delete your account and all
               associated data, contact us at the address below.
             </p>
@@ -207,14 +207,14 @@ export default function PrivacyPage() {
             <p>
               You control when the recorder runs — it captures only while you have
               an active recording. You can review, edit, approve, and delete the
-              knowledge that powers your copilot at any time in Sync Studio, and you
+              knowledge that powers your copilot at any time in FlowBuddy Studio, and you
               can request access to or deletion of your data by contacting us.
             </p>
           </Section>
 
           <Section title="Children">
             <p>
-              Sync is a business tool and is not directed to children under 13, and
+              FlowBuddy is a business tool and is not directed to children under 13, and
               we do not knowingly collect their personal information.
             </p>
           </Section>
@@ -245,7 +245,7 @@ export default function PrivacyPage() {
             href="/"
             className="text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
           >
-            ← Back to Sync
+            ← Back to FlowBuddy
           </Link>
         </div>
       </main>

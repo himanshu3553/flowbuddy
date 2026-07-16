@@ -26,16 +26,16 @@ importers:
       '@fastify/multipart':
         specifier: ^9.0.1
         version: 9.4.0
-      '@sync/db':
+      '@flowbuddy/db':
         specifier: workspace:*
         version: link:../db
-      '@sync/logger':
+      '@flowbuddy/logger':
         specifier: workspace:*
         version: link:../logger
-      '@sync/shared':
+      '@flowbuddy/shared':
         specifier: workspace:*
         version: link:../shared
-      '@sync/synthesis':
+      '@flowbuddy/synthesis':
         specifier: workspace:*
         version: link:../synthesis
       bullmq:
@@ -114,10 +114,10 @@ importers:
 
   packages/synthesis:
     dependencies:
-      '@sync/logger':
+      '@flowbuddy/logger':
         specifier: workspace:*
         version: link:../logger
-      '@sync/shared':
+      '@flowbuddy/shared':
         specifier: workspace:*
         version: link:../shared
       openai:
@@ -139,6 +139,18 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.700.0
         version: 3.1072.0
+      '@flowbuddy/db':
+        specifier: workspace:*
+        version: link:../db
+      '@flowbuddy/logger':
+        specifier: workspace:*
+        version: link:../logger
+      '@flowbuddy/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@flowbuddy/synthesis':
+        specifier: workspace:*
+        version: link:../synthesis
       '@radix-ui/react-dialog':
         specifier: ^1.1.4
         version: 1.1.17(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -157,18 +169,6 @@ importers:
       '@radix-ui/react-switch':
         specifier: ^1.1.2
         version: 1.3.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@sync/db':
-        specifier: workspace:*
-        version: link:../db
-      '@sync/logger':
-        specifier: workspace:*
-        version: link:../logger
-      '@sync/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@sync/synthesis':
-        specifier: workspace:*
-        version: link:../synthesis
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3

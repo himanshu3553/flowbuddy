@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@sync/db';
-import { createLogger } from '@sync/logger';
+import { prisma } from '@flowbuddy/db';
+import { createLogger } from '@flowbuddy/logger';
 import { getCurrentWorkspace } from '@/lib/session';
 import { deleteSessionPrefix } from '@/lib/storage';
 import { enqueueSynthesis } from '@/lib/queue';

@@ -12,8 +12,8 @@ import {
   Circle,
 } from 'lucide-react';
 
-import { prisma } from '@sync/db';
-import type { SessionManifest } from '@sync/shared';
+import { prisma } from '@flowbuddy/db';
+import type { SessionManifest } from '@flowbuddy/shared';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import { listCandidates } from '@/lib/candidates';
@@ -196,7 +196,7 @@ export default async function RecordingDetailPage({
                 <h2 className="text-base font-semibold tracking-tight">Replay</h2>
                 <p className="text-sm text-muted-foreground">
                   Your narration plays while the captured screenshots advance — a
-                  reconstruction of what Sync recorded, not a video.
+                  reconstruction of what FlowBuddy recorded, not a video.
                 </p>
               </div>
               {hasReplay ? (
@@ -311,7 +311,7 @@ export default async function RecordingDetailPage({
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   {candidates.length > 0
-                    ? `Sync extracted ${candidates.length} workflow${candidates.length === 1 ? '' : 's'} from this recording. Review and approve them for the copilot.`
+                    ? `FlowBuddy extracted ${candidates.length} workflow${candidates.length === 1 ? '' : 's'} from this recording. Review and approve them for the copilot.`
                     : source.status === 'ready' || source.status === 'done'
                       ? 'No workflows were distilled from this recording.'
                       : 'Workflows appear once processing finishes.'}

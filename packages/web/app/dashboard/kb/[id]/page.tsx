@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { CheckCircle2, ChevronLeft, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import { relativeTime } from '@/lib/recordings';

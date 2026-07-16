@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Button — Sync Studio's primary control.
+ * Button — FlowBuddy Studio's primary control.
  * Variants: primary (indigo CTA gradient), secondary (white/hairline),
  * soft (indigo-tint), ghost. Optional Material Symbol icon or a "record" dot.
  */

@@ -14,7 +14,7 @@ function Copilot() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--success-dot)' }} /><span style={{ font: '11px var(--font-mono)', color: 'var(--success-text-2)' }}>detected on app.acme.com · 6m ago</span></div>
             </div>
             <div style={{ font: '12px var(--font-sans)', color: 'var(--text-muted)', marginBottom: 10 }}>Paste once before <code style={{ font: '11px var(--font-mono)', background: 'var(--paper)', padding: '1px 5px', borderRadius: 4 }}>&lt;/body&gt;</code>. That’s the whole install.</div>
-            <Code code={'<script src="https://cdn.getsync.app/copilot.js"\n        data-key="pk_live_8f2a…d41"></script>'} />
+            <Code code={'<script src="https://cdn.flowbuddyai.com/copilot.js"\n        data-key="pk_live_8f2a…d41"></script>'} />
           </Card>
 
           <Card>

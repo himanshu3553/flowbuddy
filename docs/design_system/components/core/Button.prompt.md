@@ -1,4 +1,4 @@
-The primary Sync Studio button — an indigo CTA plus neutral/soft/ghost variants, with optional Material-Symbol icon or record dot.
+The primary FlowBuddy Studio button — an indigo CTA plus neutral/soft/ghost variants, with optional Material-Symbol icon or record dot.
 
 ```jsx
 <Button variant="primary" icon="fiber_manual_record" iconFill={1}>How to Record</Button>

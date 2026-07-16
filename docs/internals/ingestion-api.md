@@ -29,7 +29,7 @@ everything expensive is deferred to the [worker](knowledge-base.md).
 | [`queue.ts`](../../packages/api/src/queue.ts) | The BullMQ producer (`synthesisQueue`) + the Redis connection options. |
 | [`config.ts`](../../packages/api/src/config.ts) | Env config (port, Redis URL, OpenAI key/models, R2/MinIO creds). |
 
-Runs as `pnpm --filter @sync/api dev` on **`:8787`**.
+Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
 
 ---
 
@@ -51,7 +51,7 @@ Runs as `pnpm --filter @sync/api dev` on **`:8787`**.
 ### 4.1 CORS & multipart setup
 
 A global `onRequest` hook sets permissive CORS (`Access-Control-Allow-Origin: *`, allowed headers
-include `Authorization`, `Content-Type`, `X-Sync-Key`) and short-circuits `OPTIONS` preflights with
+include `Authorization`, `Content-Type`, `X-FlowBuddy-Key`) and short-circuits `OPTIONS` preflights with
 `204`. This is required because the caller origin is `chrome-extension://…` (recorder) or a customer's
 domain (widget). Multipart is registered with generous limits: `fileSize: 300 MB`, `files: 10000`,
 `fieldSize: 100 MB` — a long recording can have thousands of screenshots/DOM files.
@@ -127,7 +127,7 @@ different `R2_ENDPOINT`. `forcePathStyle: true` is set (MinIO requires it, R2 to
 ### 4.5 The queue producer (`queue.ts`)
 
 A single BullMQ `Queue` named `synthesis` (the `SYNTHESIS_QUEUE` constant shared with the worker via
-[`@sync/shared/jobs`](../../packages/shared/src/jobs.ts)). The Redis **connection options** (host/port/
+[`@flowbuddy/shared/jobs`](../../packages/shared/src/jobs.ts)). The Redis **connection options** (host/port/
 user/pass, TLS for `rediss:`) are passed — not a pre-built client — so BullMQ can apply the settings
 workers need. The producer (API) and consumer ([worker](knowledge-base.md)) share only this queue
 name and the `{ sessionId, workspaceId }` shape.

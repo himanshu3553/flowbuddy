@@ -1,4 +1,4 @@
-# Sync — Phase 1 Modules Map (visual)
+# FlowBuddy — Phase 1 Modules Map (visual)
 
 > **The end-to-end picture of the Phase 1 system.** Capture raw signal → turn it into a Knowledge Base → gate it with approval → answer customers from it. Everything connects through **one cumulative KB per workspace**. For the canonical 3-module model see [`architecture.md`](architecture.md); for the per-module build/as-built record see [`phase-1-copilot.md`](phase-1-copilot.md).
 
@@ -40,7 +40,7 @@ flowchart TB
     subgraph CUSTOMER["💬 CUSTOMER SIDE — ask &amp; answer (sync)"]
         direction TB
 
-        WIDGET["<b>WIDGET ⭐</b><br/>widget · sync-copilot.js<br/>one &lt;script&gt; · shadow-DOM chat<br/>sends page route · 👍/👎 feedback"]
+        WIDGET["<b>WIDGET ⭐</b><br/>widget · flowbuddy-copilot.js<br/>one &lt;script&gt; · shadow-DOM chat<br/>sends page route · 👍/👎 feedback"]
 
         COPILOTAPI["<b>COPILOT API</b><br/>api · copilot.ts + copilot-auth.ts<br/>/answer · /feedback<br/>embed key · origin allowlist · rate limit"]
 
@@ -100,7 +100,7 @@ flowchart TB
 | **P1-M1** Recorder / capture | **M1 · Capture** (extension) |
 | **P1-M2** Knowledge Base | **M2 · KB** (worker + synthesis) → the KB store |
 | **P1-M3** Retrieval & grounding engine | **Retrieval & grounding engine** (`answerFromKB`) |
-| **P1-M4** Cloud deploy | ✅ **deployed** — Render (api + worker + web) + R2; dev at `sync-web-uir8.onrender.com` |
+| **P1-M4** Cloud deploy | ✅ **deployed** — Render (api + worker + web) + R2; dev at `flowbuddy-dev-web-uir8.onrender.com` |
 | **P1-M5** Approval gate | **Trust gate — Approval** |
 | **P1-M6** Answer endpoint | **Copilot API** `/v1/copilot/answer` |
 | **P1-M7** Widget & SDK | **Widget** |

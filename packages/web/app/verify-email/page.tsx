@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { consumeAuthToken } from '@/lib/auth-tokens';
 import { Button } from '@/components/ui/button';
 import {
@@ -108,7 +108,7 @@ export default async function VerifyEmailPage({
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-gradient-logo text-sm font-bold text-white">
             S
           </span>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">Sync Studio</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">FlowBuddy Studio</h1>
         </div>
         <Card>{body}</Card>
       </div>

@@ -1,4 +1,4 @@
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { hashPassword } from '@/lib/password';
 
 function slugify(input: string): string {

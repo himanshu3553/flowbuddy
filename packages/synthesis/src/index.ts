@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
-import type { SessionManifest, CapturedEvent } from '@sync/shared';
+import type { SessionManifest, CapturedEvent } from '@flowbuddy/shared';
 import { transcribe, type Transcript } from './transcribe';
 import { alignNarration } from './align';
 import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
-import { createLogger } from '@sync/logger';
+import { createLogger } from '@flowbuddy/logger';
 import type { ArtifactReader } from './types';
 
 const log = createLogger('synthesis');

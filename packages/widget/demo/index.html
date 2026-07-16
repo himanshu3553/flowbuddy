@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sync Copilot — embed demo</title>
+  <title>FlowBuddy Copilot — embed demo</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
     /* Full-width app chrome — makes the page feel like a real product under the floating panel. */
@@ -23,8 +23,8 @@
   <div class="topbar"><strong>Acme App</strong><span class="fake-user">jane@acme.com</span></div>
   <div class="hero">
     <h1>Dashboard</h1>
-    <p>This page simulates a customer's product. The Sync copilot is embedded with a single script tag (bottom-right). Click it and ask about a workflow you've <strong>approved for the copilot</strong>. Drag the open panel by its header; the header's expand icon grows it to near-full height (still floating and draggable).</p>
-    <p class="note">Before loading: build the widget (<code>pnpm --filter @sync/widget build</code>), run the API + Studio, approve a workflow, then set <code>data-sync-key</code> to a workspace token and <code>data-sync-api</code> to your API base below.</p>
+    <p>This page simulates a customer's product. The FlowBuddy copilot is embedded with a single script tag (bottom-right). Click it and ask about a workflow you've <strong>approved for the copilot</strong>. Drag the open panel by its header; the header's expand icon grows it to near-full height (still floating and draggable).</p>
+    <p class="note">Before loading: build the widget (<code>pnpm --filter @flowbuddy/widget build</code>), run the API + Studio, approve a workflow, then set <code>data-flowbuddy-key</code> to a workspace token and <code>data-flowbuddy-api</code> to your API base below.</p>
   </div>
   <!-- Edge-to-edge app-like content under the floating panel. -->
   <div class="cards">
@@ -37,12 +37,12 @@
   </div>
 
   <!-- The entire embed: one script tag. Appearance (accent/title/greeting/position/launcher) is
-       fetched live from the API (Studio → Copilot → Appearance) — add data-sync-* attrs only to
+       fetched live from the API (Studio → Copilot → Appearance) — add data-flowbuddy-* attrs only to
        deliberately override it per page (attrs win over the server config). -->
   <script
-    src="../dist/sync-copilot.js"
-    data-sync-api="http://localhost:8787"
-    data-sync-key="REPLACE_WITH_WORKSPACE_TOKEN"
+    src="../dist/flowbuddy-copilot.js"
+    data-flowbuddy-api="http://localhost:8787"
+    data-flowbuddy-key="REPLACE_WITH_WORKSPACE_TOKEN"
   ></script>
 </body>
 </html>

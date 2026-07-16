@@ -31,9 +31,9 @@
         <div className="group">
           <div className="gl">Dialog + StepItem</div>
           <div className="frame">
-            <Dialog title="How Sync works" subtitle="From one recording to live, trustworthy answers — in five steps." footer={callout} onClose={()=>{}}>
-              <StepItem index={1} icon="videocam" title="Record your product" desc="Click through your product while talking out loud. The Sync extension captures screen, voice and clicks." />
-              <StepItem index={2} icon="menu_book" title="Sync builds your knowledge base" desc="It turns that recording into clean, step-by-step workflows. No manual writing." />
+            <Dialog title="How FlowBuddy works" subtitle="From one recording to live, trustworthy answers — in five steps." footer={callout} onClose={()=>{}}>
+              <StepItem index={1} icon="videocam" title="Record your product" desc="Click through your product while talking out loud. The FlowBuddy extension captures screen, voice and clicks." />
+              <StepItem index={2} icon="menu_book" title="FlowBuddy builds your knowledge base" desc="It turns that recording into clean, step-by-step workflows. No manual writing." />
               <StepItem index={3} icon="task_alt" title="Approve what the copilot can use" desc="Review and approve with one click. The copilot only answers from what you approve." last />
             </Dialog>
           </div>
@@ -43,10 +43,10 @@
           <div style={{height:330,display:'flex'}}>
             <EmptyState media={true}
               title="No recordings yet"
-              desc="Install the Sync Recorder, click Connect with Sync, and narrate your way through a real workflow."
+              desc="Install the FlowBuddy Recorder, click Connect with FlowBuddy, and narrate your way through a real workflow."
               actions={<React.Fragment><Button>Install the recorder</Button><Button variant="secondary">How it works</Button></React.Fragment>}
               chips={['Screen','Voice','DOM','Events','Routes']}
-              footnote="Captured in sync · PII masked in your browser before upload" />
+              footnote="Captured in FlowBuddy · PII masked in your browser before upload" />
           </div>
         </div>
       </React.Fragment>

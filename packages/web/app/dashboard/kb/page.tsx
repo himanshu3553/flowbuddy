@@ -44,7 +44,7 @@ export default async function KnowledgeBasePage() {
               Your Knowledge Base is empty
             </h2>
             <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Record a session and Sync distils it into structured workflows
+              Record a session and FlowBuddy distils it into structured workflows
               here — each ready for a one-click approval to your copilot.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">

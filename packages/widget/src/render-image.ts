@@ -1,5 +1,5 @@
 // P2-M5 REASON — the image tier's LAZY renderer bundle (docs/phase-2-reason.md §3 #7). Built as a
-// SEPARATE file (sync-copilot-render.js) that the widget injects on the first diagnostic question
+// SEPARATE file (flowbuddy-copilot-render.js) that the widget injects on the first diagnostic question
 // when the founder enabled "Include page image" — html2canvas never rides in the base bundle.
 //
 // What it produces is a RECONSTRUCTION, not a photograph (§3.1): the visible viewport re-painted
@@ -32,7 +32,7 @@ function maskVisibleText(s: string, includeValues: boolean): string {
 
 function maskClone(doc: Document, includeValues: boolean): void {
   // The widget itself must never appear in the evidence.
-  doc.getElementById('sync-copilot-root')?.remove();
+  doc.getElementById('flowbuddy-copilot-root')?.remove();
 
   doc.querySelectorAll('input, textarea').forEach((el) => {
     const input = el as HTMLInputElement | HTMLTextAreaElement;
@@ -60,7 +60,7 @@ function maskClone(doc: Document, includeValues: boolean): void {
   }
 }
 
-(window as unknown as { SyncCopilotRender?: unknown }).SyncCopilotRender = {
+(window as unknown as { FlowBuddyRender?: unknown }).FlowBuddyRender = {
   async capture(opts: { includeValues?: boolean } = {}): Promise<string | null> {
     try {
       if (document.querySelectorAll('*').length > MAX_DOM_ELEMENTS) return null;

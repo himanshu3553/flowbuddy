@@ -1,5 +1,5 @@
 /**
- * @sync/logger — the ONE structured logger for every Node service (api, worker, synthesis, and the
+ * @flowbuddy/logger — the ONE structured logger for every Node service (api, worker, synthesis, and the
  * Studio's server side). Browser surfaces (widget, extension, web client components) use their own
  * tiny console loggers — pino is Node-only and must never reach a client bundle.
  *
@@ -11,7 +11,7 @@
  *   • Secrets are redacted (auth headers, tokens, keys, passwords) so they can't leak into logs.
  *
  * Usage:
- *   import { createLogger } from '@sync/logger';
+ *   import { createLogger } from '@flowbuddy/logger';
  *   const log = createLogger('worker');
  *   log.info({ sessionId }, 'processing session');
  *   log.warn('embedding failed — items stay keyword-only: %s', msg);
@@ -61,7 +61,7 @@ const REDACT_PATHS = [
   'secretAccessKey',
   'req.headers.authorization',
   'req.headers.cookie',
-  'req.headers["x-sync-key"]',
+  'req.headers["x-flowbuddy-key"]',
   '*.authorization',
   '*.password',
   '*.passwordHash',

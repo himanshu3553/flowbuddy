@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 export interface AuthedWorkspace {
   workspaceId: string;

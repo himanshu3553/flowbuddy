@@ -1,5 +1,5 @@
 {
-  "name": "@sync/web",
+  "name": "@flowbuddy/web",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -17,10 +17,10 @@
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-switch": "^1.1.2",
-    "@sync/db": "workspace:*",
-    "@sync/logger": "workspace:*",
-    "@sync/shared": "workspace:*",
-    "@sync/synthesis": "workspace:*",
+    "@flowbuddy/db": "workspace:*",
+    "@flowbuddy/logger": "workspace:*",
+    "@flowbuddy/shared": "workspace:*",
+    "@flowbuddy/synthesis": "workspace:*",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.34.0",
     "class-variance-authority": "^0.7.1",

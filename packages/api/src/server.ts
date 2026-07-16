@@ -1,9 +1,9 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
-import { prisma } from '@sync/db';
-import { sessionManifestSchema, type CapturedEvent, type SessionManifest } from '@sync/shared';
-import { createLogger } from '@sync/logger';
+import { prisma } from '@flowbuddy/db';
+import { sessionManifestSchema, type CapturedEvent, type SessionManifest } from '@flowbuddy/shared';
+import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 import { authWorkspace } from './auth';
 import {
@@ -14,7 +14,7 @@ import {
   sessionArtifactReader,
 } from './storage';
 import { synthesisQueue } from './queue';
-// Retrieval + history sanitizing come from the SHARED @sync/synthesis seam (P1-M5 no-leak) —
+// Retrieval + history sanitizing come from the SHARED @flowbuddy/synthesis seam (P1-M5 no-leak) —
 // the Studio preview uses the same functions, so both surfaces answer identically.
 import {
   answerFromKB,
@@ -30,7 +30,7 @@ import {
   type ReasonSnapshotElement,
   type ReasonWorkflow,
   type ExpectedStepEvidence,
-} from '@sync/synthesis';
+} from '@flowbuddy/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
 
@@ -43,7 +43,7 @@ const app = Fastify({ loggerInstance: createLogger('api') });
 app.addHook('onRequest', async (req, reply) => {
   reply.header('Access-Control-Allow-Origin', '*');
   reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Sync-Key');
+  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-FlowBuddy-Key');
   if (req.method === 'OPTIONS') return reply.code(204).send();
 });
 
@@ -162,7 +162,7 @@ async function copilotGate(
   key: string;
   origin: string | undefined;
 } | null> {
-  const key = (req.headers['x-sync-key'] as string | undefined) ?? '';
+  const key = (req.headers['x-flowbuddy-key'] as string | undefined) ?? '';
   const origin = req.headers.origin as string | undefined;
   const auth = await resolveCopilotKey(key, origin);
   if (!auth.ok) {
@@ -756,7 +756,7 @@ app.post('/v1/copilot/walkthrough', async (req, reply) => {
 /**
  * Widget appearance config — the widget fetches this at mount so Studio Appearance changes reach
  * every embed WITHOUT customers re-copying the snippet (the DB is the source of truth; explicit
- * `data-sync-*` attrs on the script tag still win as per-page overrides). Auth = the public key +
+ * `data-flowbuddy-*` attrs on the script tag still win as per-page overrides). Auth = the public key +
  * origin allowlist (same as /answer). `no-store` so a Studio save is visible on the next page load.
  * Nulls mean "not customized" — the widget falls back to its built-in defaults, which keeps the
  * default look defined in exactly one place (the widget runtime).
@@ -825,7 +825,7 @@ app
   .then(() =>
     app.log.info(
       { port: config.port, env: process.env.NODE_ENV || 'development' },
-      'Sync api listening',
+      'FlowBuddy api listening',
     ),
   )
   .catch((err) => {

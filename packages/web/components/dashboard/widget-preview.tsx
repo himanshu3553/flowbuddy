@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
  * The REAL-widget tester (Approach B). Renders the actual embeddable bundle — same artifact, same
  * public key, same API path an end-user hits — inside an iframe host page that stands in for a
  * customer's app page (`/dashboard/copilot/preview-frame`). The widget runs in preview mode
- * (`data-sync-preview`), so trying it never stamps embed detection or writes analytics.
+ * (`data-flowbuddy-preview`), so trying it never stamps embed detection or writes analytics.
  *
  * Appearance edits ride to the frame as query params, debounced — a reload per keystroke would
  * flicker; ~half a second after typing settles, the frame refreshes with the new look.

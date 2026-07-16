@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { getOrCreateCopilotKey } from '@/lib/copilot-settings';
 import { getCopilotMetrics } from '@/lib/copilot-metrics';
@@ -52,9 +52,9 @@ export default async function CopilotSettingsPage() {
     }),
   ]);
 
-  const apiBase = process.env.SYNC_API_URL || 'http://localhost:8787';
+  const apiBase = process.env.FLOWBUDDY_API_URL || 'http://localhost:8787';
   const widgetSrc =
-    process.env.SYNC_WIDGET_URL || 'https://YOUR_WIDGET_HOST/sync-copilot.js';
+    process.env.FLOWBUDDY_WIDGET_URL || 'https://YOUR_WIDGET_HOST/flowbuddy-copilot.js';
   const primaryOrigin = allowedOrigins[0]
     ? originHost(allowedOrigins[0])
     : 'your site';

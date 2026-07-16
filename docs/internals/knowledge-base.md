@@ -37,7 +37,7 @@ caring how it was captured.** A step item is just retrievable knowledge.
 | [`synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | LLM per-workflow → clean steps ("A"). |
 | [`synthesis/redact.ts`](../../packages/synthesis/src/redact.ts) | Server-side PII backstop (Cut 1). |
 
-Runs as `pnpm --filter @sync/api worker`, `concurrency: 2`.
+Runs as `pnpm --filter @flowbuddy/api worker`, `concurrency: 2`.
 
 ---
 

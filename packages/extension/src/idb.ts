@@ -1,7 +1,7 @@
 // Minimal IndexedDB key/value store used by the background service worker to
 // buffer a recording so an interruption doesn't lose the session.
 
-const DB_NAME = 'sync-spike';
+const DB_NAME = 'flowbuddy-recorder';
 const STORE = 'kv';
 
 function openDb(): Promise<IDBDatabase> {

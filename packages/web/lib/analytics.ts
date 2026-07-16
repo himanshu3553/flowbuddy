@@ -1,4 +1,4 @@
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 /**
  * Analytics aggregations for the Studio Analytics page. These complement

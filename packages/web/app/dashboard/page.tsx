@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Check, Lock } from 'lucide-react';
 
 import { auth } from '@/auth';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { resolveCoverageGap } from '@/lib/copilot-actions';
 import { listCandidates } from '@/lib/candidates';
@@ -66,16 +66,16 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  // Chrome Web Store listing for the Sync Recorder. When set, the install CTA
+  // Chrome Web Store listing for the FlowBuddy Recorder. When set, the install CTA
   // opens the store ("Add to Chrome"); until the extension is published it
   // falls back to Settings (where the token + load-unpacked steps live).
-  const extensionStoreUrl = process.env.SYNC_EXTENSION_URL?.trim();
+  const extensionStoreUrl = process.env.FLOWBUDDY_EXTENSION_URL?.trim();
 
   const steps = [
     {
       done: tokenCount > 0,
-      title: 'Install the Sync Recorder',
-      desc: 'Chrome extension · one-click “Connect with Sync”',
+      title: 'Install the FlowBuddy Recorder',
+      desc: 'Chrome extension · one-click “Connect with FlowBuddy”',
       cta: {
         label: 'Install Chrome Extension',
         href: extensionStoreUrl || '/dashboard/settings',

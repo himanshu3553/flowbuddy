@@ -11,12 +11,12 @@
  * before real users need these emails.
  */
 
-import { createLogger } from '@sync/logger';
+import { createLogger } from '@flowbuddy/logger';
 
 const log = createLogger('web:email');
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'Sync <onboarding@resend.dev>';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'FlowBuddy <onboarding@resend.dev>';
 
 /** Whether real email delivery is configured — gates the verification requirement. */
 export const emailEnabled = Boolean(RESEND_API_KEY);
@@ -53,7 +53,7 @@ export async function sendEmail(input: {
   }
 }
 
-/** Minimal branded (Sync indigo) single-CTA email shell. */
+/** Minimal branded (FlowBuddy indigo) single-CTA email shell. */
 function authEmail(heading: string, body: string, cta: { label: string; url: string }): { html: string; text: string } {
   const html = `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f4f5f9;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c2030;">
   <div style="max-width:440px;margin:0 auto;background:#ffffff;border:1px solid #e4e6ef;border-radius:12px;padding:32px;">
@@ -72,18 +72,18 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   const url = `${baseUrl}/verify-email?token=${token}`;
   const { html, text } = authEmail(
     'Verify your email',
-    'Welcome to Sync! Confirm this email address to activate your account. This link is valid for 24 hours.',
+    'Welcome to FlowBuddy! Confirm this email address to activate your account. This link is valid for 24 hours.',
     { label: 'Verify email', url },
   );
-  return sendEmail({ to, subject: 'Verify your email — Sync Studio', html, text });
+  return sendEmail({ to, subject: 'Verify your email — FlowBuddy Studio', html, text });
 }
 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<boolean> {
   const url = `${baseUrl}/reset-password?token=${token}`;
   const { html, text } = authEmail(
     'Reset your password',
-    'We received a request to reset your Sync Studio password. This link is valid for 1 hour. If you didn’t ask for this, you can safely ignore this email.',
+    'We received a request to reset your FlowBuddy Studio password. This link is valid for 1 hour. If you didn’t ask for this, you can safely ignore this email.',
     { label: 'Reset password', url },
   );
-  return sendEmail({ to, subject: 'Reset your password — Sync Studio', html, text });
+  return sendEmail({ to, subject: 'Reset your password — FlowBuddy Studio', html, text });
 }

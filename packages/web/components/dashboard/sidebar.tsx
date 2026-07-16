@@ -18,7 +18,7 @@ export function Sidebar({
       <div className="flex items-center gap-2.5 px-2 pb-4">
         <span className="h-[26px] w-[26px] rounded-lg bg-primary-gradient-logo shadow-[0_2px_8px_rgba(58,80,221,0.35)]" />
         <span className="text-base font-extrabold tracking-tight text-ink">
-          Sync
+          FlowBuddy
         </span>
       </div>
       <button

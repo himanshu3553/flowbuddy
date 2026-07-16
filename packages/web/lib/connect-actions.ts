@@ -1,6 +1,6 @@
 'use server';
 
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { auth } from '@/auth';
 import { createApiToken } from '@/lib/tokens';
 
@@ -21,13 +21,13 @@ export async function connectExtension(): Promise<
 > {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return { ok: false, error: 'Please sign in to Sync Studio first.' };
+  if (!userId) return { ok: false, error: 'Please sign in to FlowBuddy Studio first.' };
 
   const ws = await prisma.workspace.findFirst({ where: { ownerId: userId } });
   if (!ws) return { ok: false, error: 'No workspace found for your account.' };
 
-  const token = await createApiToken(ws.id, 'Sync Recorder extension');
-  const apiBaseUrl = process.env.SYNC_API_URL || 'http://localhost:8787';
+  const token = await createApiToken(ws.id, 'FlowBuddy Recorder extension');
+  const apiBaseUrl = process.env.FLOWBUDDY_API_URL || 'http://localhost:8787';
   return {
     ok: true,
     payload: { token, apiBaseUrl, email: session.user?.email ?? '', org: ws.name },

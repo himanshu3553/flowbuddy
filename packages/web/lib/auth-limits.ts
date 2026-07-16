@@ -22,11 +22,11 @@ const MAX_EMAIL_REQ_PER_EMAIL = 3;
 const MAX_EMAIL_REQ_PER_IP = 10;
 
 const g = globalThis as unknown as {
-  __syncAuthFails?: Map<string, Bucket>;
-  __syncAuthEmailReqs?: Map<string, Bucket>;
+  __flowbuddyAuthFails?: Map<string, Bucket>;
+  __flowbuddyAuthEmailReqs?: Map<string, Bucket>;
 };
-const fails = (g.__syncAuthFails ??= new Map());
-const emailReqs = (g.__syncAuthEmailReqs ??= new Map());
+const fails = (g.__flowbuddyAuthFails ??= new Map());
+const emailReqs = (g.__flowbuddyAuthEmailReqs ??= new Map());
 
 function bump(map: Map<string, Bucket>, key: string, now: number): number {
   const b = map.get(key);

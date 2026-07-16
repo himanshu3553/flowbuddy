@@ -2,7 +2,7 @@
  * Copilot appearance (host branding) — shared, pure helpers used by both the Studio controls and the
  * live preview. Since 2026-07-07 the embedded widget fetches its look from `GET /v1/copilot/config`
  * (the DB is the source of truth), so Studio Appearance changes reach every embed live — the snippet
- * carries only src/api/key and never needs re-copying. Explicit `data-sync-*` attrs remain supported
+ * carries only src/api/key and never needs re-copying. Explicit `data-flowbuddy-*` attrs remain supported
  * as deliberate per-page overrides. These defaults MUST still match the widget runtime defaults
  * (packages/widget/src) so the preview shows exactly what an uncustomized embed renders. An empty
  * stored value means "use the widget default".
@@ -21,12 +21,12 @@ export interface CopilotAppearance {
 }
 
 export const COPILOT_DEFAULTS = {
-  accent: '#3b50e0', // Sync indigo (widget --sc-accent)
-  title: 'Ask AI', // widget data-sync-title fallback
-  greeting: 'How can I help you today?', // widget data-sync-greeting fallback
+  accent: '#3b50e0', // FlowBuddy indigo (widget --fb-accent)
+  title: 'Ask AI', // widget data-flowbuddy-title fallback
+  greeting: 'How can I help you today?', // widget data-flowbuddy-greeting fallback
   position: 'right' as const,
   launcherStyle: 'icon' as LauncherStyle,
-  launcherText: 'Ask me anything', // widget data-sync-launcher-text fallback
+  launcherText: 'Ask me anything', // widget data-flowbuddy-launcher-text fallback
 };
 
 export const LAUNCHER_STYLES: { value: LauncherStyle; label: string }[] = [
@@ -73,7 +73,7 @@ export function buildSnippet(opts: { widgetSrc: string; apiBase: string; publicK
   const { widgetSrc, apiBase, publicKey } = opts;
   return [
     `<script src="${widgetSrc}"`,
-    `  data-sync-api="${apiBase}"`,
-    `  data-sync-key="${publicKey}"`,
+    `  data-flowbuddy-api="${apiBase}"`,
+    `  data-flowbuddy-key="${publicKey}"`,
   ].join('\n') + '></script>';
 }

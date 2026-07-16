@@ -1,5 +1,5 @@
 // Popup UI — a state machine (disconnected · idle · recording[/paused] · uploading · retry) per the
-// Sync Recorder design (F10–F13). Real data throughout: workspace identity + live (pause-aware) timer,
+// FlowBuddy Recorder design (F10–F13). Real data throughout: workspace identity + live (pause-aware) timer,
 // per-workflow counts, a live mic meter (getUserMedia analyser), and determinate upload progress.
 // The only deliberate placeholder is the "Mask PII" switch — masking itself isn't built yet, so it
 // stays visually ON / "always on" rather than pretending to toggle.
@@ -317,7 +317,7 @@ function setUploadUI(pct: number, ph?: PhaseState): void {
     // 0 / -1: no bytes moving yet (or an HTTP/1.1 fallback with no byte progress). If this stage
     // has been sitting a while, the honest explanation is a cold-starting server, not a hang.
     const stalled = ph?.at != null && Date.now() - ph.at > 8000;
-    setBar(true, stalled ? 'Waking the Sync server — this can take a minute…' : 'Uploading securely…', pct === -1 ? '…' : '', '');
+    setBar(true, stalled ? 'Waking the FlowBuddy server — this can take a minute…' : 'Uploading securely…', pct === -1 ? '…' : '', '');
   }
 }
 

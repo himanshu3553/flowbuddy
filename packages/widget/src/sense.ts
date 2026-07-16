@@ -158,7 +158,7 @@ export function findAlertSurfaces(max = 8): Element[] {
   const out: Element[] = [];
   const push = (el: Element): void => {
     if (out.length >= max) return;
-    if (!isVisible(el) || el.closest('#sync-copilot-root')) return;
+    if (!isVisible(el) || el.closest('#flowbuddy-copilot-root')) return;
     if ((el.textContent ?? '').trim().length < 2) return;
     if (out.some((c) => c.contains(el) || el.contains(c))) return; // outermost wins
     out.push(el);
@@ -307,7 +307,7 @@ export async function ensureShard(
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetch(`${apiBase}/v1/copilot/sense-plan?route=${encodeURIComponent(k)}`, {
-      headers: { 'X-Sync-Key': key },
+      headers: { 'X-FlowBuddy-Key': key },
       signal: ctl.signal,
     });
     if (!res.ok) throw new Error(`sense-plan ${res.status}`);
@@ -377,7 +377,7 @@ export function spotlight(root: ShadowRoot, target: Element, opts?: { sticky?: b
     /* older engines: highlight where it is */
   }
   const box = document.createElement('div');
-  box.className = 'sc-spotlight';
+  box.className = 'fb-spotlight';
   root.appendChild(box);
   const reposition = () => {
     if (!target.isConnected) return clearSpotlight(true); // a gone target is gone, sticky or not

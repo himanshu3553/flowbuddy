@@ -13,7 +13,7 @@ prod too; this doc is about the *production* configuration and process.
 | Environment | Where | Branch | Config | Purpose |
 |---|---|---|---|---|
 | **Local dev** | your machine | any | `docker-compose` (Postgres + Redis + MinIO) + `pnpm dev` per package — [`dev-setup.md`](dev-setup.md) | day-to-day development |
-| **Cloud dev / staging** | Render, free tier | `dev` | the original `sync-*` services ([`deploy-render.md`](deploy-render.md)); free Postgres self-deletes every 30 days — treat as disposable | cloud E2E testing (recorder → prod-like URLs), demoing |
+| **Cloud dev / staging** | Render, free tier | `dev` | the original `flowbuddy-dev-*` services ([`deploy-render.md`](deploy-render.md)); free Postgres self-deletes every 30 days — treat as disposable | cloud E2E testing (recorder → prod-like URLs), demoing |
 | **Production** | Render, paid | `main` | the `flowbuddy-*` services below, fronted by **FlowBuddyAI.com** custom domains | the live product |
 
 `main` receives code only by explicit fast-forward from `dev`, so **every push to `main` is a
@@ -24,14 +24,14 @@ production deploy** (Render auto-deploys the connected branch).
 ## 2. Production topology + cost (locked 2026-07-16)
 
 **~$20/month.** Seven resources, distinct `flowbuddy-*` names (so they coexist with the dev
-`sync-*` services in the same Render workspace):
+`flowbuddy-dev-*` services in the same Render workspace):
 
 | Resource | Type | Plan | Custom domain | Role |
 |---|---|---|---|---|
 | `flowbuddy-landing` | Static site | **Free** | `flowbuddyai.com` + `www` | marketing landing page (`packages/landing`) |
 | `flowbuddy-web` | Web (Docker) | **Starter $7** | `app.flowbuddyai.com` | the Studio (Next.js) |
 | `flowbuddy-api` | Web (Docker) | **Starter $7** | `api.flowbuddyai.com` | copilot answer API + ingestion **+ the embedded synthesis worker** (`start:all`) |
-| `flowbuddy-widget` | Static site | **Free** | `widget.flowbuddyai.com` | serves `sync-copilot.js` + `sync-copilot-render.js` (both, always, from one build) |
+| `flowbuddy-widget` | Static site | **Free** | `widget.flowbuddyai.com` | serves `flowbuddy-copilot.js` + `flowbuddy-copilot-render.js` (both, always, from one build) |
 | `flowbuddy-db` | PostgreSQL | **Basic-256mb $6** (+$0.30/GB extra storage) | — | the database (durable — no 30-day deletion) |
 | `flowbuddy-redis` | Key Value | **Free** | — | BullMQ synthesis queue |
 | `flowbuddy-r2` | Env group | — | — | shared Cloudflare R2 credentials (prod bucket) |
@@ -79,7 +79,7 @@ hostnames may carry a random suffix (the [suffix gotcha](deploy-render.md#8-fix-
 copy the real ones from the dashboard.
 
 **Why custom domains are set up BEFORE onboarding anyone:** the Studio-generated embed snippet
-bakes `SYNC_API_URL` + `SYNC_WIDGET_URL` into every customer's `<script>` tag. Whatever URL is live
+bakes `FLOWBUDDY_API_URL` + `FLOWBUDDY_WIDGET_URL` into every customer's `<script>` tag. Whatever URL is live
 when a customer embeds is a URL you serve forever. With all env URLs set to the custom domains from
 day one, `onrender.com` never leaks into a snippet — and the underlying Render service can be
 swapped later without breaking a single embed.
@@ -95,8 +95,8 @@ unmanaged — see the runbook step about detaching the old blueprint). Target sp
 databases:
   - name: flowbuddy-db
     plan: basic-256mb
-    databaseName: sync
-    user: sync
+    databaseName: flowbuddy
+    user: flowbuddy
 
 envVarGroups:
   - name: flowbuddy-r2
@@ -121,7 +121,7 @@ services:
     plan: starter
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
-    dockerCommand: pnpm --filter @sync/api start:all
+    dockerCommand: pnpm --filter @flowbuddy/api start:all
     envVars:
       - fromGroup: flowbuddy-r2
       - { key: PORT, value: 8787 }
@@ -132,7 +132,7 @@ services:
       - { key: TRANSCRIBE_MODEL, value: whisper-1 }
       - { key: SYNTH_MODEL, value: gpt-4o }
       - { key: EMBED_MODEL, value: text-embedding-3-small }   # must stay 1536-dim (vector(1536))
-      - { key: SYNC_STUDIO_URL, sync: false }                 # https://app.flowbuddyai.com
+      - { key: FLOWBUDDY_STUDIO_URL, sync: false }                 # https://app.flowbuddyai.com
       # - { key: REASON_MODEL, sync: false }                  # optional stronger vision model for P2-M5
 
   # Studio — paid so customer dashboards never cold-start
@@ -150,24 +150,24 @@ services:
       - { key: AUTH_SECRET, sync: false }
       - { key: AUTH_URL, sync: false }            # https://app.flowbuddyai.com
       - { key: AUTH_TRUST_HOST, value: true }
-      - { key: SYNC_API_URL, sync: false }        # https://api.flowbuddyai.com
-      - { key: SYNC_WIDGET_URL, sync: false }     # https://widget.flowbuddyai.com/sync-copilot.js
+      - { key: FLOWBUDDY_API_URL, sync: false }        # https://api.flowbuddyai.com
+      - { key: FLOWBUDDY_WIDGET_URL, sync: false }     # https://widget.flowbuddyai.com/flowbuddy-copilot.js
       - { key: RESEND_API_KEY, sync: false }
       - { key: EMAIL_FROM, sync: false }          # no-reply@flowbuddyai.com (Resend-verified domain)
-      - { key: SYNC_EXTENSION_URL, sync: false }  # Chrome Web Store listing URL
+      - { key: FLOWBUDDY_EXTENSION_URL, sync: false }  # Chrome Web Store listing URL
 
   # Widget host — publishes BOTH bundles from one build
   - type: web
     name: flowbuddy-widget
     runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @sync/widget build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @flowbuddy/widget build
     staticPublishPath: packages/widget/dist
 
   # Marketing landing page (packages/landing — static, free)
   - type: web
     name: flowbuddy-landing
     runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @sync/landing build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @flowbuddy/landing build
     staticPublishPath: packages/landing/dist
 ```
 
@@ -180,14 +180,14 @@ built; if it ships as plain static files the build step collapses to a copy.)*
 |---|---|---|
 | `R2_*` | `flowbuddy-r2` group | the **prod** bucket `flowbuddy-artifacts` + its own Object R/W token — never share the dev bucket, so dev resets can't touch prod artifacts |
 | `OPENAI_API_KEY` | `flowbuddy-api` | your `sk-…` |
-| `SYNC_STUDIO_URL` | `flowbuddy-api` | `https://app.flowbuddyai.com` (Studio origin allowlist-exemption for the real-widget tester) |
+| `FLOWBUDDY_STUDIO_URL` | `flowbuddy-api` | `https://app.flowbuddyai.com` (Studio origin allowlist-exemption for the real-widget tester) |
 | `AUTH_SECRET` | `flowbuddy-web` | fresh `openssl rand -hex 32` — do NOT reuse dev's |
 | `AUTH_URL` | `flowbuddy-web` | `https://app.flowbuddyai.com` |
-| `SYNC_API_URL` | `flowbuddy-web` | `https://api.flowbuddyai.com` |
-| `SYNC_WIDGET_URL` | `flowbuddy-web` | `https://widget.flowbuddyai.com/sync-copilot.js` |
+| `FLOWBUDDY_API_URL` | `flowbuddy-web` | `https://api.flowbuddyai.com` |
+| `FLOWBUDDY_WIDGET_URL` | `flowbuddy-web` | `https://widget.flowbuddyai.com/flowbuddy-copilot.js` |
 | `RESEND_API_KEY` | `flowbuddy-web` | **required in prod** — the default `onboarding@resend.dev` sender only delivers to the Resend account owner, so real signups would never get verification/reset emails |
 | `EMAIL_FROM` | `flowbuddy-web` | `no-reply@flowbuddyai.com` (after verifying `flowbuddyai.com` in Resend) |
-| `SYNC_EXTENSION_URL` | `flowbuddy-web` | the Chrome Web Store listing URL |
+| `FLOWBUDDY_EXTENSION_URL` | `flowbuddy-web` | the Chrome Web Store listing URL |
 
 Because every URL secret is a custom domain, the onrender suffix gotcha only matters for DNS CNAME
 targets — never for env vars or snippets.
@@ -203,7 +203,7 @@ targets — never for env vars or snippets.
 
 **B. Detach the old dev blueprint — BEFORE the new render.yaml reaches `dev`.** The existing
 blueprint instance watches `dev`; if it syncs the rewritten file it will try to create the
-`flowbuddy-*` resources and drop the `sync-*` ones. Render dashboard → the old Blueprint → disable
+`flowbuddy-*` resources and drop the `flowbuddy-dev-*` ones. Render dashboard → the old Blueprint → disable
 auto-sync (or delete the blueprint instance — deleting it keeps the services running and they keep
 auto-deploying code from `dev`; only infra-from-yaml management stops).
 
@@ -219,7 +219,7 @@ migrations (including `CREATE EXTENSION vector`) from scratch; there is no pendi
 
 **E. Domains:** on each service add its custom domain(s) (§3) → create the DNS records at
 Cloudflare (grey cloud) → wait for certs to issue → verify `https://app.flowbuddyai.com` renders
-the sign-in page and `https://widget.flowbuddyai.com/sync-copilot.js` + `/sync-copilot-render.js`
+the sign-in page and `https://widget.flowbuddyai.com/flowbuddy-copilot.js` + `/flowbuddy-copilot-render.js`
 both serve. Do this **before** creating any account — `AUTH_URL` already points at the custom
 domain, so sign-in via the onrender URL would mis-callback.
 
@@ -227,11 +227,11 @@ domain, so sign-in via the onrender URL would mis-callback.
 a rebuild + resubmission (the packaged-but-unsubmitted v0.4.0 zip bakes the OLD dev URL — don't
 upload it as-is):
 ```bash
-STUDIO_URL="https://app.flowbuddyai.com,https://sync-web-uir8.onrender.com,http://localhost:3000" \
-  pnpm --filter @sync/extension build
+STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web-uir8.onrender.com,http://localhost:3000" \
+  pnpm --filter @flowbuddy/extension build
 ```
 Bump the version, zip from `dist/`, submit, log it in [`extension-releases.md`](extension-releases.md),
-set `SYNC_EXTENSION_URL` on `flowbuddy-web`, then re-run a plain build to restore the localhost dev
+set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-web`, then re-run a plain build to restore the localhost dev
 `dist/`. Keep the old dev URL in the list during the transition.
 
 **G. Seed + smoke test:** the prod DB is empty — create the founder account (email verification
@@ -263,9 +263,9 @@ custom domains make every underlying swap invisible to customers.
 
 **Step 1 — split the worker out (~$27/mo).**
 *Trigger:* synthesis jobs dying on deploys becomes annoying, or answer latency dips while jobs run.
-- New `type: worker` service `flowbuddy-worker`, `dockerCommand: pnpm --filter @sync/api worker`, Starter plan.
-- `flowbuddy-api` `dockerCommand` → plain `pnpm --filter @sync/api start`.
-- Move migrations to `preDeployCommand: pnpm --filter @sync/db exec prisma migrate deploy` on
+- New `type: worker` service `flowbuddy-worker`, `dockerCommand: pnpm --filter @flowbuddy/api worker`, Starter plan.
+- `flowbuddy-api` `dockerCommand` → plain `pnpm --filter @flowbuddy/api start`.
+- Move migrations to `preDeployCommand: pnpm --filter @flowbuddy/db exec prisma migrate deploy` on
   `flowbuddy-api` (paid plans support it). *(The standalone-worker blueprint shape is in git
   history — commit `3488326`.)*
 
@@ -294,10 +294,10 @@ Postgres-backed queue (pg-boss) and delete Redis entirely (a small project: `pac
 
 ## 8. Open items
 
-- **Branding:** app/widget/extension say "Sync"; the domain says FlowBuddyAI. Decide whether the
-  landing page introduces *FlowBuddy* while the app keeps "Sync", or a rename pass runs through
-  Studio/widget/extension strings. (The widget title is per-workspace configurable either way.)
+- **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). The full
+  Sync→FlowBuddy rename ran through code + docs on `dev` (packages, embed contract, env vars, service
+  names, Studio/widget/extension strings). (The widget title stays per-workspace configurable.)
 - **`packages/landing`** — to build (content: hero · how-it-works · features · CTA; indigo design
   system; optionally dogfood the live widget as the demo).
-- **Walkthrough (P4-M0)** lives on `feature-walkthrough` (`711a18b`), not `main` — merges later;
-  its 2 migrations auto-apply on the next prod deploy after merge.
+- **Walkthrough (P4-M0)** merged to `main` 2026-07-17 (branches synced at `bf315b6`); its 2 migrations
+  auto-apply on the first prod deploy.

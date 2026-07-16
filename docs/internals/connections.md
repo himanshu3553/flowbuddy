@@ -18,15 +18,15 @@ Seven runtime pieces and one shared substrate:
 | 4 | **Copilot endpoints** | Routes on the same Fastify service | [copilot.md](copilot.md) |
 | 5 | **Widget** | `<script>` embedded in the customer's app | [widget.md](widget.md) |
 | 6 | **Studio** | Next.js web app, the operator console | [studio.md](studio.md) |
-| 7 | **Synthesis engine** | A library (`@sync/synthesis`), not a process — called by the worker (KB) and the API (copilot) | covered inside (3) and (4) |
+| 7 | **Synthesis engine** | A library (`@flowbuddy/synthesis`), not a process — called by the worker (KB) and the API (copilot) | covered inside (3) and (4) |
 | — | **Substrate** | Postgres + object storage + Redis | [data-model-and-storage.md](data-model-and-storage.md) |
 
 A subtle but important point: **#2, #3, and #4 are all the `api` package.** The HTTP service
 ([`server.ts`](../../packages/api/src/server.ts)) and the worker
 ([`worker.ts`](../../packages/api/src/worker.ts)) are two entrypoints of the same codebase; the
 copilot routes live *in* the HTTP service. They're separate **modules** conceptually (and separate
-processes at runtime — `pnpm --filter @sync/api dev` vs `... worker`), but they share the data layer
-and the `@sync/synthesis` library.
+processes at runtime — `pnpm --filter @flowbuddy/api dev` vs `... worker`), but they share the data layer
+and the `@flowbuddy/synthesis` library.
 
 ---
 
@@ -87,7 +87,7 @@ sequenceDiagram
     participant L as LLM (OpenAI)
 
     E->>W: open chat · ask a question
-    W->>A: POST /v1/copilot/answer  (X-Sync-Key public key, {question, history, context.path})
+    W->>A: POST /v1/copilot/answer  (X-FlowBuddy-Key public key, {question, history, context.path})
     A->>A: resolve key → workspace · check origin allowlist · rate-limit
     A->>P: load CopilotApproval keys → fetch only APPROVED KnowledgeItems
     A->>A: hybrid rank (keyword ∪ pgvector via RRF) + the user's current-route signal
@@ -173,7 +173,7 @@ Studio origin and only relays same-origin messages, so a random site can't injec
 ### Seam C — Ingestion API → Worker (Redis/BullMQ, asynchronous) ⭐ the decoupling point
 
 - **Transport:** a BullMQ job on the `synthesis` queue (`SYNTHESIS_QUEUE` constant in
-  [`@sync/shared/jobs`](../../packages/shared/src/jobs.ts)).
+  [`@flowbuddy/shared/jobs`](../../packages/shared/src/jobs.ts)).
 - **Message:** `{ sessionId, workspaceId }` — *just pointers.* The worker re-reads the manifest from
   Postgres and the artifacts from object storage. The job carries no payload of its own.
 - **Why it matters:** this is the only async boundary in the system. It's what lets the upload return
@@ -204,7 +204,7 @@ via Next.js server actions hitting Prisma directly — Studio never calls the AP
   (P2 — route-sharded locator plan, fetched on panel open), and `POST /v1/copilot/walkthrough`
   (P4-M0 — run analytics events, fire-and-forget).
 - **Payload:** `{ question, history, context: { path, title } }` with the **embed key** in the
-  `X-Sync-Key` header.
+  `X-FlowBuddy-Key` header.
 - **Gate:** embed key + origin allowlist + rate limit.
 - **Result:** a grounded answer with citations, or an honest decline.
 
@@ -257,9 +257,9 @@ Three data shapes travel between modules. They're the actual "API" of the system
 
 | Contract | Defined in | Producer → Consumer | What it carries |
 |---|---|---|---|
-| **`SessionManifest`** (the capture contract) | [`@sync/shared/capture.ts`](../../packages/shared/src/capture.ts) + zod in [`schemas.ts`](../../packages/shared/src/schemas.ts) | Recorder → Ingestion → Worker | The whole raw recording: `app` meta, `events[]` (each with DOM-fingerprint `target`, `route`, `screenshot`/`dom` file refs, `postAction` settle), `markers[]`, `audio` ref. File refs are **relative paths**, resolved to object-storage keys server-side. |
-| **`DistilledStep`** (the KB step) | [`@sync/synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | Worker → `KnowledgeItem.data` → Studio & Copilot | `{ instruction, detail?, route, narration, screenshotFile, bbox }` — a clean, user-facing step with one curated screenshot. **Raw events are not persisted here.** |
-| **`CopilotKBItem`** | [`@sync/synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | Retrieval → answer engine | `{ id, sourceId, segmentIndex, segmentTitle, text, narration }` — the slimmed item shape the LLM grounds on and that becomes a citation. |
+| **`SessionManifest`** (the capture contract) | [`@flowbuddy/shared/capture.ts`](../../packages/shared/src/capture.ts) + zod in [`schemas.ts`](../../packages/shared/src/schemas.ts) | Recorder → Ingestion → Worker | The whole raw recording: `app` meta, `events[]` (each with DOM-fingerprint `target`, `route`, `screenshot`/`dom` file refs, `postAction` settle), `markers[]`, `audio` ref. File refs are **relative paths**, resolved to object-storage keys server-side. |
+| **`DistilledStep`** (the KB step) | [`@flowbuddy/synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | Worker → `KnowledgeItem.data` → Studio & Copilot | `{ instruction, detail?, route, narration, screenshotFile, bbox }` — a clean, user-facing step with one curated screenshot. **Raw events are not persisted here.** |
+| **`CopilotKBItem`** | [`@flowbuddy/synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | Retrieval → answer engine | `{ id, sourceId, segmentIndex, segmentTitle, text, narration }` — the slimmed item shape the LLM grounds on and that becomes a citation. |
 
 The capture contract is specced in prose in [`../phase-1-copilot.md`](../phase-1-copilot.md) §6; the
 distillation contract in [`../kb-step-distillation.md`](../kb-step-distillation.md).

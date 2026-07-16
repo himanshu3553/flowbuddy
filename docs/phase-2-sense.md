@@ -1,4 +1,4 @@
-# Sync — Phase 2: Sense (in-context help)
+# FlowBuddy — Phase 2: Sense (in-context help)
 
 > **Phase 2 makes the copilot know *where the user is*.** Today (Phase 1) the copilot biases answers by page route (P1-M8). Sense sharpens that to **workflow + step**: an end-user stuck on step 3 of a 5-step approved workflow opens the copilot and asks — Sense captures the context **at that moment** (route + a **read-only probe** of approved workflows' captured locators against the live page), localizes them to *workflow W, step k*, and the answer **meets them there**: unstick step 3 first, then the path to done. Internal name **Sense**; descriptive name **in-context help**. Roadmap/status: [`roadmap.md`](roadmap.md) §3.
 
@@ -180,10 +180,10 @@ POST /v1/copilot/answer  + context { route, hypotheses[] }               (server
 
 **E2E hardening — three fixes found during user verification (2026-07-08/09):**
 1. **UUID hyphens** — the `/answer` wire validation rejected hypothesis `sourceId`s containing hyphens (`KnowledgeSource` ids are `randomUUID()`, not cuids) → every hypothesis was silently dropped server-side. Diagnostic tell: `CopilotQuery.senseUsed='none'` while the widget probed fine.
-2. **Show-me key mismatch** — the highlight looked up the probed element by the step number the *LLM echoed* (often the step it recommends *next*); `position.step` is now always the **probe's** step (also the honest value for friction analytics), plus a prefix-fallback element lookup and `data-sync-debug` narration of the show-me path. *(Also: the show-me/Sense config reaches an embed only on page load — flipping a Studio toggle needs a host-page reload.)*
+2. **Show-me key mismatch** — the highlight looked up the probed element by the step number the *LLM echoed* (often the step it recommends *next*); `position.step` is now always the **probe's** step (also the honest value for friction analytics), plus a prefix-fallback element lookup and `data-flowbuddy-debug` narration of the show-me path. *(Also: the show-me/Sense config reaches an embed only on page load — flipping a Studio toggle needs a host-page reload.)*
 3. **Conversational position drift** — on "then?" follow-ups the model advanced through steps while the page never changed (it read "at step k" as "done with step k"). Hypotheses now carry the current step's **instruction resolved server-side from the KB** ("CURRENT step — NOT yet completed — is step 2: 'Enter your full name'"), and the prompt rules state the position is **re-measured from the live page every message and beats the conversation**: never advance from chat flow alone; same-step follow-up → re-anchor gently; refer to steps by instruction, not number.
 
-⚠️ Ops note: `tsx watch` does **not** hot-reload workspace-package (`@sync/synthesis`) changes — restart the api after engine edits.
+⚠️ Ops note: `tsx watch` does **not** hot-reload workspace-package (`@flowbuddy/synthesis`) changes — restart the api after engine edits.
 
 **Where everything lives:**
 
@@ -198,7 +198,7 @@ POST /v1/copilot/answer  + context { route, hypotheses[] }               (server
 | **P2-M4** friction | `senseLogFields` on every `CopilotQuery` (`used \| ignored \| none`) + `web/lib/analytics.ts` `getStepFriction` + the **"Where users get stuck"** card on `/dashboard/analytics` |
 | Studio toggles | Copilot → Settings → **"Sense — in-context help"** section (`copilot-workspace.tsx`): Enable Sense + "Show me" highlight (disabled while Sense is off), success/error toasts (citation toggle retrofitted with toasts too); actions in `web/lib/copilot-settings-actions.ts` |
 
-**Build-time decisions (within the locked design):** Sense defaults ON (read-only, harmless), show-me defaults OFF (draws on the host page); the plan compiles **on demand** with a 60s server cache instead of persisting at approval time (no invalidation machinery; approval flips visible ≤60s + widget shard TTL); an **empty shard sends no sense context at all** (no workflows near the route ≠ drift — `senseUsed='none'` is reserved for "candidates existed, nothing matched"); preview mode (`data-sync-preview`) skips Sense entirely. **Still open for later cuts:** friction-frequency in the hub-page shard ranking (needs accumulated P2-M4 data), SPA settle-check before probing, `postRoute` progression evidence in the scorer.
+**Build-time decisions (within the locked design):** Sense defaults ON (read-only, harmless), show-me defaults OFF (draws on the host page); the plan compiles **on demand** with a 60s server cache instead of persisting at approval time (no invalidation machinery; approval flips visible ≤60s + widget shard TTL); an **empty shard sends no sense context at all** (no workflows near the route ≠ drift — `senseUsed='none'` is reserved for "candidates existed, nothing matched"); preview mode (`data-flowbuddy-preview`) skips Sense entirely. **Still open for later cuts:** friction-frequency in the hub-page shard ranking (needs accumulated P2-M4 data), SPA settle-check before probing, `postRoute` progression evidence in the scorer.
 
 ---
 

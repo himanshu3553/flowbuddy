@@ -28,7 +28,7 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-2">
             <MobileNav />
             <span className="text-sm font-semibold tracking-tight">
-              Sync Studio
+              FlowBuddy Studio
             </span>
           </div>
           <UserMenu email={session.user.email ?? ''} />

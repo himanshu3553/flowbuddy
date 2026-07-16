@@ -1,4 +1,4 @@
-# Sync — Phase 5: Converse (the goal-based agent)
+# FlowBuddy — Phase 5: Converse (the goal-based agent)
 
 > **Phase 5 turns the copilot from a question-answerer into a goal agent.** It understands what the user is trying to *accomplish* — from the conversation, the founder's product understanding, the approved workflows, and where the user is standing right now — confirms it, and then helps at the right intensity through a **three-tier ladder**: **Tell** (the SOP, step by step, in chat) → **Guide** ("follow me" — the guided walkthrough) → **Do** (confirmed, end-to-end execution, narrated live in the chat while it works across pages). One goal, three delivery modes, one grounded knowledge spine. **Division of labor with Phase 4: Phase 5 is the brain (goal → plan → parameters → consent → narration → chaining), Phase 4 is the hands (execute one approved workflow, step by step, safely).**
 

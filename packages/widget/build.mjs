@@ -7,8 +7,8 @@ const watch = process.argv.includes('--watch');
 
 /**
  * Two self-contained IIFE bundles:
- *  - sync-copilot.js        — the widget the customer embeds (one <script>).
- *  - sync-copilot-render.js — the P2-M5 Reason image-tier renderer (html2canvas + clone masking),
+ *  - flowbuddy-copilot.js        — the widget the customer embeds (one <script>).
+ *  - flowbuddy-copilot-render.js — the P2-M5 Reason image-tier renderer (html2canvas + clone masking),
  *    LAZY-loaded by the widget on the first diagnostic question when the founder enabled the page
  *    image — it must never ride in the base bundle. Deploy it NEXT TO the widget bundle (the
  *    widget derives its URL as a sibling file of its own script src).
@@ -21,8 +21,8 @@ const shared = {
   logLevel: 'info',
 };
 const bundles = [
-  { ...shared, entryPoints: [path.join(__dirname, 'src/index.ts')], outfile: path.join(__dirname, 'dist/sync-copilot.js') },
-  { ...shared, entryPoints: [path.join(__dirname, 'src/render-image.ts')], outfile: path.join(__dirname, 'dist/sync-copilot-render.js') },
+  { ...shared, entryPoints: [path.join(__dirname, 'src/index.ts')], outfile: path.join(__dirname, 'dist/flowbuddy-copilot.js') },
+  { ...shared, entryPoints: [path.join(__dirname, 'src/render-image.ts')], outfile: path.join(__dirname, 'dist/flowbuddy-copilot-render.js') },
 ];
 
 if (watch) {
@@ -30,8 +30,8 @@ if (watch) {
     const ctx = await context(opts);
     await ctx.watch();
   }
-  console.log('watching… -> dist/sync-copilot.js + dist/sync-copilot-render.js');
+  console.log('watching… -> dist/flowbuddy-copilot.js + dist/flowbuddy-copilot-render.js');
 } else {
   await Promise.all(bundles.map((opts) => build(opts)));
-  console.log('built -> dist/sync-copilot.js + dist/sync-copilot-render.js');
+  console.log('built -> dist/flowbuddy-copilot.js + dist/flowbuddy-copilot-render.js');
 }

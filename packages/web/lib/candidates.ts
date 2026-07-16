@@ -1,4 +1,4 @@
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { approvedSegmentKeys } from './copilot-approvals';
 
 /** A workflow candidate = one persisted segment (Option C) — the unit the founder approves for

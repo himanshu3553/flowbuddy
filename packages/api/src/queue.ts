@@ -1,6 +1,6 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import { SYNTHESIS_QUEUE } from '@sync/shared';
-import { createLogger } from '@sync/logger';
+import { SYNTHESIS_QUEUE } from '@flowbuddy/shared';
+import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 
 const log = createLogger('synthesis-queue');

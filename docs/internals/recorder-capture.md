@@ -149,7 +149,7 @@ chronological order** for free at assembly time.
 Before a typed value ever leaves the browser, `maskValue` replaces it with `••••••` when the field is
 sensitive: `password`/`email`/`tel` input types, sensitive `autocomplete` tokens
 (`cc-number`, `cc-csc`, `current-password`, `one-time-code`, …), name/id patterns
-(`*card*`, `*cvv*`, `*ssn*`, `*secret*`, `*token*`), or an explicit **`data-sync-redact`** opt-in the
+(`*card*`, `*cvv*`, `*ssn*`, `*secret*`, `*token*`), or an explicit **`data-flowbuddy-redact`** opt-in the
 host app can put on any field. Non-sensitive values are clipped to 200 chars.
 
 This is **Cut 1, client half**. The [KB build](knowledge-base.md) adds a *server* backstop
@@ -237,7 +237,7 @@ and determinate upload-% are all **real** now (formerly placeholders): the meter
 **Honest mid-pipeline states (v0.3.0):** the popup routes on the persisted `phase` at open, so a
 popup reopened mid-upload lands back on the **uploading** view (never a false idle) with stage-true
 labels — *Saving narration…* (stop → audio flush), *Uploading securely… N%*, *Finishing…*, and after
-~8 s with no bytes moving, *Waking the Sync server — this can take a minute…* (the free-tier
+~8 s with no bytes moving, *Waking the FlowBuddy server — this can take a minute…* (the free-tier
 cold-start, named instead of a mute spinner). The idle view's **Recent** row is persistent and live:
 it polls `GET /v1/sessions/:id` (4 s, only while the popup is open) to show
 `uploaded · queued → processing… → ready / processing failed`, with a **View in Studio ↗** deep link
@@ -249,7 +249,7 @@ status (timer, step count, mic meter) are reachable without opening the popup. I
 `getState` and sends the same background commands; it **survives Pause** and **re-appears after a
 full-page nav** (its state is polled, not tied to the per-frame capture), and is draggable. It does
 not replace the popup. **On Stop it doesn't vanish** (v0.3.0): it collapses into a **status pill**
-that mirrors the persisted `phase` (*Saving narration… → Uploading… N% → ✓ Uploaded — Sync is
+that mirrors the persisted `phase` (*Saving narration… → Uploading… N% → ✓ Uploaded — FlowBuddy is
 processing it*, or the failure variant pointing at the extension), then removes itself — the pill
 also appears when Stop came from the popup, since the user's attention is on the page either way.
 

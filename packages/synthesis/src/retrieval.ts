@@ -1,4 +1,4 @@
-import { createLogger } from '@sync/logger';
+import { createLogger } from '@flowbuddy/logger';
 import type { CopilotKBItem, CopilotTurn } from './copilot';
 import { embedTexts, toVectorLiteral, type EmbedOpts } from './embeddings';
 
@@ -27,7 +27,7 @@ const log = createLogger('retrieval');
  * unapproved rows starving the top-K candidate budget), and its ranking is only ever FUSED onto
  * the approved item list — returned items always come from the approved set alone.
  *
- * `@sync/synthesis` stays DB-free: callers inject their Prisma client, typed structurally as the
+ * `@flowbuddy/synthesis` stays DB-free: callers inject their Prisma client, typed structurally as the
  * tiny `RetrievalDb` subset below (`$queryRaw` included — PrismaClient satisfies it as-is).
  */
 

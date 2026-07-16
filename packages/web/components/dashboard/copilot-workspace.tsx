@@ -323,7 +323,7 @@ export function CopilotWorkspace({
     <p>Welcome to my app.</p>
 
 `;
-  const exampleSnippet = `    <!-- Sync copilot — paste right before </body> -->\n${indentedSnippet}`;
+  const exampleSnippet = `    <!-- FlowBuddy copilot — paste right before </body> -->\n${indentedSnippet}`;
   const exampleTail = `\n  </body>\n</html>`;
 
   // Public key, masked by default (keep the recognizable prefix, hide the secret-ish tail).
@@ -691,7 +691,7 @@ export function CopilotWorkspace({
                   <p className="text-xs text-muted-foreground">
                     Offer &ldquo;Walk me through it&rdquo; on positional answers —
                     highlights each remaining step and follows the user&rsquo;s
-                    progress. The user does everything; Sync never acts.
+                    progress. The user does everything; FlowBuddy never acts.
                   </p>
                 </div>
                 <Switch

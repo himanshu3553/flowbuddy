@@ -19,7 +19,7 @@ export interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonE
 }
 
 /**
- * The primary Sync Studio button. `primary` is the indigo CTA gradient; use
+ * The primary FlowBuddy Studio button. `primary` is the indigo CTA gradient; use
  * `secondary` for neutral actions, `soft` for low-emphasis brand actions,
  * `ghost` for tertiary. Pair with an `icon` (Material Symbol) or a record `dot`.
  *

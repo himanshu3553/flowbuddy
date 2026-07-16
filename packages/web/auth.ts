@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { verifyPassword } from '@/lib/password';
 import { emailEnabled } from '@/lib/email';
 

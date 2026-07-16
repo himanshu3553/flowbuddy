@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 export interface CopilotSettings {
   publicKey: string;

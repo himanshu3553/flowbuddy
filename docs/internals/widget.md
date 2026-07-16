@@ -1,7 +1,7 @@
 # Widget (embeddable copilot) — internals
 
 > **Module:** the embeddable script in [`packages/widget/`](../../packages/widget/), built to a single
-> `sync-copilot.js`. **Role:** the customer-facing surface of the copilot — the one `<script>` a SaaS
+> `flowbuddy-copilot.js`. **Role:** the customer-facing surface of the copilot — the one `<script>` a SaaS
 > drops into its app to give end-users an in-app help chat.
 
 ---
@@ -23,31 +23,31 @@ with the host page's styles or globals.
 | [`src/sense.ts`](../../packages/widget/src/sense.ts) | P2 Sense: sense-plan fetch/cache, the ask-time read-only locator probe + scorer, the show-me spotlight (sticky variant for the walkthrough), `findAlertSurfaces` (alert/error-surface detection incl. red-family text). |
 | [`src/reason.ts`](../../packages/widget/src/reason.ts) | P2-M5 Reason: the selective diagnostic trigger + structured page-state capture (controls as explicit state, `[alert]`-tagged texts, masked) + the lazy image-tier loader; exports `readElementState` (the shared element-state vocabulary). |
 | [`src/walkthrough.ts`](../../packages/widget/src/walkthrough.ts) | P4-M0 guided walkthrough: step card, detection-as-acknowledgment (only Next advances), self-correcting backward pointer, sessionStorage session + cross-nav resume, run analytics. |
-| [`src/render-image.ts`](../../packages/widget/src/render-image.ts) | The SECOND bundle (`sync-copilot-render.js`, html2canvas) — lazy-loaded sibling, never in the base bundle. |
-| [`src/log.ts`](../../packages/widget/src/log.ts) | Silent-by-default console diagnostics (`data-sync-debug`). |
+| [`src/render-image.ts`](../../packages/widget/src/render-image.ts) | The SECOND bundle (`flowbuddy-copilot-render.js`, html2canvas) — lazy-loaded sibling, never in the base bundle. |
+| [`src/log.ts`](../../packages/widget/src/log.ts) | Silent-by-default console diagnostics (`data-flowbuddy-debug`). |
 | [`src/styles.ts`](../../packages/widget/src/styles.ts) | The `CSS` string injected into the shadow root (indigo brand + accent var + walkthrough card + spotlight). |
-| [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/sync-copilot.js` **+ `dist/sync-copilot-render.js`** (two IIFE bundles — deploy side by side). |
+| [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/flowbuddy-copilot.js` **+ `dist/flowbuddy-copilot-render.js`** (two IIFE bundles — deploy side by side). |
 | [`demo/index.html`](../../packages/widget/demo/index.html) | Local test page (serve over **HTTP**, not `file://`). |
 
-Built with `pnpm --filter @sync/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) §8, [`phase-2-reason.md`](../phase-2-reason.md) §8, and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
+Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) §8, [`phase-2-reason.md`](../phase-2-reason.md) §8, and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
 
 ---
 
 ## 3. Inputs / Outputs
 
-- **Input (configuration):** the snippet carries only `data-sync-api` + `data-sync-key`; the LOOK
+- **Input (configuration):** the snippet carries only `data-flowbuddy-api` + `data-flowbuddy-key`; the LOOK
   comes from the server (2026-07-07):
   - **Server config** — at mount the widget fetches `GET /v1/copilot/config` (authed by the key,
     1.5s timeout, best-effort): accent, title, greeting, position, launcher style/text — whatever
     the founder saved in Studio → Copilot → Appearance. So appearance changes reach every embed
     live, without re-copying the snippet.
-  - **Per-page overrides** — explicit `data-*` attrs (or a `window.SyncCopilot` object) still win
-    over the server value, field by field: `data-sync-title`, `data-sync-greeting`,
-    `data-sync-accent`, `data-sync-position` (`left`|`right`), `data-sync-launcher`
-    (`icon`|`text`|`text-outline`), `data-sync-launcher-text`.
-  - `data-sync-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
+  - **Per-page overrides** — explicit `data-*` attrs (or a `window.FlowBuddy` object) still win
+    over the server value, field by field: `data-flowbuddy-title`, `data-flowbuddy-greeting`,
+    `data-flowbuddy-accent`, `data-flowbuddy-position` (`left`|`right`), `data-flowbuddy-launcher`
+    (`icon`|`text`|`text-outline`), `data-flowbuddy-launcher-text`.
+  - `data-flowbuddy-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
     secret recorder token.*
-  - `data-sync-preview` — `"1"` marks a **Studio tester** embed (2026-07-06): the panel starts open
+  - `data-flowbuddy-preview` — `"1"` marks a **Studio tester** embed (2026-07-06): the panel starts open
     **with the launcher kept visible below it** (panel lifted via `--sc-panel-bottom: 86px`, so
     launcher style/text/position edits show immediately), the mount heartbeat is suppressed,
     `/answer` calls carry `preview: true` so the API skips embed detection + analytics and returns
@@ -66,20 +66,20 @@ Built with `pnpm --filter @sync/widget build`. *(The Sense/Reason/walkthrough me
 
 ### 4.1 Isolation — shadow DOM
 
-The widget mounts a single host `<div id="sync-copilot-root">` and attaches an **open shadow root**.
+The widget mounts a single host `<div id="flowbuddy-copilot-root">` and attaches an **open shadow root**.
 All markup (launcher, panel, header, message list, input form) and the entire stylesheet live **inside**
 that shadow tree. Consequences:
 
 - The host page's CSS can't bleed in and the widget's CSS can't bleed out — no class collisions, no
   layout fights.
 - Theming is done with **CSS custom properties** set as inline styles on the host element, which
-  *inherit* into the shadow tree: `--sc-accent` (from `data-sync-accent`), and `--sc-right`/`--sc-left`
-  for positioning. Default theme is **Sync indigo** (`#3b50e0` family); a host can rebrand to its own
+  *inherit* into the shadow tree: `--sc-accent` (from `data-flowbuddy-accent`), and `--sc-right`/`--sc-left`
+  for positioning. Default theme is **FlowBuddy indigo** (`#3b50e0` family); a host can rebrand to its own
   color (text on it is white).
 
 ### 4.2 Configuration resolution
 
-`cfg` is resolved in two steps. At load: each value is `script.dataset.X` → `window.SyncCopilot.X` →
+`cfg` is resolved in two steps. At load: each value is `script.dataset.X` → `window.FlowBuddy.X` →
 a default (`apiBase` is trailing-slash-trimmed; the script tag is grabbed via
 `document.currentScript`). At mount: `boot()` awaits `GET /v1/copilot/config` (1.5s abort budget)
 and folds each **valid** server field into `cfg` — but only where no explicit attr/global was set
@@ -131,7 +131,7 @@ sequenceDiagram
     participant A as Copilot API
     U->>W: submit question
     W->>W: push {role:user}; loading=true; render()
-    W->>A: POST /v1/copilot/answer<br/>X-Sync-Key + {question, history, context:{path,title}}
+    W->>A: POST /v1/copilot/answer<br/>X-FlowBuddy-Key + {question, history, context:{path,title}}
     A-->>W: {covered, answer, citations, queryId}  |  {covered:false, reason}  |  error
     W->>W: push assistant message (answer / decline / error)
     W->>U: render() — bubble + citations + 👍/👎
@@ -164,11 +164,11 @@ trims the input, guards against empty/loading, and calls `ask`.
   time, a READ-ONLY glance at the host DOM (Sense locator probe; Reason's structured capture on
   diagnostic questions — values masked, `[alert]` surfaces tagged).
 - **Writes locally:** chat state is in-memory for the page view; the ONLY storage is
-  `sessionStorage["sync.walkthrough.v1"]` — an active guided-walkthrough session (founder-derived
+  `sessionStorage["flowbuddy.walkthrough.v1"]` — an active guided-walkthrough session (founder-derived
   plan data, key-scoped, 30-min TTL) so the walkthrough survives full-page navigations. No cookies.
 - **Server-side** it causes `CopilotQuery` / `CoverageGap` / `CopilotWalkthrough` rows via the API.
 - **Third-party deps:** none in the base bundle; `html2canvas` lives ONLY in the lazy sibling
-  bundle `sync-copilot-render.js` (loaded on the first diagnostic question with the image tier on).
+  bundle `flowbuddy-copilot-render.js` (loaded on the first diagnostic question with the image tier on).
 
 ---
 
@@ -177,7 +177,7 @@ trims the input, guards against empty/loading, and calls `ask`.
 - **API unreachable** → "Could not reach the assistant" error bubble; the conversation continues.
 - **Wrong/blocked origin or bad key** → the API returns `401/403/429`; the widget shows the error
   message in a bubble.
-- **Missing `data-sync-key`** → requests go out without `X-Sync-Key` and the API rejects them; nothing
+- **Missing `data-flowbuddy-key`** → requests go out without `X-FlowBuddy-Key` and the API rejects them; nothing
   breaks client-side.
 - **Host page has aggressive CSS** → shadow DOM isolates the widget, so it's unaffected.
 - **Local testing over `file://`** → won't behave (no proper origin); serve the demo over HTTP.

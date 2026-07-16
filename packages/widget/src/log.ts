@@ -4,10 +4,10 @@
  * nothing is emitted unless the embedder explicitly asks for it, regardless of build.
  *
  * Enable diagnostics with EITHER:
- *   <script ... data-sync-debug="true">        (attribute on the widget's own <script> tag)
- *   window.SyncCopilotDebug = true              (before the script loads)
+ *   <script ... data-flowbuddy-debug="true">        (attribute on the widget's own <script> tag)
+ *   window.FlowBuddyDebug = true              (before the script loads)
  *
- * Once enabled, all levels print with a `[sync-copilot]` prefix so they're easy to filter.
+ * Once enabled, all levels print with a `[flowbuddy-copilot]` prefix so they're easy to filter.
  */
 let enabled = false;
 
@@ -17,7 +17,7 @@ export function setDebug(on: boolean): void {
 }
 
 const emit = (fn: (...a: unknown[]) => void) => (...args: unknown[]) => {
-  if (enabled) fn('[sync-copilot]', ...args);
+  if (enabled) fn('[flowbuddy-copilot]', ...args);
 };
 
 export const log = {

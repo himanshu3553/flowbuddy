@@ -1,10 +1,10 @@
-// Content-script bridge: runs ONLY on the Sync Studio origin (see manifest matches). It relays
+// Content-script bridge: runs ONLY on the FlowBuddy Studio origin (see manifest matches). It relays
 // the "connect" handshake between the Studio /connect page (via window.postMessage) and the
 // extension background (via chrome.runtime). This avoids any token copy-paste and needs no
 // knowledge of the extension ID on the web side.
 
-const EXT = 'sync-ext'; // messages FROM the extension → page
-const PAGE = 'sync-page'; // messages FROM the page → extension
+const EXT = 'flowbuddy-ext'; // messages FROM the extension → page
+const PAGE = 'flowbuddy-page'; // messages FROM the page → extension
 
 function announce(): void {
   window.postMessage({ source: EXT, type: 'present' }, location.origin);

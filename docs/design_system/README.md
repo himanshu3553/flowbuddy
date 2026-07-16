@@ -1,20 +1,20 @@
-# Sync Studio — Design System
+# FlowBuddy Studio — Design System
 
-A design system for **Sync**, an in-app AI help **copilot** for SaaS products. This system codifies the **indigo brand** the team is rebuilding Studio in — colors, type, components, and full-screen UI kits — so any new Studio surface, marketing asset, or prototype lands on-brand from the first pixel.
+A design system for **FlowBuddy**, an in-app AI help **copilot** for SaaS products. This system codifies the **indigo brand** the team is rebuilding Studio in — colors, type, components, and full-screen UI kits — so any new Studio surface, marketing asset, or prototype lands on-brand from the first pixel.
 
-> **Product in one line:** Record your product once → Sync builds a structured Knowledge Base → you approve which workflows the copilot may use → paste one `<script>` → your customers get grounded, in-context answers with citations and honest "I don't know yet" declines. A feedback loop tells you what to record next.
+> **Product in one line:** Record your product once → FlowBuddy builds a structured Knowledge Base → you approve which workflows the copilot may use → paste one `<script>` → your customers get grounded, in-context answers with citations and honest "I don't know yet" declines. A feedback loop tells you what to record next.
 
 ---
 
 ## Sources this system was built from
 
-Everything here was distilled from the **Sync Studio handoff bundle** (in `design_handoff_sync_studio/` and `uploads/` at the time of authoring):
+Everything here was distilled from the **FlowBuddy Studio handoff bundle** (in `design_handoff_sync_studio/` and `uploads/` at the time of authoring):
 
 - **`prototype_full.html`** — the canvas prototype of *every* Studio screen + state (the structural / IA source of truth, mid-fidelity).
 - **`f1_home_states.html`** — Home in **hi-fi**, 3 states. The **pixel target** for visual fidelity.
 - **`theme-indigo.css`** — the brand token overrides (`--primary: 232 73% 56%` → `#3b50e0`).
 - **`README.md`** (in the handoff) — the full screen-by-screen spec, IA, data contract, and build order.
-- **`Sync Studio Wireframes.dc.html`** — the 20-frame wireframe canvas (F1–F20).
+- **`FlowBuddy Studio Wireframes.dc.html`** — the 20-frame wireframe canvas (F1–F20).
 - **`uploads/product.md`** — product narrative, personas, principles, the four surfaces.
 
 **Two fidelities existed in the source.** The grayscale wireframes carry **structure, IA, copy, and the full set of states**; the hi-fi Home carries **visual fidelity**. This design system makes the **hi-fi indigo brand canonical** and elevates the wireframe structures into it — exactly the jump the handoff asks production to make ("apply the indigo system for final styling").
@@ -23,11 +23,11 @@ Everything here was distilled from the **Sync Studio handoff bundle** (in `desig
 
 ## Product context
 
-Sync ships as **four surfaces** over one shared Knowledge Base. This system covers the builder-facing ones; the copilot widget is represented as a preview.
+FlowBuddy ships as **four surfaces** over one shared Knowledge Base. This system covers the builder-facing ones; the copilot widget is represented as a preview.
 
 | Surface | Who | In this system |
 |---|---|---|
-| **Sync Recorder** (Chrome extension) | the builder | Recorder popup states (idle / recording / uploading / retry) |
+| **FlowBuddy Recorder** (Chrome extension) | the builder | Recorder popup states (idle / recording / uploading / retry) |
 | **Studio** (web app) ⭐ | the builder | **Primary focus** — full UI kit (Home, Recordings, KB, Copilot, Analytics) |
 | **In-App Copilot** (embeddable widget) | the builder's customers | `CopilotMessage` component + widget preview |
 | **Help Portal** (Phase 2) | the builder's customers | *out of scope — frozen by-product* |
@@ -38,7 +38,7 @@ Sync ships as **four surfaces** over one shared Knowledge Base. This system cove
 
 ---
 
-## CONTENT FUNDAMENTALS — how Sync writes
+## CONTENT FUNDAMENTALS — how FlowBuddy writes
 
 The voice is **plain, calm, second-person, and trustworthy**. It explains the *why*, never hypes.
 
@@ -90,7 +90,7 @@ The voice is **plain, calm, second-person, and trustworthy**. It explains the *w
   - *(Production parity note: the handoff's Next.js app uses **lucide-react** with the same metaphors — `Home, Video, BookOpen, Bot, BarChart3, Settings`. Either set is on-brand; Material Symbols is the canonical in these specimens because the hi-fi target uses it.)*
 - **Mono characters as micro-glyphs.** The dense wireframe voice uses monospace characters where an icon would be overkill: `▾` (disclosure), `⋯` (row menu), `×` (close/remove), `→` (flow), `▲ / ▽` (thumb up/down in lists), `●` (step bullet). Keep these in `--font-mono`.
 - **Emoji:** only 👍 / 👎 for end-user helpfulness feedback. Never decorative.
-- **Logo:** `assets/logo-mark.svg` (gradient rounded square + white "S") and `assets/logo-wordmark.svg` (mark + "Sync"). The in-app sidebar often shows the bare gradient mark beside the "Sync" wordmark.
+- **Logo:** `assets/logo-mark.svg` (gradient rounded square + white "S") and `assets/logo-wordmark.svg` (mark + "FlowBuddy"). The in-app sidebar often shows the bare gradient mark beside the "FlowBuddy" wordmark.
 - **Never hand-draw icons.** Use Material Symbols (or lucide in production). Diagonal-stripe placeholders stand in for any real imagery.
 
 ---

@@ -1,10 +1,10 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import type { SynthesisJob } from '@sync/shared';
-import { createLogger } from '@sync/logger';
+import type { SynthesisJob } from '@flowbuddy/shared';
+import { createLogger } from '@flowbuddy/logger';
 
 const log = createLogger('web:queue');
 
-// Must match SYNTHESIS_QUEUE in @sync/shared (jobs.ts). Inlined rather than value-imported because
+// Must match SYNTHESIS_QUEUE in @flowbuddy/shared (jobs.ts). Inlined rather than value-imported because
 // Next's server-action bundler can't resolve shared's raw-TS `.js`-extension entry for a value.
 const SYNTHESIS_QUEUE = 'synthesis';
 
@@ -28,7 +28,7 @@ const connection: ConnectionOptions = {
 };
 
 // Reuse one Queue across hot-reloads / requests (Next.js keeps module state warm).
-const g = globalThis as unknown as { __syncSynthesisQueue?: Queue };
+const g = globalThis as unknown as { __flowbuddySynthesisQueue?: Queue };
 
 // Throttle connection-error logging so a Redis outage can't flood the logs (one line / 30s) — and,
 // critically, attach a handler AT ALL so BullMQ's emitted 'error' never becomes an unhandled
@@ -50,7 +50,7 @@ function onQueueError(err: unknown): void {
  * (and then endlessly retry) a Redis connection. Reused across requests / hot-reloads via globalThis.
  */
 function getQueue(): Queue {
-  if (g.__syncSynthesisQueue) return g.__syncSynthesisQueue;
+  if (g.__flowbuddySynthesisQueue) return g.__flowbuddySynthesisQueue;
   // defaultJobOptions MUST mirror packages/api/src/queue.ts: bounded retries for transient
   // failures (the worker is idempotent) + bounded retention so finished jobs can't fill Redis.
   const queue = new Queue(SYNTHESIS_QUEUE, {
@@ -63,7 +63,7 @@ function getQueue(): Queue {
     },
   });
   queue.on('error', onQueueError);
-  g.__syncSynthesisQueue = queue;
+  g.__flowbuddySynthesisQueue = queue;
   return queue;
 }
 

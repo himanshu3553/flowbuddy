@@ -1,5 +1,5 @@
-import { prisma } from '@sync/db';
-import type { CapturedEvent, Locator, SessionManifest } from '@sync/shared';
+import { prisma } from '@flowbuddy/db';
+import type { CapturedEvent, Locator, SessionManifest } from '@flowbuddy/shared';
 
 /**
  * P2-M0 — the SENSE PLAN: the compiled, probe-ready map of a workspace's APPROVED workflows the

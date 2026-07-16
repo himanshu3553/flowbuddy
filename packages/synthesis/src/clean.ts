@@ -1,4 +1,4 @@
-import type { CapturedEvent, EventTarget } from '@sync/shared';
+import type { CapturedEvent, EventTarget } from '@flowbuddy/shared';
 
 // KB step distillation — Phase 1 (deterministic cleanup "B").
 // See docs/kb-step-distillation.md §5.2. Mechanical-only: collapse the duplicate /

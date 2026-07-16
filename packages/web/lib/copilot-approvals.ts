@@ -1,4 +1,4 @@
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 
 /**
  * P1-M5 — copilot trust gate (server-only): approval bookkeeping for Studio dashboards.
@@ -9,7 +9,7 @@ import { prisma } from '@sync/db';
  * silently wiped. Absence of a row = not approved.
  *
  * NOTE: the RETRIEVAL enforcement seam ("the copilot grounds only on approved-KB") no longer
- * lives here — it's the shared `retrieveApprovedKBItems` in `@sync/synthesis` (retrieval.ts),
+ * lives here — it's the shared `retrieveApprovedKBItems` in `@flowbuddy/synthesis` (retrieval.ts),
  * used by both the public answer endpoint and the Studio preview. The helpers below only feed
  * Studio UI (candidate lists / counts).
  */

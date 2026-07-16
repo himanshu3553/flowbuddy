@@ -1,9 +1,9 @@
 import { Worker } from 'bullmq';
-import { SYNTHESIS_QUEUE } from '@sync/shared';
-import type { SessionManifest } from '@sync/shared';
-import { prisma } from '@sync/db';
-import { buildWorkflowKB, distilledStepText, embedTexts, toVectorLiteral } from '@sync/synthesis';
-import { createLogger } from '@sync/logger';
+import { SYNTHESIS_QUEUE } from '@flowbuddy/shared';
+import type { SessionManifest } from '@flowbuddy/shared';
+import { prisma } from '@flowbuddy/db';
+import { buildWorkflowKB, distilledStepText, embedTexts, toVectorLiteral } from '@flowbuddy/synthesis';
+import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 import { connection } from './queue';
 import { sessionArtifactReader } from './storage';

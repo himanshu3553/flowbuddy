@@ -9,8 +9,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Transform, type Readable } from 'node:stream';
-import type { ArtifactReader } from '@sync/synthesis';
-import { createLogger } from '@sync/logger';
+import type { ArtifactReader } from '@flowbuddy/synthesis';
+import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 
 const log = createLogger('storage');

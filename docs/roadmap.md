@@ -1,4 +1,4 @@
-# Sync — Roadmap & Status (Versions · Phases · Modules)
+# FlowBuddy — Roadmap & Status (Versions · Phases · Modules)
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1), [`phase-2-sense.md`](phase-2-sense.md) (Phase 2), [`phase-4-autopilot.md`](phase-4-autopilot.md) (Phase 4); the V2 portal track: [`v2-portal.md`](v2-portal.md). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
@@ -9,7 +9,7 @@
 
 ## 0. The shape of Version 1
 
-**Version 1 = Sync, the workflow-capture product, released in phases. Phase 1 is the copilot and ships first.**
+**Version 1 = FlowBuddy, the workflow-capture product, released in phases. Phase 1 is the copilot and ships first.**
 
 ```
 VERSION 1 — Workflow capture · copilot-first        ✅ shipping
@@ -77,7 +77,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **v0.3.0 LIVE on the Chrome Web Store** (stop→upload feedback + resilience; prod-targeted: deployed-Studio + localhost connect). **v0.4.0** (**R13 ranked locators** — the Sense/Phase-3 enabler — + logging) **built + packaged 2026-07-13**, store upload pending; see [`deploy-render.md`](deploy-render.md) §11. | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | ✅ **Done** (2026-07-07) — **hybrid keyword + pgvector retrieval** (RRF fusion, `text-embedding-3-small`, worker embeds at KB build, keyword fallback on any vector failure; no backfill — dev reset); Render `vector` support confirmed 2026-07-06 | M7 (+ M11 retrieval) |
-| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `sync-web-uir8.onrender.com` | M8 |
+| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `flowbuddy-dev-web-uir8.onrender.com` | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
 | **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ **Done** | C3 |
@@ -145,7 +145,7 @@ Outside Version 1. Three groups:
 
 - **Help Portal & Articles (the portal track)** — the human-facing by-products, **moved out of Version 1 on 2026-07-08** (previously Phase 2): render approved workflows as articles + per-audience approval + presentation overlay + a public portal + productization. Full feature list: [`v2-portal.md`](v2-portal.md).
 - **Capture modalities** — **narration-only capture (1.2)** + **video capture (1.3)** + the narration-derived `static` explainer-article path. The KB stays modality-agnostic (`kind`, item `step|topic`) so these slot in additively. See [`architecture.md`](architecture.md) → Product versions.
-- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision — and both since shipped: the **real-widget tester (Approach B)** — **merged 2026-07-08** (the preview embeds the real widget bundle in `data-sync-preview` mode; Approach A retired → one answer path); **pgvector (P1-M3)** — **built 2026-07-07** (hybrid keyword+vector).)*
+- **Product depth** — the Phase-1 feature backlog **moved here by scope decision (2026-07-06)**: Version 1 ships with the copilot loop as-is; these deepen it afterwards. *(Kept in Phase 1 by the same decision — and both since shipped: the **real-widget tester (Approach B)** — **merged 2026-07-08** (the preview embeds the real widget bundle in `data-flowbuddy-preview` mode; Approach A retired → one answer path); **pgvector (P1-M3)** — **built 2026-07-07** (hybrid keyword+vector).)*
 
 | Module | What it is | Status |
 |:---|:---|:---|
@@ -184,7 +184,7 @@ Outside Version 1. Three groups:
 
 ## 8. What's left to ship Version 1
 
-Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`phase-1-review.md`](phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@sync/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5); **later that day, auth hardening §3.6 Cuts 2+3** (sign-in rate limiting + Resend-backed email verification & password reset — signup gate deliberately open). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
+Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`phase-1-review.md`](phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@flowbuddy/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5); **later that day, auth hardening §3.6 Cuts 2+3** (sign-in rate limiting + Resend-backed email verification & password reset — signup gate deliberately open). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
 1. ✅ **P1-M11** — capture-reliability backlog **complete** (2026-07-06): R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + R12 screenshot timing/cost + **R13 ranked multi-signal locators** (the Phase-3 replay enabler) are all **shipped**. **R5** (marker hotkey/labels) and the recorder UX parking lot moved to **Version 2 · D3** (scope decision 2026-07-06); the R12 follow-ups stay parked.
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Version 2 (portal track)** — not release-blocking.
@@ -199,7 +199,7 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 | Doc | Role |
 |---|---|
 | **`roadmap.md`** (this) | **The map** — versions/phases/modules, status, legacy mapping. |
-| [`product.md`](product.md) | What Sync is, who it's for, **why copilot-first** (decision record + grounding model + guardrails), moats, surfaces, risks, metrics. |
+| [`product.md`](product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model + guardrails), moats, surfaces, risks, metrics. |
 | [`architecture.md`](architecture.md) | Canonical **technical** model — 3 modules, KB schema, data model, decisions, flows. |
 | [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
 | [`phase-1-modules-map.md`](phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map + P1-M# cross-ref. |
@@ -208,7 +208,7 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 | [`phase-2-reason.md`](phase-2-reason.md) | **P2-M5 (Reason / diagnostic reasoning)** — "why can't I proceed?": selective trigger → ask-time structured page-state capture (+ optional clone-masked page image, day-one build / default-off) + the founder's expected state (true screenshot + DOM snapshot) → stronger-model agentic read-tool diagnosis. **✅ Built + user-verified E2E 2026-07-13** (§8 as-built + hardening + deploy checklist); §3.1 image value analysis · §3.2 capture UX · §7 plain-language end-to-end flow. |
 | [`phase-4-autopilot.md`](phase-4-autopilot.md) | **Phase 4 (Autopilot)** — agentic execution: the copilot offers to execute approved workflows in the end-user's live session (grounded actions); **P4-M0 guided walkthrough ✅ built 2026-07-15 (§8 as-built)**; M1…M3 to plan; opened ahead of Phase 3 (sequencing decision 2026-07-15). |
 | [`phase-5-converse.md`](phase-5-converse.md) | **Phase 5 (Converse / the goal-based agent) — 📝 draft design.** The Tell → Guide → Do ladder over goal understanding: conversational foundation (persistent chat, continuity retrieval) + goal thread + product-profile KB + tier router + execution orchestration (P5 = brain, P4 = hands). Modules P5-M0…M4; this map gains its phase section when the design locks. |
-| [`competitive-claude-chrome.md`](competitive-claude-chrome.md) | **Competitive reference: Claude for Chrome (living)** — capabilities, permissions/safety model, head-to-head vs Sync, the beat-Claude plays; feeds Phase-4/5 design. Re-check on major Anthropic releases. |
+| [`competitive-claude-chrome.md`](competitive-claude-chrome.md) | **Competitive reference: Claude for Chrome (living)** — capabilities, permissions/safety model, head-to-head vs FlowBuddy, the beat-Claude plays; feeds Phase-4/5 design. Re-check on major Anthropic releases. |
 | [`kb-step-distillation.md`](kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
 | [`internals/`](internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements this map's *why/what*). Start at `internals/connections.md`. Follows the code — source wins on conflict. |
 | [`e2e-testing.md`](e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics; per-step PASS signals. **3 levels:** local · dev (Render, incl. data reset) · prod (placeholder). |

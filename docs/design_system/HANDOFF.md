@@ -1,7 +1,7 @@
-# Developer Handoff — Sync Studio (indigo rebrand) → Claude Code
+# Developer Handoff — FlowBuddy Studio (indigo rebrand) → Claude Code
 
-This package is the **Sync Studio design system**. It is meant to be dropped into the
-`@sync/web` repo (Next.js 15 + Tailwind + shadcn/ui) and used by Claude Code to rebuild
+This package is the **FlowBuddy Studio design system**. It is meant to be dropped into the
+`@flowbuddy/web` repo (Next.js 15 + Tailwind + shadcn/ui) and used by Claude Code to rebuild
 Studio in the indigo brand. Everything here is **design reference** — recreate each screen
 with the repo's existing shadcn/Radix primitives and Tailwind patterns; do **not** ship the
 HTML or copy the inline styles literally.
@@ -15,11 +15,11 @@ HTML or copy the inline styles literally.
 ## How to use this with Claude Code
 
 1. **Install it as a skill in the repo:** copy this whole folder to
-   `.claude/skills/sync-studio-design/`. `SKILL.md` is already Agent-Skills-compatible, so
+   `.claude/skills/flowbuddy-studio-design/`. `SKILL.md` is already Agent-Skills-compatible, so
    Claude Code can invoke it by name in any session and treat it as the source of truth.
    (Alternatively drop it at `design-system/` and reference it by path.)
 2. **First prompt (scoped, one screen at a time):**
-   > Read `.claude/skills/sync-studio-design/README.md` and `SKILL.md`. Apply the indigo tokens
+   > Read `.claude/skills/flowbuddy-studio-design/README.md` and `SKILL.md`. Apply the indigo tokens
    > to `app/globals.css`, grow the dashboard nav to 6 items, then rebuild **Home** to match
    > `ui_kits/studio/Home.jsx` using our existing shadcn components. Don't touch other screens yet.
 3. **Reference files while implementing:** `tokens/*.css` (values), `components/*/<Name>.d.ts`

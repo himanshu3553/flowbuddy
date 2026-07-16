@@ -4,7 +4,7 @@ import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { z } from 'zod';
-import { prisma } from '@sync/db';
+import { prisma } from '@flowbuddy/db';
 import { signIn, signOut } from '@/auth';
 import { createUserWithWorkspace } from '@/lib/workspace';
 import { hashPassword, verifyPassword } from '@/lib/password';

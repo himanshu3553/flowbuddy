@@ -19,7 +19,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Sync Studio',
+  title: 'FlowBuddy Studio',
   description: 'Record once. Self-maintaining knowledge base.',
 };
 
