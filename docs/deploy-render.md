@@ -5,8 +5,10 @@ Step-by-step guide to deploy the Phase-1 copilot stack to [Render](https://rende
 [`dev-setup.md`](dev-setup.md); for what the modules are see [`phase-1-copilot.md`](phase-1-copilot.md).
 
 > The single Render-specific file is [`render.yaml`](../render.yaml) (a Render **Blueprint**). The app
-> code stays host-agnostic. This doc tracks the **free/testing** configuration that ships in `render.yaml`;
-> a [Going to production](#going-to-production) section lists the deltas for an always-on paid setup.
+> code stays host-agnostic. This doc tracks the **free/testing** configuration; the **production**
+> deployment (FlowBuddyAI.com — topology, domains, runbook, scaling ladder) lives in
+> [`deploy-production.md`](deploy-production.md), and the [Going to production](#going-to-production)
+> section below lists the mechanical deltas it builds on.
 
 ---
 
@@ -263,9 +265,21 @@ Taking a running deploy from Phase 1 to the Phase-2 code (Sense `8187af5` + Reas
 
 ---
 
+## Upgrading an existing deploy — the walkthrough drop (P4-M0, branch `feature-walkthrough`)
+
+When `feature-walkthrough` (`711a18b` — P4-M0 guided walkthrough + Reason diagnosis hardening) merges to the deploy branch, on top of the Phase-2 steps above:
+
+1. **Migrations run automatically** on `sync-api` boot: `20260715155642_walkthrough_guided` (`Workspace.copilotWalkthrough` + the `CopilotWalkthrough` run table) and `20260715183302_reason_image_default_on` (a column-default flip only — **existing workspaces keep their current image-tier setting**; new workspaces default ON). Both additive, no backfill.
+2. **Publish BOTH widget bundles again** — the base bundle grew (walkthrough module + alert-surface detection): `sync-copilot.js` + `sync-copilot-render.js`, side by side, from one `pnpm --filter @sync/widget build`.
+3. **No new env vars.** New per-workspace toggle: Studio → Copilot → Settings → **Guided walkthrough** (default OFF, requires Sense).
+4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) §11 — the walkthrough leg (offer → manual Next-driven steps → one `CopilotWalkthrough` row) and the rejected-action diagnosis (error banner beats form theories; fast-path follow-up acknowledges the banner).
+
+---
+
 ## Going to production
 
-To run always-on and reliable, edit `render.yaml`:
+**The actual production plan (FlowBuddyAI.com — chosen plans, domains, runbook, scaling ladder) is
+[`deploy-production.md`](deploy-production.md).** The mechanical deltas it draws from:
 
 1. **Split the worker out** again into its own `type: worker` service (`dockerCommand: pnpm --filter @sync/api worker`; set `sync-api` back to plain `start`). *(The standalone-worker blueprint is in git history — commit `3488326`.)*
 2. **Move migrations** to a `preDeployCommand` on `sync-api` (`pnpm --filter @sync/db exec prisma migrate deploy`) — paid plans support it; free plans don't, which is why the free config runs migrations in the start command.
