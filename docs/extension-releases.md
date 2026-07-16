@@ -9,6 +9,17 @@
 
 ---
 
+## v0.5.0 — 📦 packaged 2026-07-17 · store upload pending
+
+**The FlowBuddy release** — the first build under the new name, and the first that connects to the renamed dev stack.
+
+- **Rename (`5db16e1`):** manifest name/description/action title → **"FlowBuddy Recorder"**; connect-bridge channels `flowbuddy-ext`/`flowbuddy-page` (must match the Studio side — pre-rename Studios can't pair with this build and vice versa); recorder IndexedDB → `flowbuddy-recorder` (any chunks in the old `sync-spike` DB are orphaned — transient by design); host masking opt-in → `data-flowbuddy-redact`.
+- **Content:** carries everything from the never-uploaded v0.4.0 (R13 ranked locators + structured logging).
+- **Permissions:** unchanged since 0.3.0.
+- **Baked targets:** `https://flowbuddy-dev-web.onrender.com` (primary) + `http://localhost:3000` (bridge only).
+- **Artifact:** `packages/extension/flowbuddy-recorder-0.5.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.5.0 + new name, bridge matches both origins, popup bakes the dev Studio URL, `__DEV__` stripped.
+- **Store mechanics:** uploads to the SAME listing (extension ID `njkf…`) — the listing renames in place; existing v0.3.0 installs auto-update and regain the ability to connect (v0.3.0's baked `sync-web-uir8` URL died with the re-deploy). After it goes live: set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-dev-web`.
+
 ## v0.4.0 — 📦 packaged 2026-07-13 · ⚠️ OBSOLETE, never uploaded — do not upload
 
 **Superseded by the FlowBuddy rename (2026-07-17) before it reached the store:** the zip bakes the old `sync-web-uir8.onrender.com` Studio URL (dead once the dev services are recreated as `flowbuddy-dev-*`) and still ships under the "Sync Recorder" name. The next store build (v0.5.0, "FlowBuddy Recorder") carries this release's content plus the rename + new baked URLs.
