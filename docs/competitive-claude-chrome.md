@@ -66,7 +66,7 @@ Two operating modes:
 
 | # | Gap | Reality check |
 |---|---|---|
-| 1 | **Claude acts today, at GA quality** | Clicks, fills, uploads, tabs, scheduled jobs, recorded-workflow replay — shipping now. Sync's Autopilot is Phase 4, gated behind Phase 3; today's closest feature is the "show me" highlight. Every open month makes "why not just use Claude?" easier to ask. |
+| 1 | **Claude acts today, at GA quality** | Clicks, fills, uploads, tabs, scheduled jobs, recorded-workflow replay — shipping now. Sync's acting Autopilot is still to build (P4-M1…M3); the **P4-M0 guided walkthrough shipped 2026-07-15** (guide, not act), and the goal-agent design (Tell→Guide→Do, [`phase-5-converse.md`](phase-5-converse.md)) is drafted. Every month without "Do" makes "why not just use Claude?" easier to ask. |
 | 2 | **End-user record-and-replay** | Claude in Chrome lets *any user* record a workflow and replay it. Validates Sync's capture→replay architecture — and shrinks the runway to ship the vendor-grade (approved, validated, drift-checked) version. |
 | 3 | **Agent-loop maturity** | Hybrid perception, batched read-only calls, plan-mode permission discipline, CAPTCHA/login handoff, model switching — years of harness engineering. (Cf. the recorder's known full-page-nav capture gap.) |
 | 4 | **Published, quantified safety** | ASR metrics (23.6% → 11.2% → <0.08%), classifier layers, hard-blocked categories, org admin controls. Enterprise buyers will benchmark Autopilot's safety story against exactly this. |

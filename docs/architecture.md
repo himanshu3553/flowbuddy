@@ -10,7 +10,7 @@
   - **Phase 1 — Copilot** ⭐ (the Version 1 release, ships first): the foundation we've built (capture → KB → retrieval/grounding) + the embeddable copilot. Modules **P1-M0…P1-M12** ([`phase-1-copilot.md`](phase-1-copilot.md)).
   - **Phase 2 — Sense (in-context help)**: the copilot localizes the end-user to **workflow + step** (an ask-time read-only probe of approved workflows' captured locators against the live page; **hybrid** — client scores, the answer LLM disambiguates with the question) and answers **positionally** ("you're on step 3 of X — here's how to get unstuck, then the path to done"). No acting, no end-user recording. Modules **P2-M0…M4 ✅ built + user-verified E2E 2026-07-09** ([`phase-2-sense.md`](phase-2-sense.md)); **+ P2-M5 Reason** — diagnostic reasoning over ask-time page-state capture + the founder's expected state, **✅ built + user-verified E2E 2026-07-13** ([`phase-2-reason.md`](phase-2-reason.md)).
   - **Phase 3 — Self-validation & freshness** (the moat; to be planned).
-  - **Phase 4 — Autopilot** (agentic execution; after Phase 3): the copilot executes approved workflows in the end-user's live session — **grounded actions** over the same replay core Phase 3 builds, entering mid-workflow via Sense's localization. Modules **P4-M0…P4-M3** ([`phase-4-autopilot.md`](phase-4-autopilot.md)).
+  - **Phase 4 — Autopilot** (agentic execution; opened ahead of Phase 3, sequencing decision 2026-07-15): the copilot executes approved workflows in the end-user's live session — **grounded actions** over the same replay core Phase 3 builds, entering mid-workflow via Sense's localization. **P4-M0 guided walkthrough ✅ built 2026-07-15** (zero-acting); the acting modules **P4-M1…M3** to plan ([`phase-4-autopilot.md`](phase-4-autopilot.md)). **Phase 5 — Converse** (the goal-based agent: Tell → Guide → Do; P5 = brain, P4 = hands) is designed in draft ([`phase-5-converse.md`](phase-5-converse.md)).
 - **Version 2** = the **Help Portal & Articles track** (the human-facing by-products, **moved out of V1 2026-07-08**: render approved workflows as articles + per-audience approval + presentation overlay + productization — modules **V2 · P0…P6**, [`v2-portal.md`](v2-portal.md)) + additional **capture modalities** — **narration-only (1.2)** and **video (1.3)** — plus the narration-derived `static` explainer-article path, + product depth.
 
 > **⚠️ Phase numbers were redefined 2026-06-22.** The 3-module model below is **unchanged**; only the *phase grouping* and the *copilot's grounding* (**approved-KB**, not published articles) changed. Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. **Now:** Phase 1 = **copilot** (primary, ships first), Phase 3 = self-validation. Module IDs are now **per-phase** (`P{phase}-M{n}`); the old global `M0–M14` are mapped in [`roadmap.md`](roadmap.md) §7. See also [`product.md`](product.md) §5.
@@ -139,7 +139,7 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
         ├──► Self-validation (Phase 3)  grounds on the selector-bearing KB
         │       └──► sandbox replay → drift flags + "validated-current" certification
         │
-        └──► approved-for-autopilot (per-audience flag)   [Phase 4 — after Phase 3]
+        └──► approved-for-autopilot (per-audience flag)   [Phase 4 — M0 walkthrough ✅; acting modules to plan]
                 └──► widget EXECUTES the approved workflow in the end-user's live session
                      (grounded actions; eligibility = approved AND validated-current)
 ```

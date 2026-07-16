@@ -199,7 +199,10 @@ via Next.js server actions hitting Prisma directly — Studio never calls the AP
 
 ### Seam F — Widget → Copilot API (HTTP, synchronous)
 
-- **Transport:** `POST /v1/copilot/answer` and `/v1/copilot/feedback`, JSON.
+- **Transport:** `POST /v1/copilot/answer` and `/v1/copilot/feedback`, JSON — plus, same gate/key:
+  `GET /v1/copilot/config` (mount-time appearance + behavior flags), `GET /v1/copilot/sense-plan`
+  (P2 — route-sharded locator plan, fetched on panel open), and `POST /v1/copilot/walkthrough`
+  (P4-M0 — run analytics events, fire-and-forget).
 - **Payload:** `{ question, history, context: { path, title } }` with the **embed key** in the
   `X-Sync-Key` header.
 - **Gate:** embed key + origin allowlist + rate limit.

@@ -72,7 +72,7 @@ Kept on record so the day-one decision (§5.1) carries its reasoning:
 - **Fast path (unchanged — Sense):** probe → hypotheses → positional answer. Pennies, ~2s, handles "how do I X / what's next / I'm stuck on an error".
 - **Reasoning path (new):** fires **selectively (locked §5.2)** — on diagnostic intent, on fast-path failure, or on a blocked page state; clearly-diagnostic questions go straight here. The widget captures the §3 package at ask time; the server assembles it and runs a **stronger model** in a small **agentic loop with read-tools** — *inspect this element's subtree · fetch the founder's step screenshot · request the rendered image* — pulling detail on demand instead of front-loading everything. Then: evidence-grounded diagnosis + the fix path.
 - **Grounding doctrine:** product facts from the KB only; state explanations from measured/captured evidence only; decline when neither covers. Page-derived text is fenced as untrusted data (the Sense `<page-error>` pattern, generalized).
-- **The arc:** this read-tool agent loop is the skeleton **Phase 4 inherits** — same loop, act-verbs added later, after Phase 3's validation gate.
+- **The arc:** this read-tool agent loop is the skeleton **Phase 4 inherits** — same loop, act-verbs added by Phase 4's execution driver (P4-M2). *(Phase 4 since opened ahead of Phase 3; its zero-acting P4-M0 walkthrough already gates on this module's `readElementState` vocabulary.)*
 
 ---
 

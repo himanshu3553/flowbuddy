@@ -19,12 +19,17 @@ with the host page's styles or globals.
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](../../packages/widget/src/index.ts) | The whole widget: config, shadow DOM, render loop, `ask`/`feedback` calls. |
-| [`src/styles.ts`](../../packages/widget/src/styles.ts) | The `CSS` string injected into the shadow root (indigo brand + accent var). |
-| [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/sync-copilot.js` (one IIFE bundle). |
+| [`src/index.ts`](../../packages/widget/src/index.ts) | The widget shell: config (attrs + live-served `/config`), shadow DOM, render loop, `ask`/`feedback`, drag+expand, boot/resume wiring. |
+| [`src/sense.ts`](../../packages/widget/src/sense.ts) | P2 Sense: sense-plan fetch/cache, the ask-time read-only locator probe + scorer, the show-me spotlight (sticky variant for the walkthrough), `findAlertSurfaces` (alert/error-surface detection incl. red-family text). |
+| [`src/reason.ts`](../../packages/widget/src/reason.ts) | P2-M5 Reason: the selective diagnostic trigger + structured page-state capture (controls as explicit state, `[alert]`-tagged texts, masked) + the lazy image-tier loader; exports `readElementState` (the shared element-state vocabulary). |
+| [`src/walkthrough.ts`](../../packages/widget/src/walkthrough.ts) | P4-M0 guided walkthrough: step card, detection-as-acknowledgment (only Next advances), self-correcting backward pointer, sessionStorage session + cross-nav resume, run analytics. |
+| [`src/render-image.ts`](../../packages/widget/src/render-image.ts) | The SECOND bundle (`sync-copilot-render.js`, html2canvas) — lazy-loaded sibling, never in the base bundle. |
+| [`src/log.ts`](../../packages/widget/src/log.ts) | Silent-by-default console diagnostics (`data-sync-debug`). |
+| [`src/styles.ts`](../../packages/widget/src/styles.ts) | The `CSS` string injected into the shadow root (indigo brand + accent var + walkthrough card + spotlight). |
+| [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/sync-copilot.js` **+ `dist/sync-copilot-render.js`** (two IIFE bundles — deploy side by side). |
 | [`demo/index.html`](../../packages/widget/demo/index.html) | Local test page (serve over **HTTP**, not `file://`). |
 
-Built with `pnpm --filter @sync/widget build`.
+Built with `pnpm --filter @sync/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) §8, [`phase-2-reason.md`](../phase-2-reason.md) §8, and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
 
 ---
 
@@ -155,10 +160,15 @@ trims the input, guards against empty/loading, and calls `ask`.
 
 ## 5. Data it reads / writes
 
-- **Reads:** its own `data-*` config; `location.pathname` + `document.title` per question.
-- **Writes:** nothing locally — all state is in-memory for the page session. Server-side it causes
-  `CopilotQuery` / `CoverageGap` rows via the API.
-- **No storage, no cookies, no third-party deps** — it's a self-contained bundle.
+- **Reads:** its own `data-*` config; `location.pathname` + `document.title` per question; at ask
+  time, a READ-ONLY glance at the host DOM (Sense locator probe; Reason's structured capture on
+  diagnostic questions — values masked, `[alert]` surfaces tagged).
+- **Writes locally:** chat state is in-memory for the page view; the ONLY storage is
+  `sessionStorage["sync.walkthrough.v1"]` — an active guided-walkthrough session (founder-derived
+  plan data, key-scoped, 30-min TTL) so the walkthrough survives full-page navigations. No cookies.
+- **Server-side** it causes `CopilotQuery` / `CoverageGap` / `CopilotWalkthrough` rows via the API.
+- **Third-party deps:** none in the base bundle; `html2canvas` lives ONLY in the lazy sibling
+  bundle `sync-copilot-render.js` (loaded on the first diagnostic question with the image tier on).
 
 ---
 

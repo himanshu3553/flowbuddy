@@ -49,7 +49,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 **Out (other phases / deferred):**
 - **Help portal + article authoring/publishing** → **Version 2** ([`v2-portal.md`](v2-portal.md)) — decoupled by-products over the same KB.
 - **Grounding Stage B** (also cite a published article) — deferred (a grounding stage, distinct from the product phases).
-- **In-app actionability** ("show me" — highlight the real element / deep-link a route via captured selectors — and executing workflows on the end-user's behalf) → **Phase 4 (Autopilot**, [`phase-4-autopilot.md`](phase-4-autopilot.md)**)**; the data exists.
+- **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight (P2-M3, ✅) and the guided walkthrough (P4-M0, ✅); executing workflows on the end-user's behalf → **Phase 4's acting modules** ([`phase-4-autopilot.md`](phase-4-autopilot.md)); the data exists.
 - **Self-validation / sandbox / drift** → **Phase 3**.
 - **Narration-only & video capture** → **Version 2**.
 - Integrations & public API; i18n; multi-seat/roles; billing (free invite-only beta).
