@@ -1,0 +1,9 @@
+{
+  "name": "@flowbuddy/landing",
+  "version": "0.0.0",
+  "private": true,
+  "description": "FlowBuddy marketing landing page (flowbuddyai.com) — static, served by the flowbuddy-landing Render service.",
+  "scripts": {
+    "build": "rm -rf dist && cp -r public dist"
+  }
+}

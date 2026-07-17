@@ -86,93 +86,20 @@ swapped later without breaking a single embed.
 
 ---
 
-## 4. The production blueprint (target `render.yaml`)
+## 4. The production blueprint (`render.yaml`) — written 2026-07-17
 
-The repo's single `render.yaml` becomes the **production** blueprint (the dev services keep running
-unmanaged — see the runbook step about detaching the old blueprint). Target spec:
+**Two blueprint files ride every branch** (Render supports custom blueprint paths), so FF releases
+stay clean and each environment stays YAML-managed:
 
-```yaml
-databases:
-  - name: flowbuddy-db
-    plan: basic-256mb
-    databaseName: flowbuddy
-    user: flowbuddy
+| File | Environment | Blueprint instance reads it from |
+|---|---|---|
+| [`render.yaml`](../render.yaml) (repo root, default path) | **Production** — the §2 topology, implemented | branch `main` |
+| [`render.dev.yaml`](../render.dev.yaml) (custom path) | Dev/staging — the free-tier config | branch `dev` |
 
-envVarGroups:
-  - name: flowbuddy-r2
-    envVars:
-      - { key: R2_ENDPOINT, sync: false }
-      - { key: R2_REGION, value: auto }
-      - { key: R2_ACCESS_KEY_ID, sync: false }
-      - { key: R2_SECRET_ACCESS_KEY, sync: false }
-      - { key: R2_BUCKET, sync: false }          # flowbuddy-artifacts (pre-created, prod-only)
-
-services:
-  - type: keyvalue
-    name: flowbuddy-redis
-    plan: free                                    # decision §2 — queue payloads are tiny
-    maxmemoryPolicy: noeviction                   # BullMQ-clean semantics (config, not paid)
-    ipAllowList: []
-
-  # API + embedded synthesis worker (start:all) — always-on
-  - type: web
-    name: flowbuddy-api
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./packages/api/Dockerfile
-    dockerContext: .
-    dockerCommand: pnpm --filter @flowbuddy/api start:all
-    envVars:
-      - fromGroup: flowbuddy-r2
-      - { key: PORT, value: 8787 }
-      - { key: LOG_LEVEL, value: info }
-      - { key: DATABASE_URL, fromDatabase: { name: flowbuddy-db, property: connectionString } }
-      - { key: REDIS_URL, fromService: { name: flowbuddy-redis, type: keyvalue, property: connectionString } }
-      - { key: OPENAI_API_KEY, sync: false }
-      - { key: TRANSCRIBE_MODEL, value: whisper-1 }
-      - { key: SYNTH_MODEL, value: gpt-4o }
-      - { key: EMBED_MODEL, value: text-embedding-3-small }   # must stay 1536-dim (vector(1536))
-      - { key: FLOWBUDDY_STUDIO_URL, sync: false }                 # https://app.flowbuddyai.com
-      # - { key: REASON_MODEL, sync: false }                  # optional stronger vision model for P2-M5
-
-  # Studio — paid so customer dashboards never cold-start
-  - type: web
-    name: flowbuddy-web
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./packages/web/Dockerfile
-    dockerContext: .
-    envVars:
-      - fromGroup: flowbuddy-r2
-      - { key: LOG_LEVEL, value: info }
-      - { key: DATABASE_URL, fromDatabase: { name: flowbuddy-db, property: connectionString } }
-      - { key: REDIS_URL, fromService: { name: flowbuddy-redis, type: keyvalue, property: connectionString } }
-      - { key: AUTH_SECRET, sync: false }
-      - { key: AUTH_URL, sync: false }            # https://app.flowbuddyai.com
-      - { key: AUTH_TRUST_HOST, value: true }
-      - { key: FLOWBUDDY_API_URL, sync: false }        # https://api.flowbuddyai.com
-      - { key: FLOWBUDDY_WIDGET_URL, sync: false }     # https://widget.flowbuddyai.com/flowbuddy-copilot.js
-      - { key: RESEND_API_KEY, sync: false }
-      - { key: EMAIL_FROM, sync: false }          # no-reply@flowbuddyai.com (Resend-verified domain)
-      - { key: FLOWBUDDY_EXTENSION_URL, sync: false }  # Chrome Web Store listing URL
-
-  # Widget host — publishes BOTH bundles from one build
-  - type: web
-    name: flowbuddy-widget
-    runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @flowbuddy/widget build
-    staticPublishPath: packages/widget/dist
-
-  # Marketing landing page (packages/landing — static, free)
-  - type: web
-    name: flowbuddy-landing
-    runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @flowbuddy/landing build
-    staticPublishPath: packages/landing/dist
-```
-
-*(The landing service's exact build command/publish path is finalized when `packages/landing` is
-built; if it ships as plain static files the build step collapses to a copy.)*
+The root file is authoritative for the prod spec — plans, env wiring, and the per-service notes
+live there as comments. Highlights: paid api/web/db per §2, `maxmemoryPolicy: noeviction` on the
+queue, migrations in the api start command, and the two static sites (widget bundles + the
+`packages/landing` page) built with `pnpm install --frozen-lockfile && pnpm --filter <pkg> build`.
 
 ### Prod secrets (all `sync: false`)
 
@@ -196,16 +123,18 @@ targets — never for env vars or snippets.
 
 ## 5. First-deploy runbook
 
-**A. Repo prep** (on `dev`, then FF `main`):
-1. Rewrite `render.yaml` to the §4 spec.
-2. Build `packages/landing` (marketing page — design-system tokens, CTA → `app.flowbuddyai.com`).
-3. Update docs; commit code + docs together; FF-sync `main`.
+**A. Repo prep** (on `dev`, then FF `main`) — **done 2026-07-17**:
+1. `render.dev.yaml` added (a copy of the dev config) and the dev blueprint's file path switched to
+   it in the dashboard **before** step 2 landed — so the dev blueprint never reads the prod spec.
+2. `render.yaml` rewritten to the §4 prod spec.
+3. `packages/landing` built — v1 is a minimal "coming soon + sign in" card on the design-system
+   tokens (CTA → `app.flowbuddyai.com`); the full marketing page (hero · how-it-works · features)
+   upgrades it later.
+4. Docs updated; code + docs committed together; `main` FF-synced.
 
-**B. Detach the dev blueprint — BEFORE the new render.yaml reaches `dev`.** The dev blueprint
-instance (created 2026-07-17 from `dev`) watches that branch; if it syncs the rewritten file it will
-try to create the `flowbuddy-*` resources and drop the `flowbuddy-dev-*` ones. Render dashboard → the
-dev Blueprint → disable auto-sync (or delete the blueprint instance — deleting it keeps the services
-running and they keep auto-deploying code from `dev`; only infra-from-yaml management stops).
+**B. Blueprint-file ordering rule (standing):** any change to the *dev* infra goes in
+`render.dev.yaml`; any change to *prod* infra goes in `render.yaml` and reaches Render only via the
+`main` FF. Never point a blueprint instance at the other environment's file.
 
 **C. Third-party accounts:**
 1. Cloudflare R2 → create bucket `flowbuddy-artifacts` + an Object R/W token scoped to it.
@@ -223,16 +152,16 @@ the sign-in page and `https://widget.flowbuddyai.com/flowbuddy-copilot.js` + `/f
 both serve. Do this **before** creating any account — `AUTH_URL` already points at the custom
 domain, so sign-in via the onrender URL would mis-callback.
 
-**F. Recorder extension (new store build):** the store artifact bakes the Studio URL, so prod needs
-a rebuild + resubmission (the packaged-but-unsubmitted v0.4.0 zip bakes the OLD dev URL — don't
-upload it as-is):
+**F. Recorder extension — v0.6.0 (decision 2026-07-17: one review cycle):** the store artifact
+bakes the Studio URL, so prod needs a rebuild + resubmission. v0.5.0 (dev-baked, in review) gets its
+review **cancelled**; v0.6.0 bakes prod + dev + localhost in one artifact:
 ```bash
 STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web.onrender.com,http://localhost:3000" \
-  pnpm --filter @flowbuddy/extension build
+  NODE_ENV=production pnpm --filter @flowbuddy/extension build
 ```
 Bump the version, zip from `dist/`, submit, log it in [`extension-releases.md`](extension-releases.md),
-set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-web`, then re-run a plain build to restore the localhost dev
-`dist/`. Keep the old dev URL in the list during the transition.
+set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-web` once live, then re-run a plain build to restore the
+localhost dev `dist/`.
 
 **G. Seed + smoke test:** the prod DB is empty — create the founder account (email verification
 works because Resend is live), connect the extension, record + approve the real workflows, then run
@@ -297,7 +226,8 @@ Postgres-backed queue (pg-boss) and delete Redis entirely (a small project: `pac
 - **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). The full
   Sync→FlowBuddy rename ran through code + docs on `dev` (packages, embed contract, env vars, service
   names, Studio/widget/extension strings). (The widget title stays per-workspace configurable.)
-- **`packages/landing`** — to build (content: hero · how-it-works · features · CTA; indigo design
-  system; optionally dogfood the live widget as the demo).
+- **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card (user
+  decision — launch first, market later). The full marketing page (hero · how-it-works · features ·
+  CTA; optionally dogfood the live widget as the demo) remains to build on top.
 - **Walkthrough (P4-M0)** merged to `main` 2026-07-17 (branches synced at `bf315b6`); its 2 migrations
   auto-apply on the first prod deploy.

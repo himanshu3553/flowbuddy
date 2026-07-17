@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowBuddy — an AI help copilot for your SaaS</title>
+  <meta name="description" content="FlowBuddy is an embeddable AI help copilot any SaaS adds in minutes — record your product once, approve the workflows it may use, drop in one script tag." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='6' width='52' height='52' rx='14' fill='%233b50e0'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --indigo: #3b50e0;
+      --indigo-2: #4a63e8;
+      --indigo-3: #3a50dd;
+      --fg: #14161f;
+      --muted: #5b6172;
+      --surface: #ffffff;
+      --bg-1: #f4f5f9;
+      --bg-2: #e9ebf4;
+      --border: #e2e5ef;
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #eceef5;
+        --muted: #9aa1b5;
+        --surface: #1a1d29;
+        --bg-1: #101320;
+        --bg-2: #171a28;
+        --border: #2a2e40;
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-sans);
+      color: var(--fg);
+      background:
+        radial-gradient(60rem 40rem at 85% -10%, color-mix(in srgb, var(--indigo) 14%, transparent), transparent 60%),
+        radial-gradient(50rem 35rem at -10% 110%, color-mix(in srgb, var(--indigo) 10%, transparent), transparent 60%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 24px 64px -24px rgba(20, 22, 31, 0.28), 0 4px 16px -8px rgba(20, 22, 31, 0.12);
+      padding: 48px 44px 40px;
+      max-width: 460px;
+      width: 100%;
+      text-align: center;
+    }
+    .mark {
+      width: 56px; height: 56px; border-radius: 16px;
+      background: linear-gradient(135deg, var(--indigo-2), var(--indigo-3));
+      display: inline-grid; place-items: center;
+      box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--indigo) 65%, transparent);
+      margin-bottom: 20px;
+    }
+    .mark svg { display: block; }
+    h1 {
+      font-size: 34px; font-weight: 800; letter-spacing: -0.02em;
+      margin-bottom: 10px;
+    }
+    .tagline {
+      color: var(--muted);
+      font-size: 15.5px;
+      line-height: 1.6;
+      margin-bottom: 26px;
+    }
+    .soon {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--indigo);
+      background: color-mix(in srgb, var(--indigo) 9%, transparent);
+      border: 1px solid color-mix(in srgb, var(--indigo) 22%, transparent);
+      border-radius: 999px;
+      padding: 6px 14px;
+      margin-bottom: 30px;
+    }
+    .cta {
+      display: inline-block;
+      font-weight: 700;
+      font-size: 15px;
+      color: #fff;
+      text-decoration: none;
+      background: linear-gradient(135deg, var(--indigo-2), var(--indigo-3));
+      border-radius: 12px;
+      padding: 13px 34px;
+      box-shadow: 0 12px 28px -12px color-mix(in srgb, var(--indigo) 70%, transparent);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .cta:hover { transform: translateY(-1px); box-shadow: 0 16px 32px -12px color-mix(in srgb, var(--indigo) 75%, transparent); }
+    .foot {
+      margin-top: 30px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .foot a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="mark" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H13l-4.2 3.6c-.65.56-1.8.1-1.8-.76V16h-.5A2.5 2.5 0 0 1 4 13.5v-7Z" fill="#fff" fill-opacity="0.92"/>
+        <circle cx="9" cy="10" r="1.25" fill="#3a50dd"/>
+        <circle cx="12" cy="10" r="1.25" fill="#3a50dd"/>
+        <circle cx="15" cy="10" r="1.25" fill="#3a50dd"/>
+      </svg>
+    </span>
+    <h1>FlowBuddy</h1>
+    <p class="tagline">An embeddable AI help copilot for your SaaS — record your product once, approve what it may say, and your customers get grounded in-app answers.</p>
+    <div><span class="soon">Coming soon</span></div>
+    <div><a class="cta" href="https://app.flowbuddyai.com">Sign in to FlowBuddy Studio</a></div>
+    <p class="foot">Early access — <a href="https://app.flowbuddyai.com/signup">create an account</a></p>
+  </main>
+</body>
+</html>

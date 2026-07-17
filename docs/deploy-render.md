@@ -4,11 +4,13 @@ Step-by-step guide to deploy the Phase-1 copilot stack to [Render](https://rende
 **free tier ($0/mo)**, with every gotcha we hit on the first real deploy baked in. For local dev see
 [`dev-setup.md`](dev-setup.md); for what the modules are see [`phase-1-copilot.md`](phase-1-copilot.md).
 
-> The single Render-specific file is [`render.yaml`](../render.yaml) (a Render **Blueprint**). The app
-> code stays host-agnostic. This doc tracks the **free/testing** configuration; the **production**
-> deployment (FlowBuddyAI.com — topology, domains, runbook, scaling ladder) lives in
-> [`deploy-production.md`](deploy-production.md), and the [Going to production](#going-to-production)
-> section below lists the mechanical deltas it builds on.
+> **Two Render Blueprint files ride every branch** (app code stays host-agnostic):
+> [`render.dev.yaml`](../render.dev.yaml) is the **dev/staging** config this doc tracks (the dev
+> blueprint instance reads it from branch `dev` via a custom blueprint path), and root
+> [`render.yaml`](../render.yaml) is **production** (read from `main`, default path) — see
+> [`deploy-production.md`](deploy-production.md) §4. The **production** deployment (FlowBuddyAI.com —
+> topology, domains, runbook, scaling ladder) lives in [`deploy-production.md`](deploy-production.md);
+> the [Going to production](#going-to-production) section below lists the mechanical deltas it builds on.
 
 ---
 
@@ -70,8 +72,9 @@ Keep the output for `AUTH_SECRET` (Studio / Auth.js).
 
 ## 5. Push the code to your deploy branch
 
-Render reads `render.yaml` from the branch you connect. Make sure the final code **and** `render.yaml`
-are committed and pushed to that branch (e.g. `main`) before creating the blueprint.
+Render reads the blueprint file from the branch you connect. Make sure the final code **and** the
+blueprint file (`render.dev.yaml` for the dev environment) are committed and pushed to that branch
+before creating the blueprint.
 
 ---
 
@@ -79,7 +82,12 @@ are committed and pushed to that branch (e.g. `main`) before creating the bluepr
 
 1. Render dashboard → **New +** → **Blueprint**.
 2. Connect/authorize the GitHub repo → select the **branch**.
-3. Render parses `render.yaml` and shows the 5 resources + the `flowbuddy-dev-r2` group. Click **Apply**.
+3. Set the **blueprint file path** to `render.dev.yaml` (the default `render.yaml` is the PROD spec —
+   applying it from `dev` would build the paid production stack).
+4. Render parses the file and shows the 5 resources + the `flowbuddy-dev-r2` group. Click **Apply**.
+   ⚠️ Render does **not** prompt for env-**group** values here — fill the `flowbuddy-dev-r2` group in
+   the dashboard right after Apply (the api's first boot fails harmlessly without it, then recovers
+   on the save-triggered redeploy).
 
 ---
 
@@ -209,7 +217,7 @@ to the list; keep the old one during the transition). ⚠️ After zipping, re-r
 ## Logging in production
 
 The Node services log **structured JSON at `info`+** in prod (`NODE_ENV=production` is set in the
-Dockerfiles; each line carries its `service` and secrets are redacted). The [`render.yaml`](../render.yaml)
+Dockerfiles; each line carries its `service` and secrets are redacted). The [`render.dev.yaml`](../render.dev.yaml)
 blueprint sets `LOG_LEVEL: info` explicitly on **`flowbuddy-dev-api`** and **`flowbuddy-dev-web`** so the level is visible
 and tunable in the dashboard.
 
@@ -320,4 +328,4 @@ flowbuddy-dev-web      : AUTH_SECRET, AUTH_URL, FLOWBUDDY_API_URL, FLOWBUDDY_WID
 ```
 
 Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`,
-`AUTH_TRUST_HOST`) is wired automatically by [`render.yaml`](../render.yaml).
+`AUTH_TRUST_HOST`) is wired automatically by [`render.dev.yaml`](../render.dev.yaml).

@@ -79,6 +79,7 @@ packages/
   web/        # Next.js Studio — copilot-first: approval gate + copilot settings/analytics
   widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js)
   extension/  # Chrome MV3 recorder
+  landing/    # static marketing page for flowbuddyai.com (v1 = coming-soon + sign-in card)
 ```
 
 *(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
@@ -226,7 +227,7 @@ Start with the roadmap; each doc links onward.
 
 ## Deployment
 
-The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + a static widget host) + **Cloudflare R2** for blobs, driven by the [`render.yaml`](render.yaml) blueprint — currently the **free/testing** configuration (spin-down + non-persistent Redis caveats are documented in the blueprint). Step-by-step deploy guide (every gotcha from the first real deploy, plus the going-to-production deltas): [`docs/deploy-render.md`](docs/deploy-render.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
+The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + static widget/landing hosts) + **Cloudflare R2** for blobs, driven by two blueprints: [`render.yaml`](render.yaml) (**production**, read from `main`) and [`render.dev.yaml`](render.dev.yaml) (**dev/staging** free tier, read from `dev` via a custom blueprint path; spin-down + non-persistent Redis caveats documented in the file). Step-by-step deploy guide (every gotcha from the first real deploy, plus the going-to-production deltas): [`docs/deploy-render.md`](docs/deploy-render.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
 
 ---
 
