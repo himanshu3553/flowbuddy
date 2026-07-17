@@ -38,7 +38,9 @@ envVarGroups:
 services:
   - type: keyvalue
     name: flowbuddy-redis
-    plan: free # decision §2 — queue payloads are tiny; revisit at Scale step 2
+    # Paid (decision 2026-07-17): Render allows only ONE free KV per workspace and dev holds it —
+    # and prod gets persistence with it (queued synthesis jobs survive restarts; ex-Scale-step-2).
+    plan: starter
     maxmemoryPolicy: noeviction # BullMQ requirement — default allkeys-lru can silently evict queued jobs
     ipAllowList: [] # only reachable from Render services
 

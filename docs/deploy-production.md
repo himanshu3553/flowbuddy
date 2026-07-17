@@ -23,7 +23,7 @@ production deploy** (Render auto-deploys the connected branch).
 
 ## 2. Production topology + cost (locked 2026-07-16)
 
-**~$20/month.** Seven resources, distinct `flowbuddy-*` names (so they coexist with the dev
+**~$30/month.** Seven resources, distinct `flowbuddy-*` names (so they coexist with the dev
 `flowbuddy-dev-*` services in the same Render workspace):
 
 | Resource | Type | Plan | Custom domain | Role |
@@ -33,7 +33,7 @@ production deploy** (Render auto-deploys the connected branch).
 | `flowbuddy-api` | Web (Docker) | **Starter $7** | `api.flowbuddyai.com` | copilot answer API + ingestion **+ the embedded synthesis worker** (`start:all`) |
 | `flowbuddy-widget` | Static site | **Free** | `widget.flowbuddyai.com` | serves `flowbuddy-copilot.js` + `flowbuddy-copilot-render.js` (both, always, from one build) |
 | `flowbuddy-db` | PostgreSQL | **Basic-256mb $6** (+$0.30/GB extra storage) | — | the database (durable — no 30-day deletion) |
-| `flowbuddy-redis` | Key Value | **Free** | — | BullMQ synthesis queue |
+| `flowbuddy-redis` | Key Value | **Starter $10** | — | BullMQ synthesis queue (persistent) |
 | `flowbuddy-r2` | Env group | — | — | shared Cloudflare R2 credentials (prod bucket) |
 
 ### Decisions recorded (and their trade-offs)
@@ -43,10 +43,11 @@ production deploy** (Render auto-deploys the connected branch).
   answer traffic, and the combo is proven on the same 512MB footprint. Trade-off: a deploy restarts
   the process and kills an in-flight synthesis job (`attempts=1`, no auto-retry — fix is
   re-recording). Split it out at **Scale step 1** (§7) when that starts to hurt.
-- **Key Value stays free** (with `maxmemoryPolicy: noeviction` set — a config field, not a paid
-  feature). The queue holds tiny job payloads; 25MB is plenty. Trade-off: no persistence — a Redis
-  restart in the seconds between upload and pickup drops that job (fix: re-record). Revisit at
-  **Scale step 2** (§7).
+- **Key Value is paid (Starter $10) — revised 2026-07-17 at first deploy.** The original "stays
+  free" decision hit a platform limit: Render allows only **one free Key Value instance per
+  workspace**, and the dev environment holds it (`flowbuddy-dev-redis`). Paying for the prod one
+  also buys **persistence** — the "a restart drops a queued job" caveat is gone in prod, which was
+  Scale step 2's first option, arrived early. (`maxmemoryPolicy: noeviction` stays set.)
 - **Studio is paid (Starter)** — customers (SaaS founders) sign up and work here; a ~1-min
   free-tier cold start on the dashboard reads as "broken product".
 - **The API is paid and always-on, non-negotiable** — it serves *end-users of customers* on every
@@ -198,11 +199,11 @@ custom domains make every underlying swap invisible to customers.
   `flowbuddy-api` (paid plans support it). *(The standalone-worker blueprint shape is in git
   history — commit `3488326`.)*
 
-**Step 2 — durable queue.**
-*Trigger:* a dropped job actually happens, or upload volume grows.
-Either pay for Key Value (Starter $10/mo, persistence) — zero code change — or swap BullMQ for a
-Postgres-backed queue (pg-boss) and delete Redis entirely (a small project: `packages/api/src/queue.ts`,
-`worker.ts`, `packages/web/lib/queue.ts`).
+**Step 2 — durable queue. ✅ Arrived early (2026-07-17):** prod Key Value is already paid/persistent
+(the one-free-instance limit forced it at first deploy — see §2). The remaining lever here is
+**cost reduction**, not durability: swap BullMQ for a Postgres-backed queue (pg-boss) and delete
+Redis entirely (−$10/mo; a small project: `packages/api/src/queue.ts`, `worker.ts`,
+`packages/web/lib/queue.ts`).
 
 **Step 3 — headroom.**
 *Trigger:* sustained load. In rough order of likely need:
