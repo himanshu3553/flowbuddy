@@ -63,13 +63,16 @@ production deploy** (Render auto-deploys the connected branch).
 
 ## 3. Domains & DNS
 
-Registrar: FlowBuddyAI.com. Host DNS on **Cloudflare** (account already exists for R2). Keep
-records **DNS-only (grey cloud)** so Render provisions and renews TLS itself; if you later want
-Cloudflare's proxy, follow Render's Cloudflare guide (Full-strict mode) — don't flip it on blindly.
+Registrar: **GoDaddy**, and DNS is hosted there too (as-built 2026-07-17 — the original plan said
+Cloudflare, but only R2 lives on Cloudflare; GoDaddy has no proxy layer, so Render provisions and
+renews TLS itself with no extra care). ⚠️ First-deploy gotcha (hit live): **delete the registrar's
+default parking A records on the apex** (e.g. `13.248.243.5` / `76.223.105.230`) — with stray A
+records present, DNS round-robins to parking servers AND Render won't verify the apex or issue its
+certificate. GoDaddy doesn't flatten CNAMEs at the apex — use the A record.
 
 | Record | Type | Points to |
 |---|---|---|
-| `flowbuddyai.com` | A (or Cloudflare CNAME-flattened) | the apex IP Render shows when you add the domain to `flowbuddy-landing` (currently `216.24.57.1`) |
+| `flowbuddyai.com` | A record (GoDaddy — no apex CNAME flattening) | the apex IP Render shows when you add the domain to `flowbuddy-landing` (currently `216.24.57.1`) |
 | `www.flowbuddyai.com` | CNAME | `flowbuddy-landing`'s `*.onrender.com` hostname |
 | `app.flowbuddyai.com` | CNAME | `flowbuddy-web`'s `*.onrender.com` hostname |
 | `api.flowbuddyai.com` | CNAME | `flowbuddy-api`'s `*.onrender.com` hostname |
@@ -139,7 +142,7 @@ targets — never for env vars or snippets.
 
 **C. Third-party accounts:**
 1. Cloudflare R2 → create bucket `flowbuddy-artifacts` + an Object R/W token scoped to it.
-2. Resend → add + verify `flowbuddyai.com` (DNS records at Cloudflare) → key ready.
+2. Resend → add + verify `flowbuddyai.com` (DNS records at GoDaddy) → key ready.
 3. `openssl rand -hex 32` → the prod `AUTH_SECRET`.
 
 **D. Apply the prod blueprint:** Render → New + → Blueprint → this repo → branch **`main`** → fill
@@ -148,7 +151,7 @@ the §4 secrets (URL vars get the final custom-domain values immediately) → Ap
 migrations (including `CREATE EXTENSION vector`) from scratch; there is no pending-migration bookkeeping.
 
 **E. Domains:** on each service add its custom domain(s) (§3) → create the DNS records at
-Cloudflare (grey cloud) → wait for certs to issue → verify `https://app.flowbuddyai.com` renders
+GoDaddy → wait for certs to issue → verify `https://app.flowbuddyai.com` renders
 the sign-in page and `https://widget.flowbuddyai.com/flowbuddy-copilot.js` + `/flowbuddy-copilot-render.js`
 both serve. Do this **before** creating any account — `AUTH_URL` already points at the custom
 domain, so sign-in via the onrender URL would mis-callback.

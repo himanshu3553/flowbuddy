@@ -117,7 +117,7 @@ function enterIdle(lastUpload?: Upload): void {
   stopLoops();
   $('orgName').textContent = org || 'Your workspace';
   $('connEmail').textContent = email ? `Connected as ${email}` : 'Connected';
-  $('orgAvatar').textContent = (org.trim()[0] || 'S').toUpperCase();
+  $('orgAvatar').textContent = (org.trim()[0] || 'F').toUpperCase();
   void renderRecent();
   startSessionPoll();
   // The upload outcome is a ONE-TIME notification: show it, then clear it from storage + the toolbar

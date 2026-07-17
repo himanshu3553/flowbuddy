@@ -9,7 +9,17 @@
 
 ---
 
-## v0.5.0 — 🚀 submitted 2026-07-17 · in review
+## v0.6.0 — 🚀 submitted 2026-07-17 · in review
+
+**The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
+
+- **Content:** v0.5.0 (the FlowBuddy rename + R13 + logging) + the **visual rebrand**: all four action/store icons regenerated as the FlowBuddy "F" mark (indigo gradient rounded square — the old ones still showed the Sync "S"), and the popup's org-avatar fallback letter flipped S→F. ⚠️ The **store listing's own icon** is a separate dashboard upload — replace it with `src/icons/icon-128.png` when submitting.
+- **Permissions:** unchanged since 0.3.0.
+- **Baked targets:** `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only) — one artifact connects against prod, dev, and local.
+- **Artifact:** `packages/extension/flowbuddy-recorder-0.6.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.6.0, bridge matches all three origins, popup bakes the prod URL, `__DEV__` stripped.
+- **Store mechanics:** v0.5.0's pending review is **cancelled** and this replaces it (decision 2026-07-17: one review cycle instead of two). After it goes live: set `FLOWBUDDY_EXTENSION_URL` on **`flowbuddy-web`** (prod) and `flowbuddy-dev-web` to the listing URL.
+
+## v0.5.0 — ⚠️ review cancelled 2026-07-17 · superseded by v0.6.0 before approval
 
 **The FlowBuddy release** — the first build under the new name, and the first that connects to the renamed dev stack.
 
