@@ -1,0 +1,120 @@
+# Render Blueprint — the DEV / STAGING environment (branch `dev`; the dev blueprint instance
+# points at THIS file via a custom blueprint path — root render.yaml is the PRODUCTION blueprint).
+# THIS IS THE FREE / TESTING configuration ($0/mo):
+#   flowbuddy-dev-api (Fastify API + synthesis worker in ONE web service) + flowbuddy-dev-web (Studio) +
+#   flowbuddy-dev-widget (static) + free Postgres + free Key Value.
+#
+# Why the worker is folded into the api: Render background workers are PAID-only, so for a $0
+# deploy the synthesis worker runs INSIDE the api web service via `start:all` (src/all.ts boots
+# both the Fastify server and the BullMQ worker in one process).
+#
+# ⚠️ FREE-TIER CAVEATS (fine for testing, NOT production):
+#   - Free Postgres is DELETED 30 days after creation (14-day grace) — recreate when it lapses.
+#   - Free Key Value (Redis) has NO persistence — a restart drops queued synthesis jobs.
+#   - Free web services SPIN DOWN after ~15 min idle (~1 min cold start). The embedded worker only
+#     runs while the api is awake — a recorder upload wakes it, then synthesis proceeds.
+#   - 750 free instance-hours/month per workspace (shared); idle/spun-down services don't consume them.
+#
+# ➜ TO GO PRODUCTION (always-on, reliable): split the worker back into its own `type: worker`
+#   service (dockerCommand: pnpm --filter @flowbuddy/api worker; api back to plain `start`), move the
+#   migration to a preDeployCommand, and change every free plan to paid (Postgres -> basic-256mb,
+#   web/worker/keyvalue -> starter). The standalone-worker blueprint is in git history (commit 3488326).
+#
+# Before first deploy: pre-create the R2 bucket + an Object R/W token; fill the flowbuddy-dev-r2 group +
+# OPENAI_API_KEY; set AUTH_SECRET + the *.onrender.com URLs on flowbuddy-dev-web (see the secrets table in chat).
+
+databases:
+  - name: flowbuddy-dev-db
+    plan: free # ⚠️ deleted 30 days after creation — testing only
+    databaseName: flowbuddy
+    user: flowbuddy
+
+# Shared object-storage (R2) credentials — entered ONCE here, referenced by api + web.
+envVarGroups:
+  - name: flowbuddy-dev-r2
+    envVars:
+      - { key: R2_ENDPOINT, sync: false } # https://<accountid>.r2.cloudflarestorage.com
+      - { key: R2_REGION, value: auto }
+      - { key: R2_ACCESS_KEY_ID, sync: false }
+      - { key: R2_SECRET_ACCESS_KEY, sync: false }
+      - { key: R2_BUCKET, sync: false } # flowbuddy-artifacts-dev (pre-created)
+
+services:
+  - type: keyvalue
+    name: flowbuddy-dev-redis
+    plan: free # ⚠️ no persistence — queued jobs are lost on restart
+    maxmemoryPolicy: noeviction # BullMQ requirement — default allkeys-lru can silently evict queued jobs
+    ipAllowList: [] # only reachable from Render services
+
+  # --- API + synthesis worker in ONE free web service ---
+  # Runs DB migrations (idempotent) then boots Fastify + the BullMQ worker via start:all.
+  - type: web
+    name: flowbuddy-dev-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./packages/api/Dockerfile
+    dockerContext: .
+    dockerCommand: pnpm --filter @flowbuddy/api start:all
+    envVars:
+      - fromGroup: flowbuddy-dev-r2
+      - { key: PORT, value: 8787 }
+      # Structured JSON logs at info+ (NODE_ENV=production is set in the Dockerfile). Lower to `debug`
+      # to trace a request path, or raise to `warn` to quieten — no redeploy of code needed.
+      - { key: LOG_LEVEL, value: info }
+      - { key: DATABASE_URL, fromDatabase: { name: flowbuddy-dev-db, property: connectionString } }
+      - { key: REDIS_URL, fromService: { name: flowbuddy-dev-redis, type: keyvalue, property: connectionString } }
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: TRANSCRIBE_MODEL, value: whisper-1 }
+      - { key: SYNTH_MODEL, value: gpt-4o }
+      # P1-M3 hybrid retrieval — must match the vector(1536) column dims (see @flowbuddy/synthesis embeddings.ts).
+      - { key: EMBED_MODEL, value: text-embedding-3-small }
+      # The deployed Studio URL (https://flowbuddy-dev-web-....onrender.com). Its origin is exempt from
+      # workspace origin allowlists so the Copilot page's real-widget tester keeps working after a
+      # customer restricts the copilot to their own site's origins. Unset = http://localhost:3000.
+      - { key: FLOWBUDDY_STUDIO_URL, sync: false }
+
+  # --- Studio (Next.js): approve workflows, copilot settings, analytics ---
+  - type: web
+    name: flowbuddy-dev-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./packages/web/Dockerfile
+    dockerContext: .
+    envVars:
+      - fromGroup: flowbuddy-dev-r2
+      # Server-side Studio logs: JSON at info+. (Client/browser level is baked at build via
+      # NEXT_PUBLIC_LOG_LEVEL — defaults to warn in prod so end-user consoles stay clean.)
+      - { key: LOG_LEVEL, value: info }
+      - { key: DATABASE_URL, fromDatabase: { name: flowbuddy-dev-db, property: connectionString } }
+      # Studio enqueues re-process jobs straight onto the worker's queue, so it needs the SAME Redis
+      # as flowbuddy-dev-api. Without this the BullMQ producer falls back to localhost and spams ECONNREFUSED.
+      - { key: REDIS_URL, fromService: { name: flowbuddy-dev-redis, type: keyvalue, property: connectionString } }
+      - { key: AUTH_SECRET, sync: false }
+      - { key: AUTH_URL, sync: false } # the deployed web URL (https://flowbuddy-dev-web.onrender.com)
+      - { key: AUTH_TRUST_HOST, value: true }
+      # No OpenAI config here: the Studio makes NO OpenAI calls — the Copilot-page tester embeds the
+      # REAL widget, so every answer goes through flowbuddy-dev-api (which owns OPENAI_API_KEY/EMBED_MODEL).
+      # PUBLIC api URL — baked into the browser embed snippet (data-flowbuddy-api) + extension payload.
+      - { key: FLOWBUDDY_API_URL, sync: false } # https://flowbuddy-dev-api.onrender.com
+      - { key: FLOWBUDDY_WIDGET_URL, sync: false } # https://flowbuddy-dev-widget.onrender.com/flowbuddy-copilot.js
+      # Transactional email (Resend) — §3.6: setting the key ENABLES the verified-email requirement
+      # for new signups + password reset. Unset = auth works but signups auto-verify (dev semantics).
+      # ⚠️ On first enable, backfill pre-existing accounts or they can't sign in:
+      #   UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;
+      - { key: RESEND_API_KEY, sync: false }
+      # Optional custom sender (needs a verified domain in Resend); default = onboarding@resend.dev,
+      # which only delivers to the Resend account owner's own address.
+      # - { key: EMAIL_FROM, sync: false }
+      # Chrome Web Store listing for the FlowBuddy Recorder — when set, the Home "Get started" checklist's
+      # install CTA opens the store ("Add to Chrome") instead of the manual Settings fallback.
+      - { key: FLOWBUDDY_EXTENSION_URL, sync: false } # https://chromewebstore.google.com/detail/<extension-id>
+
+  # --- Widget host: serves the embeddable flowbuddy-copilot.js bundle (static site, free) ---
+  - type: web
+    name: flowbuddy-dev-widget
+    runtime: static
+    # Render's static builder auto-detects pnpm; do NOT `corepack enable` — its /usr/bin is read-only (EROFS).
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @flowbuddy/widget build
+    staticPublishPath: packages/widget/dist
+
+  # (Phase 2 — deferred: a flowbuddy-portal web service for the public help site.)
