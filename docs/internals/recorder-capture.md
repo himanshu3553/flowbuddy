@@ -266,7 +266,7 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 
 ## 5. Data it reads / writes
 
-- **Writes (transiently):** IndexedDB (`sync-spike` DB, `kv` store) keyed by prefix —
+- **Writes (transiently):** IndexedDB (`flowbuddy-recorder` DB, `kv` store) keyed by prefix —
   `meta`, `audio`, `event:*`, `shot:*`, `dom:*`. Cleared on successful upload (R2).
 - **Writes (durably):** nothing in Postgres directly — it hands the bundle to the API, which persists
   the `KnowledgeSource`.

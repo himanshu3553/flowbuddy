@@ -5,7 +5,8 @@
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.
 
 - **Status:** v0.2 — **copilot-first** (supersedes the original portal-first framing)
-- **Last updated:** 2026-07-08 · **Branch:** `dev`
+- **Name:** **FlowBuddy** (domain `flowbuddyai.com`) — decided 2026-07-17; built under the working name "Sync" until then (the full rename runs through code, contract, and infra).
+- **Last updated:** 2026-07-17 · **Branch:** `dev`
 - **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · local dev → [`dev-setup.md`](dev-setup.md)
 
 ---

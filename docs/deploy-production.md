@@ -13,7 +13,7 @@ prod too; this doc is about the *production* configuration and process.
 | Environment | Where | Branch | Config | Purpose |
 |---|---|---|---|---|
 | **Local dev** | your machine | any | `docker-compose` (Postgres + Redis + MinIO) + `pnpm dev` per package — [`dev-setup.md`](dev-setup.md) | day-to-day development |
-| **Cloud dev / staging** | Render, free tier | `dev` | the original `flowbuddy-dev-*` services ([`deploy-render.md`](deploy-render.md)); free Postgres self-deletes every 30 days — treat as disposable | cloud E2E testing (recorder → prod-like URLs), demoing |
+| **Cloud dev / staging** | Render, free tier | `dev` | the `flowbuddy-dev-*` services, created fresh 2026-07-17 ([`deploy-render.md`](deploy-render.md)); free Postgres self-deletes every 30 days — treat as disposable | cloud E2E testing (recorder → prod-like URLs), demoing |
 | **Production** | Render, paid | `main` | the `flowbuddy-*` services below, fronted by **FlowBuddyAI.com** custom domains | the live product |
 
 `main` receives code only by explicit fast-forward from `dev`, so **every push to `main` is a
@@ -201,11 +201,11 @@ targets — never for env vars or snippets.
 2. Build `packages/landing` (marketing page — design-system tokens, CTA → `app.flowbuddyai.com`).
 3. Update docs; commit code + docs together; FF-sync `main`.
 
-**B. Detach the old dev blueprint — BEFORE the new render.yaml reaches `dev`.** The existing
-blueprint instance watches `dev`; if it syncs the rewritten file it will try to create the
-`flowbuddy-*` resources and drop the `flowbuddy-dev-*` ones. Render dashboard → the old Blueprint → disable
-auto-sync (or delete the blueprint instance — deleting it keeps the services running and they keep
-auto-deploying code from `dev`; only infra-from-yaml management stops).
+**B. Detach the dev blueprint — BEFORE the new render.yaml reaches `dev`.** The dev blueprint
+instance (created 2026-07-17 from `dev`) watches that branch; if it syncs the rewritten file it will
+try to create the `flowbuddy-*` resources and drop the `flowbuddy-dev-*` ones. Render dashboard → the
+dev Blueprint → disable auto-sync (or delete the blueprint instance — deleting it keeps the services
+running and they keep auto-deploying code from `dev`; only infra-from-yaml management stops).
 
 **C. Third-party accounts:**
 1. Cloudflare R2 → create bucket `flowbuddy-artifacts` + an Object R/W token scoped to it.
@@ -227,7 +227,7 @@ domain, so sign-in via the onrender URL would mis-callback.
 a rebuild + resubmission (the packaged-but-unsubmitted v0.4.0 zip bakes the OLD dev URL — don't
 upload it as-is):
 ```bash
-STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web-uir8.onrender.com,http://localhost:3000" \
+STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web.onrender.com,http://localhost:3000" \
   pnpm --filter @flowbuddy/extension build
 ```
 Bump the version, zip from `dist/`, submit, log it in [`extension-releases.md`](extension-releases.md),

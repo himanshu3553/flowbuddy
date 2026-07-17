@@ -5,7 +5,7 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 | Level | Where | Section |
 |---|---|---|
 | **1 · Local** | your machine — docker-compose (Postgres + Redis + MinIO) | [Level 1 — Local testing on localhost](#level-1--local-testing-on-localhost) |
-| **2 · Dev** | Render free tier (`flowbuddy-dev-web-uir8.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
+| **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **not deployed yet** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
 > **Scope.** This covers the **Phase-1 copilot** product end-to-end (P1-M0…M12). Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
@@ -473,7 +473,7 @@ All migrations have been successfully applied.
 Mirrors [`deploy-render.md`](deploy-render.md) §10–12, with the **post-wipe gotchas** called out.
 
 ### D5.1 Create a new account
-Open **https://flowbuddy-dev-web-uir8.onrender.com** → sign up. This creates a fresh workspace + a **new**
+Open **https://flowbuddy-dev-web.onrender.com** → sign up. This creates a fresh workspace + a **new**
 public widget key and connect token.
 
 ✅ **PASS:** you land in the empty Studio (Home dashboard, no recordings).
@@ -488,8 +488,8 @@ connect bridge), so one build can cover both. Pick the build for what you're tes
 | Testing against | Build command | What gets baked |
 |---|---|---|
 | **Local** (docker-compose) | `pnpm --filter @flowbuddy/extension build` *(default `http://localhost:3000`)* | connect-bridge `matches` + popup links → **localhost**; handshake carries the local API (`http://localhost:8787`) |
-| **Render** (this dev deploy) | `STUDIO_URL=https://flowbuddy-dev-web-uir8.onrender.com pnpm --filter @flowbuddy/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `FLOWBUDDY_API_URL` |
-| **Both** (the Web Store artifact, v0.2.1+) | `STUDIO_URL="https://flowbuddy-dev-web-uir8.onrender.com,http://localhost:3000" pnpm --filter @flowbuddy/extension build` | popup → **Render**; connect bridge on **both** origins — a store install can also connect to a local Studio |
+| **Render** (this dev deploy) | `STUDIO_URL=https://flowbuddy-dev-web.onrender.com pnpm --filter @flowbuddy/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `FLOWBUDDY_API_URL` |
+| **Both** (the Web Store artifact, v0.2.1+) | `STUDIO_URL="https://flowbuddy-dev-web.onrender.com,http://localhost:3000" pnpm --filter @flowbuddy/extension build` | popup → **Render**; connect bridge on **both** origins — a store install can also connect to a local Studio |
 
 Then `chrome://extensions` → **Reload** / **Load unpacked** → `packages/extension/dist` → **Connect**
 (opens `…/connect`, relaying the token + API URL into the extension).

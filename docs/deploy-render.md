@@ -116,8 +116,9 @@ Auto-wired by the blueprint (do **not** set): `DATABASE_URL`, `REDIS_URL`, `PORT
 ## 8. Fix the service URLs (the suffix gotcha)
 
 **Render appends a random suffix to a service's hostname if the plain name is already taken** — e.g. you
-may get `https://flowbuddy-dev-web-uir8.onrender.com` even though the service is named `flowbuddy-dev-web` (in our deploy
-`flowbuddy-dev-widget` stayed clean but `flowbuddy-dev-web` got `-uir8`). There is **no blueprint reference** for a service's
+may get `https://flowbuddy-dev-web-x4k2.onrender.com` even though the service is named `flowbuddy-dev-web`
+(it happened on the first-ever deploy — `sync-web` came out `-uir8`; the 2026-07-17 `flowbuddy-dev-*` deploy
+got all three plain names, so don't count on either outcome). There is **no blueprint reference** for a service's
 public URL, so:
 
 1. After the services appear, open **each** of `flowbuddy-dev-api`, `flowbuddy-dev-web`, `flowbuddy-dev-widget` and copy its **real** URL.
@@ -177,8 +178,8 @@ listing URL goes in `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-dev-web` so the Home
 matched localhost; v0.2.1 was the first prod-targeted release; v0.4.0 — R13 ranked locators + structured
 logging — was packaged 2026-07-13 but never uploaded and is OBSOLETE post-rename.)* **v0.5.0**
 (**"FlowBuddy Recorder"** — the rename release, carrying v0.4.0's content; no new permissions) was
-**built + packaged 2026-07-17** (`flowbuddy-recorder-0.5.0.zip`, baked `https://flowbuddy-dev-web.onrender.com`
-+ localhost; store upload pending). The store zip is built from
+**built + packaged 2026-07-17 and submitted to the store the same day — in review** (`flowbuddy-recorder-0.5.0.zip`,
+baked `https://flowbuddy-dev-web.onrender.com` + localhost). The store zip is built from
 `dist/` (`cd dist && zip -r ../flowbuddy-recorder-<version>.zip .`). ⚠️ The baked Studio URL is part of the
 store artifact — moving to a custom domain later means a rebuild + resubmission (add the new domain
 to the list; keep the old one during the transition). ⚠️ After zipping, re-run a plain
@@ -279,35 +280,22 @@ When `feature-walkthrough` (`711a18b` — P4-M0 guided walkthrough + Reason diag
 
 ---
 
-## Upgrading an existing deploy — the FlowBuddy rename (2026-07-17)
+## The FlowBuddy rename cutover (done 2026-07-17)
 
-The product was renamed **Sync → FlowBuddy**: blueprint service names (`sync-*` → `flowbuddy-dev-*`),
-env-var names (`SYNC_*` → `FLOWBUDDY_*`), the widget bundles (`sync-copilot*.js` → `flowbuddy-copilot*.js`),
-the embed contract (`data-sync-*` attrs → `data-flowbuddy-*`, key header `x-sync-key` → `x-flowbuddy-key`,
-`window.SyncCopilot` → `window.FlowBuddy`), and the extension listing ("Sync Recorder" → "FlowBuddy Recorder").
+The product was renamed **Sync → FlowBuddy** and the dev environment was **rebuilt from scratch** the
+same day: the old blueprint, every `sync-*` service, and the `sync-artifacts` bucket were deleted, then
+the current `flowbuddy-dev-*` stack was created fresh from `dev` per §§2–10 (fresh DB applied all
+migrations on first boot; user-verified E2E). What this means for anything pre-rename you may run into:
 
-**Render matches blueprint services by NAME, so this deploy is a re-create, not an upgrade:** syncing the
-renamed `render.yaml` creates brand-new `flowbuddy-dev-*` services (new `*.onrender.com` URLs, fresh empty
-free Postgres) and flags the old `sync-*` services for removal. Treat it as a first deploy — run §§6–10 —
-with these rename-specific notes:
-
-1. **Migrations:** the fresh database applies **every** migration from scratch on first `flowbuddy-dev-api`
-   boot — the previously pending Sense/Reason/walkthrough migrations (the two "upgrading" sections above)
-   are absorbed; no manual step. Old dev data is gone (disposable by design; `e2e-testing.md` starts clean).
-2. **Secrets are NOT carried over** — re-enter the §7 table on the new services, using the **renamed** keys:
-   `FLOWBUDDY_API_URL`, `FLOWBUDDY_WIDGET_URL` (now pointing at `flowbuddy-copilot.js`),
-   `FLOWBUDDY_STUDIO_URL`, optional `FLOWBUDDY_EXTENSION_URL`. The `flowbuddy-dev-r2` group can keep the
-   existing R2 credentials — pointing `R2_BUCKET` at the old `sync-artifacts` bucket still works, or
-   pre-create `flowbuddy-artifacts-dev` for a clean cut (the api tries to auto-create a missing bucket,
-   but a scoped R2 Object R/W token can't create buckets — pre-create it as in §3).
-3. **New URLs everywhere** (suffix gotcha §8): `AUTH_URL`, `FLOWBUDDY_*` URLs, and any bookmarks.
-4. **Embed snippets do not survive:** old test embeds load `sync-copilot.js` with `data-sync-*` attrs —
-   both are gone. Re-copy the snippet from Studio → Copilot (new bundle URL + `data-flowbuddy-*` attrs).
-5. **Extension:** rebuild with `STUDIO_URL="https://<new flowbuddy-dev-web URL>,http://localhost:3000"`;
-   the packaged-but-never-uploaded v0.4.0 zip is **obsolete** (bakes the old dev URL — do not upload).
-   Next store release = v0.5.0 as **FlowBuddy Recorder** — see [`extension-releases.md`](extension-releases.md).
-6. **Delete the old `sync-*` services** (and the old `sync-r2` env group) once the new stack passes the
-   §12 end-to-end test — nothing references them afterwards.
+- **The contract renamed with the product:** env vars `SYNC_*` → `FLOWBUDDY_*`, bundles
+  `sync-copilot*.js` → `flowbuddy-copilot*.js`, embed attrs `data-sync-*` → `data-flowbuddy-*`,
+  key header `x-sync-key` → `x-flowbuddy-key`, `window.SyncCopilot` → `window.FlowBuddy`,
+  extension "Sync Recorder" → "FlowBuddy Recorder".
+- **Pre-rename embed snippets are dead** (old bundle URL + old attrs) — re-copy from Studio → Copilot.
+- **Pre-rename extension builds can't connect** (old baked URLs + old bridge channels): store v0.3.0
+  and the never-uploaded v0.4.0 zip are both inert; v0.5.0 (submitted 2026-07-17) is the first working
+  post-rename build — [`extension-releases.md`](extension-releases.md).
+- **Old `*.onrender.com` URLs and the `sync_*` database are gone**; dev data was disposable by design.
 
 ---
 

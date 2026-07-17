@@ -9,7 +9,7 @@
 
 ---
 
-## v0.5.0 — 📦 packaged 2026-07-17 · store upload pending
+## v0.5.0 — 🚀 submitted 2026-07-17 · in review
 
 **The FlowBuddy release** — the first build under the new name, and the first that connects to the renamed dev stack.
 

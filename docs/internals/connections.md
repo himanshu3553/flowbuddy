@@ -136,7 +136,7 @@ sequenceDiagram
     participant X as Extension background
 
     S->>S: connectExtension() server action → mint ApiToken, return {token, apiBaseUrl, email}
-    S->>B: window.postMessage({ source:'sync-page', type:'connect', token, ... })
+    S->>B: window.postMessage({ source:'flowbuddy-page', type:'connect', token, ... })
     B->>X: chrome.runtime.sendMessage({ cmd:'connect', token, backendUrl, email })
     X->>X: store apiToken + backendUrl in chrome.storage.local
     X-->>B: ack → page shows "connected"
