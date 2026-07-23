@@ -177,17 +177,16 @@ Click **Connect** — it opens `<your-flowbuddy-dev-web-url>/connect`, relays th
 extension, and shows as connected. *(Plain `pnpm --filter @flowbuddy/extension build` with no `STUDIO_URL`
 reverts to localhost — the committed `src/manifest.json` stays localhost so local dev is unaffected.)*
 
-**Chrome Web Store** (full per-version history + the cut-a-release checklist: [`extension-releases.md`](extension-releases.md)): **v0.3.0 is LIVE** as "Sync Recorder" (stop→upload feedback + resilience; approved after the
-2026-07-06 submission) — but it bakes the **pre-rename** dev Studio URL (`sync-web-uir8.onrender.com`), which
-died with the FlowBuddy re-deploy, so store installs of v0.3.0 can no longer connect:
+**Chrome Web Store** (full per-version history + the cut-a-release checklist: [`extension-releases.md`](extension-releases.md)): **v0.6.0 "FlowBuddy Recorder" is LIVE** (submitted 2026-07-17, confirmed live by
+2026-07-23) — the production release: bakes `https://app.flowbuddyai.com` (primary) +
+`https://flowbuddy-dev-web.onrender.com` + localhost, new FlowBuddy "F" icons, no new permissions.
+Listing (extension ID `njkfcfpehcklldmeofolnpdljdhcgofk`, stable across the rename):
 <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk>. Its
-listing URL goes in `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-dev-web` so the Home checklist's install CTA reads
-"Add to Chrome" — leave that var unset until v0.5.0 is live. *(0.1.0/0.2.0 were dev builds whose bridge only
-matched localhost; v0.2.1 was the first prod-targeted release; v0.4.0 — R13 ranked locators + structured
-logging — was packaged 2026-07-13 but never uploaded and is OBSOLETE post-rename.)* **v0.5.0**
-(**"FlowBuddy Recorder"** — the rename release, carrying v0.4.0's content; no new permissions) was
-**built + packaged 2026-07-17 and submitted to the store the same day — in review** (`flowbuddy-recorder-0.5.0.zip`,
-baked `https://flowbuddy-dev-web.onrender.com` + localhost). The store zip is built from
+listing URL goes in `FLOWBUDDY_EXTENSION_URL` on **both** `flowbuddy-web` (prod) and `flowbuddy-dev-web`
+so the Home checklist's install CTA reads "Add to Chrome". *(History: 0.1.0/0.2.0 dev builds; v0.2.1
+first prod-targeted; v0.3.0 the previous live version — its pre-rename baked URL died with the
+FlowBuddy re-deploy; v0.4.0 packaged but never uploaded; v0.5.0's review cancelled in favor of one
+v0.6.0 cycle.)* The store zip is built from
 `dist/` (`cd dist && zip -r ../flowbuddy-recorder-<version>.zip .`). ⚠️ The baked Studio URL is part of the
 store artifact — moving to a custom domain later means a rebuild + resubmission (add the new domain
 to the list; keep the old one during the transition). ⚠️ After zipping, re-run a plain

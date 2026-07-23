@@ -9,7 +9,7 @@
 
 ---
 
-## v0.6.0 — 🚀 submitted 2026-07-17 · in review
+## v0.6.0 — ✅ LIVE (submitted 2026-07-17 · confirmed live 2026-07-23)
 
 **The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
 
@@ -17,7 +17,7 @@
 - **Permissions:** unchanged since 0.3.0.
 - **Baked targets:** `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only) — one artifact connects against prod, dev, and local.
 - **Artifact:** `packages/extension/flowbuddy-recorder-0.6.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.6.0, bridge matches all three origins, popup bakes the prod URL, `__DEV__` stripped.
-- **Store mechanics:** v0.5.0's pending review is **cancelled** and this replaces it (decision 2026-07-17: one review cycle instead of two). After it goes live: set `FLOWBUDDY_EXTENSION_URL` on **`flowbuddy-web`** (prod) and `flowbuddy-dev-web` to the listing URL.
+- **Store mechanics:** v0.5.0's pending review was **cancelled** and this replaced it (decision 2026-07-17: one review cycle instead of two). Now live: `FLOWBUDDY_EXTENSION_URL` = the listing URL on **both** `flowbuddy-web` (prod) and `flowbuddy-dev-web`.
 
 ## v0.5.0 — ⚠️ review cancelled 2026-07-17 · superseded by v0.6.0 before approval
 
@@ -42,7 +42,7 @@
 - **Baked targets:** `https://sync-web-uir8.onrender.com` (primary) + `http://localhost:3000` (bridge only).
 - **Artifact:** `packages/extension/sync-recorder-0.4.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.4.0, bridge matches both origins, popup bakes the Render URL, R13 present, `__DEV__` stripped. Manifest bump commit: `07d1bbb`.
 
-## v0.3.0 — ✅ LIVE (submitted 2026-07-06 · confirmed live 2026-07-13)
+## v0.3.0 — ✅ was LIVE 2026-07-13 → superseded by v0.6.0 (2026-07-23)
 
 **Stop→upload feedback & resilience** (`6a06864`) — drove out the "stranded stop" incident found on the first store-install E2E (asleep API + service-worker eviction → stuck upload, popup falsely idle):
 
