@@ -15,7 +15,7 @@ flowbuddy/
   package.json          # root: orchestration + shared dev tools (turbo, typescript)
   pnpm-workspace.yaml   # declares packages live in packages/*
   turbo.json            # task pipeline (build/dev/typecheck across packages)
-  docker-compose.yml    # local Postgres + Redis
+  docker-compose.yml    # local Postgres + Redis + MinIO
   packages/
     shared/     # types + zod schemas shared by everyone
     db/         # Prisma schema + client
@@ -25,10 +25,11 @@ flowbuddy/
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
     widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js + the lazy P2-M5 renderer flowbuddy-copilot-render.js) — FlowBuddy-indigo default, host-rebrandable
     extension/  # Chrome MV3 recorder — indigo UI
-  docs/       # product · architecture · roadmap · phase-1-copilot · phase-1-modules-map · phase-2-sense · phase-2-reason · phase-4-autopilot · v2-portal · kb-step-distillation · design_system/ · e2e-testing · extension-releases · this file
+    landing/    # static marketing page for flowbuddyai.com (build = copy public/ → dist/)
+  docs/       # the full doc set — start at the map: roadmap.md §10 / the CLAUDE.md doc table
 ```
 
-> **Note:** the `portal/` package (the public help site) and the throwaway `spike/` were **removed for the Phase-1 copilot clean slate** (commit `c9f13f4`, 2026-06-22). The portal is **built in Version 2** ([`v2-portal.md`](v2-portal.md)).
+> **Note:** the `portal/` package (the public help site) is not in the current workspace — it's **built in Version 2** ([`v2-portal.md`](v2-portal.md)).
 
 Why a monorepo: the extension, api, web, and widget must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
 
@@ -47,7 +48,7 @@ Same `package.json` and registry; better at multi-package repos (one install for
 `pnpm build` actually runs `turbo run build`: it runs each package's `build` script **in dependency order** (`shared`/`db` before `web`) and **caches** unchanged packages (the "cache miss / N cached" output).
 
 ### Docker Compose — the infrastructure (separate from pnpm)
-Runs **Postgres** + **Redis** as containers so you don't install them on your Mac. The app connects via `DATABASE_URL` / `REDIS_URL`. Defined in `docker-compose.yml`.
+Runs **Postgres** + **Redis** + **MinIO** as containers so you don't install them on your Mac. The app connects via `DATABASE_URL` / `REDIS_URL`. Defined in `docker-compose.yml`.
 
 > **Postgres image = `pgvector/pgvector:pg16`** (since P1-M3 hybrid retrieval, 2026-07-07) — a
 > drop-in postgres:16 with the `vector` extension the migrations need. Upgrading an existing
@@ -131,7 +132,8 @@ docker compose down                           # stop Postgres + Redis (add -v to
 | `worker` | BullMQ synthesis worker | `pnpm --filter @flowbuddy/api worker` |
 | `widget` | embeddable copilot `<script>` (esbuild) | `pnpm --filter @flowbuddy/widget build` → serve `demo/` over HTTP (`python3 -m http.server 8080`) |
 | `extension` | Chrome MV3 recorder | `pnpm --filter @flowbuddy/extension build` → load `dist/` |
-| `shared`, `db` | shared types + Prisma | built as dependencies of the above |
+| `landing` | static marketing page (flowbuddyai.com) | `pnpm --filter @flowbuddy/landing build` → `dist/` |
+| `shared`, `db`, `logger`, `synthesis` | shared types + Prisma + the Pino logger (§7) + the OpenAI pipeline | built as dependencies of the above |
 
 *(`portal` — the V2 public help site — is built in Version 2; it's not in the current workspace.)*
 
@@ -195,7 +197,7 @@ LOG_LEVEL=debug   # trace a request path in prod (verbose — set back to info a
 LOG_LEVEL=warn    # quieten a noisy service to warnings + errors only
 ```
 
-Full prod steps: [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production).
+Full prod steps: [`deploy.md` → Logging in production](deploy.md#25-logging-in-production).
 
 ### Browser surfaces (special cases)
 

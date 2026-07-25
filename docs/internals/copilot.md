@@ -25,7 +25,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-06) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-08) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
 | [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` + `/sense-plan` (P2-M0) + `/walkthrough` (P4-M0) routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
@@ -50,7 +50,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
   rate bucket); read-only — writes nothing.
 - **`GET /v1/copilot/sense-plan?route=…`** (P2-M0, 2026-07-08) — the ROUTE-SHARDED compiled sense
   plan (approved workflows → steps × ranked locators + routes), gated by `Workspace.senseEnabled`;
-  the widget caches per route. Mechanics: [`phase-2-sense.md`](../phase-2-sense.md) §8.
+  the widget caches per route. Mechanics: [`phase-2-sense.md`](../phase-2-sense.md) Part A.
 - **`POST /v1/copilot/walkthrough`** (P4-M0, 2026-07-15) — guided-walkthrough run analytics:
   `started` (key re-verified against `CopilotApproval` — no-leak; returns `runId`) then
   `step_advanced`/`completed`/`aborted`/`stalled` update the one `CopilotWalkthrough` row per run
@@ -86,7 +86,7 @@ flowchart TD
   the origin must be in the list (else `403`). An **empty list = allow any** (dev default).
   Server-to-server callers send no `Origin` and aren't blocked here (a page can't spoof "no origin").
 - **Rate limit:** `checkRateLimit(bucket)` — an in-memory **fixed window of 30 requests / 60 s**.
-  MVP-grade; production would back it with Redis. Over-limit → `429`. **All three copilot routes**
+  MVP-grade; production would back it with Redis. Over-limit → `429`. **All copilot routes** (`/answer` · `/feedback` · `/seen` · `/config` · `/sense-plan` · `/walkthrough`)
   go through one shared `copilotGate` (server.ts) — `/answer` keeps the bare key as its bucket,
   `/feedback` and `/seen` get per-route buckets (`feedback:key`, `seen:key`) so a chatty host page
   pinging `/seen` can't starve real questions.
@@ -98,7 +98,7 @@ recorder-token auth used by ingestion. See [connections.md](connections.md) §3.
 
 `retrieveApprovedKBItems(db, workspaceId, question, { contextPath })` is **the single point that keeps
 the copilot grounded only in approved-KB** — one implementation, one caller (the public answer route;
-since 2026-07-06 the Studio tester is the real widget and arrives through that same route), with the
+since 2026-07-08 the Studio tester is the real widget and arrives through that same route), with the
 Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
 
 1. **Load the approval set.** Fetch `CopilotApproval` rows for the workspace → a `Set` of

@@ -2,7 +2,7 @@
 
 > **The portal track is the human-facing help center built over the same Knowledge Base the copilot uses — a decoupled, second publish target, scheduled in Version 2.** Version 1 is the pure copilot arc (Copilot → Sense → Self-validation → Autopilot); the portal + articles ship after it. This doc is the forward build plan — the features to develop, aligned to what Phase 1 already produces (distilled workflows + the approval gate + hybrid retrieval). Roadmap/status: [`roadmap.md`](roadmap.md) §6. Technical model: [`architecture.md`](architecture.md). Why it's a by-product: [`product.md`](product.md) §5.
 
-- **Status:** **Version 2 — all 7 modules (V2 · P0…P6) to build; no investment until scheduled.** · **Branch:** `dev` · **Last updated:** 2026-07-08
+- **Status:** **Version 2 — all 7 modules (V2 · P0…P6) to build; no investment until scheduled.** · **Branch:** `dev` · **Last updated:** 2026-07-17 (rename sweep; feature list locked 2026-07-08)
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publishing. Approving a workflow for the copilot and publishing it to the portal are **independent** actions over the same KB. Mental model: `ONE KB → per-audience approval → { Copilot, Portal }`.
 
 ---
@@ -13,7 +13,7 @@ The same recordings that power the copilot also feed a **public help portal** �
 
 | Module | Feature |
 |:---|:---|
-| **V2 · P0** | **Publish foundation** — per-audience approval (`copilot | portal`) + a render-time presentation overlay |
+| **V2 · P0** | **Publish foundation** — per-audience approval (`copilot \| portal`) + a render-time presentation overlay |
 | **V2 · P1** | **Text → Article** — grounded authoring (type a topic → article over hybrid retrieval) |
 | **V2 · P2** | **Public Help Portal** — per-workspace site rendering approved workflows as articles |
 | **V2 · P3** | **Search UI** — portal + Studio KB hybrid search |

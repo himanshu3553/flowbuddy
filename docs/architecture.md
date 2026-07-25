@@ -1,6 +1,6 @@
 # FlowBuddy — System Architecture (the 3 modules)
 
-> **Canonical model.** FlowBuddy is three modules: **(1) Capture** raw data, **(2)** turn it into an explicit **Knowledge Base**, **(3)** create **Articles** from the KB. Capture *modality* and article-creation *mode* are **orthogonal** — connected only through the KB. Every other doc ([`product.md`](product.md), [`roadmap.md`](roadmap.md), the phase docs) refers here for the module structure; the **per-phase data-model deltas** live in [`phase-1-copilot.md`](phase-1-copilot.md) §7 (copilot) and [`v2-portal.md`](v2-portal.md) §4 (the V2 portal track).
+> **Canonical model.** FlowBuddy is three modules: **(1) Capture** raw data, **(2)** turn it into an explicit **Knowledge Base**, **(3)** create **Articles** from the KB. Capture *modality* and article-creation *mode* are **orthogonal** — connected only through the KB. Every other doc ([`product.md`](product.md), [`roadmap.md`](roadmap.md), the phase docs) refers here for the module structure; the **per-phase data-model deltas** live in [`phase-1-copilot.md`](phase-1-copilot.md) §7 (copilot), the as-builts of [`phase-2-sense.md`](phase-2-sense.md) (Sense/Reason fields) and [`phase-4-autopilot.md`](phase-4-autopilot.md) §8 (`CopilotWalkthrough`), and [`v2-portal.md`](v2-portal.md) §3 (the V2 portal track).
 
 - **Status:** Frozen v1.0 — 2026-06-19. Segmentation placement **locked: Option B → C** (§Decisions). Product-version scope **locked 2026-06-21** (below). **UPDATED 2026-06-22 — copilot-first pivot:** the copilot grounds on **approved-KB** (not published articles) and copilot/portal are **decoupled** targets; the 3-module model is unchanged. See [`product.md`](product.md) §5. *(Supersedes §Decisions "copilot grounds on PUBLISHED articles".)*
 - **Key principle preserved:** *grounded authorship* — AI writes **only** from the customer's own recordings, never the model's general knowledge.
@@ -8,12 +8,12 @@
 ### Product versions & phases (scope — **phases REDEFINED 2026-06-22, copilot-first**)
 - **Version 1** = the **workflow-capture** product (**capture is workflow-only, 1.1**), released in **four phases — a pure copilot arc (answer → locate → stay fresh → act)** — authoritative roadmap: [`roadmap.md`](roadmap.md):
   - **Phase 1 — Copilot** ⭐ (the Version 1 release, ships first): the foundation we've built (capture → KB → retrieval/grounding) + the embeddable copilot. Modules **P1-M0…P1-M12** ([`phase-1-copilot.md`](phase-1-copilot.md)).
-  - **Phase 2 — Sense (in-context help)**: the copilot localizes the end-user to **workflow + step** (an ask-time read-only probe of approved workflows' captured locators against the live page; **hybrid** — client scores, the answer LLM disambiguates with the question) and answers **positionally** ("you're on step 3 of X — here's how to get unstuck, then the path to done"). No acting, no end-user recording. Modules **P2-M0…M4 ✅ built + user-verified E2E 2026-07-09** ([`phase-2-sense.md`](phase-2-sense.md)); **+ P2-M5 Reason** — diagnostic reasoning over ask-time page-state capture + the founder's expected state, **✅ built + user-verified E2E 2026-07-13** ([`phase-2-reason.md`](phase-2-reason.md)).
+  - **Phase 2 — Sense (in-context help)**: the copilot localizes the end-user to **workflow + step** (an ask-time read-only probe of approved workflows' captured locators against the live page; **hybrid** — client scores, the answer LLM disambiguates with the question) and answers **positionally** ("you're on step 3 of X — here's how to get unstuck, then the path to done"). No acting, no end-user recording. Modules **P2-M0…M4 ✅ built** + **P2-M5 Reason** — diagnostic reasoning over ask-time page-state capture + the founder's expected state, **✅ built** ([`phase-2-sense.md`](phase-2-sense.md)).
   - **Phase 3 — Self-validation & freshness** (the moat; to be planned).
   - **Phase 4 — Autopilot** (agentic execution; opened ahead of Phase 3, sequencing decision 2026-07-15): the copilot executes approved workflows in the end-user's live session — **grounded actions** over the same replay core Phase 3 builds, entering mid-workflow via Sense's localization. **P4-M0 guided walkthrough ✅ built 2026-07-15** (zero-acting); the acting modules **P4-M1…M3** to plan ([`phase-4-autopilot.md`](phase-4-autopilot.md)). **Phase 5 — Converse** (the goal-based agent: Tell → Guide → Do; P5 = brain, P4 = hands) is designed in draft ([`phase-5-converse.md`](phase-5-converse.md)).
 - **Version 2** = the **Help Portal & Articles track** (the human-facing by-products, **moved out of V1 2026-07-08**: render approved workflows as articles + per-audience approval + presentation overlay + productization — modules **V2 · P0…P6**, [`v2-portal.md`](v2-portal.md)) + additional **capture modalities** — **narration-only (1.2)** and **video (1.3)** — plus the narration-derived `static` explainer-article path, + product depth.
 
-> **⚠️ Phase numbers were redefined 2026-06-22.** The 3-module model below is **unchanged**; only the *phase grouping* and the *copilot's grounding* (**approved-KB**, not published articles) changed. Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. **Now:** Phase 1 = **copilot** (primary, ships first), Phase 3 = self-validation. Module IDs are now **per-phase** (`P{phase}-M{n}`); the old global `M0–M14` are mapped in [`roadmap.md`](roadmap.md) §7. See also [`product.md`](product.md) §5.
+> **⚠️ Phase numbers were redefined 2026-06-22.** The 3-module model below is **unchanged**; only the *phase grouping* and the *copilot's grounding* (**approved-KB**, not published articles) changed. Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. **Now:** Phase 1 = **copilot** (primary, ships first), Phase 3 = self-validation. Module IDs are now **per-phase** (`P{phase}-M{n}`); the old global `M0–M14` are mapped in [`roadmap.md`](roadmap.md) §8. See also [`product.md`](product.md) §5.
 >
 > **⚠️ Phase 2 was redefined again 2026-07-08:** the portal/articles by-products moved **out of Version 1 into Version 2** (the portal track, `V2 · P0…P6` — [`v2-portal.md`](v2-portal.md)); the new **Phase 2 = Sense (in-context help)**.
 
@@ -37,7 +37,7 @@ Notes:
 
 ## Module 2 — Knowledge Base (explicit, persisted, indexed substrate)
 
-Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This explicit layer is **implemented (M6)** — the worker does capture → KB (transcript + **distilled** steps grouped by workflow), and article creation reads the KB. As of 2026-06-26 the worker **cleans + distills** raw events into clean, user-facing steps rather than persisting events 1:1 — see [`kb-step-distillation.md`](kb-step-distillation.md).
+Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This explicit layer is **implemented (M6)** — the worker does capture → KB (transcript + **distilled** steps grouped by workflow); every consumer reads the KB (the copilot today; the V2 portal render when built). As of 2026-06-26 the worker **cleans + distills** raw events into clean, user-facing steps rather than persisting events 1:1 — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
 A processing/extraction step (the worker, repurposed) reads a raw capture and writes:
 
@@ -80,7 +80,7 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
   orderIndex   Int
   text         String                          // searchable content (the index field)
   data         Json                            // kind-specific payload:
-  //   step  -> { instruction, detail, route, narration, screenshotFile, bbox }   (distilled — 2026-06-26)
+  //   step  -> { instruction, detail, route, narration, screenshotFile, bbox, keyEventId }   (distilled — 2026-06-26; keyEventId persisted since 2026-07-08)
   //   topic -> { spanText, startMs, endMs }
   segmentIndex Int?    // workflow this item belongs to (persisted segmentation — promoted toward C)
   segmentTitle String?
@@ -98,17 +98,17 @@ model KnowledgeItem {            // the indexed unit of knowledge (new)
 
 Job: produce human-facing **Articles** by reading the KB. **Articles are not the KB** — they're curated outputs.
 
-- **3.1 Auto (curated, M6.1)** — propose candidate **titles** (the segment titles persisted at KB build — Option C; free, no LLM) → user **selects** → synthesize Article(s) for **only the selected** segments. Workflow step-items → `workflow_backed` step-by-step articles. *(narration topic-items → `static` explainer prose = **Version 2**.)* **Not auto-pushed** — generation is user-triggered.
-- **3.2 Prompt-to-article** — query the **index** for items relevant to a topic *across the workspace* → synthesize one grounded Article; **decline + create a `CoverageGap`** if nothing matches. ✅ *built (M7).*
+- **3.1 Auto (curated)** *(the V2 portal render path — conceptual model; segmentation/titles are live, the article rendering is Version 2)* — propose candidate **titles** (the segment titles persisted at KB build — Option C; free, no LLM) → user **selects** → synthesize Article(s) for **only the selected** segments. Workflow step-items → `workflow_backed` step-by-step articles. *(narration topic-items → `static` explainer prose = **Version 2**.)* **Not auto-pushed** — generation is user-triggered.
+- **3.2 Prompt-to-article** *(V2 · P1 "Text → Article" — to build)* — query the **index** for items relevant to a topic *across the workspace* → synthesize one grounded Article; **decline + create a `CoverageGap`** if nothing matches. *(Only the retrieval seam it rides on is live — P1-M3; the article path itself is Version 2.)*
 
 ### Article types vs. sources (clarified)
 `type` describes **shape / self-validatability**; `source` describes **origin**. They're independent:
 
 | | `type = workflow_backed` (steps, self-validatable) | `type = static` (prose, not self-validatable) |
 |---|---|---|
-| `source = recording_auto` | auto from a workflow capture *(V1)* | auto from a narration capture (explainer) *(**V2**)* |
-| `source = prompt_grounded` | prompt → matched workflow items *(V1)* | prompt → matched topic items *(**V2** — needs narration)* |
-| `source = manual` | — | human-written (pricing/policy/FAQ) *(V1 — Studio lane, not a capture)* |
+| `source = recording_auto` | auto from a workflow capture *(**V2**)* | auto from a narration capture (explainer) *(**V2**)* |
+| `source = prompt_grounded` | prompt → matched workflow items *(**V2**)* | prompt → matched topic items *(**V2** — needs narration)* |
+| `source = manual` | — | human-written (pricing/policy/FAQ) *(**V2** — Studio lane, not a capture)* |
 
 > **Refinement to grounded authorship (2026-06-19; scoped V2 on 2026-06-21):** AI **may** generate `static` articles **when grounded in a narration recording** (the spoken words are the source). This does *not* break grounded authorship — narration is a recording, not general knowledge. **This narration-derived path is Version 2** (V1 has no narration capture, so V1 produces `static` only via the human `manual` lane). Human-written `static` (source = `manual`) remains for content with no recording at all.
 
@@ -147,7 +147,7 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 **One KB, decoupled publish targets (UPDATED 2026-06-22 — copilot-first pivot):**
 - **The KB (Module 2)** is the single substrate; access is gated **per target**:
   - **Copilot (primary product)** grounds on **approved-KB** — `KnowledgeItem`s behind a lightweight **per-workflow "approve for copilot"** flag. Richer than prose (selectors/routes/expected-outcomes) → context-aware + actionable, and it's the substrate Phase-3 freshness needs.
-  - **Help Portal (by-product)** serves **published articles** (Module 3 → Studio → publish) to public/SEO readers.
+  - **Help Portal (by-product — Version 2, to build)** renders **approved workflows as articles** (per-audience approval + a presentation overlay) for public/SEO readers ([`v2-portal.md`](v2-portal.md)).
 - **Copilot and portal are decoupled** — different audiences (in-app authenticated end-users vs. public/SEO), potentially different visibility; approving a workflow for the copilot and publishing an article are **independent** actions over the same KB.
 - **No-leak preserved:** the copilot answers **only** from approved-KB — never raw/un-approved items, never draft articles. **Approval ≠ article authoring** (one click on a workflow).
 - Detail: [`product.md`](product.md) §5, [`phase-1-copilot.md`](phase-1-copilot.md). *(Grounding **Stage B** — also citing a published article when one exists — is **deferred**; not to be confused with the V2 portal track.)*
@@ -160,9 +160,9 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 |---|---|---|
 | Module 1 | 1.1 workflow only | **1.1 workflow only** (narration 1.2 + video 1.3 = **Version 2**); capture carries `kind` |
 | **Module 2 (KB)** | **`KnowledgeSource` + `KnowledgeItem` + transcript + segment tags + hybrid keyword ∪ pgvector retrieval (M6/M7 + P1-M3 pgvector, 2026-07-07)** | ✅ reached (ANN/HNSW index only if a workspace ever exceeds ~tens of thousands of items) |
-| Module 3 | derived article views over the **KB** | Version 2 (portal track) — **render approved workflows** as articles + a presentation overlay ([`v2-portal.md`](v2-portal.md)) |
+| Module 3 | *none in V1 — the copilot consumes the KB directly* | Version 2 (portal track) — **render approved workflows** as articles + a presentation overlay ([`v2-portal.md`](v2-portal.md)) |
 
-**Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics) — the **Prisma model** was renamed; the underlying **table is kept as `RecSession`** (`@@map`) so existing data is preserved; add `KnowledgeItem`; the worker splits into **(a) capture → KB extraction** and **(b) KB → articles**; prompt-to-article becomes a second Module-3 path.
+**Migration:** `RecSession` → `KnowledgeSource` (add `kind`, `transcript`, `status` semantics) — the **Prisma model** was renamed; the underlying **table is kept as `RecSession`** (`@@map`) so existing data is preserved; add `KnowledgeItem`; the worker does **(a) capture → KB extraction**; **(b) KB → rendered articles** is the V2 portal path (with Text→Article as its second lane — [`v2-portal.md`](v2-portal.md)).
 
 ---
 
@@ -196,4 +196,4 @@ Articles are **not auto-generated** on capture. Segmentation runs at **KB build*
 
 **Original text (history, 2026-06-21):** the **raw KB is builder-internal** (authoring only); the **copilot and portal serve only PUBLISHED articles** — never raw/draft/un-reviewed knowledge. This prevented leaking unapproved content to customers and created the right loop. *(The "no-leak" goal survives; the mechanism changed to approved-KB.)*
 
-> **Coverage gaps — two tiers (as built + future):** when a customer asks the copilot something it can't answer from **approved-KB**, that's a coverage-gap signal (logged as `CoverageGap` with `source=copilot` — built in P1-M10). Two cases: **(a) KB-covered but not approved** — the topic *was* captured and lives in the KB, but its workflow isn't approved-for-copilot → the founder **approves it (one click)**. **(b) Truly uncovered** — not even captured → "**record this next**." Detection = honest declines (low-confidence copilot answers) + prompt-to-article misses, unified in Studio's "record this next" view.
+> **Coverage gaps — two tiers (as built + future):** when a customer asks the copilot something it can't answer from **approved-KB**, that's a coverage-gap signal (logged as `CoverageGap` with `source=copilot` — built in P1-M10). Two cases: **(a) KB-covered but not approved** — the topic *was* captured and lives in the KB, but its workflow isn't approved-for-copilot → the founder **approves it (one click)**. **(b) Truly uncovered** — not even captured → "**record this next**." Detection = honest declines (low-confidence copilot answers), unified in Studio's "record this next" view *(the V2 Text→Article path adds prompt-miss detection when built)*.

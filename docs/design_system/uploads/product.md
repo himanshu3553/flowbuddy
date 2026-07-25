@@ -1,5 +1,7 @@
 # FlowBuddy — Product (What it is, who it's for, why copilot-first)
 
+> **⚠️ FROZEN SNAPSHOT — design-system source material only.** This is the product doc as it was uploaded for the design-system handoff (June 2026, pre-restructure). Its links, statuses, and phase labels are stale by design and are not maintained — the living doc is [`../../product.md`](../../product.md).
+
 > **One-liner:** Add a trustworthy AI help **copilot** to your SaaS in minutes — record your product once, approve the workflows it's allowed to use, drop in one `<script>`, and your customers get in-app answers grounded **only** in what you approved. (The same recordings also produce a help portal + articles, as decoupled by-products.)
 
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.

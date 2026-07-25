@@ -6,9 +6,9 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 |---|---|---|
 | **1 · Local** | your machine — docker-compose (Postgres + Redis + MinIO) | [Level 1 — Local testing on localhost](#level-1--local-testing-on-localhost) |
 | **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
-| **3 · Prod** | Render paid tier — **not deployed yet** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
+| **3 · Prod** | Render paid tier — **flowbuddyai.com, live since 2026-07-23** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the **Phase-1 copilot** product end-to-end (P1-M0…M12). Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
+> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 
@@ -27,7 +27,7 @@ Chrome Extension ──upload──▶  API (Fastify :8787)  ──enqueue──
    Widget (<script>) ──ask──▶ API /v1/copilot/answer ──grounded in APPROVED KB only──▶ answer
 ```
 
-Stores: **Postgres** (data) · **object storage** for screenshots/audio (**MinIO** locally, **Cloudflare R2** on Render) · **Redis** (job queue). One Render-specific difference: on the free tier the worker runs **inside** the api web service (`start:all`) instead of as a separate process.
+Stores: **Postgres** (data) · **object storage** for screenshots/audio (**MinIO** locally, **Cloudflare R2** on Render) · **Redis** (job queue). One Render-specific difference: on Render (dev **and** prod) the worker runs **inside** the api web service (`start:all`) instead of as a separate process (a standalone worker is scaling-ladder Step 1).
 
 ---
 ---
@@ -377,7 +377,7 @@ All three ride the Part-10 embed (or your own test app — remember to copy **bo
 
 How to wipe the **data** on the live [Render](https://render.com) dev deploy and re-run the full copilot walkthrough on a clean slate — record → KB → approve → embed → ask → verify.
 
-This is the **cloud** counterpart to Level 1 (which resets a *local* docker-compose stack). For the initial deploy + every secret, see [`deploy-render.md`](deploy-render.md).
+This is the **cloud** counterpart to Level 1 (which resets a *local* docker-compose stack). For the initial deploy + every secret, see [`deploy.md`](deploy.md) §3 (dev/staging).
 
 > **You are wiping DATA, not the deploy.** The 5 Render resources and all env vars / secrets stay put.
 > Only the contents of the three stores are cleared.
@@ -392,7 +392,7 @@ This is the **cloud** counterpart to Level 1 (which resets a *local* docker-comp
 | Store | Render resource | Holds | Wiped by |
 |---|---|---|---|
 | Postgres | `flowbuddy-dev-db` | users, workspaces, recordings, KB, approvals, copilot queries, **widget public key + extension connect tokens** | Step D1 |
-| Object storage | Cloudflare **R2** (`flowbuddy-artifacts`) | screenshots / audio / DOM (`workspaces/<wsId>/sessions/<sessionId>/…`) | Step D2 |
+| Object storage | Cloudflare **R2** (`flowbuddy-artifacts-dev` — the **dev** bucket; `flowbuddy-artifacts` is PROD, never touch it here) | screenshots / audio / DOM (`workspaces/<wsId>/sessions/<sessionId>/…`) | Step D2 |
 | Queue | `flowbuddy-dev-redis` (Key Value) | BullMQ synthesis jobs (transient, no persistence) | Step D3 *(optional)* |
 
 ⚠️ **Wiping Postgres deletes your account, workspace, the embed snippet's `data-flowbuddy-key`, and the
@@ -433,14 +433,14 @@ Old artifacts are orphaned by the wipe (new workspace = new key prefix) and eat 
 AWS_ACCESS_KEY_ID="<R2_ACCESS_KEY_ID>" \
 AWS_SECRET_ACCESS_KEY="<R2_SECRET_ACCESS_KEY>" \
 AWS_DEFAULT_REGION=auto \
-  aws s3 rm s3://flowbuddy-artifacts --recursive \
+  aws s3 rm s3://flowbuddy-artifacts-dev --recursive \
   --endpoint-url "<R2_ENDPOINT>"
 ```
 
 Values live in the `flowbuddy-dev-r2` env group (Render → **Env Groups → flowbuddy-dev-r2**) / your Cloudflare R2 token.
-No AWS CLI? Cloudflare dashboard → R2 → `flowbuddy-artifacts` → select objects → delete.
+No AWS CLI? Cloudflare dashboard → R2 → `flowbuddy-artifacts-dev` → select objects → delete.
 
-✅ **PASS:** `aws s3 ls s3://flowbuddy-artifacts --endpoint-url "<R2_ENDPOINT>"` returns nothing.
+✅ **PASS:** `aws s3 ls s3://flowbuddy-artifacts-dev --endpoint-url "<R2_ENDPOINT>"` returns nothing.
 
 ---
 
@@ -454,7 +454,7 @@ your laptop — `ipAllowList: []` blocks external access.
 
 ## D4. Confirm the services are healthy
 
-Open the **flowbuddy-dev-api** URL once to wake it (free tier cold-starts ~1 min after idle). Prod logs are **JSON at `info`+** (see [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production)); the boot should show:
+Open the **flowbuddy-dev-api** URL once to wake it (free tier cold-starts ~1 min after idle). Prod logs are **JSON at `info`+** (see [`deploy.md` → Logging in production](deploy.md#25-logging-in-production)); the boot should show:
 
 ```
 All migrations have been successfully applied.
@@ -464,13 +464,13 @@ All migrations have been successfully applied.
 
 ✅ **PASS:** all three lines present; no `ECONNREFUSED` (R2) or `MissingSecret` (auth) errors.
 
-> **Need more detail while testing on Render?** Bump `LOG_LEVEL` to `debug` on the service (dashboard → **Environment**; no code redeploy — the service restarts), then set it back to `info`. See [`deploy-render.md` → Logging in production](deploy-render.md#logging-in-production).
+> **Need more detail while testing on Render?** Bump `LOG_LEVEL` to `debug` on the service (dashboard → **Environment**; no code redeploy — the service restarts), then set it back to `info`. See [`deploy.md` → Logging in production](deploy.md#25-logging-in-production).
 
 ---
 
 ## D5. Test from scratch
 
-Mirrors [`deploy-render.md`](deploy-render.md) §10–12, with the **post-wipe gotchas** called out.
+Mirrors [`deploy.md`](deploy.md) §6 (end-to-end test), with the **post-wipe gotchas** called out.
 
 ### D5.1 Create a new account
 Open **https://flowbuddy-dev-web.onrender.com** → sign up. This creates a fresh workspace + a **new**
@@ -489,14 +489,14 @@ connect bridge), so one build can cover both. Pick the build for what you're tes
 |---|---|---|
 | **Local** (docker-compose) | `pnpm --filter @flowbuddy/extension build` *(default `http://localhost:3000`)* | connect-bridge `matches` + popup links → **localhost**; handshake carries the local API (`http://localhost:8787`) |
 | **Render** (this dev deploy) | `STUDIO_URL=https://flowbuddy-dev-web.onrender.com pnpm --filter @flowbuddy/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `FLOWBUDDY_API_URL` |
-| **Both** (the Web Store artifact, v0.2.1+) | `STUDIO_URL="https://flowbuddy-dev-web.onrender.com,http://localhost:3000" pnpm --filter @flowbuddy/extension build` | popup → **Render**; connect bridge on **both** origins — a store install can also connect to a local Studio |
+| **Both dev + local** | `STUDIO_URL="https://flowbuddy-dev-web.onrender.com,http://localhost:3000" pnpm --filter @flowbuddy/extension build` | popup → **Render dev**; connect bridge on **both** origins — *(the actual store artifact, v0.6.0+, bakes THREE origins with `app.flowbuddyai.com` primary — [`extension-releases.md`](extension-releases.md))* |
 
 Then `chrome://extensions` → **Reload** / **Load unpacked** → `packages/extension/dist` → **Connect**
 (opens `…/connect`, relaying the token + API URL into the extension).
 
 Notes when switching targets:
 - **The upload API URL is _not_ baked** — the extension receives it from the connect handshake (the
-  Studio's `FLOWBUDDY_API_URL`). So a Render build uploads to the prod API; a localhost build to `:8787`.
+  Studio's `FLOWBUDDY_API_URL`). So a Render build uploads to the deployed **dev** API; a localhost build to `:8787`.
 - **Rebuild _and_ reconnect when you switch.** A localhost build only injects its connect bridge on
   `localhost:3000`, so it can't connect through the Render `/connect` page (and vice-versa); the old
   token won't match either. Rebuild → **Reload** the extension → **Connect** again.
@@ -507,7 +507,7 @@ Notes when switching targets:
 ✅ **PASS:** the extension popup shows **Connected** (to the Studio you built against).
 
 ### D5.3 Record a workflow
-Record a **narrated** workflow → it uploads to the prod API → the embedded worker synthesizes it.
+Record a **narrated** workflow → it uploads to the deployed dev API → the embedded worker synthesizes it.
 
 ✅ **PASS:** `flowbuddy-dev-api` log shows a `ready` line — `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`; the
 recording appears under Studio → **Recordings**.
@@ -519,7 +519,7 @@ Studio → **Knowledge Base** → **approve** the workflow (the copilot only ans
 
 ### D5.5 Test the widget
 Studio → **Copilot** → **re-copy the embed `<script>`** — the `data-flowbuddy-key` is **new** after the wipe,
-so don't reuse an old snippet (it's pre-filled with the prod API URL, widget URL, and new public key).
+so don't reuse an old snippet (it's pre-filled with the deployed dev API URL, widget URL, and new public key).
 Set the **origin allowlist** (or leave empty = allow any). Drop it into an HTML page **served over HTTP**
 (not `file://`):
 
@@ -561,23 +561,22 @@ Studio → **Analytics**.
 | `[worker] failed …: 401 … API key` | `OPENAI_API_KEY` unset on `flowbuddy-dev-api` | Set it; **re-record** (failed jobs don't auto-retry) |
 | Copilot page real-widget tester errors / returns nothing | Since Approach B it answers via **`flowbuddy-dev-api`** (`/v1/copilot/answer`), not the web process: `OPENAI_API_KEY` unset **or** a `403` from `FLOWBUDDY_STUDIO_URL` unset | Set `OPENAI_API_KEY` + `FLOWBUDDY_STUDIO_URL` on **`flowbuddy-dev-api`**; `flowbuddy-dev-web` needs **no** OpenAI key |
 
-More rows + the URL-suffix gotcha: [`deploy-render.md` → Troubleshooting](deploy-render.md#troubleshooting-real-errors-we-hit).
+More rows + the URL-suffix gotcha: [`deploy.md` → Troubleshooting](deploy.md#troubleshooting-real-errors-we-hit).
 
 ---
 ---
 
-# **LEVEL 3 — PROD TESTING ON RENDER** *(placeholder)*
+# **LEVEL 3 — PROD TESTING ON RENDER** *(live since 2026-07-23)*
 
 ---
 
-> **Not built yet — details will be added when the production deployment exists.**
+Production is the [`deploy.md`](deploy.md) §4 stack — `app.flowbuddyai.com` (Studio) · `api.flowbuddyai.com` · `widget.flowbuddyai.com` + the apex landing card — **launched 2026-07-17 and user-verified E2E on 2026-07-23** (the §5G seed + smoke test: record → approve → embed → grounded answer → Sense positional → Reason diagnosis → analytics). Prod testing rules:
 
-There is currently no production environment; the Render deploy above is the free-tier **dev** stack. When prod is stood up (per the "TO GO PRODUCTION" recipe in [`render.yaml`](../render.yaml): standalone `type: worker` service, migrations via `preDeployCommand`, paid plans, its own R2 bucket + secrets, custom domain), this section will get its own reset procedure + walkthrough mirroring Level 2 — with the key differences expected to be:
-
-- **No data wipes as a testing tool** — prod testing must be non-destructive (real customer data lives here).
-- Worker logs live in a **separate service**, not inside `flowbuddy-dev-api`.
-- No cold-start waits (paid tier is always-on).
-- The extension build targets the prod Studio URL; the embed snippet carries the stable prod API/widget URLs.
+- **Non-destructive only — NEVER run data wipes here.** The Level-2 reset flow (D0–D3) is for the dev environment exclusively (dev bucket `flowbuddy-artifacts-dev`, dev DB); real customer data lives in prod.
+- **The walkthrough = Level-2 D5 minus the wipe steps**, pointed at the prod URLs — the embed snippet copied from `app.flowbuddyai.com` already carries the stable `api.`/`widget.` domains.
+- **No cold-start waits** (paid tier is always-on).
+- **Worker logs appear inside `flowbuddy-api`** — prod also folds the worker into the api (`start:all`); a separate worker service is scaling-ladder Step 1 ([`deploy.md`](deploy.md) §9).
+- **Extension:** use the store build — v0.6.0+ bakes `app.flowbuddyai.com` as the primary origin, so no special build is needed.
 
 ---
 

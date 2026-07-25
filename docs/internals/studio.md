@@ -106,8 +106,8 @@ background. The operator never sees or copies a token. Full handshake: [connecti
 `listCandidates(workspaceId, sourceId?)` reconstructs the **workflow view** from the flat
 `KnowledgeItem` rows: it groups items by `(sourceId, segmentIndex)`, counts steps per group, takes the
 `segmentTitle`, joins the source's `appBaseUrl`, and marks each with `copilotApproved` (by checking the
-approved-key set). A "candidate" = one workflow = the unit the operator approves. *(Phase-2 note in the
-file: this same unit becomes a portal help article under workflows-as-articles.)*
+approved-key set). A "candidate" = one workflow = the unit the operator approves. *(V2-portal note in the
+file: this same unit becomes a portal help article under workflows-as-articles — Version 2.)*
 
 ### 4.4 The approval gate ([`copilot-actions.ts`](../../packages/web/lib/copilot-actions.ts)) ⭐
 
@@ -129,13 +129,13 @@ The read side, [`copilot-approvals.ts`](../../packages/web/lib/copilot-approvals
 counts). The retrieval-side enforcement moved to the shared
 [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (2026-07-06); the old
 `listApprovedItems` mirror was retired, and the Studio copilot tester now IS the real widget
-(later that day) — it exercises the exact public `/answer` route end-users hit.
+(2026-07-08, Approach B) — it exercises the exact public `/answer` route end-users hit.
 
 ### 4.5 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 
 `getOrCreateCopilotKey(workspaceId)` returns the workspace's **public** embed key, minting one
 (`pk_<48 hex>`) on first use, plus the `allowedOrigins` list. The Copilot page renders the
-`<script>` snippet with this key and the **real-widget tester** (2026-07-06):
+`<script>` snippet with this key and the **real-widget tester** (2026-07-08):
 [`widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) frames the
 session-authed host page [`copilot/preview-frame/route.ts`](../../packages/web/app/dashboard/copilot/preview-frame/route.ts),
 which embeds the actual bundle (`FLOWBUDDY_WIDGET_URL`, or the local fallback route
@@ -180,8 +180,9 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
   the worker writes `ready`.
 - **No approved workflows yet** → the embed works but the copilot returns "no approved content"
   (see [copilot.md](copilot.md)); Home nudges the operator to approve.
-- **Parked article UI** → the editor/generate panels exist in-tree but are removed from the nav; don't
-  wire them up unless resuming Phase 2.
+- **Article UI/engine** → removed 2026-07-07 (workflows-as-articles): an article is an approved
+  workflow, rendered — built in the V2 portal track ([`../v2-portal.md`](../v2-portal.md)); nothing
+  article-shaped remains in `packages/web`.
 
 ---
 

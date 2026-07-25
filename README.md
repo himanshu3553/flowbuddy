@@ -15,13 +15,13 @@ Most help tools make you write articles, then hope customers find them. FlowBudd
 3. You **approve** which workflows the copilot may use — one click each.
 4. Your customers get an **in-app assistant** that answers instantly — grounded in what you actually showed it, **never made-up**.
 
-**What your customers experience:** a clean in-app chat that gives instant, accurate answers to "how do I…" questions based only on what you recorded and approved; **shows its sources**; is **honest when it doesn't know** (no confident-sounding wrong answers); **knows which screen they're on**; and **remembers the conversation**.
+**What your customers experience:** a clean in-app chat that gives instant, accurate answers to "how do I…" questions based only on what you recorded and approved; **shows its sources**; is **honest when it doesn't know** (no confident-sounding wrong answers); **knows where they are** — the screen, and since Sense the **workflow + step** — and **remembers the conversation**.
 
 **What you stay in control of:** approve before anything goes live; choose which sites may run the copilot (origin allowlist); a one-click public key you can rotate; and **sensitive data is masked in the browser before it ever leaves your machine** while recording.
 
 **The trust model — grounded authorship + no-leak:** the Knowledge Base is the *substrate* the copilot reasons over; a lightweight per-workflow **"approve for copilot"** flag is the *trust gate*. The copilot answers **only** from approved knowledge — never raw/un-approved items, never general model knowledge — and declines + flags a coverage gap ("record this next") when something isn't covered.
 
-*(Bonus: the same recordings can also produce step-by-step help **articles** and a public **help portal** — a decoupled Phase-2 by-product.)*
+*(Bonus: the same recordings can also produce step-by-step help **articles** and a public **help portal** — a decoupled Version-2 by-product: [`docs/v2-portal.md`](docs/v2-portal.md).)*
 
 ---
 
@@ -39,7 +39,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
         │
         ├─► approved-for-copilot ──►  IN-APP COPILOT  (primary; grounded answer + citations, or honest decline)
         │
-        └─► authoring ──► Articles (curated / prompt) ──► Help PORTAL   (by-product, Phase 2)
+        └─► approved-for-portal ──► Help PORTAL   (approved workflows rendered as articles — Version 2)
 ```
 
 **Four surfaces:**
@@ -47,9 +47,9 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 | Surface | Who | Purpose |
 |---|---|---|
 | **FlowBuddy Recorder** (Chrome extension) | the builder | capture narrated product workflows |
-| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure + monitor it *(article authoring is a parked Phase-2 by-product)* |
+| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure + monitor it *(portal & article publishing land in Version 2)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
-| **Help Portal** (public web) — *Phase 2* | the builder's customers | browse + search published help articles |
+| **Help Portal** (public web) — *Version 2* | the builder's customers | browse + search approved workflows rendered as articles |
 
 ---
 
@@ -74,17 +74,16 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 packages/
   shared/     # types + zod schemas (capture contract, content model, job contracts)
   db/         # Prisma schema + client (Postgres)
-  synthesis/  # OpenAI pipeline — capture → KB synthesis + the copilot answer engine (answerFromKB)
+  logger/     # the ONE structured logger for Node services (Pino) — api / synthesis / web server-side
+  synthesis/  # OpenAI pipeline — capture → KB synthesis + the copilot answer engine + the shared hybrid retrieval seam
   api/        # Fastify ingestion + copilot routes  AND  the BullMQ worker (worker entrypoint)
   web/        # Next.js Studio — copilot-first: approval gate + copilot settings/analytics
-  widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js)
+  widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js + lazy flowbuddy-copilot-render.js, deployed as siblings)
   extension/  # Chrome MV3 recorder
   landing/    # static marketing page for flowbuddyai.com (v1 = coming-soon + sign-in card)
 ```
 
-*(`portal` — the Phase-2 public help site — returns in Phase 2; it's not in the current workspace.)*
-
-> **Phase-2 code is parked, not gone.** The article/portal **engine** stays dormant in-tree (type-checked), but its **Studio UI was removed (2026-06-25)** so the shipped product is copilot-only. Parked files carry a `// PARKED — Phase 2` banner; inventory + re-wiring map in [`docs/phase-2-portal.md`](docs/phase-2-portal.md) §6.
+*(`portal` — the public help site — is built in Version 2 ([`docs/v2-portal.md`](docs/v2-portal.md)); it's not in the current workspace.)*
 
 ---
 
@@ -109,7 +108,7 @@ cp .env.example packages/web/.env
 cp .env.example packages/db/.env
 ```
 Then edit:
-- **`OPENAI_API_KEY`** in `packages/api/.env` (worker: transcribe + segment; copilot answers). *(Also read by `packages/web/.env` only for the **parked Phase-2** article generation — not needed for the copilot.)*
+- **`OPENAI_API_KEY`** in `packages/api/.env` (worker: transcribe + segment + embed; copilot answers). The Studio makes no OpenAI calls.
 - An **auth secret** for Studio in `packages/web/.env` (`AUTH_SECRET` — `openssl rand -hex 32`).
 
 Local defaults for Postgres/Redis/MinIO already match `docker-compose.yml`, so you don't need to change those.
@@ -140,7 +139,7 @@ pnpm --filter @flowbuddy/web dev        # Studio → http://localhost:3000
 Build the client bundles:
 
 ```bash
-pnpm --filter @flowbuddy/widget build      # → packages/widget/dist/flowbuddy-copilot.js  (serve the demo over HTTP — see Testing step 6, not file://)
+pnpm --filter @flowbuddy/widget build      # → dist/flowbuddy-copilot.js + flowbuddy-copilot-render.js (siblings; serve the demo over HTTP — see Testing step 6, not file://)
 pnpm --filter @flowbuddy/extension build   # → packages/extension/dist/  (load unpacked in Chrome at chrome://extensions)
 ```
 
@@ -152,7 +151,7 @@ pnpm --filter @flowbuddy/extension build   # → packages/extension/dist/  (load
 
 ### Static checks (fast, no services needed)
 ```bash
-pnpm build        # builds & type-checks all 7 packages (incl. widget + extension bundles)
+pnpm build        # builds & type-checks all packages (incl. widget + extension bundles)
 pnpm typecheck    # tsc --noEmit across the workspace
 pnpm db:validate  # validate the Prisma schema
 ```
@@ -199,27 +198,70 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Project status
 
-**Phase 1 (the copilot) is code-complete, verified locally, and deployed** — modules **P1-M0 … P1-M12** (capture → KB → retrieval/grounding → approval gate → answer endpoint → embeddable widget → context API → embed auth → feedback/analytics → capture-reliability + PII-redaction cores). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `flowbuddy-dev-web-uir8.onrender.com`). All Phase-1 modules are done — **P1-M3 hybrid keyword+pgvector retrieval shipped 2026-07-07** and the **P1-M11 capture-reliability backlog completed 2026-07-06** (R13 ranked locators closed it; R5 → V2). The Studio's copilot preview **is the real widget** (iframe, preview mode), and widget appearance is **live-served** from Studio. Only **P1-M12 Cut 2** (screenshot/DOM pixel PII) remains, deferred to Phase 2 as a portal-publish prerequisite.
+**Version 1 is launched.** The full loop — record → KB → approve → embed → grounded answers — runs in **production at [flowbuddyai.com](https://flowbuddyai.com)** (Studio `app.` · api `api.` · widget `widget.`; launched 2026-07-23), with **FlowBuddy Recorder v0.6.0 live on the Chrome Web Store**. **Phase 1 (Copilot, P1-M0…M12)** ✅ shipped — incl. hybrid keyword+pgvector retrieval, live-served widget appearance, and a Studio preview that **is** the real widget; only P1-M12 Cut 2 (screenshot-pixel PII) remains, deferred to the Version-2 portal track as a publish prerequisite. **Phase 2 (Sense + Reason)** ✅ built + user-verified — the copilot localizes the end-user to **workflow + step**, answers positionally, and diagnoses "why can't I proceed?". **Phase 4:** the **P4-M0 guided walkthrough** ✅ built (zero-acting); the acting modules are to plan and consume **Phase 3** (self-validation — the moat, to be planned) when its replay core lands.
 
-**Phase 2** (help portal + article authoring) is a decoupled by-product, currently **frozen** — direction changed 2026-07-07 to **workflows-as-articles**: the pre-pivot article engine was removed; the portal will render **approved distilled workflows** ([`docs/phase-2-portal.md`](docs/phase-2-portal.md) §7). **Phase 3** (self-validation / freshness) is the moat, to be planned. See [`docs/roadmap.md`](docs/roadmap.md) for the full versions → phases → modules map and status.
+**Version 2** holds the by-products + depth: the **Help Portal & Articles track** (approved workflows rendered as articles — [`docs/v2-portal.md`](docs/v2-portal.md)), narration/video capture modalities, and the deferred backlogs. Captured directions beyond it: **Phase 5 Converse** (the goal agent: Tell → Guide → Do), **Phase 6 Interop** (expose the approved KB to third-party AI agents), and **Version 3** (buyer-side: the company agent). The authoritative map: [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
 ## Documentation
 
-Start with the roadmap; each doc links onward.
+Start with the roadmap; each doc links onward. Grouped by role.
+
+**Orientation — start here**
 
 | Doc | Role |
 |---|---|
 | [`docs/roadmap.md`](docs/roadmap.md) | **The map** — versions → phases → modules + status + legacy-ID map |
 | [`docs/product.md`](docs/product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model) |
 | [`docs/architecture.md`](docs/architecture.md) | Technical model — the 3 modules, KB schema, data model, decisions |
-| [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD + per-module plan & as-built + capture contract + backlog |
-| [`docs/phase-2-portal.md`](docs/phase-2-portal.md) | **Phase 2 (by-products)** — portal & article authoring (frozen) + to-build modules |
-| [`docs/design_system/`](docs/design_system/README.md) | **Design system** — the indigo brand: tokens, components, full Studio UI kit (+ recorder/widget specs). Source of truth for all UI. |
-| [`docs/e2e-testing.md`](docs/e2e-testing.md) | Manual E2E test plan — 3 levels: local · dev/Render (incl. data reset) · prod (placeholder) |
-| [`docs/deploy-render.md`](docs/deploy-render.md) | Render deploy guide — blueprint walkthrough, gotchas, going-to-production deltas |
-| [`docs/dev-setup.md`](docs/dev-setup.md) | Local dev / tooling deep-dive (pnpm · Turborepo · docker-compose · Prisma) |
+
+**Build specs — shipped (Version 1, live)**
+
+| Doc | Role |
+|---|---|
+| [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (Copilot)** ✅ — scope/DoD + per-module plan & as-built + capture contract |
+| [`docs/phase-2-sense.md`](docs/phase-2-sense.md) | **Phase 2 (Sense + Reason)** ✅ — in-context help (localize the user to workflow + step, answer positionally) + diagnostic reasoning ("why can't I proceed?") |
+| [`docs/kb-step-distillation.md`](docs/kb-step-distillation.md) | KB step quality — raw capture events → clean per-workflow steps |
+
+**Build specs — forward (planned · draft · direction)**
+
+| Doc | Role |
+|---|---|
+| [`docs/phase-4-autopilot.md`](docs/phase-4-autopilot.md) | **Phase 4 (Autopilot)** — P4-M0 guided walkthrough ✅; acting modules to plan |
+| [`docs/phase-5-converse.md`](docs/phase-5-converse.md) | Phase 5 (Converse) 📝 — the goal agent: Tell → Guide → Do |
+| [`docs/phase-6-interop.md`](docs/phase-6-interop.md) | Phase 6 (Interop) 📝 — expose the approved KB to third-party AI agents |
+| [`docs/v2-portal.md`](docs/v2-portal.md) | **Version 2** — Help Portal & Articles track: approved workflows rendered as articles |
+| [`docs/v3-company-agent.md`](docs/v3-company-agent.md) | Version 3 📝 — buyer-side: record the tools you use; the company agent |
+
+**Operations — build, run, ship, test**
+
+| Doc | Role |
+|---|---|
+| [`docs/dev-setup.md`](docs/dev-setup.md) | Local dev / tooling deep-dive (pnpm · Turborepo · docker-compose · Prisma) + the canonical logging reference |
+| [`docs/deploy.md`](docs/deploy.md) | **Render deploy guide — both environments**: shared foundations + dev/staging free-tier walkthrough + production (FlowBuddyAI.com) topology, DNS, two-blueprint model, runbook, scaling ladder |
+| [`docs/e2e-testing.md`](docs/e2e-testing.md) | Manual E2E test plan — 3 levels: local · dev/Render (incl. data reset) · prod |
+| [`docs/extension-releases.md`](docs/extension-releases.md) | Chrome Web Store release log (living) — one entry per store build |
+
+**Reference — deep dives**
+
+| Doc | Role |
+|---|---|
+| [`docs/internals/`](docs/internals/README.md) | How it RUNS — per-module mechanics + connections map (source wins on conflict) |
+| [`docs/design_system/`](docs/design_system/README.md) | **Design system** — the indigo brand: tokens, components, full Studio UI kit. Source of truth for all UI. |
+| [`docs/competitive-claude-chrome.md`](docs/competitive-claude-chrome.md) | Competitive reference (living) — Claude for Chrome vs FlowBuddy |
+
+**Go-to-market**
+
+| Doc | Role |
+|---|---|
+| [`docs/landing-page.md`](docs/landing-page.md) | Landing page plan — one-KB → three-consumers story, positioning direction, page structure, open decisions |
+
+**Archive — historical record**
+
+| Doc | Role |
+|---|---|
+| [`docs/archive/phase-1-review.md`](docs/archive/phase-1-review.md) | Phase-1 E2E review (2026-07-03), archived — the audit that drove post-Phase-1 hardening; still-open items live as the roadmap §9 backlog |
 
 `CLAUDE.md` is a short orientation file for working in this repo with Claude Code.
 
@@ -227,7 +269,7 @@ Start with the roadmap; each doc links onward.
 
 ## Deployment
 
-The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + static widget/landing hosts) + **Cloudflare R2** for blobs, driven by two blueprints: [`render.yaml`](render.yaml) (**production**, read from `main`) and [`render.dev.yaml`](render.dev.yaml) (**dev/staging** free tier, read from `dev` via a custom blueprint path; spin-down + non-persistent Redis caveats documented in the file). Step-by-step deploy guide (every gotcha from the first real deploy, plus the going-to-production deltas): [`docs/deploy-render.md`](docs/deploy-render.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
+The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + static widget/landing hosts) + **Cloudflare R2** for blobs, driven by two blueprints: [`render.yaml`](render.yaml) (**production**, read from `main`) and [`render.dev.yaml`](render.dev.yaml) (**dev/staging** free tier, read from `dev` via a custom blueprint path; spin-down + non-persistent Redis caveats documented in the file). Step-by-step deploy guide for both environments (every first-deploy gotcha + the production runbook): [`docs/deploy.md`](docs/deploy.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
 
 ---
 

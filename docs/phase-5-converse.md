@@ -4,7 +4,7 @@
 
 - **Status:** 📝 **Draft — design for discussion.** Modules P5-M0…M4 proposed below; roadmap/CLAUDE entries follow when the design locks.
 - **Drafted:** 2026-07-16 · **Branch:** `dev`
-- **Companion docs:** answers → [`phase-1-copilot.md`](phase-1-copilot.md) · position → [`phase-2-sense.md`](phase-2-sense.md) · diagnosis → [`phase-2-reason.md`](phase-2-reason.md) · the hands (walkthrough + execution driver) → [`phase-4-autopilot.md`](phase-4-autopilot.md) · validation/certification → [`roadmap.md`](roadmap.md) §4
+- **Companion docs:** answers → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the hands (walkthrough + execution driver) → [`phase-4-autopilot.md`](phase-4-autopilot.md) · validation/certification → [`roadmap.md`](roadmap.md) §4
 - **The trust story, extended one more step:** answers are grounded in approved knowledge (P1) · actions are grounded in approved workflows (P4) · **goals are grounded in both** — the agent only ever pursues a goal it can express as approved workflows over founder-provided understanding, confirms it with the user before acting, and narrates everything it does.
 
 ---
@@ -40,7 +40,7 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 
 1. **Continuity bias (deterministic, free):** the widget sends the previous answer's citation keys (`context.lastCited: [{sourceId, segmentIndex}]`, server-validated against `CopilotApproval` — no-leak); retrieval boosts items from those workflows (+2, below the +3 route boost). A follow-up stays in the workflow being discussed; an unrelated question still out-ranks it (bias, never a filter).
 2. **Query condensation (LLM, gated):** when history exists AND the question looks context-dependent (short, or anaphora markers — *it/that/then/next/same/also/again/what about*), a fast cheap model condenses history + question into one standalone retrieval query (temp 0, ~800ms hard budget, history treated as data). Failure/timeout → raw question. Full questions skip the hop — no latency tax on the common case.
-3. **Chat persistence:** sessionStorage `sync.chat.v1` (same pattern/posture as the walkthrough session — key-scoped, 30-min TTL, tab-scoped): `{v, k, updatedAt, open, goal, messages: last 20}`. Restore on boot; `walkOffer` payloads dropped at persist (stale plans re-derive on re-ask). **Tier 3's narration hard-depends on this module** — the narrative must survive the page loads the automation causes.
+3. **Chat persistence:** sessionStorage `flowbuddy.chat.v1` (same pattern/posture as the walkthrough session — key-scoped, 30-min TTL, tab-scoped): `{v, k, updatedAt, open, goal, messages: last 20}`. Restore on boot; `walkOffer` payloads dropped at persist (stale plans re-derive on re-ask). **Tier 3's narration hard-depends on this module** — the narrative must survive the page loads the automation causes.
 
 ### P5-M1 — Goal understanding (intent capture)
 
@@ -78,7 +78,7 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 |---|---|
 | `context.lastCited[]`, `context.goal` on `/answer` (validated, capped, hint-only) | widget · api |
 | `goal` (+ later `tierOffer`) in the answer JSON | `synthesis/copilot.ts` |
-| sessionStorage `sync.chat.v1` | widget |
+| sessionStorage `flowbuddy.chat.v1` | widget |
 | `CopilotQuery.goal` (nullable) | db migration |
 | `ProductProfile` table + synthetic product source/items + auto-approvals | db migration · compile step |
 | Studio: Product profile tab + toasts | web |

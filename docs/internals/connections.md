@@ -231,7 +231,7 @@ disposable.
 This is enforced at exactly **one seam** — and since 2026-07-06, one *implementation* with one
 *caller*: [`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
 filters items through the approved-key set, called only by the public answer route (the old Studio
-mirror `listApprovedItems` was retired in the consolidation, and later that day the Studio preview
+mirror `listApprovedItems` was retired in the consolidation, and two days later — 2026-07-08 — the Studio preview
 became the **real widget** — `copilot-preview-actions.ts` deleted — so the tester reaches retrieval
 through the same public `/answer` route end-users hit). If you ever add a second path that reads the
 KB for the copilot, it **must** go through this function or the no-leak guarantee breaks.
@@ -258,7 +258,7 @@ Three data shapes travel between modules. They're the actual "API" of the system
 | Contract | Defined in | Producer → Consumer | What it carries |
 |---|---|---|---|
 | **`SessionManifest`** (the capture contract) | [`@flowbuddy/shared/capture.ts`](../../packages/shared/src/capture.ts) + zod in [`schemas.ts`](../../packages/shared/src/schemas.ts) | Recorder → Ingestion → Worker | The whole raw recording: `app` meta, `events[]` (each with DOM-fingerprint `target`, `route`, `screenshot`/`dom` file refs, `postAction` settle), `markers[]`, `audio` ref. File refs are **relative paths**, resolved to object-storage keys server-side. |
-| **`DistilledStep`** (the KB step) | [`@flowbuddy/synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | Worker → `KnowledgeItem.data` → Studio & Copilot | `{ instruction, detail?, route, narration, screenshotFile, bbox }` — a clean, user-facing step with one curated screenshot. **Raw events are not persisted here.** |
+| **`DistilledStep`** (the KB step) | [`@flowbuddy/synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | Worker → `KnowledgeItem.data` → Studio & Copilot | `{ instruction, detail?, route, narration, screenshotFile, bbox, keyEventId? }` (`keyEventId` since 2026-07-08) — a clean, user-facing step with one curated screenshot. **Raw events are not persisted here.** |
 | **`CopilotKBItem`** | [`@flowbuddy/synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | Retrieval → answer engine | `{ id, sourceId, segmentIndex, segmentTitle, text, narration }` — the slimmed item shape the LLM grounds on and that becomes a citation. |
 
 The capture contract is specced in prose in [`../phase-1-copilot.md`](../phase-1-copilot.md) §6; the
@@ -293,10 +293,10 @@ forged credential resolving to the wrong workspace, which none of the three reso
   service, which is for the recorder and the widget only.
 - **The worker never talks to the widget or Studio.** It's a pure queue consumer; its only output is
   Postgres rows. Surfaces discover its work by reading `status`.
-- **Phase-2 article authoring was removed (2026-07-07).** The old raw-event engine (`buildKB`,
+- **The old article engine was removed (2026-07-07).** The raw-event engine (`buildKB`,
   `segmentItems`, `generateArticleForSegment`) and the `Article`/`Step` tables are gone — superseded
-  by **workflows-as-articles**: Phase 2 renders approved distilled workflows instead. The worker's
-  distilled `buildWorkflowKB` is the only KB path ([`../phase-2-portal.md`](../phase-2-portal.md) §7).
+  by **workflows-as-articles**: the Version-2 portal track renders approved distilled workflows
+  instead ([`../v2-portal.md`](../v2-portal.md)). The worker's distilled `buildWorkflowKB` is the only KB path.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **What this is.** The authoritative map of the product — **Versions → Phases → Modules** — with the **status of every module** and the legacy-ID mapping so none of the work is lost. **Version 1 ships the copilot first.** For *why* copilot-first see [`product.md`](product.md) §5; for the *technical* model see [`architecture.md`](architecture.md); for build detail see [`phase-1-copilot.md`](phase-1-copilot.md) (Phase 1), [`phase-2-sense.md`](phase-2-sense.md) (Phase 2), [`phase-4-autopilot.md`](phase-4-autopilot.md) (Phase 4); the V2 portal track: [`v2-portal.md`](v2-portal.md). KB step-quality work (raw events → clean per-workflow steps) is **built & verified end-to-end** — see [`kb-step-distillation.md`](kb-step-distillation.md).
 
-- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-17 · **Branch:** `dev`
+- **Status:** Locked v1.0 (structure, 2026-06-22) · **as-of:** 2026-07-25 · **Branch:** `dev`
 - **This doc wins** on phase/module structure and priority; the per-phase docs hold the detail.
 
 ---
@@ -12,7 +12,7 @@
 **Version 1 = FlowBuddy, the workflow-capture product, released in phases. Phase 1 is the copilot and ships first.**
 
 ```
-VERSION 1 — Workflow capture · copilot-first        ✅ shipping
+VERSION 1 — Workflow capture · copilot-first        ✅ LAUNCHED — prod 2026-07-23 (flowbuddyai.com)
 │
 ├─ PHASE 1 · Copilot ⭐ (the V1 release)        🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨   12 done · 1 in progress
 ├─ PHASE 2 · Sense — in-context help            🟩🟩🟩🟩🟩🟩                 6 done · ALL user-verified
@@ -20,11 +20,13 @@ VERSION 1 — Workflow capture · copilot-first        ✅ shipping
 └─ PHASE 4 · Autopilot — agentic execution      🟩⬜⬜⬜                     1 done (M0 walkthrough) · 3 to plan
 
 VERSION 2 — Portal & articles · modalities · depth  ⬜×13                   deferred
+
+VERSION 3 — Buyer-side: record the tools you USE · the company agent       📝 direction (2026-07-25)
 ```
 
 🟩 Done · 🟨 In Progress · ⬜ Draft  *(one square per module)*
 
-- **Module IDs are per-phase**, written `P{phase}-M{n}` — e.g. **`P1-M5`** = Phase 1, Module 5. (The old docs used one *global* `M0–M14`; those are "legacy IDs," mapped in §7.)
+- **Module IDs are per-phase**, written `P{phase}-M{n}` — e.g. **`P1-M5`** = Phase 1, Module 5. (The old docs used one *global* `M0–M14`; those are "legacy IDs," mapped in §8.)
 - **Modules already built are kept and marked ✅** — Phase 1 reuses the foundation we already shipped.
 
 > **⚠️ Phase numbers were redefined on 2026-06-22.** Previously: Phase 1 = the wedge, Phase 2 = copilot, Phase 3 = self-validation. The mapping:
@@ -35,7 +37,7 @@ VERSION 2 — Portal & articles · modalities · depth  ⬜×13                 
 > | Phase 2 (in-app copilot) | **Phase 1** (now the headline) |
 > | Phase 3 (self-validation) | **Phase 3** (unchanged) |
 
-> **⚠️ Phase 2 was redefined again on 2026-07-08 (second redefinition).** The **Help Portal & Articles** (previous Phase 2, modules `P2-M0…M6`) moved **out of Version 1 into Version 2** as the **portal track `V2 · P0…P6`** ([`v2-portal.md`](v2-portal.md)) — Version 1 is now a **pure copilot arc**: answer (P1) → locate (P2) → stay fresh (P3) → act (P4). The new **Phase 2 = Sense (in-context help)**. The legacy map (§7) reflects both redefinitions.
+> **⚠️ Phase 2 was redefined again on 2026-07-08 (second redefinition).** The **Help Portal & Articles** (previous Phase 2, modules `P2-M0…M6`) moved **out of Version 1 into Version 2** as the **portal track `V2 · P0…P6`** ([`v2-portal.md`](v2-portal.md)) — Version 1 is now a **pure copilot arc**: answer (P1) → locate (P2) → stay fresh (P3) → act (P4). The new **Phase 2 = Sense (in-context help)**. The legacy map (§8) reflects both redefinitions.
 
 ### Legend
 
@@ -77,7 +79,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P1-M1** | Recorder / workflow capture (Chrome extension: events + DOM + screenshots + narration) | ✅ **Done** — **v0.6.0 "FlowBuddy Recorder" LIVE on the Chrome Web Store (2026-07-23)**: the production release — bakes `app.flowbuddyai.com` + the dev Studio + localhost, FlowBuddy "F" icons, carries **R13 ranked locators** (the Sense/Phase-3 enabler) + structured logging. Full log: [`extension-releases.md`](extension-releases.md). | M2 |
 | **P1-M2** | Knowledge Base (`KnowledgeSource`/`KnowledgeItem`, transcript, segmentation → **distilled per-workflow steps**, keyword index) | ✅ **Done** — incl. step distillation ([`kb-step-distillation.md`](kb-step-distillation.md), 2026-06-27) | M3, M6 |
 | **P1-M3** | Retrieval & grounding engine (retrieve → ground → answer-or-decline) | ✅ **Done** (2026-07-07) — **hybrid keyword + pgvector retrieval** (RRF fusion, `text-embedding-3-small`, worker embeds at KB build, keyword fallback on any vector failure; no backfill — dev reset); Render `vector` support confirmed 2026-07-06 | M7 (+ M11 retrieval) |
-| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — deployed on Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `flowbuddy-dev-web.onrender.com` | M8 |
+| **P1-M4** | Cloud deploy (Render + R2) — the copilot must be live to embed | ✅ **Done** — **prod LIVE at flowbuddyai.com since 2026-07-23** (paid two-blueprint stack: root `render.yaml` from `main`, worker folded into the api — [`deploy.md`](deploy.md)); dev at `flowbuddy-dev-web.onrender.com` (`render.dev.yaml` from `dev`) | M8 |
 | **P1-M5** | Copilot **approval gate** — per-workflow "approve for copilot" (the trust gate) | ✅ **Done** | C1 |
 | **P1-M6** | Copilot **answer endpoint** — conversational RAG over approved-KB; cite or decline | ✅ **Done** | C2 |
 | **P1-M7** | **Embeddable widget & JS SDK** — one `<script>` renders the chat widget | ✅ **Done** | C3 |
@@ -95,7 +97,7 @@ A throwaway, lightweight spike answered one question before building any product
 
 ## 3. Phase 2 — Sense (in-context help)
 
-**Goal:** the copilot knows **where the user is** — not just the page (P1-M8's route bias) but **which approved workflow and which step** — and answers **positionally**. An end-user stuck on step 3 of a 5-step KB workflow opens the copilot and asks; the widget runs an ask-time **read-only probe** of approved workflows' captured locators against the live page, scores the **top-k hypotheses**, and ships them on the existing `/answer` call — the answer LLM makes the final call *with the question in hand* (**hybrid** localization, locked) and answers: **unstick step 3, then the path to done** (step-level citation; genuine tie → "are you doing X or Y?"; re-probe every follow-up). **Read-only sensing, never surveillance** — no acting (that's Phase 4), no end-user recording, only booleans + one masked error snippet leave the page. Context **biases, never overrides** — unrelated questions answer exactly as today. **Design locked + built 2026-07-08; USER-VERIFIED E2E 2026-07-09** (three E2E hardening fixes landed during verification) — detail + as-built: [`phase-2-sense.md`](phase-2-sense.md).
+**Goal:** the copilot knows **where the user is** — not just the page (P1-M8's route bias) but **which approved workflow and which step** — and answers **positionally**. An end-user stuck on step 3 of a 5-step KB workflow opens the copilot and asks; the widget runs an ask-time **read-only probe** of approved workflows' captured locators against the live page, scores the **top-k hypotheses**, and ships them on the existing `/answer` call — the answer LLM makes the final call *with the question in hand* (**hybrid** localization, locked) and answers: **unstick step 3, then the path to done** (step-level citation; genuine tie → "are you doing X or Y?"; re-probe every follow-up). **Read-only sensing, never surveillance** — no acting (that's Phase 4), no end-user recording, only booleans + one masked error snippet leave the page. Context **biases, never overrides** — unrelated questions answer exactly as today. **Design locked + built 2026-07-08; USER-VERIFIED E2E 2026-07-09** (three E2E hardening fixes landed during verification) — detail + as-built: [`phase-2-sense.md`](phase-2-sense.md) (Part A).
 
 | Module | What it is | Status | Legacy |
 |:---|:---|:---|:---|
@@ -104,7 +106,7 @@ A throwaway, lightweight spike answered one question before building any product
 | **P2-M2** | **Positional answering** (`/answer` takes hypotheses; three-tier relevance — ignore / positional / deictic-primary; unstick-then-path; step-level citations; tie → ask) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
 | **P2-M3** | **"Show me" highlight** — config-gated single-step element highlight on the host page (on → show, off → text-only) | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
 | **P2-M4** | **Step-level friction analytics** (must-have) — localization outcomes logged (`used\|ignored\|none`) → Studio per-step friction view + passive drift signals | ✅ **Done** — built 2026-07-08, user-verified E2E 2026-07-09 | — (new) |
-| **P2-M5** | **Reason — diagnostic reasoning** ("why can't I proceed?"): ask-time structured page-state capture (roles/states/validity/hint-text, values masked) + the founder's expected-state step screenshot → a stronger model diagnoses expected-vs-actual in an agentic read-tool loop (the skeleton Phase 4 inherits) | ✅ **Done** — built + user-verified E2E 2026-07-13 ([`phase-2-reason.md`](phase-2-reason.md) §8 as-built) | — (new) |
+| **P2-M5** | **Reason — diagnostic reasoning** ("why can't I proceed?"): ask-time structured page-state capture (roles/states/validity/hint-text, values masked) + the founder's expected-state step screenshot → a stronger model diagnoses expected-vs-actual in an agentic read-tool loop (the skeleton Phase 4 inherits) | ✅ **Done** ([`phase-2-sense.md`](phase-2-sense.md) Part B) | — (new) |
 
 **Depends on:** Phase 1 only — R13 ranked locators + routes + `expected_outcome` (already in the capture), the answer engine, and the P1-M8 context seam. **No Phase-3 gate needed:** probing is read-only, so a mislocalization = a slightly-off answer (recoverable) — nothing acts on the page. **Feeds:** **Phase 4 Autopilot** (mid-workflow entry — "finish from step 3" — consumes step localization; P4-M0's guided walkthrough builds on P2-M3; the sense plan is the base of P4's `ExecutionPlan`), **Phase 3** (locators that stop resolving on real users' pages = passive production drift signals), and founder analytics (per-step friction: "users get stuck on step 3 of X — re-record it or fix the UX").
 
@@ -159,7 +161,13 @@ Outside Version 1. Three groups:
 
 ---
 
-## 7. Legacy ID → new module map (nothing lost)
+## 7. Version 3 — the company agent (buyer-side track) — 📝 direction
+
+**The ownership flip:** Versions 1–2 point FlowBuddy at the product a company **makes**; Version 3 points it at the products a company **uses**. Same extension + Studio: a company records the tools and processes it uses (third-party SaaS, internal tools) → an approved workflow/SOP KB **the company owns** → **a second Chrome extension — the company agent**: a browser-use AI agent (Claude-for-Chrome-class surface, FlowBuddy-grounded behavior) the company itself uses to run those applications — **executing only recorded + approved workflows, never free-form browsing**. Reuses the shared replay core (one core, three drivers: P3 sandbox · P4 widget · V3 extension) and consumes the KB through P6's export seam. Direction captured 2026-07-25; candidate modules **V3-M0…M4** + open questions: [`v3-company-agent.md`](v3-company-agent.md) — gains its module table when designed.
+
+---
+
+## 8. Legacy ID → new module map (nothing lost)
 
 | Legacy ID | Was | New module | Status |
 |---|---|---|---|
@@ -182,37 +190,85 @@ Outside Version 1. Three groups:
 
 ---
 
-## 8. What's left to ship Version 1
+## 9. What's left to ship Version 1
 
-Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`phase-1-review.md`](phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@flowbuddy/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5); **later that day, auth hardening §3.6 Cuts 2+3** (sign-in rate limiting + Resend-backed email verification & password reset — signup gate deliberately open). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
+Only **Phase 1** gates the Version 1 release — and the release-gating work is **done**: the copilot is built, verified, and **deployed** (Render + R2). **2026-07-06:** the [`archive/phase-1-review.md`](archive/phase-1-review.md) remediation landed (`1bba47b`, user-verified E2E) — all P0 public-surface hardening (§2.1–2.7), retrieval consolidated into one `@flowbuddy/synthesis` seam (§3.1/3.2 — pgvector now has a single landing spot), transcription degradation (§3.3), graceful shutdown (§3.4), and the KB-page honesty reword (§4.5); **later that day, auth hardening §3.6 Cuts 2+3** (sign-in rate limiting + Resend-backed email verification & password reset — signup gate deliberately open). What remains is discretionary hardening + optional upgrades, none of it release-blocking:
 
 1. ✅ **P1-M11** — capture-reliability backlog **complete** (2026-07-06): R1/R2/R3/R6 + Pause/Resume + R1 cross-origin + R9 multi-tab + R8 iframe + R4 SW-eviction resilience + R7 on-page control bar + R10 scroll/hover/keyboard + R12 screenshot timing/cost + **R13 ranked multi-signal locators** (the Phase-3 replay enabler) are all **shipped**. **R5** (marker hotkey/labels) and the recorder UX parking lot moved to **Version 2 · D3** (scope decision 2026-07-06); the R12 follow-ups stay parked.
 2. 🔄 **P1-M12** — **Cut 1** (copilot answer-path PII scrub) is done; **Cut 2** (screenshot/DOM pixel OCR/blur) is deferred to **Version 2 (portal track)** — not release-blocking.
 3. ✅ **P1-M3** — the pgvector upgrade **shipped 2026-07-07** as **hybrid keyword + vector retrieval** (RRF fusion inside the single `synthesis/retrieval.ts` seam; worker embeds at KB build; every vector-path failure degrades to the keyword shortlist).
 
-> Everything else in Phase 1 is ✅ and **P1-M4 cloud deploy is done**. Phase 1's definition-of-done is met post-deploy — **that is the Version 1 release**; the items above are follow-on quality/robustness work.
+> Everything else in Phase 1 is ✅ and **P1-M4 cloud deploy is done — and the Version 1 release SHIPPED: launched in production at flowbuddyai.com 2026-07-23, user-verified E2E** ([`deploy.md`](deploy.md)); the items above are follow-on quality/robustness work.
+
+### Phase 1 backlog (discretionary, post-release — not gating)
+
+The residual open items from the Phase-1 end-to-end review — nothing release-blocking; schedule deliberately. Full detail behind each: [`archive/phase-1-review.md`](archive/phase-1-review.md).
+
+- **Automated test layer** — a thin `vitest` pass over the pure seams (`cleanEvents`, `redactText` Luhn/phone/email edges, `shortcutCombo`, the segmenter carry-forward guard, `sanitizeHistory`, `checkRateLimit`, `distillSteps` grounding validation, `highlightFromBbox`); no CI, runs next to typecheck. *(The repo still has no test harness — [`no-test-harness-for-now`]; this is the standing candidate for the first one.)*
+- **Observability** — error aggregation (Sentry-class) on api + web, and per-call model latency/token logging in `answerFromKB`. *(Structured pino logging is done — [`dev-setup.md`](dev-setup.md) §7.)*
+- **Cost ceiling** — a per-workspace daily budget counter + an OpenAI token-usage column on `CopilotQuery` (also unlocks real cost analytics). *(The cheap caps — question length, `max_completion_tokens`, low temperature, rate limits — are done.)*
+- **Extension injection scope** — switch the recorder from static `<all_urls>` content-script injection to programmatic injection into session tabs only (lower Web-Store scrutiny + better privacy optics; the on-demand `armTab` machinery already exists).
+- **Signup gate** — an invite/allowlist gate for private beta (deliberately left open; sign-in rate-limiting + email verification/reset are done).
+- **Capture quality** — type-aware distill labels (`typed`/`pressed`/`scrolled to`), inner-container scroll capture, `Enter`+`submit` merge in `clean.ts`, the multi-tab screenshot wrong-tab case, and the **full-page-nav capture gap** (late `change`/post-action loss — candidate fix: flush field values on `submit` + a `pagehide` flush).
+- **Studio/widget polish** — range-window the coverage-gap "asked N×" count (+ fuzzy gap matching), per-workspace timezone for analytics day-bucketing, client-side history slicing + widget `maxlength`, widget a11y (dialog role, focus management, thumb labels), a real deflection metric, and a CORS-scope note.
 
 ---
 
-## 9. Doc map
+## 10. Doc map
+
+Grouped by role. **Orientation** first (every other doc points back to these three), then build specs (shipped · forward), operations, reference, go-to-market, and archive.
+
+**Orientation — start here**
 
 | Doc | Role |
 |---|---|
 | **`roadmap.md`** (this) | **The map** — versions/phases/modules, status, legacy mapping. |
 | [`product.md`](product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model + guardrails), moats, surfaces, risks, metrics. |
 | [`architecture.md`](architecture.md) | Canonical **technical** model — 3 modules, KB schema, data model, decisions, flows. |
+
+**Build specs — shipped (Version 1, live)**
+
+| Doc | Role |
+|---|---|
 | [`phase-1-copilot.md`](phase-1-copilot.md) | **Phase 1 (copilot)** — scope/DoD/acceptance + per-module plan & **as-built** + capture contract + privacy + recorder/PII backlog. |
-| [`phase-1-modules-map.md`](phase-1-modules-map.md) | **Phase 1 visual** — Mermaid end-to-end flow (capture → KB → approval → copilot) + package/module map + P1-M# cross-ref. |
-| [`v2-portal.md`](v2-portal.md) | **V2 portal track (by-products)** — the forward feature list for the help portal & articles: render approved workflows + per-audience approval + presentation overlay + productization; modules V2 · P0…P6, all to build. *(Moved out of Version 1 on 2026-07-08 — the previous Phase 2.)* |
-| [`phase-2-sense.md`](phase-2-sense.md) | **Phase 2 (Sense / in-context help)** — the copilot localizes the end-user to workflow + step (ask-time read-only probe, hybrid client-score → LLM-disambiguate) and answers positionally; modules P2-M0…M4. **✅ Built + user-verified E2E 2026-07-09**; as-built + E2E hardening in §8. |
-| [`phase-2-reason.md`](phase-2-reason.md) | **P2-M5 (Reason / diagnostic reasoning)** — "why can't I proceed?": selective trigger → ask-time structured page-state capture (+ optional clone-masked page image, day-one build / default-off) + the founder's expected state (true screenshot + DOM snapshot) → stronger-model agentic read-tool diagnosis. **✅ Built + user-verified E2E 2026-07-13** (§8 as-built + hardening + deploy checklist); §3.1 image value analysis · §3.2 capture UX · §7 plain-language end-to-end flow. |
-| [`phase-4-autopilot.md`](phase-4-autopilot.md) | **Phase 4 (Autopilot)** — agentic execution: the copilot offers to execute approved workflows in the end-user's live session (grounded actions); **P4-M0 guided walkthrough ✅ built 2026-07-15 (§8 as-built)**; M1…M3 to plan; opened ahead of Phase 3 (sequencing decision 2026-07-15). |
+| [`phase-2-sense.md`](phase-2-sense.md) | **Phase 2 (Sense + Reason)** — ✅ built + live. **Part A · Sense** (P2-M0…M4): the copilot localizes the end-user to workflow + step (ask-time read-only probe; hybrid — client scores → top-k hypotheses ride `/answer` → the LLM disambiguates with the question) and answers positionally (unstick step k → path; step-level citation; tie → "X or Y?"; re-probe every follow-up). **Part B · Reason** (P2-M5): diagnostic "why can't I proceed?" — selective trigger → ask-time structured page-state capture (± a lazy clone-masked page image) + the founder's expected state (true screenshot + DOM) → stronger-model agentic read-tool diagnosis of expected-vs-actual. Includes the trust-ladder posture split, the image value analysis, the Sense→Reason flow, and both as-built file maps. |
+| [`kb-step-distillation.md`](kb-step-distillation.md) | **KB step quality (built)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
+
+**Build specs — forward (planned · draft · direction)**
+
+| Doc | Role |
+|---|---|
+| [`phase-4-autopilot.md`](phase-4-autopilot.md) | **Phase 4 (Autopilot)** — agentic execution: the copilot offers to execute approved workflows in the end-user's live session (grounded actions); **P4-M0 guided walkthrough ✅ built (§8 as-built)**; M1…M3 to plan; opened ahead of Phase 3. |
 | [`phase-5-converse.md`](phase-5-converse.md) | **Phase 5 (Converse / the goal-based agent) — 📝 draft design.** The Tell → Guide → Do ladder over goal understanding: conversational foundation (persistent chat, continuity retrieval) + goal thread + product-profile KB + tier router + execution orchestration (P5 = brain, P4 = hands). Modules P5-M0…M4; this map gains its phase section when the design locks. |
-| [`competitive-claude-chrome.md`](competitive-claude-chrome.md) | **Competitive reference: Claude for Chrome (living)** — capabilities, permissions/safety model, head-to-head vs FlowBuddy, the beat-Claude plays; feeds Phase-4/5 design. Re-check on major Anthropic releases. |
-| [`kb-step-distillation.md`](kb-step-distillation.md) | **KB step quality (built 2026-06-27)** — distill raw capture events → clean per-workflow steps (heuristics + LLM); design + as-built. |
-| [`internals/`](internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements this map's *why/what*). Start at `internals/connections.md`. Follows the code — source wins on conflict. |
-| [`e2e-testing.md`](e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics; per-step PASS signals. **3 levels:** local · dev (Render, incl. data reset) · prod (placeholder). |
-| [`deploy-render.md`](deploy-render.md) | **Render deploy guide** — free-tier blueprint walkthrough (every first-deploy gotcha) + the going-to-production deltas. |
+| [`phase-6-interop.md`](phase-6-interop.md) | **Phase 6 (Interop / the open agent interface) — 📝 direction, not yet designed.** Expose the approved KB to **third-party AI agents** so they can operate the customer's product: the `agents` audience on the same per-workflow approval model + workspace opt-in, one **two-layer** export of distilled workflows (instructional layer universal · ranked-locator machine layer optional; values masked; screenshots gated by PII Cut 2). Transports recommended: **remote MCP (v1 lead) · markdown/`llms.txt` (v1 rider) · WebMCP registered by the widget snippet (the fleet-wide prepared bet) · bespoke REST skipped**; feasibility head start = the P2-M0 sense-plan compiler. Extends `ONE KB → per-target approval → {Copilot, Portal, Agents}`; scope = any web app with workflows. Candidate modules P6-M0…M4 + build sequence. |
+| [`v2-portal.md`](v2-portal.md) | **Version 2 portal track (by-products)** — the forward feature list for the help portal & articles: render approved workflows + per-audience approval + presentation overlay + productization; modules V2 · P0…P6, all to build. |
+| [`v3-company-agent.md`](v3-company-agent.md) | **Version 3 (the company agent / buyer-side track) — 📝 direction, not designed/scheduled.** The ownership flip: any company records the tools it **uses** (same extension + Studio) → an owned, internal-use-approved workflow/SOP KB → a **second Chrome extension: FlowBuddy's own browser-use agent** runs those apps for the company — executes only recorded + approved workflows, never free-form browsing (the grounded answer to Claude-for-Chrome-class improvisation). One replay core, three drivers (P3 sandbox · P4 widget · V3 extension); consumes P6's export seam. Candidate modules V3-M0…M4. |
+
+**Operations — build, run, ship, test**
+
+| Doc | Role |
+|---|---|
+| [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma) — and the **canonical logging reference** (§7). |
+| [`deploy.md`](deploy.md) | **Render deploy guide — both environments.** Shared foundations (two-blueprint model, R2, suffix gotcha, logging, worker-folded model) + the **dev/staging** free-tier walkthrough (every first-deploy gotcha) + the **production** (FlowBuddyAI.com) topology/plans, DNS, as-run runbook, release flow, upgrades, scaling ladder. **Prod deployed; V1 launched + user-verified E2E.** |
+| [`e2e-testing.md`](e2e-testing.md) | **Manual E2E test plan** — clean slate → record → KB → approve → embed → ask → analytics; per-step PASS signals. **3 levels:** local · dev (Render, incl. data reset) · prod. |
 | [`extension-releases.md`](extension-releases.md) | **Chrome Web Store release log (living)** — one entry per store build of the recorder (what shipped · permissions deltas · baked targets · status) + the cut-a-release checklist. Updated at every packaging. |
-| [`phase-1-review.md`](phase-1-review.md) | **Phase-1 E2E review (2026-07-03)** — full-codebase findings + prioritized recommendations (P0/P1/P2) + a suggested remediation sequence; annotated as items land. |
-| [`dev-setup.md`](dev-setup.md) | Local dev / tooling (pnpm · Turborepo · docker-compose · Prisma). |
+
+**Reference — deep dives**
+
+| Doc | Role |
+|---|---|
+| [`internals/`](internals/README.md) | **How it RUNS** — low-level per-module mechanics + data flow + a connections map (engineering deep-dive; complements this map's *why/what*). Start at `internals/connections.md`. Follows the code — source wins on conflict. |
+| [`design_system/`](design_system/README.md) | **Design system (indigo brand)** — tokens · components · the full Studio UI kit; the source of truth for ALL UI. |
+| [`competitive-claude-chrome.md`](competitive-claude-chrome.md) | **Competitive reference: Claude for Chrome (living)** — capabilities, permissions/safety model, head-to-head vs FlowBuddy, the beat-Claude plays; feeds Phase-4/5 design. Re-check on major Anthropic releases. |
+
+**Go-to-market**
+
+| Doc | Role |
+|---|---|
+| [`landing-page.md`](landing-page.md) | **Landing page (ideas, positioning & structure)** — the flowbuddyai.com marketing page plan: the one-KB-many-consumers story (record → copilot · portal · third-party agents), the "AI-agent-ready" positioning direction, proposed sections, and open decisions. |
+
+**Archive — historical record**
+
+| Doc | Role |
+|---|---|
+| [`archive/phase-1-review.md`](archive/phase-1-review.md) | **Phase-1 E2E review (2026-07-03), archived** — the full-codebase audit that drove the post-Phase-1 hardening; nearly all findings landed. Its still-open items live as the **Phase 1 backlog** (§9). |

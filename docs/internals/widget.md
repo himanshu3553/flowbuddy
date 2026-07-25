@@ -1,7 +1,8 @@
 # Widget (embeddable copilot) — internals
 
-> **Module:** the embeddable script in [`packages/widget/`](../../packages/widget/), built to a single
-> `flowbuddy-copilot.js`. **Role:** the customer-facing surface of the copilot — the one `<script>` a SaaS
+> **Module:** the embeddable script in [`packages/widget/`](../../packages/widget/), built to
+> `flowbuddy-copilot.js` **plus the lazy P2-M5 sibling `flowbuddy-copilot-render.js`** (loaded on
+> demand for Reason's image tier; deployed side by side). **Role:** the customer-facing surface of the copilot — the one `<script>` a SaaS
 > drops into its app to give end-users an in-app help chat.
 
 ---
@@ -29,7 +30,7 @@ with the host page's styles or globals.
 | [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/flowbuddy-copilot.js` **+ `dist/flowbuddy-copilot-render.js`** (two IIFE bundles — deploy side by side). |
 | [`demo/index.html`](../../packages/widget/demo/index.html) | Local test page (serve over **HTTP**, not `file://`). |
 
-Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) §8, [`phase-2-reason.md`](../phase-2-reason.md) §8, and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
+Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
 
 ---
 
@@ -47,8 +48,8 @@ Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrou
     (`icon`|`text`|`text-outline`), `data-flowbuddy-launcher-text`.
   - `data-flowbuddy-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
     secret recorder token.*
-  - `data-flowbuddy-preview` — `"1"` marks a **Studio tester** embed (2026-07-06): the panel starts open
-    **with the launcher kept visible below it** (panel lifted via `--sc-panel-bottom: 86px`, so
+  - `data-flowbuddy-preview` — `"1"` marks a **Studio tester** embed (2026-07-08): the panel starts open
+    **with the launcher kept visible below it** (panel lifted via `--fb-panel-bottom: 86px`, so
     launcher style/text/position edits show immediately), the mount heartbeat is suppressed,
     `/answer` calls carry `preview: true` so the API skips embed detection + analytics and returns
     no `queryId` (→ no thumbs), **and the `/v1/copilot/config` fetch is skipped** (the preview frame
@@ -73,7 +74,7 @@ that shadow tree. Consequences:
 - The host page's CSS can't bleed in and the widget's CSS can't bleed out — no class collisions, no
   layout fights.
 - Theming is done with **CSS custom properties** set as inline styles on the host element, which
-  *inherit* into the shadow tree: `--sc-accent` (from `data-flowbuddy-accent`), and `--sc-right`/`--sc-left`
+  *inherit* into the shadow tree: `--fb-accent` (from `data-flowbuddy-accent`), and `--fb-right`/`--fb-left`
   for positioning. Default theme is **FlowBuddy indigo** (`#3b50e0` family); a host can rebrand to its own
   color (text on it is white).
 

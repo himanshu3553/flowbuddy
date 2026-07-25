@@ -60,7 +60,8 @@ Runs as `pnpm --filter @flowbuddy/api worker`, `concurrency: 2`.
 
 The shape persisted into each `KnowledgeItem.data` is a
 [`DistilledStep`](../../packages/synthesis/src/distill.ts):
-`{ instruction, detail?, route, narration, screenshotFile, bbox }`. **Raw events are not persisted as
+`{ instruction, detail?, route, narration, screenshotFile, bbox, keyEventId? }` (`keyEventId`
+persisted since 2026-07-08 — Sense locator recovery). **Raw events are not persisted as
 items** — they remain only inside `KnowledgeSource.manifest`.
 
 ---
@@ -210,7 +211,7 @@ quality regressions): emails need a real TLD, SSNs need the `3-2-4` dash form, *
 Luhn-validated**, phones require a separator. So prices, dates, order ids, versions, and bare numbers
 are **not** touched. It's **idempotent** — re-running on already-redacted text is a no-op (safe across
 reprocess). Screenshot OCR / pixel redaction (PII *displayed* on a page) is **Cut 2, deferred to
-Phase 2**.
+the Version-2 portal track**.
 
 The copilot's system prompt is told to treat the placeholders as opaque and never reproduce them — see
 [copilot.md](copilot.md).
@@ -282,11 +283,11 @@ its approval (and the copilot's access to it) survives. This is the seam between
 
 ## 9. The old Phase-2 path — REMOVED (2026-07-07)
 
-The synthesis package used to carry an **older, raw-event path** for the parked article engine
+The synthesis package used to carry an **older, raw-event path** for the retired article engine
 (`buildKB` — 1:1 raw items with `data = { event, narration }` —, `segmentItems`,
 `generateArticleForSegment`). It was **removed 2026-07-07** with the workflows-as-articles decision;
-the worker's `buildWorkflowKB` (distilled) is now the **only** KB build path. Decision + rebuild
-notes: [`../phase-2-portal.md`](../phase-2-portal.md) §7.
+the worker's `buildWorkflowKB` (distilled) is now the **only** KB build path. The Version-2 portal
+track renders approved workflows instead: [`../v2-portal.md`](../v2-portal.md).
 
 ---
 

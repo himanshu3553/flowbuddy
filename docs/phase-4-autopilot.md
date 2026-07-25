@@ -3,8 +3,8 @@
 > **Phase 4 moves the copilot from *telling* to *doing*.** Today (Phase 1) an end-user asks "how do I X?" and gets a grounded, cited answer. Autopilot adds the next step: after the answer, the widget offers **"Want me to do this for you?"** — and on consent, **executes the approved workflow in the end-user's live session**, resolving each recorded step's element on the real page, acting, and verifying, with the user watching and in control the whole time. Working name **Autopilot** (a.k.a. **AI Agents / agentic mode**). Roadmap/status: [`roadmap.md`](roadmap.md) §5.
 
 - **Status:** 🔄 **In progress — P4-M0 (guided walkthrough) ✅ built 2026-07-15 (§8 as-built); P4-M1…M3 to plan.** Sequencing decision (2026-07-15): the phase opened **ahead of Phase 3** — P4-M0 has no Phase-3 dependency (zero-acting), and P4-M1's eligibility gate will accept pluggable signals so Phase-3 certification slots in later without rework. The acting modules (M2) still consume the shared replay core (§3).
-- **Last updated:** 2026-07-15 · **Branch:** `dev`
-- **Companion docs:** roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 (the substrate) → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 2 (Sense — localization + the plan artifact) → [`phase-2-sense.md`](phase-2-sense.md) · Phase 3 (the engine + certification) → [`roadmap.md`](roadmap.md) §4 · why copilot-first → [`product.md`](product.md) §5 · competitive reference (Claude for Chrome) → [`competitive-claude-chrome.md`](competitive-claude-chrome.md)
+- **Last updated:** 2026-07-25 · **Branch:** `dev`
+- **Companion docs:** roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 (the substrate) → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 2 (Sense localization + the plan artifact · Reason's agent loop) → [`phase-2-sense.md`](phase-2-sense.md) · Phase 3 (the engine + certification) → [`roadmap.md`](roadmap.md) §4 · why copilot-first → [`product.md`](product.md) §5 · competitive reference (Claude for Chrome) → [`competitive-claude-chrome.md`](competitive-claude-chrome.md)
 - **The trust story in one line — grounded actions.** Generic browser agents *improvise* how to do a task; Autopilot **only executes workflows the founder recorded and approved** — the grounded-authorship guarantee extended from answers to actions. When a step can't be verified, Autopilot **stops safely and says so** instead of guessing forward (decline-over-hallucinate, applied to execution).
 
 ---
@@ -23,7 +23,7 @@ for each step:  resolve locator (ranked list, first that resolves wins)
 ```
 
 - **Human-in-the-loop by construction.** Captured input values are **masked** at capture (P1-M12), so Autopilot can never blindly replay values — it **prompts the end-user for every input** (prefilled from their question where safe, always confirmable). Sensitive by design, not by policy.
-- **A second audience on the approval model** (`portal` joins as a third with the V2 portal track): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag on the same `(sourceId, segmentIndex)` key. Founder opt-in per workflow, one click, reversible. Absence = never executable.
+- **A second audience on the approval model** (`portal` joins with the V2 portal track, `agents` with Phase 6 — [`phase-6-interop.md`](phase-6-interop.md)): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag on the same `(sourceId, segmentIndex)` key. Founder opt-in per workflow, one click, reversible. Absence = never executable.
 - **The guided walkthrough is the stepping stone.** Before acting *for* the user, the same machinery can **guide** them — Sense (Phase 2, P2-M3) already highlights the *current* step on demand; P4-M0 extends that into a sequential, progression-aware walkthrough of the whole remaining workflow. Zero side effects, same locator resolution; it ships first and is independently valuable.
 - **The user stays in charge:** consent to start, visible step-by-step execution, pause/abort at any moment, confirmation on destructive steps.
 
@@ -39,7 +39,7 @@ for each step:  resolve locator (ranked list, first that resolves wins)
 | **Know the step landed** | **`post_action` / `expected_outcome`** — the settled post-step state captured per event; the agentic loop's verification check. |
 | **Navigate between steps** | **`route`** per event (URL/path/hash/title) — deep-link and confirm location. |
 | **An execution surface already in the page** | The **widget** is a same-origin script inside the host app — it can highlight, click, fill, and navigate. Today it only renders chat; Autopilot gives it hands. |
-| **The trust-gate pattern** | `CopilotApproval` keyed `(sourceId, segmentIndex)`, reprocess-safe — generalizes to the `autopilot` audience (and to `portal` in the V2 portal track). |
+| **The trust-gate pattern** | `CopilotApproval` keyed `(sourceId, segmentIndex)`, reprocess-safe — generalizes to the `autopilot` audience (and to `portal` — V2 portal track — and `agents` — Phase 6). |
 | **Input safety** | Values masked at capture → execution **must** ask the user, making every run human-in-the-loop. |
 
 ---
@@ -56,14 +56,14 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 | A failed replay is… | **The product working** — a drift flag | **A safety event** — safe-stop, explain, hand back |
 | Purpose | Keep the KB fresh | Complete the user's task |
 
-**Why Phase 3 ships first:**
+**Why the acting modules (M1…M3) wait for Phase 3's replay core** *(the phase itself opened ahead of Phase 3 — sequencing decision 2026-07-15; P4-M0 is zero-acting and never needed these rails)*:
 1. **The engine learns where failure is the deliverable.** Locator healing, step semantics, outcome verification get hardened in the sandbox — where a failed replay *is* drift detection — before ever touching a live user's data.
-2. **Validation is Autopilot's certification layer.** Eligibility = **approved for autopilot AND recently validated green**. A workflow Phase 3 can't replay cleanly is never offered for execution. This rail exists only if Phase 3 ships first.
+2. **Validation is Autopilot's certification layer.** Eligibility = **approved for autopilot AND recently validated green**. A workflow Phase 3 can't replay cleanly is never offered for execution. This rail exists only once Phase 3 lands — until then, M1's eligibility gate takes pluggable interim signals (the 2026-07-15 sequencing decision).
 3. **The loop closes both ways.** An Autopilot safe-stop in production ("element not found at step 3") is a **live drift signal** feeding Phase 3's freshness dashboards — production telemetry complementing sandbox validation.
 
-**Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with two drivers — Phase 3's sandbox runner and Phase 4's widget driver. The `retrieval.ts` single-seam pattern, applied to execution.
+**Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with three drivers — Phase 3's sandbox runner, Phase 4's widget driver, and (when that track is built) V3's company-agent extension ([`v3-company-agent.md`](v3-company-agent.md)). The `retrieval.ts` single-seam pattern, applied to execution.
 
-**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`phase-2-reason.md`](phase-2-reason.md) §4) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
+**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`phase-2-sense.md`](phase-2-sense.md) Part B) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
 
 ---
 

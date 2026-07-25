@@ -2,15 +2,15 @@
 
 > **Phase 1 is the copilot, end-to-end — and it ships as the Version 1 release.** A SaaS records its product, **approves workflows for the copilot**, drops a `<script>` into its app, and its end-users get a chat widget that answers **grounded only in approved Knowledge Base content**, with citations and honest declines. **Decoupled** from the human-facing portal/articles (those are a [Version 2 by-product](v2-portal.md)). This doc is the build plan, the acceptance spec, and the as-built record in one place.
 
-- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done** — the stack runs on Render (Dockerized api + worker + web) + Cloudflare R2 (dev deploy at `https://flowbuddy-dev-web.onrender.com`; reset/test guide → [`e2e-testing.md`](e2e-testing.md) **Level 2**). Remaining Phase-1 work: only **P1-M12 PII Cut 2** (deferred to the V2 portal track) — **P1-M3 shipped 2026-07-07** as hybrid keyword+pgvector retrieval (§5 / §11). The **P1-M11 capture-reliability backlog is complete** (§8 — **R13 ranked locators shipped 2026-07-06**, closing the list; **R5** + the recorder UX parking lot → **V2·D3**).
-- **Last updated:** 2026-07-08 · **Branch:** `dev`
-- **Companion docs:** why copilot-first → [`product.md`](product.md) §5 · roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · local dev → [`dev-setup.md`](dev-setup.md)
+- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done — and Version 1 is LIVE IN PRODUCTION at flowbuddyai.com since 2026-07-23** ([`deploy.md`](deploy.md): paid two-blueprint stack, worker folded into the api; dev stays at `https://flowbuddy-dev-web.onrender.com`, reset/test guide → [`e2e-testing.md`](e2e-testing.md) **Level 2**). Remaining Phase-1 work: only **P1-M12 PII Cut 2** (deferred to the V2 portal track) — **P1-M3 shipped 2026-07-07** as hybrid keyword+pgvector retrieval (§5 / §11). The **P1-M11 capture-reliability backlog is complete** (§8 — **R13 ranked locators shipped 2026-07-06**, closing the list; **R5** + the recorder UX parking lot → **V2·D3**).
+- **Last updated:** 2026-07-25 · **Branch:** `dev`
+- **Companion docs:** why copilot-first → [`product.md`](product.md) §5 · roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · deploy → [`deploy.md`](deploy.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · local dev → [`dev-setup.md`](dev-setup.md) *(the Phase-1 visual map is §1.1 above)*
 - **Grounding (Stage A):** the copilot grounds on **approved-KB** (`KnowledgeItem`s behind a per-workflow approval flag), **not** published articles. **Stage B** (also cite a published article when one exists) is **deferred**. *(These grounding "Stages" are within Phase 1 — not the product Phases 1/2/3.)*
 
 ---
 
 ## Table of contents
-1. [Overview](#1-overview)
+1. [Overview](#1-overview) · [1.1 System map (the visual)](#11-system-map-the-visual)
 2. [Scope & definition of done](#2-scope--definition-of-done)
 3. [Locked decisions & assumptions](#3-locked-decisions--assumptions)
 4. [The four surfaces (as built)](#4-the-four-surfaces-as-built)
@@ -40,6 +40,91 @@ A founder installs the **FlowBuddy Recorder**, connects it to their account, and
 
 The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → retrieval/grounding engine); the copilot delivery layer (P1-M5…P1-M12) was built on top.
 
+### 1.1 System map (the visual)
+
+The end-to-end picture — capture raw signal → turn it into a Knowledge Base → gate it with approval → answer customers from it — with everything connecting through **one cumulative KB per workspace**. There are **two halves joined by the KB**:
+
+1. **Builder side** (record → process → approve) — asynchronous (BullMQ): `extension → api ingestion → worker + synthesis → KB → approval`.
+2. **Customer side** (ask → answer) — synchronous: `widget → copilot API → answerFromKB → approved-KB`.
+
+The **approval gate** is the seam between them — a customer can only ever get answers from knowledge the founder explicitly approved (the **no-leak** guarantee). `synthesis` is the shared brain: the *same* package builds the KB on the way in and grounds the answers on the way out.
+
+```mermaid
+%%{ init: { "flowchart": { "htmlLabels": true, "useMaxWidth": true, "nodeSpacing": 45, "rankSpacing": 55 } } }%%
+flowchart TB
+    subgraph BUILDER["🛠️ BUILDER SIDE — record &amp; curate (async · BullMQ)"]
+        direction TB
+
+        EXT["<b>M1 · CAPTURE</b><br/>extension (Chrome MV3)<br/>events + DOM + screenshots + narration<br/>client-side PII mask · reliable upload"]
+
+        ING["<b>INGESTION API</b><br/>api · server.ts<br/>store artifacts → S3/R2<br/>write KnowledgeSource · enqueue job"]
+
+        WORKER["<b>M2 · KNOWLEDGE BASE worker</b><br/>api · worker.ts + synthesis<br/>transcribe → align → clean events<br/>segment → distill into clean steps · server PII scrub<br/>status: uploaded → processing → ready"]
+
+        KB[("<b>THE KNOWLEDGE BASE</b> · Postgres<br/>one cumulative KB per workspace<br/>KnowledgeSource + distilled-step KnowledgeItem[]<br/>· segmentIndex · segmentTitle")]
+
+        APPROVAL{{"<b>TRUST GATE — Approval (P1-M5)</b><br/>CopilotApproval (sourceId, segmentIndex)<br/>⇒ defines the approved-KB"}}
+
+        EXT -- "raw session bundle" --> ING
+        ING -- "async job" --> WORKER
+        WORKER --> KB
+        KB --> APPROVAL
+    end
+
+    subgraph CUSTOMER["💬 CUSTOMER SIDE — ask &amp; answer (sync)"]
+        direction TB
+
+        WIDGET["<b>WIDGET ⭐</b><br/>widget · flowbuddy-copilot.js<br/>one &lt;script&gt; · shadow-DOM chat<br/>sends page route · 👍/👎 feedback"]
+
+        COPILOTAPI["<b>COPILOT API</b><br/>api · copilot.ts + copilot-auth.ts<br/>/answer · /feedback<br/>embed key · origin allowlist · rate limit"]
+
+        ENGINE["<b>RETRIEVAL &amp; GROUNDING (P1-M3/M6)</b><br/>synthesis · answerFromKB()<br/>retrieve approved-KB → grounded answer + cites<br/>low confidence → honest DECLINE"]
+
+        WIDGET -- "question + route + key" --> COPILOTAPI
+        COPILOTAPI --> ENGINE
+        ENGINE -- "answer + citations / decline" --> COPILOTAPI
+        COPILOTAPI --> WIDGET
+    end
+
+    APPROVAL -- "no-leak: retrieval filters<br/>to APPROVED items only" --> ENGINE
+
+    STUDIO["<b>STUDIO — builder console</b><br/>web (Next.js · Tailwind + shadcn · indigo)<br/>Home · Recordings · Knowledge Base · Copilot · Analytics · Settings"]
+
+    STUDIO -. "approve toggle" .-> APPROVAL
+    KB -. "browse / status" .-> STUDIO
+    ENGINE -. "queries + gaps" .-> STUDIO
+
+    classDef capture fill:#e7f0ff,stroke:#2b6cb0,color:#1a365d;
+    classDef kb fill:#e6fffa,stroke:#2c7a7b,color:#234e52;
+    classDef gate fill:#fffaf0,stroke:#dd6b20,color:#7b341e;
+    classDef customer fill:#faf5ff,stroke:#6b46c1,color:#44337a;
+    classDef studio fill:#f7fafc,stroke:#4a5568,color:#1a202c;
+
+    class EXT,ING capture;
+    class WORKER,KB kb;
+    class APPROVAL gate;
+    class WIDGET,COPILOTAPI,ENGINE customer;
+    class STUDIO studio;
+```
+
+**How the pieces map to packages:**
+
+| Module / role | Package(s) | Key files | Responsible for |
+|---|---|---|---|
+| **M1 · Capture** | `extension` | `content.ts`, `background.ts`, `offscreen.ts`, `controlbar.ts`, `idb.ts` | Record the session bundle (events + DOM + screenshots + audio), client-side PII mask, on-page control bar, reliable upload |
+| **Ingestion** | `api` | `server.ts`, `storage.ts`, `queue.ts` | Receive upload → store artifacts (S3/R2) → write `KnowledgeSource` → enqueue worker job |
+| **M2 · Knowledge Base** | `api` (worker) + `synthesis` | `worker.ts`; `index.ts` (`buildWorkflowKB`), `transcribe.ts`, `align.ts`, `clean.ts`, `segment.ts`, `distill.ts`, `embeddings.ts`, `redact.ts` | Transcribe → align → **clean** events → segment into workflows → **distill** clean steps → server PII scrub → embed → `ready` |
+| **The KB store** | `db` | `schema.prisma` | One cumulative KB per workspace; `KnowledgeSource` + `KnowledgeItem` + index |
+| **Approval gate (P1-M5)** | `api` + `web` | `CopilotApproval`; Studio toggle | Per-workflow "approve for copilot" → defines **approved-KB** (the trust gate) |
+| **Retrieval & grounding (P1-M3/M6)** | `synthesis` | `retrieval.ts` (the single no-leak seam — hybrid keyword∪pgvector RRF) + `embeddings.ts` → `copilot.ts` `answerFromKB()` | Retrieve approved-KB → grounded answer + citations, or honest decline → `CoverageGap` |
+| **Copilot API (P1-M6/M8/M9)** | `api` | `copilot.ts`, `copilot-auth.ts` | `/v1/copilot/answer` + `/feedback`; embed key auth, origin allowlist, rate limit, route-bias |
+| **Widget (P1-M7/M10)** | `widget` | `index.ts`, `styles.ts` | One `<script>` shadow-DOM chat; renders answers/citations; 👍/👎 feedback (+ the lazy P2-M5 sibling `flowbuddy-copilot-render.js`) |
+| **Studio (P1-M10 + console)** | `web` | `app/dashboard/*` | Builder UI: KB browser, approve toggle, embed snippet, activity + coverage gaps |
+| **Shared contracts** | `shared` | capture contract + zod schemas | The session-bundle shape every module agrees on |
+| **Cross-cutting** | `logger`, `landing` | — | the one Pino logger for every Node service; the flowbuddyai.com marketing page |
+
+*(Module 3 — article creation — and the Help Portal are **Version 2 by-products**, decoupled from this copilot flow — [`v2-portal.md`](v2-portal.md).)*
+
 ---
 
 ## 2. Scope & definition of done
@@ -52,7 +137,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 - **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight (P2-M3, ✅) and the guided walkthrough (P4-M0, ✅); executing workflows on the end-user's behalf → **Phase 4's acting modules** ([`phase-4-autopilot.md`](phase-4-autopilot.md)); the data exists.
 - **Self-validation / sandbox / drift** → **Phase 3**.
 - **Narration-only & video capture** → **Version 2**.
-- Integrations & public API; i18n; multi-seat/roles; billing (free invite-only beta).
+- Integrations & public API; i18n; multi-seat/roles; billing (free open-signup beta).
 
 **Definition of done (= the Version 1 release):**
 - [ ] End-to-end: install → record → process → **approve for copilot** → embed snippet → end-user asks → grounded answer.
@@ -81,7 +166,7 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 | Redaction | Client-side **before upload**; mask password/email/tel, sensitive `autocomplete`, card/CVV/SSN-like patterns, and host-marked `data-flowbuddy-redact`. Server backstop → backlog. |
 | Recording scope | Primary tab **+ tabs opened from it** (R9 Option A, 2026-07-02); survives same-tab navigations incl. **cross-origin** (R1); upload retry on failure (R2). |
 | Deploy | Render (Dockerized: api + worker + web) + Cloudflare R2; **executed last**, after the copilot works locally. |
-| Workspace | Single-user = single-workspace in V1; multi-seat/roles later. Browser: Chrome-only (MV3). Beta: free, invite-only. |
+| Workspace | Single-user = single-workspace in V1; multi-seat/roles later. Browser: Chrome-only (MV3). Beta: free, open signup. |
 
 **Cadence:** one module at a time, each verified end-to-end, with a stop for review.
 
@@ -110,13 +195,13 @@ The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → 
 
 Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persisted transcript, raw manifest) and **`KnowledgeItem`** (the normalized, indexed unit — in V1 a **distilled step item**: a clean imperative `instruction` (+ optional `detail`), `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, and searchable `text`).
 
-**The worker** (on upload): transcribes narration (`whisper-1`, persisted) → aligns narration to events → **cleans** the raw events (deterministic dedupe/merge of mechanical duplicates) → **segments** into candidate workflows (markers → route changes → narration cues → LLM) → **distills** each workflow (LLM) into clean, user-facing steps — dropping stray clicks, merging low-level interactions, attributing narration, and keeping one curated screenshot per step — then persists those distilled steps tagged by workflow and sets status **`ready`**. Raw events are **not** persisted as items (only the distilled steps are; the raw log stays in the manifest). It **stops at `ready`** (curated model; approval and article generation are separate explicit steps). Items are indexed by text for **keyword/LLM retrieval**, workspace-wide. See [`kb-step-distillation.md`](kb-step-distillation.md) (2026-06-26).
+**The worker** (on upload): transcribes narration (`whisper-1`, persisted) → aligns narration to events → **cleans** the raw events (deterministic dedupe/merge of mechanical duplicates) → **segments** into candidate workflows (markers → route changes → narration cues → LLM) → **distills** each workflow (LLM) into clean, user-facing steps — dropping stray clicks, merging low-level interactions, attributing narration, and keeping one curated screenshot per step — then persists those distilled steps tagged by workflow and sets status **`ready`**. Raw events are **not** persisted as items (only the distilled steps are; the raw log stays in the manifest). It **stops at `ready`** (curated model; approval and article generation are separate explicit steps). Items are indexed by text **and embedded at KB build** (`text-embedding-3-small` — P1-M3, 2026-07-07) for **hybrid keyword+vector retrieval**, workspace-wide. See [`kb-step-distillation.md`](kb-step-distillation.md) (2026-06-26).
 
 ### 4.3 In-App Copilot ⭐ — the primary KB consumer (the headline)
 *Grounds directly on the approved subset of the KB (Module 2) — parallel to, and independent of, Module 3 article creation (Version 2).*
 - **Approval gate (P1-M5):** a per-**workflow** "approve for copilot" toggle in the KB browser; the **enforcement seam** — retrieval filters to approved items only.
 - **Answer endpoint (P1-M6):** `POST /v1/copilot/answer` retrieves over **approved-KB**, returns a structured **grounded answer + citations** or an **honest decline** (→ `CoverageGap`, `source=copilot`); multi-turn.
-- **Widget & SDK (P1-M7):** `flowbuddy-copilot.js` (esbuild → ~7 kB IIFE); shadow-DOM launcher + chat panel; **FlowBuddy-indigo default theme** (`--sc-accent:#3b50e0`, indigo citations + terracotta declines — aligned to the design system, 2026-06-28). **Appearance is LIVE-SERVED (2026-07-07):** at mount the widget fetches `GET /v1/copilot/config` (key-authed, 1.5s best-effort budget) so Studio → Appearance changes reach every embed without re-copying the snippet — the snippet carries only src/api/key; explicit `data-flowbuddy-*` attrs (`-accent`/`-position`/`-title`/`-greeting`/`-launcher`/`-launcher-text`) remain supported as deliberate per-page overrides that win over the server config; renders answers + citations + decline/error states; `demo/index.html` for local testing. **Design-system chrome + typography (2026-07-08):** header bot-badge + mono tagline, borderless input + square ↑ send button, "Source"/"Honest decline" pills, and Plus Jakarta Sans / JetBrains Mono at token sizes (fonts injected document-level by the widget, system-stack fallback).
+- **Widget & SDK (P1-M7):** `flowbuddy-copilot.js` (esbuild IIFE); shadow-DOM launcher + chat panel; **FlowBuddy-indigo default theme** (`--fb-accent:#3b50e0`, indigo citations + terracotta declines — aligned to the design system, 2026-06-28). **Appearance is LIVE-SERVED (2026-07-08):** at mount the widget fetches `GET /v1/copilot/config` (key-authed, 1.5s best-effort budget) so Studio → Appearance changes reach every embed without re-copying the snippet — the snippet carries only src/api/key; explicit `data-flowbuddy-*` attrs (`-accent`/`-position`/`-title`/`-greeting`/`-launcher`/`-launcher-text`) remain supported as deliberate per-page overrides that win over the server config; renders answers + citations + decline/error states; `demo/index.html` for local testing. **Design-system chrome + typography (2026-07-08):** header bot-badge + mono tagline, borderless input + square ↑ send button, "Source"/"Honest decline" pills, and Plus Jakarta Sans / JetBrains Mono at token sizes (fonts injected document-level by the widget, system-stack fallback).
 - **Context API (P1-M8):** the widget sends `location.pathname`; retrieval **boosts** items whose captured route matches the page; **soft boost** — biases, never excludes.
 - **Embed auth (P1-M9):** the API authenticates via **`X-FlowBuddy-Key`** → resolve key → workspace; enforce **origin allowlist** (CORS + server, empty=any — **origins normalized on save** to exact `Origin`-header form since 2026-07-06, with a Studio warning when the widget is live but the list is empty); **rate-limit** 30/min/key on **all three copilot routes** (`/answer`, `/feedback`, `/seen` — one shared gate, per-route buckets, 2026-07-06). Unknown/missing → 401, disallowed origin → 403, over limit → 429; key rotatable in Studio. Question capped at 2000 chars (+ widget `maxlength` 400) and the answer call pins `max_completion_tokens`/low temperature — the cheap cost ceiling from the review (§2.4).
 - **Feedback & analytics (P1-M10):** every question is logged with its outcome (`CopilotQuery`: question + answered + thumbs; returns `queryId`); widget renders **👍/👎** → `POST /v1/copilot/feedback` (tenant-scoped); Studio shows **Copilot activity** + unified **coverage gaps** ("record this next").
@@ -128,7 +213,7 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
   - **Home** (`/dashboard`): **first-run** = a live activation checklist (token → recording ready → workflow approved → copilot embedded) with a progress ring + two help dialogs (How it works / How to record); flips to a **steady-state dashboard** once a workflow is approved or a question arrives — metric tiles, "record this next" gaps, recent questions, pending approvals, copilot-health bars, weekly questions chart.
   - **Recordings** (`/dashboard/recordings`): filter tabs (All/Ready/Processing) + search over recording rows (status, workflow count, processing/failed states) + empty state; row → a recording's detail.
   - **Knowledge Base** (`/dashboard/kb`): top-level **workflows list** (the trust gate) — pending-approvals callout + **Approve all** + per-workflow **one-click "In copilot" toggle**; row → the source detail (`/kb/[id]`: distilled steps by workflow w/ screenshots — **click → a same-page lightbox, with the clicked element highlighted from the captured `bbox`** (2026-07-03) — approve toggles, transcript, a "Used by the copilot" citation-stats placeholder). *(Workflows = segments within a source; approval is per-`(sourceId, segmentIndex)`. No standalone Workflow entity/route, no "Draft" state, no per-step selector/expected_outcome in the data — those parts of the design are placeholders.)*
-  - **Copilot** (`/dashboard/copilot`): **tabs** (Install / Settings / Appearance) — embed snippet + copy (with a **local-testing hint** when the widget URL is a placeholder), "not detected yet" listening state + checklist, public key + rotate, origin allowlist, grounding & trust controls (**Cite the workflow used** now persists + is enforced on both the embedded widget and the preview; **decline-threshold** remains a UI-only preview — persistence/enforcement → **Version 2 · D2**, 2026-07-06) — plus the **real-widget tester** (Approach B, **2026-07-06**: the preview IS the actual `flowbuddy-copilot.js` bundle — an iframe host page (`copilot/preview-frame` route, session-authed) embeds it with the workspace's real key against the real API in **`data-flowbuddy-preview` mode**, which starts the panel open **with the launcher still visible below it** (lifted via `--sc-panel-bottom`, so launcher style/text/position edits show live), suppresses the embed-detection heartbeat, and flags `/answer` calls so the API skips ALL analytics writes and returns no `queryId`; the Studio origin is **exempt from origin allowlists** server-side (`FLOWBUDDY_STUDIO_URL`) so the tester survives a customer locking origins down; locally the bundle is served by a `web` fallback route when `FLOWBUDDY_WIDGET_URL` is unset. Replaced the Approach-A session-auth server action — `copilot-preview-actions.ts` deleted; the copilot now has exactly **one** answer path) and real Copilot activity. *(Embed-detection is **wired** (2026-06-30): the widget pings on mount + every `/answer` → `Workspace.widgetLastSeenAt` (`recordWidgetSeen` in `copilot-auth.ts`), read via `lib/embed-status.ts` for the live/idle state. The **F17 origin-blocked** error state → **Version 2 · D2** (2026-07-06; needs a blocked-origin signal).)*
+  - **Copilot** (`/dashboard/copilot`): **tabs** (Install / Settings / Appearance) — embed snippet + copy (with a **local-testing hint** when the widget URL is a placeholder), "not detected yet" listening state + checklist, public key + rotate, origin allowlist, grounding & trust controls (**Cite the workflow used** now persists + is enforced on both the embedded widget and the preview; **decline-threshold** remains a UI-only preview — persistence/enforcement → **Version 2 · D2**, 2026-07-06) — plus the **real-widget tester** (Approach B, **2026-07-06**: the preview IS the actual `flowbuddy-copilot.js` bundle — an iframe host page (`copilot/preview-frame` route, session-authed) embeds it with the workspace's real key against the real API in **`data-flowbuddy-preview` mode**, which starts the panel open **with the launcher still visible below it** (lifted via `--fb-panel-bottom`, so launcher style/text/position edits show live), suppresses the embed-detection heartbeat, and flags `/answer` calls so the API skips ALL analytics writes and returns no `queryId`; the Studio origin is **exempt from origin allowlists** server-side (`FLOWBUDDY_STUDIO_URL`) so the tester survives a customer locking origins down; locally the bundle is served by a `web` fallback route when `FLOWBUDDY_WIDGET_URL` is unset. Replaced the Approach-A session-auth server action — `copilot-preview-actions.ts` deleted; the copilot now has exactly **one** answer path) and real Copilot activity. *(Embed-detection is **wired** (2026-06-30): the widget pings on mount + every `/answer` → `Workspace.widgetLastSeenAt` (`recordWidgetSeen` in `copilot-auth.ts`), read via `lib/embed-status.ts` for the live/idle state. The **F17 origin-blocked** error state → **Version 2 · D2** (2026-07-06; needs a blocked-origin signal).)*
   - **Analytics** (`/dashboard/analytics`): 7-day answer-quality metrics, answered-vs-declined chart, coverage-gaps "record this next" table (each row: **Record** + **Dismiss**), recent declines, "resolved without a human" + empty state. *(Citation logging **shipped** (2026-06-30) via the **`QueryCitation`** model — **top workflows by citations is now real**. Still backlog: a real deflection metric (tickets-deflected still shown as ≈answered), 👎-feedback drill-down, period deltas, query log/export, citation backfill.)*
   - **Settings** (`/dashboard/settings`): extension API token + workspace details.
   - **Action feedback (Studio-wide convention, 2026-07-08):** every server-mutating action confirms with a **toast** — top-right, filled status color (solid green success / terracotta error, white text; [`components/ui/toast.tsx`](../packages/web/components/ui/toast.tsx), one `<Toaster />` in the root layout), success AND failure — first wired on the Appearance save. New mutating features must include it.
@@ -143,10 +228,10 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 | # | Module | Done when | Status (build) |
 |---|---|---|---|
 | **P1-M0** | Monorepo, infra & auth | Postgres/R2/Redis/Auth.js/api/worker + multi-tenancy in place | ✅ (legacy M0/M1) |
-| **P1-M1** | Recorder / workflow capture | extension emits the full session bundle (§6) with client redaction | ✅ (legacy M2) |
+| **P1-M1** | Recorder / workflow capture | extension emits the full session bundle (§6) with client redaction | ✅ (legacy M2) — **FlowBuddy Recorder v0.6.0 LIVE on the Chrome Web Store since 2026-07-23** ([`extension-releases.md`](extension-releases.md)) |
 | **P1-M2** | Knowledge Base | captures normalize → `KnowledgeSource`+`KnowledgeItem` + transcript + segmentation + keyword index | ✅ (legacy M3/M6) |
 | **P1-M3** | Retrieval & grounding engine | shared retrieve → ground → answer-or-decline engine | ✅ **done** — incl. the **hybrid keyword+pgvector upgrade (2026-07-07)**: RRF fusion in `synthesis/retrieval.ts`, worker embeds at KB build, keyword fallback on any vector failure (legacy M7/M11-retrieval) |
-| **P1-M4** | **Cloud deploy** (Render + R2) | the stack is live; copilot API + widget serve from the deployed origin | ✅ **deployed** — Render (Dockerized api + worker + web) + Cloudflare R2; dev deploy at `flowbuddy-dev-web.onrender.com` (reset/test → `e2e-testing.md` Level 2) |
+| **P1-M4** | **Cloud deploy** (Render + R2) | the stack is live; copilot API + widget serve from the deployed origin | ✅ **deployed** — **prod LIVE at flowbuddyai.com since 2026-07-23** (paid two-blueprint stack, worker folded into the api — [`deploy.md`](deploy.md)); dev at `flowbuddy-dev-web.onrender.com` (reset/test → `e2e-testing.md` Level 2) |
 | **P1-M5** | **Approval gate** | builder marks a workflow "approved for copilot"; only approved items are eligible; reversible + audited; survives reprocess | ✅ **built** 2026-06-23 |
 | **P1-M6** | **Answer endpoint** | grounded answer (cite workflow/step) from **only** approved-KB, or honest decline → `CoverageGap`; multi-turn | ✅ **built** 2026-06-23 — verified incl. no-leak |
 | **P1-M7** | **Embeddable widget & SDK** | one `<script>` renders a working chat that talks to P1-M6 + shows citations | ✅ **built** 2026-06-23 — first end-to-end demo |
@@ -156,7 +241,7 @@ Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persiste
 | **P1-M11** | **Capture reliability** | no recording the user made is silently lost (nav/upload/audio) | ✅ **done** — core (R1/R2/R3) + **R6, Pause/Resume, R1 cross-origin re-arm (2026-07-01), R9 multi-tab Option A & R8 iframe (2026-07-02), R4 SW-eviction resilience, R7 on-page control bar, R10 scroll/hover/keyboard & R12 screenshot timing/cost (2026-07-03), R13 ranked locators (2026-07-06) shipped**; R5 → V2·D3 |
 | **P1-M12** | **PII redaction** | passwords never captured; values masked by default before upload; copilot-facing text scrubbed server-side | 🔄 client masking 2026-06-23 + **server text-scrub (Cut 1) 2026-06-26**; screenshot OCR/blur (Cut 2) → Version 2, portal track (§8) |
 
-**Package layout:** `packages/api` (Fastify ingestion + copilot routes + the BullMQ worker), `packages/synthesis` (the shared `answerFromKB` engine + capture synthesis + the `retrieval.ts`/`embeddings.ts` seams), `packages/widget` (the embeddable copilot, esbuild), `packages/web` (Studio: approval toggle, copilot settings, analytics), `packages/logger` (the one Pino structured logger for every Node service — 2026-07-08), plus `shared`/`db`/`extension`.
+**Package layout:** `packages/api` (Fastify ingestion + copilot routes + the BullMQ worker), `packages/synthesis` (the shared `answerFromKB` engine + capture synthesis + the `retrieval.ts`/`embeddings.ts` seams), `packages/widget` (the embeddable copilot, esbuild), `packages/web` (Studio: approval toggle, copilot settings, analytics), `packages/logger` (the one Pino structured logger for every Node service — 2026-07-08), plus `shared`/`db`/`extension`/`landing`.
 
 ---
 
@@ -199,9 +284,9 @@ Event {
 
 ## 7. Data model
 
-All **additive** on the foundation schema (`Workspace / ApiToken / KnowledgeSource / KnowledgeItem / Article / Step / CoverageGap`):
+All **additive** on the foundation schema (`Workspace / ApiToken / KnowledgeSource / KnowledgeItem / CoverageGap`):
 
-- **KB:** `KnowledgeSource` (kind, appBaseUrl, status, persisted `transcript`, manifest) → `KnowledgeItem[]` (kind `step|topic`, `text` index field, `data` payload — for `step`, the **distilled** `{ instruction, detail, route, narration, screenshotFile, bbox }` (2026-06-26), `segmentIndex`/`segmentTitle`). The copilot retrieves over `KnowledgeItem`s, not articles.
+- **KB:** `KnowledgeSource` (kind, appBaseUrl, status, persisted `transcript`, manifest) → `KnowledgeItem[]` (kind `step|topic`, `text` index field, `data` payload — for `step`, the **distilled** `{ instruction, detail, route, narration, screenshotFile, bbox }` (2026-06-26) **+ `keyEventId`** — the step's key manifest event, persisted since 2026-07-08 — `segmentIndex`/`segmentTitle`). The copilot retrieves over `KnowledgeItem`s, not articles.
 - **Approval (P1-M5):** a first-class **`CopilotApproval`** row keyed by `(sourceId, segmentIndex)` (with a `workspaceId` scoping column) — **survives** the worker's item delete+recreate on reprocess. (The enforcement seam P1-M6 retrieves through.)
 - **Copilot embed/config (on `Workspace`):** `copilotPublicKey` (unique, `pk_…`) + `copilotAllowedOrigins[]` + **live-served appearance** (`copilotAccent`, `copilotTitle`, `copilotGreeting`, `copilotPosition`, `copilotLauncherStyle`, `copilotLauncherText`) + `copilotShowCitations` + the embed-detection heartbeat (`widgetLastSeenAt`/`widgetLastSeenOrigin`). *(Appearance is now a **Studio setting, stored server-side** and served to the widget at mount via `GET /v1/copilot/config` — 2026-07-08; explicit `data-flowbuddy-*` embed attrs still win as per-page overrides. This supersedes the earlier "theming is host-driven, not stored server-side" model.)*
 - **Copilot logs (P1-M10):** **`CopilotQuery`** (question, answered, feedback `up|down|null` — the question + outcome + thumbs; the answer text and citations are returned to the widget but **not** persisted) + **`CoverageGap.source`** discriminator (`prompt | copilot`).
@@ -238,8 +323,8 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 - **Stop→upload feedback & resilience** *(✅ shipped 2026-07-06, **v0.3.0**)* — **M.** After Stop, the pipeline had **no persisted state and no deadline**: the control bar vanished silently, a reopened popup claimed **idle** mid-upload, a worker eviction or a fetch hung on a cold-starting server stranded the recording with a stuck `↑` badge and no outcome (hit in the first store-install E2E), and nothing reported server-side processing. **Fix (shipped) — four parts:** **(1)** a **persisted `phase`** (`recording → saving → uploading → done/failed` in `storage.local`) as the pipeline's single truth — the popup routes on it at open with stage-true labels (*Saving narration… / Uploading… N% / Finishing… /* after ~8 s stalled, *Waking the FlowBuddy server…*); **(2) resilience** — a `chrome.alarms` twin of the 30 s finalize fallback (survives eviction; adds the `alarms` permission), boot-time recovery (a fresh worker resumes an upload its predecessor died holding; an orphaned buffer surfaces as a retryable interruption), and an **upload watchdog** (abort at 2 min stalled streaming / 4 min plain → retryable timeout instead of an eternal `↑`); **(3)** a persistent popup **Recent** row polling `GET /v1/sessions/:id` while open (`uploaded · queued → processing… → ready/failed`) + a **View in Studio** deep link; **(4)** the control bar collapses into an on-page **status pill** (*Saving → Uploading → ✓ Uploaded / ⚠ failed*) instead of vanishing — it deliberately reverses the earlier "outcomes never render on the page" decision for the stop moment. Mechanics: [`internals/recorder-capture.md`](internals/recorder-capture.md) §4.6/4.8/4.9. *(Deliberately excluded: `chrome.notifications` desktop alerts.)*
 
 **D. Capture quality** *(accuracy & Phase-3 enablers — backlog)*
-- **R12 — Screenshot timing & cost** *(✅ shipped 2026-07-03)* — **M.** Shots are taken after the event round-trips a ~700 ms-spaced queue, so the frame is late (a click that opens a modal / navigates / changes state in place gets captured *after* its side effect — the target ends up occluded/changed under a correct box), and PNGs are heavy. **Fix (shipped) — three parts:** **(1) Cost** — capture **JPEG** (`captureVisibleTab {format:'jpeg', quality:80}`) instead of PNG (~5–10× smaller for UI screenshots; two shots/step); files are `shots/<id>.jpg`/`-post.jpg`, uploaded `image/jpeg` (the API stores by the multipart mimetype, so it flows through; a since-removed article engine hardcoded an `image/png` data-URL — harmless, it was never in the live path). **(2) Snapshot closer to the event** — on **`pointerdown`** (before the click fires and triggers its side effect) the content script sends a `preCapture`; the background starts the snapshot *then* and stashes the **promise** by id; the `click` **awaits** it via `preShotId` (awaiting, not polling, avoids a race where `captureVisibleTab`'s 100–300 ms finishes after the ~150 ms click), so the target is still visible under the highlight. **The last input step reuses it too:** a text field's `change` fires on blur — caused by clicking the next control / the final submit — so the input event references that same click's pre-shot (peek, don't consume; both claim the one frame), fixing the "last field before the submit shows the *post*-submit state" case. No pointerdown (keyboard/Tab) → capture at event time; a stale id self-clears after 1.2 s; works across frames (R8), fixing e.g. an in-`iframe` "Pay" button. **(3) bbox↔scroll re-validation** — for the *fallback* (delayed) capture, the content script tags the event with the **scroll at bbox time**; the background re-checks the top frame's **current scroll** and **shifts the bbox by the delta** (or **omits** it if the element scrolled out of frame). A pre-click shot skips this (it already matches the bbox's moment). *(A further DPR-downscale via OffscreenCanvas would shrink Retina captures more — not done; JPEG is the bulk of the win.)*
-- **R12 follow-ups — ⏸️ parked (not building now; revisit if needed).** R12 covers deliberate mouse-driven recording; two known boundaries remain, both fine for normal walkthroughs:
+- **R12 — Screenshot timing & cost** *(✅ shipped 2026-07-03)* — **M.** Shots are taken after the event round-trips a ~700 ms-spaced queue, so the frame is late (a click that opens a modal / navigates / changes state in place gets captured *after* its side effect — the target ends up occluded/changed under a correct box), and PNGs are heavy. **Fix (shipped) — three parts:** **(1) Cost** — capture **JPEG** (`captureVisibleTab {format:'jpeg', quality:80}`) instead of PNG (~5–10× smaller for UI screenshots; two shots/step); files are `shots/<id>.jpg`/`-post.jpg`, uploaded `image/jpeg` (the API stores by the multipart mimetype, so it flows through). **(2) Snapshot closer to the event** — on **`pointerdown`** (before the click fires and triggers its side effect) the content script sends a `preCapture`; the background starts the snapshot *then* and stashes the **promise** by id; the `click` **awaits** it via `preShotId` (awaiting, not polling, avoids a race where `captureVisibleTab`'s 100–300 ms finishes after the ~150 ms click), so the target is still visible under the highlight. **The last input step reuses it too:** a text field's `change` fires on blur — caused by clicking the next control / the final submit — so the input event references that same click's pre-shot (peek, don't consume; both claim the one frame), fixing the "last field before the submit shows the *post*-submit state" case. No pointerdown (keyboard/Tab) → capture at event time; a stale id self-clears after 1.2 s; works across frames (R8), fixing e.g. an in-`iframe` "Pay" button. **(3) bbox↔scroll re-validation** — for the *fallback* (delayed) capture, the content script tags the event with the **scroll at bbox time**; the background re-checks the top frame's **current scroll** and **shifts the bbox by the delta** (or **omits** it if the element scrolled out of frame). A pre-click shot skips this (it already matches the bbox's moment). *(A further DPR-downscale via OffscreenCanvas would shrink Retina captures more — not done; JPEG is the bulk of the win.)*
+- **R12 follow-ups — deferred (not building now; revisit if needed).** R12 covers deliberate mouse-driven recording; two known boundaries remain, both fine for normal walkthroughs:
   - **(a) Keyboard/Tab pre-capture** — **S/M.** The pre-capture is triggered by **`pointerdown`**, so a field left via **Tab** or a form submitted via **Enter** gets no pre-shot and falls back to the (late) event-time capture. The browser order is symmetric — `keydown` (Tab/Enter) fires *before* the blur/submit — so the fix is to also fire a `preCapture` on `keydown`, **gated to navigation/action keys only** (Tab/Enter/Escape; never printable keys, or it floods the capture queue), and let the field's `change` + the keydown event reuse it via the existing machinery. **Low payoff:** intermediate Tab-hops are already fine (no side effect); realistically this only rescues *Enter-to-submit on the last field*.
   - **(b) Rate limit / rapid-fire clicks** — **M–L.** `chrome.tabs.captureVisibleTab` is hard-capped at **~2 shots/s**, so clicking faster than the queue drains still lags. Two levels: **(i) cheaper** — cut capture load (we snap an action **and** a post-action shot per click, but the post-action frame is only *rendered* for a workflow's **last** step; deferring/skipping non-terminal post-action screenshots ~halves the load and raises the ceiling — a heuristic, doesn't remove the cap); **(ii) proper fix** — replace `captureVisibleTab` with a **`chrome.tabCapture` video stream** (run in the offscreen doc alongside the mic) and **grab frames on demand** from it — no per-frame limit, exact-moment frames at pointerdown/click/keydown. This **supersedes most of the R12 pre-capture machinery** (with exact frames you don't need the pointerdown/await/reuse dance) but is a real rebuild (live stream = CPU/mem, `tabCapture` permission + user gesture, offscreen coordination). Only worth it if rapid-fire recording becomes real.
 - **R13 — Ranked, multi-signal selectors** *(✅ shipped 2026-07-06)* — **M.** The slice captured only brittle positional `cssPath`/`xpath`; Phase 3 self-validation depends on resolving these months later. **Fix (shipped):** every event target now carries a **ranked `locators` set** (`{ strategy, value, unique }`), built **and uniqueness-verified against the live document at capture time** — the one moment both are knowable. Strategies best-first: `testid` (`data-testid`/`data-test-id`/`data-test`/`data-cy`/`data-qa`) → human-authored `id` (framework-generated ids — `ember123`, React `:r5:`, uuid/long-digit patterns — are **rejected**; they churn per deploy, so anchoring to one is worse than nothing) → `aria-label` → `name` → `placeholder` → `href` (links) → visible **text** (≤60 chars — the signal that survives redesigns); ranked **unique-first** (ambiguous locators kept lower as healing signals), with `cssPath`/`xpath` appended as last resorts (≤8 entries). Every value except `text` is a ready-to-run, escaped CSS selector; a selector that fails to match its own element at capture time is dropped rather than shipped broken. The `locators` field is **additive** on the capture contract (`shared` capture types + zod schema, mirrored in the extension's `types.ts`) so old bundles still validate; locator-healing/replay itself stays **Phase 3** (walk the list in order, first locator that still resolves wins). Logic verified against a real DOM (31 checks: ranking order, generated-id rejection, quote escaping, selector round-trip); **user-verified E2E 2026-07-06** (real recording → `manifest` events carry ranked `locators`).
@@ -248,7 +333,7 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 
 ### P1-M12 — PII redaction (the B2B trust gate)
 - **Client-side, before upload (R11) — ✅ core shipped.** Masks password values/regions (never captured) + `email`/`tel`, sensitive `autocomplete`, card/CVV/SSN/secret/token patterns, and host-marked `data-flowbuddy-redact`. *(Backlog: a "mask-all-by-default + per-field opt-in" pre-record toggle; pause-and-skip for sensitive screens.)*
-- **Studio review-time redaction — backlog.** One-click blur of any screenshot region or text span, persisted to the artifact (e.g. a `redactions Json` on `Step`/`KnowledgeItem`).
+- **Studio review-time redaction — backlog.** One-click blur of any screenshot region or text span, persisted to the artifact (e.g. a `redactions Json` on `KnowledgeItem`).
 - **Server-side backstop — split into two cuts:**
   - **Cut 1 (copilot-facing text) — ✅ shipped 2026-06-26.** At KB build the worker scrubs high-confidence structured PII (email / phone / card-with-Luhn / SSN) from everything the copilot reads — the persisted **transcript**, each **`KnowledgeItem.text`**, and the aligned **narration** — replacing it with typed placeholders (`[redacted-email]` …). Plus a **guardrail in the answer-engine prompt** (never emit personal data; the rule does **not** change coverage). High-PRECISION patterns (Luhn for cards, separator-required phones) so prices/dates/IDs/versions are never touched — no answer-quality regression. Impl: `@flowbuddy/synthesis` `redactText` (`src/redact.ts`), applied in `buildKB`. This closes the **end-user answer-leak** path.
   - **Cut 2 (pixels/DOM at rest) — deferred to Version 2 (rides with the portal).** OCR screenshots + region-blur + DOM-attribute scrub for PII *displayed* on the page (captured in screenshot pixels / DOM, which the copilot does **not** surface but the **V2 portal renders publicly**). See [`v2-portal.md`](v2-portal.md). **Until Cut 2 lands, screenshots/DOM still hold pixels — test-account guidance remains the primary protection for those artifacts.**
@@ -290,7 +375,7 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 - **Context mapping (P1-M8):** host routes vs. captured routes when paths differ (params/hashes); privacy of host-sent context.
 - **Capture reliability internals (P1-M11):** nav re-arm + buffer durability; upload-retry bounds; audio finalize race; SW reconnect; iframe/multi-tab scope; event-vocabulary noise; selector robustness (defer healing to Phase 3).
 - **Segmentation accuracy:** drives both the approval unit and retrieval grouping; markers + route boundaries reduce reliance on the LLM.
-- **Cloud deploy (P1-M4):** validate the Dockerfiles/blueprint on the first real `docker build`/deploy; on deploy add the prod Studio origin to the extension manifest and set `STUDIO_URL`/`FLOWBUDDY_API_URL`; host the widget bundle + set `FLOWBUDDY_WIDGET_URL`.
+- **Cloud deploy (P1-M4): ✅ done** — dev env rebuilt 2026-07-17, **prod launched 2026-07-23**; the blueprint/env/extension-rebuild mechanics live in [`deploy.md`](deploy.md).
 
 ---
 

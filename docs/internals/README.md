@@ -88,7 +88,7 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 ## Quick orientation (if you only read one box)
 
 - **One direction, then a fan-out.** Data flows **capture → ingestion → KB** in a strict line, then
-  the KB **fans out** to the copilot (and, in Phase 2, to the help portal rendering approved workflows). Nothing flows
+  the KB **fans out** to the copilot (and, in Version 2, to the help portal rendering approved workflows). Nothing flows
   backward — the copilot never writes to the KB.
 - **The async seam is the queue.** The API accepts an upload and returns immediately; the expensive
   AI work (transcription, segmentation, distillation) happens later in the **worker**, decoupled by a
@@ -109,7 +109,9 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 
 ---
 
-*Last synced to the code: 2026-07-08 (branch `dev`). Since the initial 2026-06-28 sync these docs
+*Last synced to the code: 2026-07-08 · staleness/label pass 2026-07-25 (branch `dev`). Known coverage
+gaps: the Sense/Reason answer-path mechanics and the walkthrough/Studio behavior toggles live in their
+phase docs' §8 as-builts, not yet here. Since the initial 2026-06-28 sync these docs
 have tracked: retrieval consolidated into `synthesis/retrieval.ts` + **hybrid keyword∪pgvector (P1-M3)**,
 the **Approach-B real-widget preview** (one answer path), **live-served widget appearance**
 (`GET /v1/copilot/config`), the recorder **v0.3.0** stop→upload resilience + R12/R13, the **Phase-2

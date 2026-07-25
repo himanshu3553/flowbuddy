@@ -154,7 +154,7 @@ host app can put on any field. Non-sensitive values are clipped to 200 chars.
 
 This is **Cut 1, client half**. The [KB build](knowledge-base.md) adds a *server* backstop
 (`redactText`) that scrubs structured PII (email/phone/card/SSN) from the text the copilot reads.
-Screenshot/OCR redaction is Cut 2, deferred to Phase 2.
+Screenshot/OCR redaction is Cut 2, deferred to the Version-2 portal track.
 
 ### 4.5 The post-action settle watcher
 

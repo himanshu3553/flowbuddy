@@ -59,7 +59,7 @@ A simple chatful.co sign-in recording produced **13 raw "knowledge items"** for 
 
 | Option | What | Pros | Cons | Verdict |
 |---|---|---|---|---|
-| **A — LLM distillation at build** | Model turns raw events + narration + transcript into clean, ordered, deduped, user-facing steps; raw events are **discarded** (not kept as evidence) | Highest quality; fixes stray clicks + narration attribution; reuses parked engine | +1 LLM call/workflow; needs grounding guardrails | ✅ **chosen** |
+| **A — LLM distillation at build** | Model turns raw events + narration + transcript into clean, ordered, deduped, user-facing steps; raw events are **discarded** (not kept as evidence) | Highest quality; fixes stray clicks + narration attribution; reused existing prompt patterns | +1 LLM call/workflow; needs grounding guardrails | ✅ **chosen** |
 | **B — Deterministic heuristics** | Rules: drop non-interactive clicks, dedupe consecutive same-target, merge focus-click+input, merge button-click+submit | Free, fast, predictable | Brittle; can't fix narration; would drop the "arrived" signal if naive | ✅ **chosen** (as pre-filter for A) |
 | **C — Filter at capture (extension)** | Don't emit non-interactive clicks; dedupe at source | Stops noise earliest | Loses page-context signals; can't fix narration; ships in the client (slower to iterate) | ⏸ future hardening |
 | **D — Workflow-start marker / narration realignment** | Recorder marks task start; attach narration at workflow level | Cleanly removes pre-workflow noise | Requires UX + capture changes | ⏸ future (A covers most of it) |
@@ -115,6 +115,7 @@ interface DistilledStep {                 // what we persist (in KnowledgeItem.d
   narration: string | null;               // attributed narration for the step
   screenshotFile: string | null;          // resolved from keyEventId + frame rule C (below)
   bbox?: { x: number; y: number; w: number; h: number }; // keyEvent's element rect — for later highlight
+  keyEventId?: string;                    // Sense locator recovery — see phase-2-sense.md
 }
 ```
 
@@ -144,7 +145,7 @@ interface DistilledStep {                 // what we persist (in KnowledgeItem.d
 | `orderIndex` | event order | clean step order |
 | `text` | `eventLabel + narration` | **clean instruction** (better retrieval) |
 | `segmentIndex` / `segmentTitle` | per workflow | unchanged |
-| `data` (Json) | `{ event, narration }` | `{ instruction, detail, route, narration, screenshotFile, bbox }` |
+| `data` (Json) | `{ event, narration }` | `{ instruction, detail, route, narration, screenshotFile, bbox }` — `+ keyEventId` since 2026-07-08 (Sense locator recovery) |
 
 The persisted step keeps **no raw-event log** — but it does carry **one curated screenshot** (`screenshotFile`, resolved from `keyEventId` + frame rule C) and the element `bbox` as published-step content. `route` is carried for P1-M8 route-boost. The raw event *records* remain solely in `KnowledgeSource.manifest` as the reprocess record, never surfaced. (The unreferenced screenshots from dropped/stray events sit unused in MinIO — a future prune could remove them.)
 
@@ -185,7 +186,7 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 
 ### Phase 6 — Docs + memory ✅ done (2026-06-27)
 - **Done (2026-06-26):** [`architecture.md`](./architecture.md) (Module 2 = distilled steps; raw events discarded, only in manifest), [`phase-1-copilot.md`](./phase-1-copilot.md) (KB worker pipeline + `KnowledgeItem` data shape + KB-page label), this doc's status → Built, and the auto-memory KB note updated.
-- **Follow-up sync (2026-06-27):** the remaining docs that still described the pre-distillation pipeline were updated to match — [`roadmap.md`](./roadmap.md) (P1-M2 = distilled steps; doc map), [`phase-1-modules-map.md`](./phase-1-modules-map.md) (worker/KB nodes), and [`e2e-testing.md`](./e2e-testing.md) (worker-log lines, KB-page labels, architecture diagram).
+- **Follow-up sync (2026-06-27):** the remaining docs that still described the pre-distillation pipeline were updated to match — [`roadmap.md`](./roadmap.md) (P1-M2 = distilled steps; doc map), the Phase-1 visual map (now [`phase-1-copilot.md §1.1`](./phase-1-copilot.md#11-system-map-the-visual); worker/KB nodes), and [`e2e-testing.md`](./e2e-testing.md) (worker-log lines, KB-page labels, architecture diagram).
 
 **Dependency order:** 1 → 2 → 3 → 4 → 5 → 6. Phases 1 and 2 can be built in parallel (independent modules); 3 depends on both.
 
@@ -207,7 +208,7 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 
 ## 8. Out of scope (future hardening)
 
-- **bbox highlight rendering** — ✅ **shipped 2026-07-03** on Studio's KB detail page ([`web/.../step-screenshot.tsx`](../packages/web/components/dashboard/step-screenshot.tsx)): the step screenshot opens in a **same-page lightbox** and the `bbox` is drawn as a CSS overlay expressed in **viewport fractions** (`bbox / manifest.app.viewport`) — DPR-independent, no coordinate calibration needed. Pure render-layer add (no pipeline change, no reprocess). *(The since-removed Phase-2 article editor had its own `lib/highlight.ts` doing the same fraction math; the KB page's self-contained copy is now the only one.)*
+- **bbox highlight rendering** — ✅ **shipped 2026-07-03** on Studio's KB detail page ([`web/.../step-screenshot.tsx`](../packages/web/components/dashboard/step-screenshot.tsx)): the step screenshot opens in a **same-page lightbox** and the `bbox` is drawn as a CSS overlay expressed in **viewport fractions** (`bbox / manifest.app.viewport`) — DPR-independent, no coordinate calibration needed. Pure render-layer add (no pipeline change, no reprocess). *(The KB page's self-contained fraction-math implementation is the only one in the tree.)*
 - **Prune unreferenced screenshots**: only ~1 screenshot per step is referenced; the dropped/stray events' shots sit unused in MinIO.
 - **C — capture-source filtering**: stop emitting non-interactive clicks / dedupe in the extension.
 - **D — workflow-start marker**: let the recorder mark where the task begins (kills pre-workflow noise at the source); workflow-level narration instead of per-event smear.

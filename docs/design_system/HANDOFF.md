@@ -152,7 +152,7 @@ focus rings use indigo `--ring`.
 - [ ] Analytics + empty.
 
 ## Assets
-`assets/logo-mark.svg` (gradient rounded-square + "S") and `assets/logo-wordmark.svg`. The
+`assets/logo-mark.svg` (gradient rounded-square; brand glyph = **"F"** since the 2026-07-17 rename — the SVG still renders "S", pending regeneration) and `assets/logo-wordmark.svg`. The
 striped diagonal placeholder (`--media-fill`) stands in for screenshots/media — wire real
 captures into those slots.
 

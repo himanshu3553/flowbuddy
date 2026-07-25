@@ -1,13 +1,13 @@
 # FlowBuddy — Product (What it is, who it's for, why copilot-first)
 
-> **One-liner:** Add a trustworthy AI help **copilot** to your SaaS in minutes — record your product once, approve the workflows it's allowed to use, drop in one `<script>`, and your customers get in-app answers grounded **only** in what you approved. (The same recordings also produce a help portal + articles, as decoupled by-products.)
+> **One-liner:** Add a trustworthy AI help **copilot** to your SaaS in minutes — record your product once, approve the workflows it's allowed to use, drop in one `<script>`, and your customers get in-app answers grounded **only** in what you approved. (The same recordings also produce a help portal + articles in **Version 2**, as decoupled by-products.)
 
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.
 
-- **Status:** v0.2 — **copilot-first** (supersedes the original portal-first framing)
+- **Status:** v0.3 — **copilot-first** · **Version 1 LIVE IN PRODUCTION since 2026-07-23** at [flowbuddyai.com](https://flowbuddyai.com) (`app.` Studio · `api.` · `widget.` + the landing card; user-verified E2E — [`deploy.md`](deploy.md))
 - **Name:** **FlowBuddy** (domain `flowbuddyai.com`) — decided 2026-07-17; built under the working name "Sync" until then (the full rename runs through code, contract, and infra).
-- **Last updated:** 2026-07-17 · **Branch:** `dev`
-- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 1 visual → [`phase-1-modules-map.md`](phase-1-modules-map.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · local dev → [`dev-setup.md`](dev-setup.md)
+- **Last updated:** 2026-07-25 · **Branch:** `dev`
+- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](phase-1-copilot.md) · Phase 1 visual → [`phase-1-copilot.md §1.1`](phase-1-copilot.md#11-system-map-the-visual) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · local dev → [`dev-setup.md`](dev-setup.md)
 
 ---
 
@@ -26,7 +26,7 @@ The result: your customers get help the moment they need it, without leaving you
 
 **What you stay in control of:** approve before anything goes live; choose which of your sites may run the copilot (origin allowlist); a one-click public key you can rotate; and **sensitive data is masked before it ever leaves your browser** while recording.
 
-**Also included (bonus):** the same recordings can produce **help articles** (clean, step-by-step, with screenshots) and a **public help page** — but the in-app copilot is the star of the show.
+**Also included (bonus):** the same recordings can produce **help articles** (clean, step-by-step, with screenshots) and a **public help page** — built in **Version 2**; the in-app copilot is the star of the show.
 
 ---
 
@@ -76,7 +76,7 @@ FlowBuddy captures that session in **multiple synchronized layers** (screen, voi
 That knowledge base powers, in priority order:
 
 1. **An embedded in-app copilot (primary)** — answers from **approved-KB** in context, cites the workflow it used, declines honestly on gaps.
-2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." ([`phase-2-sense.md`](phase-2-sense.md)) **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`phase-2-reason.md`](phase-2-reason.md))
+2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`phase-2-sense.md`](phase-2-sense.md))
 3. **Self-validation (moat, later)** — periodically re-checks that documented steps still work and flags drift.
 4. **Autopilot (agentic execution — opened ahead of self-validation; the zero-acting P4-M0 guided walkthrough is ✅ built)** — the copilot offers to **execute the approved workflow in the end-user's live session** on consent: grounded actions (only recorded + approved workflows, never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty; the acting modules consume self-validation's certification when it lands. ([`phase-4-autopilot.md`](phase-4-autopilot.md); the goal-based agent on top — Tell → Guide → Do — is drafted in [`phase-5-converse.md`](phase-5-converse.md).)
 5. **A published help portal + articles (Version 2 by-product)** — human-readable, searchable articles rendered from the same approved workflows. A *decoupled* publish target, moved to Version 2. ([`v2-portal.md`](v2-portal.md))
@@ -113,11 +113,11 @@ That knowledge base powers, in priority order:
 - **Commodity (table stakes; won't win on alone):** "record a screen flow → auto-generate a step-by-step doc." Scribe, Tango, Guidde, Supademo, Arcade already do versions of this, and generic LLMs are closing the gap.
 - **Moats (the actual product):**
   1. **Grounded, context-aware copilot** — an in-app assistant grounded **only** in the customer's own approved recordings (never the model's general knowledge), that answers *for the screen the user is on* and **cites its source**. The KB's richness (selectors/routes/expected-outcomes, not lossy prose) is what makes context-awareness and future actionability possible.
-  2. **Self-validation / freshness** — knowledge that re-checks itself and flags drift. Hardest to copy; directly answers "products change faster than docs." (Also the namesake: keeping the KB *in sync* with the product.)
+  2. **Self-validation / freshness** — knowledge that re-checks itself and flags drift. Hardest to copy; directly answers "products change faster than docs."
   3. **The compounding feedback loop** — copilot questions, thumbs, and honest declines tell the founder exactly what to record next. The product improves with use.
   4. **Grounded agentic execution (Autopilot, Phase 4)** — the copilot doesn't just answer, it **does**: it executes the task in the end-user's session — but **only** workflows the founder recorded and approved, certified fresh by self-validation. Generic browser agents improvise actions and can't make that guarantee; FlowBuddy's grounding model extends from answers to actions.
 
-**Grounded authorship (core principle).** Everything the copilot says — and everything the Phase-2 portal will publish (a rendered approved workflow, optionally prose-polished) — comes *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
+**Grounded authorship (core principle).** Everything the copilot says — and everything the V2 portal will publish (a rendered approved workflow, optionally prose-polished) — comes *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
 
 **Operating principle:** treat capture + synthesis as quality we must achieve; treat **the copilot + freshness + feedback loop** as the things we differentiate and charge for.
 
@@ -130,13 +130,13 @@ FlowBuddy ships as **four distinct surfaces** over one shared structured knowled
 | Surface | Who | Purpose |
 |---|---|---|
 | **FlowBuddy Recorder** (Chrome extension) | the builder | effortless multi-layer capture of narrated product workflows |
-| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; *(Phase-2 by-product: approve/publish workflows to the portal)* |
+| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; *(V2 by-product: approve/publish workflows to the portal)* |
 | **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
 | **Help Portal** (public web) — *Version 2 by-product* | the builder's customers | browse + search published help articles |
 
 - **Recorder** — one-click "Connect with FlowBuddy"; start/stop; **mark new workflow**; **event/DOM-primary** capture (event + DOM + hi-res screenshot + post-action snapshot for `expected_outcome` + continuous audio); **PII masked before upload**; **capture reliability** (survives navigations, retry on upload failure, narration preserved). *(V1 capture is workflow-only; narration-only + video are Version 2.)*
-- **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate, **live-served appearance**), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), and the KB browser. *(Currently copilot-only; the Phase-2 portal-authoring surface — approve-for-portal + a presentation overlay over the same workflows — returns later.)*
-- **Copilot widget ⭐** — one `<script>` renders a shadow-DOM launcher + chat panel; grounded in **approved-KB**; **cites its source**; **honest declines**; **context-aware** (biases to the host route); multi-turn; 👍/👎 feedback; embed security (public key + origin allowlist + rate limit). *Future:* "show me" actionability and human handoff.
+- **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate, **live-served appearance**), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), and the KB browser. *(Currently copilot-only; the V2 portal-authoring surface — approve-for-portal + a presentation overlay over the same workflows — is built in Version 2.)*
+- **Copilot widget ⭐** — one `<script>` renders a shadow-DOM launcher + chat panel; grounded in **approved-KB**; **cites its source**; **honest declines**; **context-aware** (biases to the host route); multi-turn; 👍/👎 feedback; embed security (public key + origin allowlist + rate limit). **Since shipped on top:** the "show me" element highlight (P2-M3), positional Sense answers + Reason diagnosis (Phase 2), and the P4-M0 guided walkthrough. *Future:* acting Autopilot (P4-M1…M3) and human handoff.
 - **Help Portal (Version 2)** — published structured articles (steps + screenshots + element highlights), hybrid search, theming/custom domains/SEO/gating/"was this helpful?". **Decoupled** from the copilot.
 
 > Full surface detail: Phase 1 surfaces in [`phase-1-copilot.md`](phase-1-copilot.md); the V2 portal/authoring in [`v2-portal.md`](v2-portal.md).

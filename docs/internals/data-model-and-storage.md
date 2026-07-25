@@ -82,7 +82,7 @@ erDiagram
   founder's optional rename (null falls back to `appBaseUrl`), settable from the Recordings page.
 - **`KnowledgeItem`** = one **distilled step**. `data` holds the
   [`DistilledStep`](../../packages/synthesis/src/distill.ts)
-  (`instruction, detail, route, narration, screenshotFile, bbox`). `segmentIndex`/`segmentTitle` group
+  (`instruction, detail, route, narration, screenshotFile, bbox` + `keyEventId` since 2026-07-08). `segmentIndex`/`segmentTitle` group
   items into workflows. The schema comment still mentions the old `{ event, narration }` shape — that's
   the **legacy pre-distillation** shape (old rows only); the live worker writes the distilled shape. Indexed on `workspaceId` and
   `sourceId`.
@@ -98,10 +98,10 @@ erDiagram
 
 ### 2.5 Phase-2 articles — REMOVED (2026-07-07)
 
-The `Article` + `Step` tables (the parked Phase-2 article model) were **dropped** with the
-workflows-as-articles decision: Phase 2 will render **approved distilled workflows** as help
-articles instead of maintaining a parallel article store. Decision + rebuild notes:
-[`../phase-2-portal.md`](../phase-2-portal.md) §7.
+The `Article` + `Step` tables (the retired article model) were **dropped** with the
+workflows-as-articles decision (2026-07-07): the **Version-2 portal track** renders **approved
+distilled workflows** as help articles instead of maintaining a parallel article store. The
+track's feature list: [`../v2-portal.md`](../v2-portal.md).
 
 ---
 
@@ -173,11 +173,14 @@ All three converge on a `workspaceId`, which scopes every query. This is the who
 
 ## 7. Migrations (the schema's history)
 
-Prisma migrations in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations/), in
-order: `init` → `add_step_highlight` → `kb_layer` (the `KnowledgeSource`/`KnowledgeItem` split) →
+Prisma migrations in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations/) — the
+early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the `KnowledgeSource`/`KnowledgeItem` split) →
 `kb_item_segment` (segmentation tags) → `article_segment_link` → `coverage_gap` →
 `copilot_approval` (the trust gate) → `copilot_embed_key` (public key + allowlist) →
-`copilot_query` (analytics). Each migration name maps cleanly to a module milestone above.
+`copilot_query` (analytics); later waves include `pgvector_hybrid_retrieval` (P1-M3),
+`drop_phase2_article_step_tables` (workflows-as-articles), `sense_in_context_help` (P2),
+`reason_diagnostic` + `reason_image_default_on` (P2-M5), and `walkthrough_guided` (P4-M0) — **see the
+migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
 `pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../dev-setup.md).

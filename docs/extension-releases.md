@@ -2,10 +2,10 @@
 
 > **A living doc.** One entry per store build of the recorder extension (`packages/extension`) — what shipped, when it went live, permissions deltas, and the exact baked targets. **Updated every time a new store build is cut**, at packaging time (status flips `packaged → submitted → live` as the release moves). Newest first.
 >
-> **Naming:** the product was renamed **Sync → FlowBuddy** on 2026-07-17. Builds ≤ 0.4.0 shipped under the old name **"Sync Recorder"** — their entries below keep the names/URLs they actually shipped with. The next store build ships as **FlowBuddy Recorder** (a listing rename on the same item, same extension ID — installed users keep updating in place).
+> **Naming:** the product was renamed **Sync → FlowBuddy** on 2026-07-17. Builds ≤ 0.4.0 shipped under the old name **"Sync Recorder"** — their entries below keep the names/URLs they actually shipped with. Builds ≥ 0.6.0 ship as **FlowBuddy Recorder** (the listing renamed in place — same item, same extension ID; installed users keep updating).
 >
-> - **Listing:** <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk> (this URL is `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-dev-web` — it powers the Home checklist's "Add to Chrome" CTA; the extension ID `njkf…` is the stable part and survives the listing rename, the name slug in the URL may update).
-> - **Build/package mechanics:** [`deploy-render.md`](deploy-render.md) §11 (prod-targeted build, multi-origin `STUDIO_URL`, zip rules).
+> - **Listing:** <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk> (this URL goes in `FLOWBUDDY_EXTENSION_URL` on **both** `flowbuddy-web` (prod) and `flowbuddy-dev-web` — **still pending** — powering the Home checklist's "Add to Chrome" CTA; the extension ID `njkf…` is the stable part and survives the listing rename, the name slug in the URL may update).
+> - **Build/package mechanics:** [`deploy.md`](deploy.md) §5 (prod-targeted build, multi-origin `STUDIO_URL`, zip rules).
 
 ---
 
@@ -71,11 +71,11 @@ Same localhost-only limitation as 0.2.0. Kept for history: the first time the re
 ## Cutting a new store release (the checklist)
 
 1. **Bump** `packages/extension/src/manifest.json` `version` (never reuse a submitted number).
-2. **Prod build:** `STUDIO_URL="https://<flowbuddy-dev-web>.onrender.com,http://localhost:3000" NODE_ENV=production pnpm --filter @flowbuddy/extension build` (use the real dev-Studio URL — Render appends a random suffix to `flowbuddy-dev-web`) — never zip a stale `dist/` (a default-env build is localhost-only and useless on the store).
-3. **Verify the artifact:** `dist/manifest.json` has the new version + bridge `matches` for both origins; the popup bundle contains the deployed-Studio URL; prod-only expectations hold (minified, `__DEV__` stripped).
+2. **Prod build:** `STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web.onrender.com,http://localhost:3000" NODE_ENV=production pnpm --filter @flowbuddy/extension build` (prod Studio FIRST = the popup's primary target; use the real deployed dev URL — Render *may* append a random suffix to a service name) — never zip a stale `dist/` (a default-env build is localhost-only and useless on the store).
+3. **Verify the artifact:** `dist/manifest.json` has the new version + bridge `matches` for all three origins; the popup bundle contains `app.flowbuddyai.com`; prod-only expectations hold (minified, `__DEV__` stripped).
 4. **Zip:** `cd packages/extension/dist && zip -r ../flowbuddy-recorder-<version>.zip .` (the zip is gitignored).
 5. **Upload** via the Web Store developer dashboard → submit for review. New permissions = slower review; call them out in the entry.
 6. **Restore the dev build:** plain `pnpm --filter @flowbuddy/extension build` (local unpacked loads should point at localhost again).
-7. **Update the docs:** add the entry HERE (newest first, with commits/permissions/baked targets), plus the store-version notes in [`deploy-render.md`](deploy-render.md) §11 and the roadmap P1-M1 row; flip this doc's older entry statuses when a version goes live.
+7. **Update the docs:** add the entry HERE (newest first, with commits/permissions/baked targets), plus the store-version notes in [`deploy.md`](deploy.md) §5 and the roadmap P1-M1 row; flip this doc's older entry statuses when a version goes live.
 
 > ⚠️ **The baked Studio URL is part of the artifact.** Moving to a custom domain = rebuild + resubmission (add the new domain to the `STUDIO_URL` list; keep the old one during the transition).

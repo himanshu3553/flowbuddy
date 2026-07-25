@@ -3,8 +3,8 @@
 # `render.dev.yaml` (branch `dev`, custom blueprint path) — both files ride every branch so
 # FF releases stay clean; each blueprint ignores the other's file.
 #
-# Topology + cost (~$30/mo — locked 2026-07-16, Redis revised to paid 2026-07-17) + runbook: docs/deploy-production.md.
-# Service mechanics (Dockerfiles, gotchas, troubleshooting): docs/deploy-render.md.
+# Topology + cost (~$30/mo — locked 2026-07-16, Redis revised to paid 2026-07-17) + runbook: docs/deploy.md §4.
+# Service mechanics (shared foundations, Dockerfiles, gotchas, troubleshooting): docs/deploy.md §2 + Troubleshooting.
 #
 #   flowbuddy-api     Starter $7   api.flowbuddyai.com     copilot API + ingestion + embedded synthesis worker (start:all)
 #   flowbuddy-web     Starter $7   app.flowbuddyai.com     the Studio (Next.js)
@@ -13,11 +13,11 @@
 #   flowbuddy-landing Free static  flowbuddyai.com + www   marketing landing page
 #   flowbuddy-redis   Starter $10  —                       BullMQ synthesis queue (persistent; noeviction)
 #
-# Custom domains are attached in the dashboard (no blueprint field) — see deploy-production.md §3.
+# Custom domains are attached in the dashboard (no blueprint field) — see deploy.md §4.2.
 # Every URL secret gets its final custom-domain value at creation, so onrender.com never leaks
 # into an embed snippet.
 #
-# Scaling ladder (worker split → durable queue → headroom → ops): deploy-production.md §7.
+# Scaling ladder (worker split → durable queue → headroom → ops): deploy.md §9.
 
 databases:
   - name: flowbuddy-db

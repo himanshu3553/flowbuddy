@@ -14,7 +14,7 @@ Everything here was distilled from the **FlowBuddy Studio handoff bundle** (in `
 - **`f1_home_states.html`** — Home in **hi-fi**, 3 states. The **pixel target** for visual fidelity.
 - **`theme-indigo.css`** — the brand token overrides (`--primary: 232 73% 56%` → `#3b50e0`).
 - **`README.md`** (in the handoff) — the full screen-by-screen spec, IA, data contract, and build order.
-- **`FlowBuddy Studio Wireframes.dc.html`** — the 20-frame wireframe canvas (F1–F20).
+- **`Sync Studio Wireframes.dc.html`** *(the on-disk filename — predates the rename)* — the 20-frame wireframe canvas (F1–F20).
 - **`uploads/product.md`** — product narrative, personas, principles, the four surfaces.
 
 **Two fidelities existed in the source.** The grayscale wireframes carry **structure, IA, copy, and the full set of states**; the hi-fi Home carries **visual fidelity**. This design system makes the **hi-fi indigo brand canonical** and elevates the wireframe structures into it — exactly the jump the handoff asks production to make ("apply the indigo system for final styling").
@@ -30,7 +30,7 @@ FlowBuddy ships as **four surfaces** over one shared Knowledge Base. This system
 | **FlowBuddy Recorder** (Chrome extension) | the builder | Recorder popup states (idle / recording / uploading / retry) |
 | **Studio** (web app) ⭐ | the builder | **Primary focus** — full UI kit (Home, Recordings, KB, Copilot, Analytics) |
 | **In-App Copilot** (embeddable widget) | the builder's customers | `CopilotMessage` component + widget preview |
-| **Help Portal** (Phase 2) | the builder's customers | *out of scope — frozen by-product* |
+| **Help Portal** (Version 2) | the builder's customers | *out of scope — V2 by-product* |
 
 **Audience / persona.** "Founder Fiona" — a time-starved early-stage B2B SaaS founder who hates writing docs. The product's whole promise is *near-zero-effort, trust-by-default*. That shapes the UI: calm, dense-but-legible, one confident accent, and a relentless focus on the **approve-in-one-click** moment and the **record-this-next** loop.
 
@@ -90,7 +90,7 @@ The voice is **plain, calm, second-person, and trustworthy**. It explains the *w
   - *(Production parity note: the handoff's Next.js app uses **lucide-react** with the same metaphors — `Home, Video, BookOpen, Bot, BarChart3, Settings`. Either set is on-brand; Material Symbols is the canonical in these specimens because the hi-fi target uses it.)*
 - **Mono characters as micro-glyphs.** The dense wireframe voice uses monospace characters where an icon would be overkill: `▾` (disclosure), `⋯` (row menu), `×` (close/remove), `→` (flow), `▲ / ▽` (thumb up/down in lists), `●` (step bullet). Keep these in `--font-mono`.
 - **Emoji:** only 👍 / 👎 for end-user helpfulness feedback. Never decorative.
-- **Logo:** `assets/logo-mark.svg` (gradient rounded square + white "S") and `assets/logo-wordmark.svg` (mark + "FlowBuddy"). The in-app sidebar often shows the bare gradient mark beside the "FlowBuddy" wordmark.
+- **Logo:** `assets/logo-mark.svg` (gradient rounded square; the brand glyph is the white **"F"** since the 2026-07-17 rename — ⚠️ the SVG asset itself still renders the old "S" and needs regenerating) and `assets/logo-wordmark.svg` (mark + "FlowBuddy"). The in-app sidebar often shows the bare gradient mark beside the "FlowBuddy" wordmark.
 - **Never hand-draw icons.** Use Material Symbols (or lucide in production). Diagonal-stripe placeholders stand in for any real imagery.
 
 ---

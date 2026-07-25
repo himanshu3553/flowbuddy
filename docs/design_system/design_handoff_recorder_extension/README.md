@@ -153,4 +153,4 @@ Full source in **`tokens/`**. Key values used by these screens:
 ## Files
 - `recorder_extension_states.html` — the four-state visual reference (this folder).
 - `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/elevation.css`, `tokens/fonts.css` — canonical FlowBuddy design tokens.
-- Source of truth in the parent project: **`FlowBuddy Studio Wireframes.dc.html`**, Section **06 · Recorder Extension**, frames F10–F13.
+- Source of truth in the parent project: **`Sync Studio Wireframes.dc.html`** *(the on-disk filename — predates the rename)*, Section **06 · Recorder Extension**, frames F10–F13.

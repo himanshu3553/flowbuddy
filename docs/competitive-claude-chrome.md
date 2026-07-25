@@ -3,7 +3,7 @@
 > **Claude for Chrome ("Claude in Chrome") is Anthropic's user-side browser agent** — a Chrome extension that lets Claude see, click, type, and run multi-step workflows in the end-user's own browser session. It is the closest large-scale product to FlowBuddy's Phase-4 Autopilot ambition, and the clearest proof that in-browser agents are going mainstream. **It plays a different game than FlowBuddy** — horizontal + user-installed vs. vertical + vendor-embedded — and that asymmetry is the strategy.
 
 - **Status:** 📄 **Living competitive reference** — re-check on major Anthropic releases.
-- **Last updated:** 2026-07-15 · **Branch:** `dev`
+- **Last updated:** 2026-07-25 · **Branch:** `dev`
 - **Companion docs:** Phase 4 (where this matters most) → [`phase-4-autopilot.md`](phase-4-autopilot.md) · roadmap → [`roadmap.md`](roadmap.md) · why copilot-first → [`product.md`](product.md)
 
 ---
@@ -83,6 +83,7 @@ Two operating modes:
 ## 6. Watch items
 
 - **An embeddable/white-label agent SDK for site owners** from Anthropic would be the moment they enter FlowBuddy's lane. No sign of it today — the extension is user-side only. Until then it *helps* FlowBuddy: it normalizes in-browser agents while leaving the vendor-side seat empty.
+- **WebMCP posture (added 2026-07-25).** The W3C page-registers-tools standard (Google + Microsoft; Chrome 149 origin trial live, Gemini-in-Chrome support announced — assessment in [`phase-6-interop.md`](phase-6-interop.md) §4) has had **no public engagement from Anthropic** in its first year — MCP's creator staying silent on the browser-native variant is itself signal. If Claude for Chrome starts calling WebMCP tools, FlowBuddy's widget-registered knowledge tools become directly consumable by it (P6-M2c's flip trigger); if Anthropic counter-proposes, re-evaluate the Phase-6 transport mix.
 - **End-user bypass:** users with Claude for Chrome may skip the vendor's copilot. Counter: FlowBuddy is grounded, free, in-product, zero-friction.
 - **Their cadence:** 10 months preview→GA. Assume capability gaps quoted here have a short shelf life; re-verify before repeating them externally.
 
