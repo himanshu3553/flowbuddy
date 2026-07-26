@@ -3,6 +3,8 @@
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
+// Subpath import — the package barrel can't be VALUE-imported from web (see lib/copilot-settings.ts).
+import { MODE_LABELS, SELECTABLE_MODES, parseCopilotMode } from '@flowbuddy/shared/copilot-mode';
 import { getCurrentWorkspace } from '@/lib/session';
 
 export interface SaveOriginsResult {
@@ -75,6 +77,28 @@ export async function setCopilotAppearance(input: {
       copilotLauncherStyle: launcherStyle,
       copilotLauncherText: launcherText,
     },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
+/**
+ * The operating mode — how much the assistant decides for itself (AI Chatbot · Copilot · AI Agent).
+ *
+ * Only SELECTABLE modes may be set here. `agent` exists in the vocabulary so the ladder is stable
+ * and the stored value never has to change, but it is not buildable yet and must not become
+ * reachable through a hand-crafted form post — acting is a capability nobody should acquire by
+ * accident. Anything unrecognised falls back to `chatbot`, never upward.
+ */
+export async function setCopilotMode(mode: string): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const parsed = parseCopilotMode(mode);
+  if (!SELECTABLE_MODES.includes(parsed)) {
+    throw new Error(`${MODE_LABELS[parsed].name} isn't available yet.`);
+  }
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { copilotMode: parsed },
   });
   revalidatePath('/dashboard/copilot');
 }

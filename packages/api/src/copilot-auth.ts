@@ -1,4 +1,5 @@
 import { prisma } from '@flowbuddy/db';
+import { parseCopilotMode, type CopilotMode } from '@flowbuddy/shared';
 import { config } from './config';
 
 /**
@@ -16,7 +17,7 @@ export interface ReasonFlags {
 }
 
 export type CopilotAuthResult =
-  | { ok: true; workspaceId: string; showCitations: boolean; reason: ReasonFlags }
+  | { ok: true; workspaceId: string; showCitations: boolean; mode: CopilotMode; reason: ReasonFlags }
   | { ok: false; status: number; error: string };
 
 /** Resolve a public embeddable key → workspace, enforcing the origin allowlist (empty = allow any). */
@@ -33,6 +34,7 @@ export async function resolveCopilotKey(
       id: true,
       copilotAllowedOrigins: true,
       copilotShowCitations: true,
+      copilotMode: true,
       reasonEnabled: true,
       reasonImageEnabled: true,
       reasonIncludeValues: true,
@@ -52,6 +54,8 @@ export async function resolveCopilotKey(
     ok: true,
     workspaceId: ws.id,
     showCitations: ws.copilotShowCitations,
+    // Fail closed: an unrecognised stored value resolves to AI Chatbot, never to more capability.
+    mode: parseCopilotMode(ws.copilotMode),
     reason: { enabled: ws.reasonEnabled, image: ws.reasonImageEnabled, values: ws.reasonIncludeValues },
   };
 }

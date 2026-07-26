@@ -7,6 +7,7 @@ import { AlertTriangle, Check, Code2, Eye, EyeOff, RefreshCw } from 'lucide-reac
 import {
   setCopilotOrigins,
   regenerateCopilotKey,
+  setCopilotMode,
   setCopilotShowCitations,
   setCopilotAppearance,
   setSenseEnabled,
@@ -22,6 +23,13 @@ import {
   LAUNCHER_STYLES,
   type CopilotAppearance,
 } from '@/lib/copilot-appearance';
+// Subpath import — the package barrel can't be VALUE-imported from web (see lib/copilot-settings.ts).
+import {
+  MODE_LABELS,
+  SELECTABLE_MODES,
+  COPILOT_MODES,
+  type CopilotMode,
+} from '@flowbuddy/shared/copilot-mode';
 import type { EmbedStatus } from '@/lib/embed-status';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -100,6 +108,7 @@ export function CopilotWorkspace({
   primaryOrigin,
   widgetIsPlaceholder = false,
   showCitations = true,
+  mode = 'chatbot',
   senseEnabled = true,
   showMe = false,
   walkthrough = false,
@@ -117,6 +126,8 @@ export function CopilotWorkspace({
   primaryOrigin: string;
   widgetIsPlaceholder?: boolean;
   showCitations?: boolean;
+  /** The operating mode — how much the assistant decides for itself. */
+  mode?: CopilotMode;
   senseEnabled?: boolean;
   showMe?: boolean;
   walkthrough?: boolean;
@@ -139,6 +150,7 @@ export function CopilotWorkspace({
   const [origins, setOrigins] = useState(allowedOrigins.join('\n'));
   const [rejectedOrigins, setRejectedOrigins] = useState<string[]>([]);
   const [cite, setCite] = useState(showCitations);
+  const [modeValue, setModeValue] = useState<CopilotMode>(mode);
   const [sense, setSense] = useState(senseEnabled);
   const [showMeOn, setShowMeOn] = useState(showMe);
   // P4-M0 — the guided-walkthrough offer (needs Sense, like "show me").
@@ -161,6 +173,24 @@ export function CopilotWorkspace({
       router.refresh();
     });
   }
+  /** Switch operating mode. Optimistic like the other settings, and reverted on failure so the
+   *  radio can never show a capability the workspace doesn't actually have. */
+  function chooseMode(next: CopilotMode) {
+    if (next === modeValue) return;
+    const previous = modeValue;
+    setModeValue(next);
+    start(async () => {
+      try {
+        await setCopilotMode(next);
+        toast.success(`Switched to ${MODE_LABELS[next].name}. Reload any embedded pages to pick it up.`);
+        router.refresh();
+      } catch {
+        setModeValue(previous);
+        toast.error('Could not switch mode.');
+      }
+    });
+  }
+
   function toggleCite(value: boolean) {
     setCite(value); // optimistic
     start(async () => {
@@ -609,6 +639,65 @@ export function CopilotWorkspace({
 
       {tab === 'settings' && (
         <div className="space-y-5">
+          {/* The operating mode is the headline decision on this screen: it says WHO decides how
+              your users get helped. Everything below it is what the assistant is PERMITTED to do,
+              which is why the abilities sit under an "advanced" fold rather than beside this. */}
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">How your assistant works</h3>
+            <p className="text-xs text-muted-foreground">
+              Changes reach embedded pages on their next load.
+            </p>
+            <div className="mt-3 space-y-2">
+              {COPILOT_MODES.map((m) => {
+                const selectable = SELECTABLE_MODES.includes(m);
+                const active = modeValue === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => selectable && chooseMode(m)}
+                    disabled={!selectable || pending}
+                    aria-pressed={active}
+                    className={cn(
+                      'flex w-full items-start gap-3 rounded-card border p-3 text-left transition',
+                      active && 'border-primary/40 bg-primary/5',
+                      !active && selectable && 'hover:border-primary/30 hover:bg-muted/40',
+                      !selectable && 'cursor-not-allowed opacity-55',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                        active ? 'border-primary' : 'border-muted-foreground/40',
+                      )}
+                      aria-hidden
+                    >
+                      {active && <span className="h-2 w-2 rounded-full bg-primary" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{MODE_LABELS[m].name}</span>
+                        {active && (
+                          <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-primary">
+                            Current
+                          </span>
+                        )}
+                        {!selectable && (
+                          <span className="rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-muted-foreground">
+                            Coming soon
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {MODE_LABELS[m].blurb}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">Grounding &amp; trust</h3>
             <div className="mt-3 divide-y">
@@ -644,6 +733,26 @@ export function CopilotWorkspace({
               </div>
             </div>
           </section>
+
+          {/* The ABILITIES fold. These say what the assistant may do on your customers' pages —
+              the same permissions in every mode. What changes with the mode above is WHO decides
+              when to use them: a fixed rule in AI Chatbot, the assistant's own judgment in Copilot.
+              Folded away because most founders should pick a mode and never open this. */}
+          <details className="group rounded-card border bg-card shadow-card [&_section]:border-0 [&_section]:shadow-none">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
+              <span>
+                <span className="block text-[13.5px] font-bold text-ink">
+                  What it may do on your page
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Sensing, highlighting, guided walkthroughs and diagnosis — permissions, not behaviour.
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-muted-foreground">
+                Advanced
+              </span>
+            </summary>
+            <div className="space-y-4 px-5 pb-5">
 
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">
@@ -781,6 +890,9 @@ export function CopilotWorkspace({
               </div>
             )}
           </section>
+
+            </div>
+          </details>
 
           <section className="rounded-card border bg-card p-5 shadow-card">
             <div className="mb-3">

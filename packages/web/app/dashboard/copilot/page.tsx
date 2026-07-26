@@ -26,6 +26,7 @@ export default async function CopilotSettingsPage() {
     publicKey,
     allowedOrigins,
     showCitations,
+    mode,
     senseEnabled,
     showMe,
     walkthrough,
@@ -84,6 +85,7 @@ export default async function CopilotSettingsPage() {
           allowedOrigins={allowedOrigins}
           primaryOrigin={primaryOrigin}
           showCitations={showCitations}
+          mode={mode}
           senseEnabled={senseEnabled}
           showMe={showMe}
           walkthrough={walkthrough}

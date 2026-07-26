@@ -192,6 +192,23 @@ with the heartbeat and analytics.
 **Consequence to remember:** the `history` sent with `/answer` is derived from `messages[]`, so it
 now **spans navigations**.
 
+### 4.8 Operating mode & the on-page gate (2026-07-27)
+
+`/v1/copilot/config` also serves the workspace's **mode** (`chatbot` · `copilot` · `agent`), which
+the widget stores in `cfg.mode`. It changes ONE thing on the client: **who decides when an on-page
+ability fires.**
+
+`wantsOnPage(intents, which)` is the whole rule — an ability runs when the founder's switch is on
+**AND** either (a) mode 1's fixed rule applies, or (b) mode 2's answer carried an explicit request
+(`intents.highlight` / `intents.offerWalkthrough`, present only on agent answers). A missing intent
+in mode 2 means *"not this time"*, never *"fall back to always"*.
+
+Two properties this preserves: the founder's switches remain the only thing that grants a
+capability — nothing the model returns can turn something on — and an ability the workspace has
+switched off simply doesn't happen, so the end-user is never told that a feature exists but is
+disabled. The widget's copy of the mode is a convenience; **the server re-resolves it on every
+call**, so a page holding the public key cannot talk itself into a higher mode.
+
 **Topic memory (P5-M0 cut 2).** `Citation` carries `sourceId`/`segmentIndex` alongside the title
 (the server always sent them; the widget just ignored them). `lastCitedKeys()` walks back to the
 most recent `assistant.answer` and ships its distinct workflow keys as `context.lastCited` — so a

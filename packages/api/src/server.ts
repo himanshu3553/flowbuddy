@@ -2,7 +2,14 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@flowbuddy/db';
-import { sessionManifestSchema, type CapturedEvent, type SessionManifest } from '@flowbuddy/shared';
+import {
+  modeUsesAgentLoop,
+  parseCopilotMode,
+  sessionManifestSchema,
+  type CapturedEvent,
+  type CopilotMode,
+  type SessionManifest,
+} from '@flowbuddy/shared';
 import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 import { authWorkspace } from './auth';
@@ -17,6 +24,7 @@ import { synthesisQueue } from './queue';
 // Retrieval + history sanitizing come from the SHARED @flowbuddy/synthesis seam (P1-M5 no-leak) —
 // the Studio preview uses the same functions, so both surfaces answer identically.
 import {
+  answerAsAgent,
   answerFromKB,
   diagnoseFromKB,
   retrieveApprovedKBItems,
@@ -30,6 +38,7 @@ import {
   type ReasonSnapshotElement,
   type ReasonWorkflow,
   type ExpectedStepEvidence,
+  type AgentWorkflow,
 } from '@flowbuddy/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
@@ -158,6 +167,7 @@ async function copilotGate(
 ): Promise<{
   workspaceId: string;
   showCitations: boolean;
+  mode: CopilotMode;
   reason: ReasonFlags;
   key: string;
   origin: string | undefined;
@@ -176,7 +186,7 @@ async function copilotGate(
     void reply.code(429).send({ error: 'rate limit exceeded — slow down' });
     return null;
   }
-  return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, reason: auth.reason, key, origin };
+  return { workspaceId: auth.workspaceId, showCitations: auth.showCitations, mode: auth.mode, reason: auth.reason, key, origin };
 }
 
 // ── P2 Sense — validate the widget's localization payload ─────────────────────────────────────
@@ -419,6 +429,46 @@ function resolveReasonContext(raw: unknown, flags: ReasonFlags): ResolvedReason 
 }
 
 /**
+ * Copilot mode's `get_workflow` tool — one workflow's full ordered steps, as citable items.
+ *
+ * The approval check is the whole point and it happens HERE, server-side, against a key the MODEL
+ * supplied: an unapproved (or another workspace's, or a made-up) key returns null, so the assistant
+ * cannot reach knowledge the founder never released. This mirrors the no-leak rule retrieval
+ * already enforces — the agent's reach is the approved KB, and nothing about the tool surface
+ * widens it.
+ */
+async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<AgentWorkflow | null> {
+  const [sourceId, rawSegment] = key.split(':');
+  const segmentIndex = Number(rawSegment);
+  if (!sourceId || !/^[a-z0-9-]{1,40}$/i.test(sourceId)) return null;
+  if (!Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999) return null;
+
+  const approval = await prisma.copilotApproval.findFirst({
+    where: { workspaceId, sourceId, segmentIndex },
+    select: { segmentTitle: true },
+  });
+  if (!approval) return null; // absent, not forbidden
+
+  const rows = await prisma.knowledgeItem.findMany({
+    where: { workspaceId, kind: 'step', sourceId, segmentIndex },
+    orderBy: { orderIndex: 'asc' },
+    select: { id: true, sourceId: true, segmentIndex: true, text: true },
+  });
+  if (rows.length === 0) return null;
+
+  return {
+    title: approval.segmentTitle ?? 'this workflow',
+    items: rows.map((r) => ({
+      id: r.id,
+      sourceId: r.sourceId,
+      segmentIndex: r.segmentIndex,
+      segmentTitle: approval.segmentTitle,
+      text: r.text,
+    })),
+  };
+}
+
+/**
  * The founder's side of expected-vs-actual (§3 #3/#6): the FULL localized workflow recipe (every
  * step, not just the retrieval shortlist) + lazy accessors for the current step's expected-state
  * artifacts — the TRUE screenshot and the captured DOM snapshot from the approved recording, read
@@ -591,6 +641,28 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       apiKey: config.openaiApiKey,
       model: config.reasonModel,
     });
+  } else if (modeUsesAgentLoop(gate.mode)) {
+    // Copilot mode — the assistant decides how to help. Round one sees exactly what AI Chatbot
+    // sees (retrieval has already run), so a simple lookup costs the same and answers just as
+    // fast; the extra rounds are the escalation. Both tools are approval-constrained HERE, in the
+    // closures, so the model's action space is the approved KB and nothing else.
+    req.log.info({ workspaceId, mode: gate.mode }, 'agent path engaged');
+    result = await answerAsAgent({
+      question,
+      history: sanitizeHistory(body.history),
+      items,
+      context: { path: contextPath, sense: sense ?? undefined },
+      searchKb: (query) =>
+        retrieveApprovedKBItems(prisma, workspaceId, query, {
+          contextPath,
+          senseKeys,
+          continuityKeys,
+          embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
+        }),
+      loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
+      apiKey: config.openaiApiKey,
+      model: config.synthModel,
+    });
   } else {
     result = await answerFromKB({
       question,
@@ -624,7 +696,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // Preview answers are never persisted — return the engine's result as-is (no queryId).
   if (preview) {
     return result.covered
-      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position }
+      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position, ...(result.intents ? { intents: result.intents } : {}) }
       : { covered: false, answer: null, citations: [], reason: result.reason };
   }
 
@@ -670,7 +742,16 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }
 
-  return { covered: true, answer: result.answer, citations: forClient(result.citations), position, queryId: logged.id };
+  // `intents` = what the assistant DECIDED to do on the page (Copilot mode only; absent in mode 1,
+  // whose on-page behaviour stays rule-driven). The widget still checks the founder's switches.
+  return {
+    covered: true,
+    answer: result.answer,
+    citations: forClient(result.citations),
+    position,
+    ...(result.intents ? { intents: result.intents } : {}),
+    queryId: logged.id,
+  };
 });
 
 /**
@@ -831,6 +912,7 @@ app.get('/v1/copilot/config', async (req, reply) => {
       senseEnabled: true,
       copilotShowMe: true,
       copilotWalkthrough: true,
+      copilotMode: true,
       reasonEnabled: true,
       reasonImageEnabled: true,
       reasonIncludeValues: true,
@@ -856,6 +938,10 @@ app.get('/v1/copilot/config', async (req, reply) => {
     reason: ws.reasonEnabled,
     reasonImage: ws.reasonImageEnabled,
     reasonValues: ws.reasonIncludeValues,
+    // The operating mode (AI Chatbot | Copilot | AI Agent). The widget needs it because some of
+    // the assistant's abilities run in the page; the SERVER re-checks it on every call regardless
+    // — a page holding the public key must never be able to talk itself into a higher mode.
+    mode: parseCopilotMode(ws.copilotMode),
   };
 });
 

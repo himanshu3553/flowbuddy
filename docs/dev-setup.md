@@ -96,6 +96,8 @@ pnpm --filter @flowbuddy/extension build           # build the recorder → load
 # building / checking
 pnpm build                                    # build everything (Turbo)
 pnpm typecheck                                # type-check everything
+pnpm test                                     # vitest over the pure seams (synthesis) — the repo's
+                                              # only tests; no CI, run it beside typecheck
 
 # database
 pnpm db:migrate                               # apply schema changes (creates/updates tables)
@@ -108,7 +110,22 @@ docker compose down                           # stop Postgres + Redis (add -v to
 ```
 
 ### Root scripts that exist (`package.json`)
-`build` · `dev` · `typecheck` · `lint` · `db:generate` · `db:validate` · `db:migrate`
+`build` · `dev` · `typecheck` · **`test`** · `lint` · `db:generate` · `db:validate` · `db:migrate`
+
+> **Tests (added 2026-07-26 — the repo's first).** `vitest` in `@flowbuddy/synthesis` only, over the
+> *pure* seams: retrieval's signal-ordering invariants (route/sense outrank continuity; a real
+> keyword match still beats all of them — the rule that lets a user change subject) and the answer
+> engine's contract (AI Chatbot = exactly one model call with no tool surface). Deliberately NOT
+> tested: prompts and model output — a unit test asserting on generated text fails for the wrong
+> reasons. Answer *quality* is covered by `scripts/copilot-baseline.mjs` (below) and the manual E2E
+> plan. Still no CI, by standing decision.
+
+**Answer-quality baselines** — `node scripts/copilot-baseline.mjs --key pk_… [--runs 3] [--only h2]`
+asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited, position,
+agent intents) rather than the prose, because the model runs at `temperature 0.2` and its wording
+always differs. `scripts/copilot-baseline-diff.mjs before.json after.json` reports only
+decision-level changes. Runs in `preview` mode, so a capture writes no analytics. Saved reference
+captures for both modes live in `scripts/`.
 
 ---
 

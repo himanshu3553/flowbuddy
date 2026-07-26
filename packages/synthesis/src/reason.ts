@@ -2,13 +2,13 @@ import OpenAI from 'openai';
 import {
   senseBlock,
   ANSWER_FORMAT_RULES,
-  type AnswerPosition,
   type CopilotAnswer,
-  type CopilotCitation,
   type CopilotKBItem,
   type CopilotTurn,
   type SenseContext,
 } from './copilot';
+// The loop + the answer shaper are shared with the fast path (and, from mode 2, with the agent).
+import { runAnswerLoop, shapeAnswer, type EngineTool } from './engine';
 
 /**
  * P2-M5 — REASON, the diagnostic answer engine (docs/phase-2-reason.md). Sense locates the user;
@@ -126,25 +126,6 @@ Output (JSON):
 - "citedItemIds": the ids of knowledge items you actually used for product facts (empty if none).
 - Position echo: if you anchored the diagnosis on a POSITION CONTEXT hypothesis, set "usedPosition" true, "positionKey" to that hypothesis's key, and "positionStep" to its current step; otherwise false, "", 0.${ANSWER_FORMAT_RULES}`;
 
-const ANSWER_SCHEMA = {
-  name: 'copilot_answer',
-  strict: true,
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      covered: { type: 'boolean' },
-      reason: { type: 'string' },
-      answer: { type: 'string' },
-      citedItemIds: { type: 'array', items: { type: 'string' } },
-      usedPosition: { type: 'boolean' },
-      positionKey: { type: 'string' },
-      positionStep: { type: 'number' },
-    },
-    required: ['covered', 'reason', 'answer', 'citedItemIds', 'usedPosition', 'positionKey', 'positionStep'],
-  },
-} as const;
-
 /** One control as a compact evidence line. State facts are UPPERCASED where they carry the signal. */
 function elementLine(e: ReasonSnapshotElement): string {
   const parts: string[] = [];
@@ -220,45 +201,79 @@ export function capExpectedDom(html: string): string {
     .slice(0, MAX_EXPECTED_DOM_CHARS);
 }
 
-// ── The loop ────────────────────────────────────────────────────────────────────────────────────
+// ── The diagnostic tools ────────────────────────────────────────────────────────────────────────
+// The loop itself lives in engine.ts; these are the grounded primitives it may reach for. Each is
+// bound ONLY when its evidence actually exists — a tool the caller doesn't bind simply isn't part
+// of the model's world, which is the same "absence, not refusal" discipline mode 2 relies on.
 
-const MAX_ROUNDS = 4; // up to 3 tool rounds, then the final answer is forced
-const MAX_TOOL_CALLS = 4; // across the whole loop — each is money on a public endpoint
+const NO_ARGS = { type: 'object', properties: {}, additionalProperties: false } as const;
 
-type Tool = OpenAI.Chat.ChatCompletionTool;
-
-function buildTools(input: ReasonInput): Tool[] {
-  const none = { type: 'object', properties: {}, additionalProperties: false } as const;
-  const tools: Tool[] = [];
+function buildTools(input: ReasonInput): EngineTool[] {
+  const tools: EngineTool[] = [];
   if (input.expected) {
     tools.push({
-      type: 'function',
-      function: {
-        name: 'get_expected_screenshot',
-        description:
-          "The founder's TRUE screenshot of the user's current step at the moment it WORKED (from the approved recording). Request it to compare the working state against the user's page state.",
-        parameters: none,
+      name: 'get_expected_screenshot',
+      spec: {
+        type: 'function',
+        function: {
+          name: 'get_expected_screenshot',
+          description:
+            "The founder's TRUE screenshot of the user's current step at the moment it WORKED (from the approved recording). Request it to compare the working state against the user's page state.",
+          parameters: NO_ARGS,
+        },
+      },
+      run: async () => {
+        const url = await input.expected?.screenshot();
+        if (!url) return { reply: 'No expected-state screenshot is available for this step.' };
+        return {
+          reply: 'The screenshot is attached in the next message.',
+          images: [
+            { type: 'text', text: "The founder's expected-state screenshot for the current step (a TRUE screenshot of the step working — compare CONTENT/STATE against the user's page state, never pixel styling):" },
+            { type: 'image_url', image_url: { url, detail: 'auto' } },
+          ],
+        };
       },
     });
     tools.push({
-      type: 'function',
-      function: {
-        name: 'get_expected_dom',
-        description:
-          "The founder's captured DOM snapshot (sanitized HTML) of the current step when it worked — the data half of expected-vs-actual. Diff its STATE/CONTENT against the measured page state.",
-        parameters: none,
+      name: 'get_expected_dom',
+      spec: {
+        type: 'function',
+        function: {
+          name: 'get_expected_dom',
+          description:
+            "The founder's captured DOM snapshot (sanitized HTML) of the current step when it worked — the data half of expected-vs-actual. Diff its STATE/CONTENT against the measured page state.",
+          parameters: NO_ARGS,
+        },
+      },
+      run: async () => {
+        const html = await input.expected?.dom();
+        return {
+          reply: html
+            ? `The founder's captured DOM for the current step, when it worked (sanitized, truncated):\n<expected-dom>\n${capExpectedDom(html)}\n</expected-dom>`
+            : 'No expected-state DOM snapshot is available for this step.',
+        };
       },
     });
   }
   if (input.pageImage) {
     tools.push({
-      type: 'function',
-      function: {
-        name: 'get_page_image',
-        description:
-          "A rendered image of the USER'S page right now (a DOM reconstruction — not a photo; canvas/cross-origin content may be blank). Request it when the structured page state cannot explain the blocker — e.g. requirement checklists / status indicators whose met state is only visual (color, icons), an action DISABLED while nothing reads invalid — and for layout or occlusion questions.",
-        parameters: none,
+      name: 'get_page_image',
+      spec: {
+        type: 'function',
+        function: {
+          name: 'get_page_image',
+          description:
+            "A rendered image of the USER'S page right now (a DOM reconstruction — not a photo; canvas/cross-origin content may be blank). Request it when the structured page state cannot explain the blocker — e.g. requirement checklists / status indicators whose met state is only visual (color, icons), an action DISABLED while nothing reads invalid — and for layout or occlusion questions.",
+          parameters: NO_ARGS,
+        },
       },
+      run: async () => ({
+        reply: 'The page image is attached in the next message.',
+        images: [
+          { type: 'text', text: "A rendered image of the user's page right now (a DOM reconstruction — compare CONTENT/STATE only; canvas/cross-origin areas may be blank):" },
+          { type: 'image_url', image_url: { url: input.pageImage!, detail: 'auto' } },
+        ],
+      }),
     });
   }
   return tools;
@@ -271,7 +286,6 @@ function buildTools(input: ReasonInput): Tool[] {
  */
 export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer> {
   const openai = new OpenAI({ apiKey: input.apiKey });
-  const byId = new Map(input.items.map((i) => [i.id, i]));
 
   const itemBlock =
     input.items.length > 0
@@ -297,115 +311,23 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
       `KNOWLEDGE ITEMS (the only source of product facts):\n${itemBlock}\n\nQuestion: ${input.question}`,
   });
 
-  const tools = buildTools(input);
-  const served = new Set<string>();
-  let toolCalls = 0;
-
-  let content: string | null = null;
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const finalRound = round === MAX_ROUNDS - 1 || toolCalls >= MAX_TOOL_CALLS || tools.length === 0;
-    const res = await openai.chat.completions.create({
-      model: input.model,
-      messages,
-      ...(tools.length > 0 ? { tools, tool_choice: finalRound ? ('none' as const) : ('auto' as const) } : {}),
-      response_format: { type: 'json_schema', json_schema: ANSWER_SCHEMA as never },
-      // The diagnostic path is the most expensive thing the product does per interaction (§6) —
-      // cap output hard; a truncated JSON parses as a decline, the graceful failure mode.
-      max_completion_tokens: 900,
-      temperature: 0.2,
-    });
-
-    const msg = res.choices[0]?.message;
-    if (!msg) break;
-    if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      content = msg.content ?? null;
-      break;
-    }
-
-    // Serve the read-tools. Images can't ride a tool message (string-only), so each image tool
-    // answers with a pointer and the actual pixels follow in ONE user message after the results.
-    messages.push(msg);
-    const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [];
-    for (const tc of msg.tool_calls) {
-      toolCalls++;
-      const name = tc.type === 'function' ? tc.function.name : '';
-      let reply: string;
-      if (served.has(name)) {
-        reply = 'Already provided earlier in this conversation — do not request it again.';
-      } else if (name === 'get_expected_screenshot') {
-        const url = await input.expected?.screenshot();
-        if (url) {
-          imageParts.push(
-            { type: 'text', text: "The founder's expected-state screenshot for the current step (a TRUE screenshot of the step working — compare CONTENT/STATE against the user's page state, never pixel styling):" },
-            { type: 'image_url', image_url: { url, detail: 'auto' } },
-          );
-          reply = 'The screenshot is attached in the next message.';
-        } else {
-          reply = 'No expected-state screenshot is available for this step.';
-        }
-      } else if (name === 'get_expected_dom') {
-        const html = await input.expected?.dom();
-        reply = html
-          ? `The founder's captured DOM for the current step, when it worked (sanitized, truncated):\n<expected-dom>\n${capExpectedDom(html)}\n</expected-dom>`
-          : 'No expected-state DOM snapshot is available for this step.';
-      } else if (name === 'get_page_image') {
-        if (input.pageImage) {
-          imageParts.push(
-            { type: 'text', text: "A rendered image of the user's page right now (a DOM reconstruction — compare CONTENT/STATE only; canvas/cross-origin areas may be blank):" },
-            { type: 'image_url', image_url: { url: input.pageImage, detail: 'auto' } },
-          );
-          reply = 'The page image is attached in the next message.';
-        } else {
-          reply = 'No page image is available for this question.';
-        }
-      } else {
-        reply = 'Unknown tool.';
-      }
-      served.add(name);
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: reply });
-    }
-    if (imageParts.length > 0) messages.push({ role: 'user', content: imageParts });
-  }
-
-  let a: {
-    covered?: boolean;
-    reason?: string;
-    answer?: string;
-    citedItemIds?: string[];
-    usedPosition?: boolean;
-    positionKey?: string;
-    positionStep?: number;
-  };
-  try {
-    a = JSON.parse(content ?? '{}');
-  } catch {
-    return { covered: false, reason: "I couldn't work out what's blocking you from what I can see." };
-  }
-
-  if (!a.covered || !a.answer) {
-    return { covered: false, reason: a.reason || "I couldn't work out what's blocking you from what I can see." };
-  }
-
-  const citations: CopilotCitation[] = [];
-  const seen = new Set<string>();
-  for (const id of a.citedItemIds ?? []) {
-    const it = byId.get(id);
-    if (it && !seen.has(id)) {
-      seen.add(id);
-      citations.push({ itemId: it.id, sourceId: it.sourceId, segmentIndex: it.segmentIndex, segmentTitle: it.segmentTitle });
-    }
-  }
-
-  // Position echo — same protocol as the fast path: the key must name a hypothesis WE provided,
-  // and the returned step is the PROBE's step (where the user actually stands), never the model's.
-  let position: AnswerPosition | null = null;
-  const hyps = input.sense?.hypotheses ?? [];
-  if (a.usedPosition && hyps.length > 0) {
-    const match = hyps.find((h) => `${h.sourceId}:${h.segmentIndex}` === (a.positionKey ?? '')) ?? hyps[0]!;
-    position = { sourceId: match.sourceId, segmentIndex: match.segmentIndex, step: match.step };
-  }
+  // The diagnostic path is the most expensive thing the product does per interaction (§6) — cap
+  // output hard; a truncated JSON parses as a decline, the graceful failure mode. The loop itself
+  // now lives in engine.ts, shared with the fast path (and, from mode 2, with the agent).
+  const content = await runAnswerLoop({
+    openai,
+    model: input.model,
+    messages,
+    tools: buildTools(input),
+    maxOutputTokens: 900,
+  });
 
   // Like the fast path: the engine returns what it grounded on, and `showCitations` (a
   // what-the-end-user-sees setting) is applied at the API response boundary — see copilot.ts.
-  return { covered: true, answer: a.answer, citations, position };
+  return shapeAnswer({
+    content,
+    items: input.items,
+    hypotheses: input.sense?.hypotheses,
+    declineReason: "I couldn't work out what's blocking you from what I can see.",
+  });
 }

@@ -1,0 +1,14 @@
+[
+  { "id": "s1", "group": "simple", "q": "How do I create an account?" },
+  { "id": "s2", "group": "simple", "q": "What do I need to sign up?" },
+  { "id": "s3", "group": "simple", "q": "Where do I click to get started?" },
+  { "id": "s4", "group": "simple", "q": "Do I have to agree to the terms?" },
+
+  { "id": "h1", "group": "hard", "q": "and then what?" },
+  { "id": "h2", "group": "hard", "q": "why can't I create the account?" },
+  { "id": "h3", "group": "hard", "q": "I'm stuck" },
+
+  { "id": "f1", "group": "should-decline", "q": "How do I reset my password?" },
+  { "id": "f2", "group": "should-decline", "q": "How much does it cost?" },
+  { "id": "f3", "group": "should-decline", "q": "How many accounts do I have?" }
+]

@@ -1,10 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { prisma } from '@flowbuddy/db';
+// Imported by SUBPATH, not from the package barrel. Next's bundler can't resolve the barrel's
+// `./x.js` re-exports back to their .ts sources, so a VALUE import from '@flowbuddy/shared' fails
+// the web build (type-only imports are fine — they're erased). `copilot-mode.ts` has no imports of
+// its own, so the subpath resolves cleanly and the vocabulary stays defined in exactly one place.
+import { parseCopilotMode, type CopilotMode } from '@flowbuddy/shared/copilot-mode';
 
 export interface CopilotSettings {
   publicKey: string;
   allowedOrigins: string[];
   showCitations: boolean;
+  /** The operating mode — how much the assistant decides for itself (and the pricing tier). */
+  mode: CopilotMode;
   // P2 Sense — the per-workspace master toggle + the "show me" highlight config (P2-M3).
   senseEnabled: boolean;
   showMe: boolean;
@@ -29,6 +36,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     copilotPublicKey: true,
     copilotAllowedOrigins: true,
     copilotShowCitations: true,
+    copilotMode: true,
     senseEnabled: true,
     copilotShowMe: true,
     copilotWalkthrough: true,
@@ -54,6 +62,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     publicKey: ws.copilotPublicKey ?? '',
     allowedOrigins: ws.copilotAllowedOrigins,
     showCitations: ws.copilotShowCitations,
+    mode: parseCopilotMode(ws.copilotMode),
     senseEnabled: ws.senseEnabled,
     showMe: ws.copilotShowMe,
     walkthrough: ws.copilotWalkthrough,

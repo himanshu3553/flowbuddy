@@ -1,0 +1,187 @@
+{
+  "capturedAt": "2026-07-26T18:11:03.725Z",
+  "api": "http://localhost:8787",
+  "runs": 3,
+  "contextPath": null,
+  "results": [
+    {
+      "id": "s1",
+      "group": "simple",
+      "question": "How do I create an account?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To create an account, follow these steps:\n\n1. **Click 'Start Free'** to go to the signup page.\n2. **Enter your full name** in the provided field.\n3. **Enter your email** address.\n4. **Enter your password**.\n5. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n6. **Click 'Create account'** to complete the process.",
+        "To create an account, follow these steps:\n\n1. **Click 'Start Free'** to go to the signup page.\n2. **Enter your full name** in the provided field.\n3. **Enter your email** address.\n4. **Enter your password**.\n5. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n6. **Click 'Create account'** to complete the process.",
+        "To create an account, follow these steps:\n\n1. **Click 'Start Free'** to go to the signup page.\n2. **Enter your full name** in the provided field.\n3. **Enter your email** address.\n4. **Enter your password**.\n5. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n6. **Click 'Create account'** to complete the process.\n\nOnce you've done these steps, your account will be created."
+      ]
+    },
+    {
+      "id": "s2",
+      "group": "simple",
+      "question": "What do I need to sign up?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To sign up, you'll need to:\n\n1. **Enter your full name**.\n2. **Enter your email ID**.\n3. **Provide a password**.\n4. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n5. **Click on 'Create account'** to complete the process.",
+        "To sign up, you'll need to:\n\n1. **Enter your full name**.\n2. **Enter your email ID**.\n3. **Provide a password**.\n4. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n5. **Click on 'Create account'** to complete the process.",
+        "To sign up, you'll need to:\n\n1. **Enter your full name**.\n2. **Enter your email ID**.\n3. **Provide a password**.\n4. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n5. **Click on 'Create account'** to complete the process."
+      ]
+    },
+    {
+      "id": "s3",
+      "group": "simple",
+      "question": "Where do I click to get started?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To get started, click **Start Free**. This will take you to the signup page.",
+        "To get started, click **Start Free**. This will take you to the signup page where you can begin creating your account.",
+        "To get started, click **Start Free**. This will take you to the signup page where you can begin creating your account."
+      ]
+    },
+    {
+      "id": "s4",
+      "group": "simple",
+      "question": "Do I have to agree to the terms?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes, you need to agree to the Terms of Service and Privacy Policy to create an account. Make sure to check the 'I agree to the Terms of Service and Privacy Policy' checkbox before proceeding.",
+        "Yes, you need to agree to the Terms of Service and Privacy Policy to create an account. Make sure to check the 'I agree to the Terms of Service and Privacy Policy' checkbox during the signup process.",
+        "Yes, you need to agree to the Terms of Service and Privacy Policy to create an account. Make sure to check the 'I agree to the Terms of Service and Privacy Policy' checkbox before proceeding."
+      ]
+    },
+    {
+      "id": "h1",
+      "group": "hard",
+      "question": "and then what?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "After entering your full name, follow these steps to create your account:\n\n1. **Enter your email ID**.\n2. **Enter your password**.\n3. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n4. **Click 'Create account'**.\n\nOnce you complete these steps, your account will be created.",
+        "After you enter your full name, you'll need to enter your email ID. Then, provide your password and check the 'I agree to the Terms of Service and Privacy Policy' checkbox. Finally, click on **Create account** to complete the process.",
+        "To create an account, follow these steps:\n\n1. **Click 'Start Free'** to go to the signup page.\n2. **Enter your email ID**.\n3. **Enter your full name**.\n4. **Enter your password**.\n5. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n6. **Click 'Create account'**.\n\nOnce you've completed these steps, your account will be created."
+      ]
+    },
+    {
+      "id": "h2",
+      "group": "hard",
+      "question": "why can't I create the account?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To help you with creating an account, let's make sure you've completed all the necessary steps:\n\n1. **Enter your full name** in the designated field.\n2. **Enter your email** address.\n3. **Provide a password** for your account.\n4. **Check the 'I agree to the Terms of Service and Privacy Policy'** checkbox.\n5. **Click 'Create account'** to finish the process.\n\nIf you've done all these steps and are still having trouble, please let me know what happens when you try to create the account, such as any error messages you see.",
+        "To create an account, make sure you have completed all the necessary steps:\n\n1. **Click 'Start Free'** to go to the signup page.\n2. **Enter your full name** in the provided field.\n3. **Enter your email** address.\n4. **Enter your password**.\n5. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n6. **Click 'Create account'** to finish.\n\nIf you're still having trouble, please let me know what happens when you try to create the account, and I'll help you further.",
+        "To create an account successfully, make sure you have completed all the necessary steps:\n\n1. **Enter your full name**.\n2. **Enter your email**.\n3. **Enter your password**.\n4. **Check 'I agree to the Terms of Service and Privacy Policy'**.\n5. **Click 'Create account'**.\n\nIf you've done all these and it's still not working, please check for any error messages on the screen. Let me know what you see, and I can help further!"
+      ]
+    },
+    {
+      "id": "h3",
+      "group": "hard",
+      "question": "I'm stuck",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":true}",
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "It looks like you're in the process of creating an account. Let's go through the steps together:\n\n1. **Enter your full name** in the provided field.\n2. **Enter your email** address.\n3. **Enter your password**.\n4. Check the **'I agree to the Terms of Service and Privacy Policy'** checkbox.\n5. Click on **'Create account'** to complete the process.\n\nIf you're stuck on a specific step, let me know what you're seeing, and I can help you further!",
+        "Let's get you unstuck! It looks like you're in the process of creating an account. Here's what you need to do next:\n\n1. **Enter your full name** in the provided field.\n2. **Enter your email** address.\n3. **Enter your password**.\n4. Check the **'I agree to the Terms of Service and Privacy Policy'** checkbox.\n5. Click **'Create account'** to complete the process.\n\nIf you're having trouble with a specific step, let me know what you see, and I'll help you further.",
+        "Let's get you unstuck with creating your account. Here's what you need to do next:\n\n1. **Enter your full name** in the provided field.\n2. **Enter your email** address.\n3. **Enter your password**.\n4. Check the **'I agree to the Terms of Service and Privacy Policy'** checkbox.\n5. Click **'Create account'** to complete the process.\n\nIf you're having trouble with any specific step, let me know what happens when you try it!"
+      ]
+    },
+    {
+      "id": "f1",
+      "group": "should-decline",
+      "question": "How do I reset my password?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet."
+      ]
+    },
+    {
+      "id": "f2",
+      "group": "should-decline",
+      "question": "How much does it cost?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet."
+      ]
+    },
+    {
+      "id": "f3",
+      "group": "should-decline",
+      "question": "How many accounts do I have?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet.",
+        "I don't have that in our help content yet."
+      ]
+    }
+  ]
+}

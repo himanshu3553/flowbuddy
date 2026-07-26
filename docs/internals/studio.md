@@ -51,6 +51,14 @@ empty / loading / error states.
 | **Analytics** | Answered/declined trend, helpful %, coverage gaps. | `getCopilotMetrics` |
 | **Settings** | Account / workspace / token management. | `auth`, `tokens` |
 
+**Copilot → Settings (2026-07-27)** opens with **How your assistant works** — the operating-mode
+selector (AI Chatbot · Copilot · AI Agent, the last shown but locked). Below it the five ability
+switches (Sense · show-me · guided walkthrough · Reason · image tier) sit inside a folded
+`<details>` **"What it may do on your page / Advanced"**. The split is deliberate: the mode says WHO
+decides how users get helped, the switches say WHAT the assistant is permitted to touch. Selecting
+an unbuilt mode is blocked in the UI **and** re-checked in the server action — acting must never be
+reachable by a hand-crafted form post.
+
 ---
 
 ## 4. Internal mechanics

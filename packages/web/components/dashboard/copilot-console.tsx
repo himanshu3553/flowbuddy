@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { CopilotWorkspace } from '@/components/dashboard/copilot-workspace';
+import type { CopilotMode } from '@flowbuddy/shared/copilot-mode';
 import { WidgetPreview } from '@/components/dashboard/widget-preview';
 import {
   buildSnippet,
@@ -24,6 +25,7 @@ export function CopilotConsole({
   allowedOrigins,
   primaryOrigin,
   showCitations,
+  mode,
   senseEnabled,
   showMe,
   walkthrough,
@@ -41,6 +43,7 @@ export function CopilotConsole({
   allowedOrigins: string[];
   primaryOrigin: string;
   showCitations: boolean;
+  mode: CopilotMode;
   senseEnabled: boolean;
   showMe: boolean;
   walkthrough: boolean;
@@ -72,6 +75,7 @@ export function CopilotConsole({
         primaryOrigin={primaryOrigin}
         widgetIsPlaceholder={widgetIsPlaceholder}
         showCitations={showCitations}
+        mode={mode}
         senseEnabled={senseEnabled}
         showMe={showMe}
         walkthrough={walkthrough}

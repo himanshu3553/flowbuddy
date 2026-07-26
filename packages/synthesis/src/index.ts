@@ -19,6 +19,10 @@ export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from 
 export type { SenseContext, SenseHypothesisContext, AnswerPosition } from './copilot'; // P2 Sense
 // P2-M5 Reason — the diagnostic engine (structured page state + expected-vs-actual, agentic read-tools).
 export { diagnoseFromKB } from './reason';
+// Copilot mode (mode 2) — the agent loop over KB-reading tools. Mode 1 keeps its own path and
+// prompt untouched; this is the escalation-capable sibling, not a replacement.
+export { answerAsAgent } from './agent';
+export type { AgentInput, AgentWorkflow } from './agent';
 export type {
   ReasonInput,
   ReasonSnapshot,

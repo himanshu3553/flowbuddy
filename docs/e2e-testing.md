@@ -76,7 +76,7 @@ Wipes Postgres (recordings/KB/approvals/users/tokens), MinIO (artifacts), and Re
 
 ```bash
 # 0. Stop any dev servers still holding the app ports (web · api · widget demo · prisma studio)
-lsof -ti tcp:3000,tcp:8787,tcp:8080,tcp:5555 | xargs kill 2>/dev/null
+kill -9 $(lsof -t -i:3000 -i:8787 -i:8080 -i:5555)
 
 # 1. Tear down infra + volumes
 docker compose down -v
@@ -314,6 +314,22 @@ Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.ser
 4. **Follow-ups now carry across pages (cut 2).** After navigating, ask *"and then what?"* — it must continue the **same workflow** rather than searching the KB for those words. Two things to prove alongside it: (a) the server receives the pre-navigation turns in `history` (the one behavioral change — `history` now spans navigations), and (b) **the bias is escapable** — ask something clearly unrelated next and you must get that answer, not a forced continuation. A filter would be a bug; this is a bias.
    With source labels turned OFF in Studio (Copilot → Settings), re-run this step: no "Source" pill should appear, but the follow-up must still stay in the workflow — and Analytics → top workflows by citations should now populate for that workspace (previously it stayed empty).
 5. **Hygiene.** DevTools → Application → Session Storage should show `flowbuddy.chat.v1` (and `flowbuddy.walkthrough.v2` during a run) — inspect the chat record: **no `walkOffer` plan copies**, and no message of kind `assistant.error`. Then: kill the API and ask something (the error bubble appears but must **not** persist across a nav); change `data-flowbuddy-key` on page 2 (the thread must be discarded, not shown to the wrong workspace); leave it 30+ minutes (TTL discard); open the Studio → Copilot preview (must persist **nothing** — reload it and the thread is gone); block storage / use a private window (the widget still works, just per-page-view).
+
+**Copilot mode — the read-only agent (built + user-verified 2026-07-27):**
+
+1. **Switch it on.** Studio → Copilot → Settings → **How your assistant works** → pick **Copilot** (toast; the AI Agent row is visible but locked). Reload the host page — mode is read at mount, like every other config flag.
+2. **Simple questions must not get worse.** Ask three or four straightforward "how do I…" questions you know are covered. They must answer as before, and at the same speed — round one of the agent loop *is* the old fast path. **This is the non-negotiable check**: a simple lookup that starts declining is the failure mode to watch (one such regression was caught during the build, at roughly 1-in-6).
+3. **Ambiguity → a question back.** With two or more approved workflows that could both match, ask something ambiguous ("how do I cancel?"). It should ask *which one you mean* rather than guessing or declining. *(With a single approved workflow this cannot fire — there is nothing to disambiguate.)*
+4. **It searches on its own.** Ask a follow-up that shifts topic ("what about …?"). It should find the other workflow rather than declining on the user's literal words.
+5. **On-page abilities become judgment.** Mid-workflow, ask a positional question: the highlight and the **"Walk me through it"** offer now appear only when the assistant judges them useful — *expect them less often than in AI Chatbot, and that is the feature, not a bug*. Turn the founder switches OFF and confirm neither ever appears regardless of what the assistant wants; the switches still rule.
+6. **Honest declines survive.** Ask two things the KB genuinely doesn't cover. Still declined, still no invention.
+7. **Flip back to AI Chatbot** and confirm the old rule-driven behaviour returns exactly — the offer reappears on every positional answer.
+
+✅ **PASS:** simple questions unchanged in quality and speed; the assistant asks rather than guesses on genuine ambiguity; it searches again instead of declining on a topic shift; on-page abilities appear on judgment but NEVER without the founder's switch; declines still honest; switching modes is instant and fully reversible.
+
+*(A DB-level shortcut for testing: `UPDATE "Workspace" SET "copilotMode"='copilot' WHERE "copilotPublicKey"='pk_…';` — and note an unrecognised value fails closed to `chatbot` by design.)*
+
+---
 
 ✅ **PASS:** the conversation survives full-page navigations with citations and feedback intact; the panel re-opens only on a fresh thread and never over a resuming walkthrough; the walkthrough's "Explain what's blocking me" escalation lands in a populated thread; storage holds only allowlisted kinds with no plan copies; wrong-key/expired/preview/blocked-storage all degrade to today's single-page behavior instead of breaking.
 

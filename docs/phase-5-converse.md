@@ -65,6 +65,8 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 
 ### P5-M2 — Product Profile (the product-understanding KB)
 
+> **⭐ Now the TOP capability gap for Copilot mode (recorded 2026-07-27).** Mode 2 shipped and was user-verified, and this is the clearest limit on it: the assistant knows **recipes, not the product**. It can say *how* to create an account; it cannot say what a workspace is, how the plans differ, or that the user doesn't need a new project for what they're doing — so every orienting question ("do I need X or Y?", "what's the difference?") declines: correctly, and uselessly. **Sequence it after more workflows are recorded**, or an improvement can't be attributed to the profile rather than to the KB finally having depth. See [`unified-agent.md`](unified-agent.md) §9 Gap 1.
+
 - **Authoring (Studio, KB page tab):** founder-authored structured prompts + free text — what the product is · who uses it · core concepts/terms · plans/roles · FAQs · never-say list. Optional starter: distill a draft profile from the recordings' narration transcripts (the understanding is already in the founder's voice there).
 - **Storage — reuse the whole pipeline:** authoring truth in a `ProductProfile` row; on save, compiled into a synthetic `KnowledgeSource` (`kind:'product'`) whose `KnowledgeItem`s (one per concept/FAQ/section, embedded) are delete-and-recreated. `CopilotApproval` rows written automatically (founder-authored = approved by authorship), so retrieval's approved-only invariant holds untouched. Citation chip reads **"Source: Product profile."**
 - **Answer synthesis:** the prompt names two evidence layers — **PRODUCT BACKGROUND** (orient, explain, compare, redirect) and **WORKFLOWS** (instruct steps) — anchored by POSITION, framed by the GOAL. Background may redirect ("you don't need a new project for that"); only workflows may instruct; nothing may be invented.
@@ -129,4 +131,6 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 
 ---
 
-> **Not in Phase 5:** server-side conversation storage or cross-device history, long-term per-user memory, proactive/unprompted messages, free-form agentic browsing (never — goals ground to approved workflows or they are not pursued), portal articles (V2).
+> **Not in Phase 5:** server-side conversation storage or cross-device history, long-term per-user memory, free-form agentic browsing (never — goals ground to approved workflows or they are not pursued), portal articles (V2).
+>
+> **Proactive/unprompted help is PARKED, not rejected** — user-flagged 2026-07-26 as worth revisiting; the reasoning and the likely shape live in [`unified-agent.md`](unified-agent.md) § "Parked idea — proactive help".

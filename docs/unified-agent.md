@@ -2,7 +2,7 @@
 
 > **One chat, one agent, one grounded tool surface.** Instead of a copilot that *routes* a user into one of three separate mechanisms — an answer (Phase 1), a walkthrough (P4-M0), an execution run (P4-M2) — FlowBuddy becomes a single agentic loop for which **Tell · Show · Do are tools it may call, turn by turn**. The user stays in one conversation; the agent moves up and down the intensity ladder as the task demands, narrating what it does and asking for what it needs. **The division of labor that survives: the agent deliberates, the grounded primitives act.**
 
-- **Status:** 📝 **DIRECTION — D1–D8 locked 2026-07-25, D9 (the three operating modes = the pricing tiers) locked 2026-07-26; the design is not yet written.** This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
+- **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1). D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done; **§9 records the three gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
 - **Supersedes in spirit, not yet in text:** the Phase-4 / Phase-5 "hands vs. brain" split ([`phase-4-autopilot.md`](phase-4-autopilot.md), [`phase-5-converse.md`](phase-5-converse.md)). Those docs remain authoritative for their module detail; where this doc and they disagree on *structure*, this one is newer.
 - **Companion docs:** the substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the acting primitives → [`phase-4-autopilot.md`](phase-4-autopilot.md) · goals/conversation → [`phase-5-converse.md`](phase-5-converse.md) · status map → [`roadmap.md`](roadmap.md) · outward-facing tools → [`phase-6-interop.md`](phase-6-interop.md)
 
@@ -56,8 +56,8 @@ Founder-selected per workspace, strictly ordered (mode 3 *is* mode 2 plus one to
 | | | Mode |
 |:---|:---|:---|
 | **Done, live** | Answering · knowing where the user is (Sense) · diagnosing why they're stuck (Reason) · guided walkthroughs (P4-M0) | 1 |
-| **In progress** | **P5-M0** — make the conversation survive page changes. It used to reset on every navigation, including navigations the walkthrough itself caused. **Cut 1 (persistence) ✅ built 2026-07-26**, not yet user-verified; cuts 2–3 (continuity bias · condensation) remain. **Shipped to mode 1 as well — it's a bug fix, not an agent feature.** | 1 + 2 |
-| **After that** | Turn the answering path into the agent loop, **read-only tools first** — no new risk surface, and it proves or falsifies the whole thesis cheaply | 2 |
+| **Done 2026-07-26** | **P5-M0** — the conversation survives page changes, and the copilot remembers the TOPIC on follow-ups. **Cuts 1 + 2 ✅ built + user-verified; cut 3 (LLM query condensation) DROPPED** — cut 2 took its common case for free and the agent absorbs the rest. **Shipped to mode 1 as well — a bug fix, not an agent feature.** | 1 + 2 |
+| **Done 2026-07-27** | ~~Turn the answering path into the agent loop, read-only tools first~~ — **built and verified. The thesis held.** Mode 2 is selectable in Studio; every workspace still defaults to mode 1 | 2 |
 | **The big one** | Teaching it to actually click and type (**P4-M2**) — the last piece and the riskiest | 3 |
 
 **The destination:** a customer records their product once, approves what the assistant may touch, and their users get something that explains, points, and does — always inside approved workflows, never improvising.
@@ -93,14 +93,14 @@ The striking property of this direction is how little of it is new. The primitiv
 
 | Tool | What it does | Where it already lives |
 |:---|:---|:---|
-| `search_kb` | Approval-constrained hybrid retrieval | ✅ `synthesis/retrieval.ts` (P1-M3) |
-| `get_workflow` | Distilled per-workflow steps | ✅ P1-M2 + [`kb-step-distillation.md`](kb-step-distillation.md) |
+| `search_kb` | Approval-constrained hybrid retrieval | ✅ **bound to the agent 2026-07-27** as `search_knowledge` (`synthesis/agent.ts`) |
+| `get_workflow` | Distilled per-workflow steps | ✅ **bound 2026-07-27**; approval re-checked server-side in `loadApprovedWorkflow` |
 | `where_am_i` | Read-only locator probe → workflow + step | ✅ `widget/src/sense.ts` `probeForAsk` (P2-M0/M1) |
-| `read_page_state` | Structured field state, **values masked** | ✅ `widget/src/reason.ts` (P2-M5) |
-| `highlight_step` | Sticky spotlight on the host page | ✅ `widget/src/sense.ts` `spotlight` (P2-M3) |
-| `run_walkthrough` | Guided, user-paced stepping | ✅ `widget/src/walkthrough.ts` (P4-M0) |
-| `ask_user` | Clarify · prompt for input · confirm | 🔄 partial — the Sense tie only, today |
-| `product_profile` | Founder-authored product understanding | 📝 P5-M2 — to build |
+| `read_page_state` | Structured field state, **values masked** | ✅ exists (`widget/src/reason.ts`, P2-M5) but **NOT bound to the agent** — still reached via the diagnostic path (§9 Gap 3) |
+| `highlight_step` | Sticky spotlight on the host page | ✅ **agent-decided 2026-07-27** via the `highlight` intent (founder switch still gates it) |
+| `run_walkthrough` | Guided, user-paced stepping | ✅ **agent-decided 2026-07-27** via the `offerWalkthrough` intent (founder switch still gates it) |
+| `ask_user` | Clarify · prompt for input · confirm | 🔄 **clarifying questions legalised in mode 2 (2026-07-27)** — no longer the Sense tie only; input prompting + confirmation await mode 3 |
+| `product_profile` | Founder-authored product understanding | 📝 P5-M2 — **the top remaining gap (§9 Gap 1)** |
 | `execute_step` | Resolve locator → act → verify | 📝 **P4-M2 — to build (the critical path)** |
 
 **Reason is already an agentic loop.** `diagnoseFromKB` runs a read-tool loop over expected-vs-actual — the phase docs call it "the skeleton Phase 4 inherits." The unified agent is not built from scratch; it is that loop **promoted to the main path** and given more tools.
@@ -250,8 +250,8 @@ Each step ships standalone value; step 2 is where the thesis is proven, the tran
 | # | Build | Lands in | Risk added |
 |:---:|:---|:---:|:---|
 | **1** | **P5-M0 — conversational foundation.** Chat persistence + continuity retrieval. Needed under every version of this, and it fixes a live bug: the chat dies on navigation today, including navigations the walkthrough itself causes. **Ships to mode 1 too — hygiene, not an agent feature.** *(Two amendments: typed message kinds in the persisted format from day one, so D3's chat-supplied values are excludable later without a storage migration; and build its persistence deliberately as the transport prototype for §7 Q1.)* <br>**✅ CUT 1 BUILT 2026-07-26** (typecheck + build green; not yet user-verified E2E) — **both amendments landed.** `widget/src/session.ts` is a slot-based store (`walkthrough` · `chat` · later `agent-run`) owning versioning/key-scoping/stamps/TTL/discard, extracted at the second consumer rather than guessed at the first; the walkthrough refactored onto it (`flowbuddy.walkthrough.v2`). `MsgKind` + a `PERSISTED_KINDS` allowlist are the persistence boundary, so `user.value` is excluded by never being added. **Q1 now has a working reference implementation of option (c)** — see below. Cuts 2–3 (continuity bias · condensation) remain. | **1 + 2** | none |
-| **2** | **Promote `diagnoseFromKB` to the main loop, read-only tools first** — `search_kb`, `get_workflow`, `where_am_i`, `read_page_state`, `product_profile`, `ask_user`. Nothing acts, so **the risk surface does not grow**; Tell + diagnosis + clarifying questions unify immediately. **Mode 2 becomes real here.** | **2** | prompt regression · cost/latency (measure) |
-| **3** | **Add the shipped zero-acting client tools** — `highlight_step`, `run_walkthrough`. Tell and Show become one mechanism and mid-walkthrough questions start working. **Mode 2 is now feature-complete.** | **2** | none on the page |
+| **2** | ✅ **DONE 2026-07-27** *(as: extract the loop into `engine.ts`, then build `agent.ts` on it — `diagnoseFromKB` keeps its own path for now, see §9 Gap 3)* — **read-only tools first** — `search_kb`, `get_workflow`, `where_am_i`, `read_page_state`, `product_profile`, `ask_user`. Nothing acts, so **the risk surface does not grow**; Tell + diagnosis + clarifying questions unify immediately. **Mode 2 becomes real here.** | **2** | prompt regression · cost/latency (measure) |
+| **3** | ✅ **DONE 2026-07-27** *(as: on-page INTENTS on the answer, not mid-loop tools — the widget already owns these primitives; the agent declares `highlight` / `offerWalkthrough` and the founder's switches still gate them)* — **the shipped zero-acting client tools**. Tell and Show become one mechanism and mid-walkthrough questions start working. **Mode 2 is now feature-complete.** | **2** | none on the page |
 | **4** | **`execute_step` plugs in as one more tool** — P4-M2, gated by P4-M1's eligibility signals (and Phase 3's certification when it lands), with P4-M3's rails and audit log. **Mode 3 opens.** | **3** | **accountability transfer** |
 
 **Regression protection.** Three risks, in descending order of how quietly they bite:
@@ -262,6 +262,68 @@ Each step ships standalone value; step 2 is where the thesis is proven, the tran
 
 **And keep mode 1's single-shot path as the runtime fallback** when the loop errors or times out — the same posture Reason and the condensation hop already use. Because mode 1 is a supported, sold configuration (D9), that fallback stays exercised in production rather than rotting as dead code.
 
+## 9. What's still open in Copilot mode (mode 2) — built + verified 2026-07-26/27
+
+Mode 2 is **complete against its scope and user-verified E2E** (founder's verdict: markedly more accurate than mode 1). Nothing below is half-built — these are the gaps that remain, recorded 2026-07-27 in priority order.
+
+### ⏸ Gap 1 — it knows the RECIPES, not the PRODUCT *(the biggest one)*
+
+Everything the assistant knows is a recorded workflow: a sequence of clicks. So it can say **how** to create an account. It cannot say what a workspace *is*, how the plans differ, what "project" means here, or that the user doesn't need a new one for what they're attempting.
+
+Real support skews heavily toward orienting questions — *"do I need X or Y?"*, *"what's the difference?"* — and today every one of them declines: correctly, and uselessly. **This is the difference between an assistant that understands the product and one that recites steps**, and it is the single biggest limit on how good mode 2 can feel.
+
+The design already exists — **P5-M2 Product Profile** ([`phase-5-converse.md`](phase-5-converse.md) §3): founder-authored structured prose (what it is · who uses it · core concepts · plans/roles · FAQs · never-say list), compiled into a synthetic `KnowledgeSource` so retrieval, approval and grounding are untouched, and surfaced to the answer prompt as a second evidence layer (**background may orient and redirect; only workflows may instruct**).
+
+**Sequence it AFTER more workflows are recorded** — otherwise an improvement can't be attributed to the profile rather than to the KB finally having depth.
+
+### ⏸ Gap 2 — nothing records what the agent did *(small; unblocks a decision)*
+
+Verified in the code 2026-07-27: `CopilotQuery` logs the question, `answered`, `contextPath`, the Sense outcome and the Reason trigger — **but not which MODE answered, how many ROUNDS it took, or which TOOLS it called.**
+
+Two consequences, and the second is the important one:
+
+1. **The founder is blind.** After switching to Copilot mode nothing in Studio shows it behaving differently — no evidence the upgrade is doing anything.
+2. **§7 Q6's measurement is currently impossible.** Escalation rate and cost-per-question are exactly the numbers that decide *"should AI Chatbot collapse into Copilot?"* — the founder raised that question himself, and his mode-2 verdict already leans toward yes. Without these columns the decision stays an opinion.
+
+Small: a few additive columns (mode · rounds · tools used), and it pairs naturally with the roadmap §9 backlog's token-usage column, which would make real cost analytics possible for the first time.
+
+### ⏸ Gap 3 — fold the diagnostic path into the agent loop *(deferred with a hard prerequisite)*
+
+**Where it stands.** Mode 2 ships with **two agent loops running side by side**: `diagnoseFromKB` (diagnostic questions — page state + expected-vs-actual) and `answerAsAgent` (everything else). A **deterministic trigger still decides which one a question gets** — Reason's selective trigger, unchanged. That trigger is the last hardcoded fork left in mode 2; every other "what kind of help is this?" decision is now the agent's.
+
+**Why folding them is right eventually.**
+- The trigger has the failure mode every rule has: it misses diagnostically-shaped questions phrased unusually, and over-fires on simple questions containing *"why"*.
+- A question currently cannot be BOTH: *"why can't I invite someone — and what's the whole process?"* goes down one path or the other. Merged, one turn could read the page **and** pull the workflow.
+- It is the last place the product decides FOR the user which kind of help they receive, which is precisely what D1 set out to remove.
+
+**Why it was NOT done in stage 3, and must not be done casually.** `REASON_SYSTEM` is the most heavily tuned prompt in the product — [`phase-2-sense.md`](phase-2-sense.md) Part B records **eight** hardening items, each learned from a real session it got wrong (read the on-page error first · never claim a control is disabled when the state says otherwise · never conclude "looks fine" from structure alone · look at the image before hedging · no speculative declines · …). That is scar tissue, not styling.
+
+And it is **currently untestable**: `scripts/copilot-baseline.mjs` sends no page context, so diagnosis has *zero* automated coverage. Rewriting eight rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
+
+**The prerequisite, concretely.** Make diagnosis measurable first: capture real `ReasonSnapshot` fixtures from the demo signup page in a few states (empty form · half-filled · invalid email · rejection banner showing), commit them, and teach the baseline script to replay them through `/answer`. Diagnosis then gets before/after numbers like every other path, and the merge becomes verifiable instead of hopeful. Useful on its own — it would be the first coverage Reason has ever had.
+
+**Priority: low.** Diagnosis works today, and mid-walkthrough diagnostic questions already reach it. What the merge buys is consistency and combined-evidence answers, not capability. Sequence it behind anything that grows the KB past a single workflow — with one workflow, half of the agent's judgment has nothing to exercise it.
+
+### ⚠ Not a gap in the code — the KB is one workflow deep
+
+Recorded here because it distorts every judgment about mode 2: as of 2026-07-27 the test workspace holds **one** approved workflow ("Create an account", 6 steps). So three of the agent's abilities have **never actually fired** — searching with its own wording (nothing else to find), choosing between workflows, and asking *"did you mean X or Y?"* (nothing to disambiguate).
+
+Mode 2 was verified against what a single workflow can exercise. **Recording two or three more is the cheapest way to test the half that is currently theoretical**, and it gates honest evaluation of Gap 1.
+
+### Suggested order
+
+**Gap 2 (logging) → more workflows → Gap 1 (product profile) → Gap 3 (diagnostic merge).** Logging is small, gives immediate visibility, and turns the mode-1-collapse question into a measurable one. Everything after it is more honest to evaluate once the KB has depth.
+
 ---
 
-> **Not in scope (unchanged from Phase 5):** server-side conversation storage or cross-device history, long-term per-user memory, proactive/unprompted messages, and — permanently — **free-form agentic browsing**. A goal grounds to approved workflows or it is not pursued.
+> **Not in scope (unchanged from Phase 5):** server-side conversation storage or cross-device history, long-term per-user memory, and — permanently — **free-form agentic browsing**. A goal grounds to approved workflows or it is not pursued.
+
+### 💡 Parked idea — proactive help (user-flagged 2026-07-26, revisit deliberately)
+
+Every mode so far is **purely reactive**: the assistant never speaks until spoken to. It cannot offer help even when it can see the user is stuck — a disabled button they've clicked three times, a validation error sitting on screen, the same step retried repeatedly. The machinery to *notice* all of that already exists and ships today (the read-only probe, the element-state reading, the walkthrough's progression observation); what is missing is permission to open its mouth first.
+
+**Why it was excluded:** an uninvited pop-up on someone else's product is the single fastest way to make a widget feel like spam, and it converts a trusted help surface into an interruption. The bar for getting it right is high.
+
+**Why it is worth revisiting:** the users who most need help are exactly the ones who never open a help widget. Reactive help only ever serves people who already thought to ask.
+
+**If it is picked up, the shape is probably:** founder-controlled and off by default · triggered by *evidence*, never by inference (a genuinely blocked state, not "seems slow") · at most once per session · dismissible permanently by the end-user · and a nudge rather than a panel — the launcher gets a quiet badge, not an auto-opening chat. Note this is orthogonal to the modes: it is a question of *who starts the conversation*, and it could apply to `1 Copilot` as easily as to the agent modes.

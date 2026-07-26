@@ -97,6 +97,11 @@ const cfg = {
   // P4-M0 guided walkthrough — arrives from /v1/copilot/config; defaults OFF (it draws on the
   // host page and observes progression, so the founder knowingly enables it). Needs Sense.
   walkthrough: false,
+  // The workspace's operating mode, from /v1/copilot/config: 'chatbot' (today's behaviour — the
+  // default and the fallback) · 'copilot' (the agent decides how to help, still read-only) ·
+  // 'agent' (adds acting; not built). The widget needs it because some abilities run in the page —
+  // but the SERVER re-checks on every call, so nothing here can grant capability.
+  mode: 'chatbot' as 'chatbot' | 'copilot' | 'agent',
   // P2-M5 Reason — all three arrive from /v1/copilot/config. reason defaults ON (structure-only,
   // masked); the image tier and value unmasking default OFF (the founder knowingly enables them).
   reason: true,
@@ -339,9 +344,26 @@ async function buildReasonPayload(trigger: ReasonTrigger): Promise<ReasonAskPayl
   return { trigger, snapshot, ...(image ? { image } : {}) };
 }
 
+/** What the assistant DECIDED to do on the page — Copilot mode only; absent in AI Chatbot, whose
+ *  on-page behaviour stays rule-driven. A request, not a permission: the founder's switches below
+ *  still decide what actually happens. */
+interface AnswerIntents { highlight?: boolean; offerWalkthrough?: boolean }
+
 interface AnswerResponse {
   covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
-  position?: AnswerPosition | null; escalate?: boolean;
+  position?: AnswerPosition | null; escalate?: boolean; intents?: AnswerIntents;
+}
+
+/**
+ * Should this on-page ability run? Two gates, in order:
+ *  1. the founder's switch — always, in every mode. Nothing here can turn something on.
+ *  2. WHO decides the timing: in AI Chatbot a fixed rule does (offer whenever it applies); in
+ *     Copilot mode the assistant does, per message. That swap is the whole of D8 in one function.
+ * A missing intent in Copilot mode means "not this time" — never "fall back to always".
+ */
+function wantsOnPage(intents: AnswerIntents | undefined, which: keyof AnswerIntents): boolean {
+  if (cfg.mode === 'chatbot') return true; // the rule decides; the caller already checked its switch
+  return intents?.[which] === true;
 }
 
 /**
@@ -449,6 +471,7 @@ async function ask(question: string): Promise<void> {
       if (data.position && !walkthroughActive()) {
         const key = `${data.position.sourceId}:${data.position.segmentIndex}:${data.position.step}`;
         if (!cfg.showMe) log.debug('show-me: off (enable it in Studio → Copilot → Settings, then reload this page)');
+        else if (!wantsOnPage(data.intents, 'highlight')) log.debug('show-me: the assistant judged a highlight unhelpful here');
         else if (!lastProbe) log.debug('show-me: no probe result for this question');
         else {
           const prefix = `${data.position.sourceId}:${data.position.segmentIndex}:`;
@@ -461,7 +484,7 @@ async function ask(question: string): Promise<void> {
       }
       // P4-M0 — offer to walk the user through the rest (config-gated; needs a position + a shard
       // workflow to walk; the shard is cached from panel open, so this is normally instant).
-      if (data.position && cfg.walkthrough && senseActive() && !walkthroughActive()) {
+      if (data.position && cfg.walkthrough && senseActive() && !walkthroughActive() && wantsOnPage(data.intents, 'offerWalkthrough')) {
         const workflows = await ensureShard(cfg.apiBase, cfg.key, location.pathname, 800);
         const offer = walkthroughOffer(data.position, workflows);
         if (offer) answered.walkOffer = offer;
@@ -714,6 +737,7 @@ interface ServerConfig {
   position?: string | null; launcher?: string | null; launcherText?: string | null;
   sense?: boolean; showMe?: boolean; // P2 Sense — Studio-controlled flags
   walkthrough?: boolean; // P4-M0 guided walkthrough — Studio-controlled
+  mode?: string; // operating mode — 'chatbot' | 'copilot' | 'agent' (unknown values fail closed)
   reason?: boolean; reasonImage?: boolean; reasonValues?: boolean; // P2-M5 Reason — Studio-controlled
 }
 
@@ -757,6 +781,9 @@ function applyServerConfig(s: ServerConfig): void {
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
   cfg.walkthrough = s.walkthrough === true; // P4-M0 — workspace policy too (explicit true only)
+  // Operating mode — anything unrecognised stays 'chatbot'. The widget never widens its own
+  // capability from a config value; the server is the authority and re-checks every call.
+  if (s.mode === 'copilot' || s.mode === 'agent') cfg.mode = s.mode;
   // P2-M5 Reason — workspace policy too; the image tier and unmasking require an explicit true.
   if (s.reason === false) cfg.reason = false;
   cfg.reasonImage = s.reasonImage === true;

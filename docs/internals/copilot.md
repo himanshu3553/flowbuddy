@@ -27,7 +27,10 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
 | [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-08) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
-| [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer** — the grounded LLM call: cite-or-decline (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). |
+| [`synthesis/engine.ts`](../../packages/synthesis/src/engine.ts) | **The shared answer loop (2026-07-26)** — ONE loop + ONE answer shaper, used by all three paths. Owns the model call, the tool rounds (caps: 4 rounds / 4 tool calls), the response schema, and `shapeAnswer` (citations resolved only against items WE supplied; position step taken from the PROBE, never the model). |
+| [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer — AI Chatbot (mode 1)**: the shared loop with **no tools bound and `maxRounds: 1`** (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). Not a separate pipeline: with zero tools the loop makes exactly one call and breaks. |
+| [`synthesis/agent.ts`](../../packages/synthesis/src/agent.ts) | **Answer — Copilot (mode 2)**: the same loop with KB-reading tools (`search_knowledge` · `get_workflow`), its OWN prompt and a superset schema (adds the on-page intents). Round one *is* the fast path, so simple lookups cost the same; the extra rounds are escalation. |
+| [`shared/copilot-mode.ts`](../../packages/shared/src/copilot-mode.ts) | **The mode vocabulary** — `chatbot \| copilot \| agent`, founder-facing labels, `SELECTABLE_MODES`, and `parseCopilotMode` which **fails closed** (anything unrecognised → `chatbot`). |
 | [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` + `/sense-plan` (P2-M0) + `/walkthrough` (P4-M0) routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
 
 ---
@@ -171,7 +174,35 @@ Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
 `sanitizeHistory` also lives here: it accepts only well-formed `user`/`assistant` turns from the
 untrusted request body, keeps the **last 10**, and clips each to **4000 chars**.
 
-### 4.3 Grounding — answer or decline ([`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts))
+### 4.3 Grounding — answer or decline
+
+**Three paths, ONE loop (restructured 2026-07-26).** The engine in
+[`engine.ts`](../../packages/synthesis/src/engine.ts) makes the model call, serves any tools the
+CALLER bound, and stops. Which path a question takes is decided by the workspace's mode plus the
+Reason trigger:
+
+| Path | When | Tools bound | Rounds |
+|---|---|---|:---:|
+| **AI Chatbot** (`copilot.ts`) | mode `chatbot` | **none** | **1** |
+| **Copilot** (`agent.ts`) | mode `copilot`, non-diagnostic | `search_knowledge` · `get_workflow` | ≤4 |
+| **Diagnostic** (`reason.ts`) | Reason trigger fires, either mode | expected screenshot · expected DOM · page image | ≤4 |
+
+Two properties worth not losing:
+
+- **Mode 1 is the loop with nothing bound.** With zero tools the `tools`/`tool_choice` keys are
+  omitted from the request entirely, `finalRound` is true immediately, and exactly one call is made
+  — byte-identical to the pre-restructure fast path (proven by re-running the answer baseline: no
+  decision-level change). This is what makes collapsing mode 1 into mode 2 later a config change.
+- **A final round NEVER serves tools.** `tool_choice: 'none'` asks the model not to call any, but a
+  model that does anyway is not obeyed: there is no round left to use the result, so the call would
+  be pure cost — and in a future acting mode, an action taken after the loop decided to stop, which
+  nobody observes or verifies. Structural, not advisory.
+
+The mode is resolved server-side from `Workspace.copilotMode` on every call
+([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding
+the public key can never talk itself into a higher mode.
+
+#### The grounded call ([`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts))
 
 `answerFromKB` makes one LLM call with a **strict JSON schema**
 (`{ covered, reason, answer, citedItemIds }`) and a system prompt that is the product's no-leak
@@ -197,8 +228,10 @@ segmentTitle`), deduped. A response that isn't `covered` or has no `answer` beco
 
 ### 4.4 The route handler — wiring + analytics ([`server.ts`](../../packages/api/src/server.ts))
 
-`/v1/copilot/answer` orchestrates: gate (auth + rate-limit) → input caps → retrieve → (zero-items
-shortcut) → `answerFromKB` → **log + respond**. Input caps (cost ceiling — the key is public):
+`/v1/copilot/answer` orchestrates: gate (auth + rate-limit + **mode**) → input caps → resolve context
+(Sense hypotheses **and** P5-M0 continuity keys, in ONE `Promise.all` so neither adds a serial hop) →
+retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFromKB` \| `answerAsAgent` \|
+`answerFromKB`) → **log + respond**. Input caps (cost ceiling — the key is public):
 **question ≤ 2000 chars** (`400` above it; the widget input additionally caps at 400 via
 `maxlength`), `context.path` clipped to 512.
 
