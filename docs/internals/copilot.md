@@ -202,6 +202,20 @@ The mode is resolved server-side from `Workspace.copilotMode` on every call
 ([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding
 the public key can never talk itself into a higher mode.
 
+**Default vs. floor (2026-07-27).** New workspaces are created in mode 2 (`@default("copilot")` on
+the column, mirrored by `NEW_WORKSPACE_MODE`), while `parseCopilotMode` still resolves anything
+unrecognised to `chatbot` (`DEFAULT_COPILOT_MODE`). These are two constants on purpose: the product
+default may climb the ladder as modes prove out, the fail-closed floor may only descend. Note the
+Prisma client — not the column — is what a `create` actually applies, since it bakes scalar defaults
+in at `prisma generate` time; the migration keeps the column in step for direct SQL.
+
+**The fallback is real, not just documented.** `answerAsAgent` is wrapped in
+[`server.ts`](../../packages/api/src/server.ts): any failure — timeout, malformed tool argument,
+anything — degrades that question to a normal `answerFromKB` answer rather than erroring. Retrieval
+has already run by then, so the fallback sees exactly the items the loop's own first round would
+have. Both the mode-1 path and the fallback call one named closure (`answerAsChatbot`) so they
+cannot drift apart. The mode setting is untouched: this is per-question, not a demotion.
+
 #### The grounded call ([`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts))
 
 `answerFromKB` makes one LLM call with a **strict JSON schema**

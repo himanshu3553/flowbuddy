@@ -419,7 +419,7 @@ Taking a running deploy from Phase 1 to the Phase-2 code (Sense `8187af5` + Reas
 3. **Set `FLOWBUDDY_STUDIO_URL`** on the api (the real Studio URL) if not set — without it the real-widget tester 403s once a workspace restricts origins (§3.7).
 4. **Publish BOTH widget bundles** from one `pnpm --filter @flowbuddy/widget build`: `flowbuddy-copilot.js` **and** `flowbuddy-copilot-render.js`, side by side. A missing renderer never breaks answers — diagnostics silently degrade to structure-only.
 5. *(Optional)* set `REASON_MODEL` for a stronger vision model on the diagnostic path (unset = `SYNTH_MODEL`, default `gpt-4o`).
-6. **No other new env vars.** Behavior toggles are per-workspace in Studio → Copilot → Settings, with safe defaults: Sense **ON** · show-me OFF · Reason **ON** (masked, structure-only) · page image **ON** (new workspaces, since 2026-07-16) · typed values OFF.
+6. **No other new env vars.** Behavior toggles are per-workspace in Studio → Copilot → Settings, with safe defaults: Sense **ON** · show-me OFF · Reason **ON** (masked, structure-only) · page image **ON** (new workspaces, since 2026-07-16) · typed values OFF. *(Defaults as of this drop — show-me and walkthrough later flipped ON for new workspaces; see §8.3.)*
 7. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 11 — a positional "what do I do next?" and a "why is this button disabled?" diagnosis; verify `CopilotQuery.reasonTrigger` is populated on the diagnostic row.
 
 ### 8.2 The walkthrough drop (P4-M0)
@@ -428,8 +428,41 @@ On top of the Phase-2 steps:
 
 1. **Migrations run automatically**: `20260715155642_walkthrough_guided` (`Workspace.copilotWalkthrough` + the `CopilotWalkthrough` run table) and `20260715183302_reason_image_default_on` (a column-default flip only — **existing workspaces keep their current image-tier setting**; new workspaces default ON). Both additive, no backfill.
 2. **Publish BOTH widget bundles again** — the base bundle grew (walkthrough module + alert-surface detection).
-3. **No new env vars.** New per-workspace toggle: Studio → Copilot → Settings → **Guided walkthrough** (default OFF, requires Sense).
+3. **No new env vars.** New per-workspace toggle: Studio → Copilot → Settings → **Guided walkthrough** (default OFF at this drop — flipped ON for new workspaces in §8.3; requires Sense).
 4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) §11 — the walkthrough leg (offer → manual Next-driven steps → one `CopilotWalkthrough` row) and the rejected-action diagnosis.
+
+### 8.3 The Copilot-mode drop (D9 mode 2) + the default flip
+
+Two commits, one deploy story. **The headline for an existing deploy: nothing changes for any
+workspace that already exists.** Every migration below is additive or a column-default change, and
+column defaults apply only to rows created afterwards.
+
+1. **Migrations run automatically** on api boot (`prisma migrate deploy`):
+   - `20260726143125_copilot_mode` — adds `Workspace.copilotMode` (one `TEXT NOT NULL DEFAULT`).
+   - `20260727012603_copilot_mode_default_copilot` — default → `'copilot'`, **no back-fill**.
+   - `20260727013457_copilot_abilities_default_on` — `copilotShowMe` + `copilotWalkthrough` defaults → `true`, **no back-fill**.
+
+   No downtime concern, and each is reversible by flipping the default back (the *absence* of a
+   back-fill is what makes them safe to revert — nothing was overwritten).
+2. **⚠️ `prisma generate` must run in the build.** Prisma Client bakes scalar defaults in at
+   generate time and sends them explicitly, so **the client — not the column default — is what a
+   create actually applies.** A deploy that migrates without regenerating will keep handing new
+   workspaces the old defaults while the database claims otherwise. Render's build already runs it
+   via `pnpm build`; worth knowing because the failure is silent and looks like the migration didn't
+   take.
+3. **Publish BOTH widget bundles again** — the base bundle carries mode-aware on-page judgment
+   (`wantsOnPage`) and the chat-persistence store.
+4. **No new env vars.** New per-workspace control: Studio → Copilot → Settings → **How your
+   assistant works** (AI Chatbot · Copilot · AI Agent-locked). New workspaces land on **Copilot**
+   with show-me and guided walkthrough permitted; every mode stays switchable both ways.
+5. **New defaults for new workspaces:** mode **Copilot** · Sense **ON** · show-me **ON** ·
+   walkthrough **ON** · Reason **ON** · page image **ON** · typed values **OFF**.
+6. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) — the Copilot-mode leg. Confirm the API logs
+   `agent path engaged` on a question, and that a *new* signup shows Copilot pre-selected in
+   Settings without touching anything.
+7. **If the loop misbehaves in production**, the fastest lever is Studio → Copilot → Settings →
+   **AI Chatbot** — instant, per workspace, no deploy. Individual loop failures already degrade to
+   an AI Chatbot answer on their own.
 
 ---
 

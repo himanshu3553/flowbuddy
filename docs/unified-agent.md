@@ -2,7 +2,7 @@
 
 > **One chat, one agent, one grounded tool surface.** Instead of a copilot that *routes* a user into one of three separate mechanisms — an answer (Phase 1), a walkthrough (P4-M0), an execution run (P4-M2) — FlowBuddy becomes a single agentic loop for which **Tell · Show · Do are tools it may call, turn by turn**. The user stays in one conversation; the agent moves up and down the intensity ladder as the task demands, narrating what it does and asking for what it needs. **The division of labor that survives: the agent deliberates, the grounded primitives act.**
 
-- **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1). D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done; **§9 records the three gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
+- **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1) **— and the DEFAULT for new workspaces since 2026-07-27**, with its on-page abilities permitted and the mode-1 runtime fallback finally built beneath it. D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done; **§9 records the three gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
 - **Supersedes in spirit, not yet in text:** the Phase-4 / Phase-5 "hands vs. brain" split ([`phase-4-autopilot.md`](phase-4-autopilot.md), [`phase-5-converse.md`](phase-5-converse.md)). Those docs remain authoritative for their module detail; where this doc and they disagree on *structure*, this one is newer.
 - **Companion docs:** the substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the acting primitives → [`phase-4-autopilot.md`](phase-4-autopilot.md) · goals/conversation → [`phase-5-converse.md`](phase-5-converse.md) · status map → [`roadmap.md`](roadmap.md) · outward-facing tools → [`phase-6-interop.md`](phase-6-interop.md)
 
@@ -39,11 +39,13 @@ Then:
 
 | Mode | What it is | Can act? |
 |:---|:---|:---:|
-| **1 · Copilot** | Today's product, unchanged — and the fallback underneath the other two | No |
-| **2 · Agent (read-only)** | The unified loop: steps 1–4 above, fluid, one conversation | No |
-| **3 · Agent (acting)** | Adds step 5 | **Yes** |
+| **1 · Copilot** *(shipped as **AI Chatbot**)* | Today's product, unchanged — a sold tier, and the safety floor beneath the other two | No |
+| **2 · Agent (read-only)** *(shipped as **Copilot**)* | The unified loop: steps 1–4 above, fluid, one conversation — **the default for new workspaces since 2026-07-27** | No |
+| **3 · Agent (acting)** *(**AI Agent**)* | Adds step 5 | **Yes** |
 
 Founder-selected per workspace, strictly ordered (mode 3 *is* mode 2 plus one tool), and **also the pricing tiers**. The wall sits where the liability is — between 2 and 3, not between 1 and 2. Full build detail: §4, "D9 in practice."
+
+**Mode 1's two jobs are not the same job (2026-07-27).** It is a *sold tier* — the predictable single-call configuration — and separately it is the *safety floor*: where an unrecognised stored value lands, and where the runtime falls back when the loop errors. Those were one constant until mode 2 became the default; they are now `NEW_WORKSPACE_MODE` and `DEFAULT_COPILOT_MODE`, because a product default may climb the ladder while a floor may only descend. Collapsing them again would mean the day the default rises, every typo rises with it.
 
 ### What this did and did not change
 
@@ -139,7 +141,7 @@ The striking property of this direction is how little of it is new. The primitiv
 
 **Two triads — do not conflate them.** **Tell / Guide / Do** is *what the user receives*. **Copilot / read-only / acting** is *how it is orchestrated and what is permitted*. Guide exists in modes 1 and 2 — the same `walkthrough.ts`, reached two different ways (a deterministic pill vs. an agent offer).
 
-**Invariant across all three modes:** one KB, one approval model, one retrieval seam, values masked at capture, grounded-only, honest declines. **The mode picks the orchestrator and the permission ceiling — never the knowledge model.** The existing five toggles (`senseEnabled` · `copilotShowMe` · `copilotWalkthrough` · `reasonEnabled` · `reasonImageEnabled`) tune features *within* a mode, underneath it (D7).
+**Invariant across all three modes:** one KB, one approval model, one retrieval seam, values masked at capture, grounded-only, honest declines. **The mode picks the orchestrator and the permission ceiling — never the knowledge model.** The existing five toggles (`senseEnabled` · `copilotShowMe` · `copilotWalkthrough` · `reasonEnabled` · `reasonImageEnabled`) tune features *within* a mode, underneath it (D7) — and the switch always wins: no mode can turn on an ability the founder turned off. What changes across modes is what "on" *means* (§7 Q7, resolved 2026-07-27): a rule in mode 1, a permission in mode 2.
 
 **Defaults.** Mode 1 for every workspace today. Mode 2 becomes the sensible default once proven — strictly better, no new risk. **Mode 3 is never a default**, and plausibly not self-serve at all for regulated verticals.
 
@@ -241,7 +243,7 @@ Stripe Elements, Plaid, hosted checkout: the widget cannot see inside them, so i
 4. **How mode 3 is accepted** — D9 makes it a contractual line, so the toggle is probably not just a Studio switch: explicit acceptance, versioned terms, and a record of who enabled it and when. What exactly gets stored? Far cheaper now than retrofitted.
 5. **Cross-origin iframe UX** — is "highlight the region + Continue" enough, or does the payment case want a bespoke affordance?
 6. **Cost per mode (measurement, not a design choice)** — the real cost-per-question and p50/p95 delta between the mode-1 pipeline and the mode-2 loop, on live traffic. **Measured after migration step 2.** Now a *margin* question rather than a consolidation one (D9 pricing), but it still sets tier prices and D7's spend caps.
-7. **Where the five existing toggles land per mode** — which are mode-1-only, which survive into 2/3, which become redundant once the agent decides (e.g. does `copilotShowMe` still mean anything when the agent chooses to highlight?).
+7. ~~**Where the five existing toggles land per mode**~~ — **RESOLVED 2026-07-27 for the two on-page toggles.** They survive into mode 2 unchanged in *shape* and change in *meaning*: the founder switch is still checked first and can still turn an ability off, but it stops meaning "do this every time" and starts meaning "you MAY do this when it helps" — the widget's `wantsOnPage` is exactly that swap. So `copilotShowMe` does still mean something: it is the permission, and the agent's judgment refines it rather than replacing it. Consequence: both defaulted **ON for new workspaces** alongside the mode-2 default, because a Copilot that the picker describes as pointing and guiding must be able to. Still open for `reasonEnabled`/`reasonImageEnabled`, which wait on the un-merged diagnostic path (§9 gap 3).
 
 ## 8. Migration path
 
@@ -261,6 +263,8 @@ Each step ships standalone value; step 2 is where the thesis is proven, the tran
 3. **Latency creep** — D2 keeps the fast path as the agent's first move, but principles erode. If a triage hop lands in front of every question, simple lookups get slower for nothing. §7 Q6's measurement is also the guardrail.
 
 **And keep mode 1's single-shot path as the runtime fallback** when the loop errors or times out — the same posture Reason and the condensation hop already use. Because mode 1 is a supported, sold configuration (D9), that fallback stays exercised in production rather than rotting as dead code.
+
+> ✅ **BUILT 2026-07-27** (`api/src/server.ts`). It had been asserted in three docs and the schema comment while not existing in code; the mode-2 default made that urgent, because the loop's failure became the *default* experience's failure. The agent call is wrapped and degrades to a normal AI Chatbot answer — retrieval has already run, so the fallback answers from exactly the items the loop's own first round would have seen. Catches everything, including timeouts and malformed tool arguments: no failure of the loop is better served by showing an end-user an error than by answering from the same knowledge one rung down. The chatbot call is a single named closure used by both the mode-1 path and the fallback, so they cannot drift.
 
 ## 9. What's still open in Copilot mode (mode 2) — built + verified 2026-07-26/27
 

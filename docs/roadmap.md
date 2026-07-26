@@ -28,14 +28,23 @@ VERSION 3 — Buyer-side: record the tools you USE · the company agent       �
 per workspace and also the pricing tiers. This cuts ACROSS the phases above rather than sitting inside one:
 
 ```
-1 · AI Chatbot   answers, fixed rules decide the rest   🟩 shipped — the default for every workspace
+1 · AI Chatbot   answers, fixed rules decide the rest   🟩 shipped — the SAFETY FLOOR (below)
 2 · Copilot      the read-only agent: it decides how    🟩 BUILT + user-verified E2E 2026-07-27
-                 to help, turn by turn. Never acts.        (gaps: unified-agent.md §9)
+                 to help, turn by turn. Never acts.        ⭐ the default for NEW workspaces
 3 · AI Agent     adds acting on the user's behalf       ⬜ not built · never a default
 ```
 
-Mode 1 is unchanged and remains the runtime fallback beneath the others. **Nothing changes for any
-workspace until a founder switches**, in Studio → Copilot → Settings.
+**Mode 2 is what a new workspace gets (2026-07-27)** — signed up, embedded, and already a Copilot,
+with the on-page abilities it advertises (`copilotShowMe`, `copilotWalkthrough`) permitted too.
+Every mode stays switchable both ways in Studio → Copilot → Settings, and **existing workspaces are
+untouched**: a column default applies only to new rows, and the stored value cannot tell a founder's
+deliberate choice from an inherited one.
+
+Mode 1 keeps two jobs it does not share with the ladder position: it is a **sold tier** (the
+predictable, single-call configuration), and it is the **safety floor** — where an unrecognised
+stored value lands, and where the runtime falls back when the agent loop errors (built 2026-07-27).
+That floor may only ever move *down*, which is why the product default and the floor are now
+deliberately different constants (`NEW_WORKSPACE_MODE` vs `DEFAULT_COPILOT_MODE`).
 
 🟩 Done · 🟨 In Progress · ⬜ Draft  *(one square per module)*
 
@@ -145,7 +154,7 @@ A throwaway, lightweight spike answered one question before building any product
 
 | Module | What it is | Status |
 |:---|:---|:---|
-| **P4-M0** | **Guided walkthrough** — "Walk me through it" on positional answers: highlight each remaining step + follow the user's progress (auto-detect + Next fallback, cross-nav resume, run analytics); no acting (the zero-risk stepping stone) | ✅ **Done** — built 2026-07-15 ([`phase-4-autopilot.md`](phase-4-autopilot.md) §8 as-built); default OFF, needs Sense |
+| **P4-M0** | **Guided walkthrough** — "Walk me through it" on positional answers: highlight each remaining step + follow the user's progress (auto-detect + Next fallback, cross-nav resume, run analytics); no acting (the zero-risk stepping stone) | ✅ **Done** — built 2026-07-15 ([`phase-4-autopilot.md`](phase-4-autopilot.md) §8 as-built); needs Sense; **default ON for new workspaces since 2026-07-27** (Copilot mode decides per message, so the switch is a permission rather than a rule) |
 | **P4-M1** | **Autopilot gate** — the `autopilot` audience flag + validated-current certification (offer execution only on approved **and** green-validated workflows) | 📝 **Draft** |
 | **P4-M2** | **Widget execution driver** — consent UX, visible step-by-step run, per-input prompts, pause/abort/takeover, resume across navigations | 📝 **Draft** |
 | **P4-M3** | **Safety rails + telemetry** — destructive-step confirmation, safe-stop semantics, execution audit log, drift feedback to Phase 3 | 📝 **Draft** |

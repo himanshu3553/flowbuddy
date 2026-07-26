@@ -615,6 +615,19 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   }
 
   let result: CopilotAnswer;
+  // AI Chatbot — one grounded call over the items retrieval has already produced. Named rather
+  // than inlined because it is BOTH the mode-1 path and the fallback underneath Copilot mode, and
+  // a fallback that drifts from the thing it falls back to is worse than none.
+  const answerAsChatbot = () =>
+    answerFromKB({
+      question,
+      history: sanitizeHistory(body.history),
+      items,
+      context: { path: contextPath, sense: sense ?? undefined },
+      apiKey: config.openaiApiKey,
+      model: config.synthModel,
+    });
+
   if (reasonPayload) {
     // The reasoning path (docs/phase-2-reason.md §4): full workflow recipe + expected-state
     // artifacts for the localized current step, then the stronger model's agentic read-tool loop.
@@ -647,31 +660,39 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     // fast; the extra rounds are the escalation. Both tools are approval-constrained HERE, in the
     // closures, so the model's action space is the approved KB and nothing else.
     req.log.info({ workspaceId, mode: gate.mode }, 'agent path engaged');
-    result = await answerAsAgent({
-      question,
-      history: sanitizeHistory(body.history),
-      items,
-      context: { path: contextPath, sense: sense ?? undefined },
-      searchKb: (query) =>
-        retrieveApprovedKBItems(prisma, workspaceId, query, {
-          contextPath,
-          senseKeys,
-          continuityKeys,
-          embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
-        }),
-      loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
-      apiKey: config.openaiApiKey,
-      model: config.synthModel,
-    });
+    try {
+      result = await answerAsAgent({
+        question,
+        history: sanitizeHistory(body.history),
+        items,
+        context: { path: contextPath, sense: sense ?? undefined },
+        searchKb: (query) =>
+          retrieveApprovedKBItems(prisma, workspaceId, query, {
+            contextPath,
+            senseKeys,
+            continuityKeys,
+            embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
+          }),
+        loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
+        apiKey: config.openaiApiKey,
+        model: config.synthModel,
+      });
+    } catch (err) {
+      // THE SAFETY FLOOR, made real (2026-07-27). The loop makes several model calls and several
+      // tool round-trips, so it has strictly more ways to fail than the single call beneath it —
+      // and it is now what a new workspace gets by default, which makes ITS failure the DEFAULT
+      // experience's failure. So degrade instead of erroring: retrieval already ran, so the
+      // fallback answers from exactly the items the loop's own first round would have seen. The
+      // user gets a real answer a little less cleverly; the founder gets a log line.
+      //
+      // Deliberately catches everything, including a timeout or a malformed tool argument. There
+      // is no failure of the loop that is better served by showing the end-user an error than by
+      // answering from the same knowledge one rung down.
+      req.log.error({ err, workspaceId, mode: gate.mode }, 'agent path failed — falling back to AI Chatbot');
+      result = await answerAsChatbot();
+    }
   } else {
-    result = await answerFromKB({
-      question,
-      history: sanitizeHistory(body.history),
-      items,
-      context: { path: contextPath, sense: sense ?? undefined },
-      apiKey: config.openaiApiKey,
-      model: config.synthModel,
-    });
+    result = await answerAsChatbot();
   }
   // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
   const position = result.covered ? result.position : null;

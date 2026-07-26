@@ -142,7 +142,7 @@ The alternative architecture — capture the page's HTML element fingerprints (r
 
 ## A6. Data-model deltas
 
-- **`Workspace.senseEnabled`** (default **ON**) — the Studio toggle; gates the plan endpoint. **`Workspace.copilotShowMe`** (default **OFF**) — the show-me flag, served via `GET /v1/copilot/config`.
+- **`Workspace.senseEnabled`** (default **ON**) — the Studio toggle; gates the plan endpoint. **`Workspace.copilotShowMe`** (default **ON** for new workspaces since 2026-07-27, was OFF) — the show-me flag, served via `GET /v1/copilot/config`. It was off while it fired on a fixed rule (*every* positional answer highlights, which is noisy enough to deserve opt-in); in Copilot mode the assistant decides per message, so "on" means *may, when it helps*. The switch still wins either way. Existing workspaces keep what they set — the migration flips the column default only.
 - **Sense plan storage** — compiled on demand, keyed by the workflow key `(sourceId, segmentIndex)`; designed as the shared base of Phase 4's `ExecutionPlan`.
 - **`CopilotQuery` localization fields** — `senseSourceId`/`senseSegmentIndex`, `senseStep`, `senseConfidence`, `senseUsed` (`used | ignored | none`) — powers the P2-M4 friction view. No end-user identity.
 
@@ -150,7 +150,7 @@ The alternative architecture — capture the page's HTML element fingerprints (r
 
 | Piece | File(s) & specifics |
 |:---|:---|
-| Schema | `db/prisma/schema.prisma`: `Workspace.senseEnabled` (ON) · `copilotShowMe` (OFF) · `CopilotQuery.sense*` fields |
+| Schema | `db/prisma/schema.prisma`: `Workspace.senseEnabled` (ON) · `copilotShowMe` (ON for new workspaces since 2026-07-27) · `CopilotQuery.sense*` fields |
 | **P2-M0** plan compile + route-sharded serve | `api/src/sense-plan.ts` (on-demand compile, **60s per-workspace cache** — no invalidation machinery; approval flips visible ≤60s + the widget shard TTL — shard cap **top-8**, **≤6 locators/step**) + `GET /v1/copilot/sense-plan` in `api/src/server.ts` (own rate bucket, toggle-gated) |
 | Step → event locator recovery | `DistilledStep.keyEventId` (`synthesis/src/distill.ts`) for fresh builds; existing recordings resolve via `screenshotFile` matching against the manifest — no reprocess needed |
 | **P2-M1** probe + scorer + masking + shard cache | `widget/src/sense.ts` — read-only locator walk (incl. xpath + tag-scoped text), visible/enabled/filled booleans, `role=alert`/`aria-invalid` error capture → client-masked ≤200 chars; **scorer weights: 0.45 exact-route / 0.3 prefix / 0.35 current-step / 0.2 done-fraction; `MIN_SCORE 0.2`, `TIE_DELTA 0.15`**; shard cached 5 min per route, fetched on panel open |

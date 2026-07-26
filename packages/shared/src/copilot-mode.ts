@@ -14,6 +14,13 @@
  *    ability to decide. Ordering is expressed once, in `MODE_RANK`, so callers ask
  *    "is this at least X?" instead of hard-coding lists of modes that drift apart.
  *
+ * 3. **The product default vs. the safety floor.** `NEW_WORKSPACE_MODE` is what a fresh workspace
+ *    starts as — an opinion about what FlowBuddy IS, and it may climb the ladder as modes prove
+ *    out. `DEFAULT_COPILOT_MODE` is where an unrecognised value lands, and it may only ever move
+ *    DOWN. They were one constant until 2026-07-27 and read identically; collapsing them again
+ *    would mean a future "new workspaces start as agents" decision silently turned every typo and
+ *    every rolled-back value into an acting agent.
+ *
  * Parsing FAILS CLOSED: anything unrecognised — an older row, a typo, a value written by a future
  * version and then rolled back — resolves to `chatbot`, the mode that cannot do anything
  * surprising. A capability must never be granted by accident.
@@ -22,9 +29,19 @@
 export const COPILOT_MODES = ['chatbot', 'copilot', 'agent'] as const;
 export type CopilotMode = (typeof COPILOT_MODES)[number];
 
-/** The safe default, the value every existing workspace has, and the runtime fallback when the
- *  agent loop errors or times out. */
+/** The SAFETY FLOOR — where an unrecognised stored value lands, and the runtime fallback when the
+ *  agent loop fails. Not the product default (see `NEW_WORKSPACE_MODE`): this one answers "what do
+ *  we do when we don't know?", and the only safe answer is the mode that cannot surprise anyone.
+ *  It may move down the ladder, never up. */
 export const DEFAULT_COPILOT_MODE: CopilotMode = 'chatbot';
+
+/** The mode a NEWLY CREATED workspace starts in — `copilot` since 2026-07-27 (was `chatbot`).
+ *
+ *  The database applies this, not this constant: workspaces are created without a `copilotMode`
+ *  ([web/lib/workspace.ts]), so the `@default` on the column is what actually decides. This is here
+ *  so the intent is stated in the shared vocabulary rather than only in a migration, and so any
+ *  future code that creates or previews a workspace has one thing to read. Change BOTH together. */
+export const NEW_WORKSPACE_MODE: CopilotMode = 'copilot';
 
 /** Position on the ladder. Higher = may do more. Compare, never enumerate. */
 export const MODE_RANK: Record<CopilotMode, number> = { chatbot: 0, copilot: 1, agent: 2 };

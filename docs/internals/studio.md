@@ -59,6 +59,11 @@ decides how users get helped, the switches say WHAT the assistant is permitted t
 an unbuilt mode is blocked in the UI **and** re-checked in the server action — acting must never be
 reachable by a hand-crafted form post.
 
+A **new workspace arrives on Copilot** with show-me and guided walkthrough already permitted, so this
+screen is a place to *change* the assistant rather than to switch it on. The picker badges the stored
+value "Current" and has no notion of a default, which is why the flip needed no UI change. Both
+built modes stay selectable in both directions.
+
 ---
 
 ## 4. Internal mechanics

@@ -94,11 +94,22 @@ model Workspace {
   senseEnabled          Boolean  @default(true)
   // P2-M3 "show me" — when on, the widget also HIGHLIGHTS the current step's element on the host
   // page alongside a positional answer (off = text-only). Served to the widget via /v1/copilot/config.
-  copilotShowMe         Boolean  @default(false)
+  //
+  // Default flipped to ON for new workspaces 2026-07-27, together with the Copilot-mode default
+  // below it. These two switches were off because in AI Chatbot mode they fire on a FIXED RULE —
+  // every positional answer highlights, every positional answer offers a walkthrough — which is
+  // noisy enough that a founder should opt in. In Copilot mode there is no rule: the assistant
+  // decides per message whether pointing actually helps (widget `wantsOnPage`). So the switch stops
+  // meaning "do this every time" and starts meaning "you MAY do this when it helps" — and left off,
+  // the default Copilot is one the picker describes as pointing and guiding while being unable to.
+  // The switch still wins in both modes: nothing here can turn an ability on that the founder
+  // turned off. Existing workspaces are untouched (a column default applies only to new rows).
+  copilotShowMe         Boolean  @default(true)
   // P4-M0 guided walkthrough — when on, positional answers offer "Walk me through it": the widget
   // highlights each remaining step and follows the user's progress (the user does everything;
-  // FlowBuddy never acts). Needs Sense. Served to the widget via /v1/copilot/config.
-  copilotWalkthrough    Boolean  @default(false)
+  // FlowBuddy never acts). Needs Sense (on by default). Served to the widget via /v1/copilot/config.
+  // On by default since 2026-07-27 — same reasoning as `copilotShowMe` above. Still zero-acting.
+  copilotWalkthrough    Boolean  @default(true)
   // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-reason.md §5.3):
   // `reasonEnabled` gates the whole diagnostic path (ask-time structured page-state capture, values
   // masked). `reasonImageEnabled` adds the DOM-rendered page image (the most sensitive capture —
@@ -107,18 +118,27 @@ model Workspace {
   // captured, card/SSN patterns always masked). All served to the widget via /v1/copilot/config.
   // The copilot's OPERATING MODE — how much the assistant is allowed to decide for itself, and
   // (later) the pricing tier. Founder-selected, strictly ordered, one per workspace:
-  //   "chatbot" → shown as **AI Chatbot** — today's behaviour: one grounded answer per question,
-  //               fixed rules decide the rest. The default for every workspace, and the runtime
+  //   "chatbot" → shown as **AI Chatbot** — one grounded answer per question, fixed rules decide
+  //               the rest. The SAFETY FLOOR: where an unrecognised value lands, and the runtime
   //               fallback underneath the others when the agent loop errors or times out.
   //   "copilot" → shown as **Copilot** — the agent loop: it chooses which grounded primitive to
   //               use, turn by turn (explain · point · guide · diagnose). Still READ-ONLY: it
-  //               never clicks, types, or navigates.
+  //               never clicks, types, or navigates. **The default for new workspaces since
+  //               2026-07-27** — the product's opinion about what FlowBuddy is. Note the default
+  //               below and the floor above are now DIFFERENT values, and deliberately so: the
+  //               default may climb the ladder as modes prove out, the floor may only descend.
   //   "agent"   → shown as **AI Agent** — adds acting. NOT BUILT; never a default.
   // Deliberately a STRING, not an enum: mode 3 (and anything after it) slots in by adding a value
   // rather than altering the database. The stored key is internal — the founder-facing labels above
   // live in the UI layer, so renaming a tier is a text change with no migration (user decision
   // 2026-07-26). Unknown values are treated as "chatbot" by the server: fail closed, never open.
-  copilotMode           String   @default("chatbot")
+  // Nothing sets this on create (see web/lib/workspace.ts), so THIS default is the only lever;
+  // mirrored for readers in shared/copilot-mode.ts `NEW_WORKSPACE_MODE` — change both together.
+  // GOTCHA: Prisma Client bakes scalar defaults in at `prisma generate` time and sends them
+  // explicitly, so it — not the column default — is what a create actually applies. Editing the
+  // default here without regenerating changes nothing (`pnpm build` regenerates; the migration
+  // keeps the column in step for anything that writes SQL directly).
+  copilotMode           String   @default("copilot")
   reasonEnabled         Boolean  @default(true)
   // Image tier default ON since 2026-07-16 (visual-only state — met/unmet checklists, banners — is
   // where diagnosis quality lives); the founder still owns the toggle + the disclosure snippet.

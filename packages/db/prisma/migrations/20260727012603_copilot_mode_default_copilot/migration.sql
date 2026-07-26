@@ -1,0 +1,13 @@
+-- New workspaces now start in Copilot mode (the read-only agent loop) instead of AI Chatbot.
+--
+-- DEFAULT ONLY — deliberately no UPDATE of existing rows. A column default applies to rows created
+-- after it, so every workspace that already exists keeps whatever it has. That is the correct
+-- behaviour even though today it changes nothing (no workspace has ever chosen AI Chatbot
+-- deliberately): the stored value carries no record of whether a founder picked it or merely
+-- inherited it, so a back-fill could only ever overwrite both alike. Not a decision this migration
+-- gets to make.
+--
+-- Unchanged: unrecognised values still resolve to 'chatbot' in the application layer
+-- (shared/copilot-mode.ts `parseCopilotMode`). The product default and the safety floor are now
+-- different values on purpose.
+ALTER TABLE "Workspace" ALTER COLUMN "copilotMode" SET DEFAULT 'copilot';

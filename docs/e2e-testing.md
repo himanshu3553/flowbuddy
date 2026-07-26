@@ -327,7 +327,16 @@ Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.ser
 
 ✅ **PASS:** simple questions unchanged in quality and speed; the assistant asks rather than guesses on genuine ambiguity; it searches again instead of declining on a topic shift; on-page abilities appear on judgment but NEVER without the founder's switch; declines still honest; switching modes is instant and fully reversible.
 
-*(A DB-level shortcut for testing: `UPDATE "Workspace" SET "copilotMode"='copilot' WHERE "copilotPublicKey"='pk_…';` — and note an unrecognised value fails closed to `chatbot` by design.)*
+*(Since 2026-07-27 a **newly created workspace is already in Copilot mode**, with show-me and
+walkthrough permitted — so a clean-slate run tests this path by default and step 7's "flip back" is
+the deliberate detour, not the setup. Workspaces made before that date keep whatever they had. A
+DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WHERE
+"copilotPublicKey"='pk_…';` — and note an unrecognised value fails closed to `chatbot` by design.)*
+
+8. **The fallback is invisible.** There is no UI for it: if the agent loop errors, that single
+   question is answered as AI Chatbot would answer it and the mode setting stays put. To confirm it
+   is wired rather than to force it, look for `agent path failed — falling back to AI Chatbot` in
+   the api log; in normal runs you should never see it.
 
 ---
 

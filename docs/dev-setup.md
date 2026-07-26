@@ -112,13 +112,21 @@ docker compose down                           # stop Postgres + Redis (add -v to
 ### Root scripts that exist (`package.json`)
 `build` · `dev` · `typecheck` · **`test`** · `lint` · `db:generate` · `db:validate` · `db:migrate`
 
-> **Tests (added 2026-07-26 — the repo's first).** `vitest` in `@flowbuddy/synthesis` only, over the
-> *pure* seams: retrieval's signal-ordering invariants (route/sense outrank continuity; a real
-> keyword match still beats all of them — the rule that lets a user change subject) and the answer
-> engine's contract (AI Chatbot = exactly one model call with no tool surface). Deliberately NOT
-> tested: prompts and model output — a unit test asserting on generated text fails for the wrong
-> reasons. Answer *quality* is covered by `scripts/copilot-baseline.mjs` (below) and the manual E2E
-> plan. Still no CI, by standing decision.
+> **Tests (added 2026-07-26 — the repo's first; 38 as of 2026-07-27).** `vitest` in
+> `@flowbuddy/synthesis` only, over the *pure* seams:
+> - `retrieval.test.ts` — signal-ordering invariants (route/sense outrank continuity; a real keyword
+>   match still beats all of them — the rule that lets a user change subject).
+> - `engine.test.ts` — the answer loop's contract (AI Chatbot = exactly one model call with no tool
+>   surface; a final round never serves tools).
+> - `copilot-mode.test.ts` — the mode vocabulary's safety invariants: the product default
+>   (`NEW_WORKSPACE_MODE`) and the fail-closed floor (`DEFAULT_COPILOT_MODE`) are different things
+>   and must not be re-collapsed, and no unrecognised value — typo, pasted label, wrong casing, null
+>   column — ever reaches the agent loop. It lives here only because this is where the runner is;
+>   move it if `@flowbuddy/shared` ever gets its own.
+>
+> Deliberately NOT tested: prompts and model output — a unit test asserting on generated text fails
+> for the wrong reasons. Answer *quality* is covered by `scripts/copilot-baseline.mjs` (below) and
+> the manual E2E plan. Still no CI, by standing decision.
 
 **Answer-quality baselines** — `node scripts/copilot-baseline.mjs --key pk_… [--runs 3] [--only h2]`
 asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited, position,
