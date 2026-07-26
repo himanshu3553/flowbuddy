@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowBuddy Copilot — embed demo (Team)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: #14161f; color: #fff; }
+    .topbar nav a { color: #cbd0e0; text-decoration: none; margin-left: 18px; font-size: 14px; }
+    .topbar nav a.on { color: #fff; font-weight: 600; }
+    .topbar .fake-user { color: #aab; font-size: 13px; }
+    .hero { padding: 32px 24px 8px; max-width: 720px; }
+    h1 { margin: 0 0 8px; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 4px; }
+    .note { color: #666; font-size: 14px; }
+    .rows { padding: 8px 24px 24px; max-width: 720px; }
+    .row { display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+    .row span { color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <strong>Acme App</strong>
+    <nav><a href="./index.html">Dashboard</a><a class="on" href="./page2.html">Team</a></nav>
+    <span class="fake-user">jane@acme.com</span>
+  </div>
+  <div class="hero">
+    <h1>Team</h1>
+    <p>A second page, reached by a <strong>real full-page navigation</strong> — the widget script is torn down and re-executed here, exactly as it is when a customer's app navigates.</p>
+    <p class="note">This is the page that makes P5-M0 testable: ask something on Dashboard, click through to Team, and the conversation should still be there (and the panel should re-open if you were just using it). Before P5-M0 cut 1 the thread was wiped on every navigation, including navigations a guided walkthrough caused itself.</p>
+  </div>
+  <div class="rows">
+    <div class="row"><strong>Jane Doe</strong><span>Owner</span></div>
+    <div class="row"><strong>Sam Patel</strong><span>Admin</span></div>
+    <div class="row"><strong>Alex Kim</strong><span>Member</span></div>
+    <div class="row"><strong>Robin Shaw</strong><span>Member — invite pending</span></div>
+  </div>
+
+  <!-- The SAME embed as index.html: same key, same API base. Both pages share one workspace, which
+       is what lets the tab-scoped chat session carry across them. -->
+  <script
+    src="../dist/flowbuddy-copilot.js"
+    data-flowbuddy-api="http://localhost:8787"
+    data-flowbuddy-key="REPLACE_WITH_WORKSPACE_TOKEN"
+  ></script>
+</body>
+</html>

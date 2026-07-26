@@ -10,9 +10,10 @@
 // re-resolution of the current step's element (the same checks Sense runs at ask time), (b) a
 // document capture-phase click listener used solely to test "was that the highlighted element?",
 // (c) `location.pathname`. Nothing leaves the page except walkthrough analytics — workflow key +
-// step numbers + auto/manual + outcome; never page content, values, or selectors. This is the
-// widget's ONLY use of storage: one sessionStorage key holding founder-derived plan data (so a
-// full-page navigation mid-workflow can resume), auto-expiring after 30 minutes.
+// step numbers + auto/manual + outcome; never page content, values, or selectors. Storage is one
+// tab-scoped sessionStorage slot holding founder-derived plan data (so a full-page navigation
+// mid-workflow can resume), auto-expiring after 30 minutes — see `session.ts`, which now owns the
+// versioning/scoping/TTL mechanics this file originally proved and the chat thread also uses.
 //
 // Detection is evidence-or-nothing: any ambiguity leaves the card waiting with Next available
 // (uncertainty costs one click, never a wrong assertion), and an unresolvable step SAFE-STOPS
@@ -34,9 +35,11 @@ import {
 // P2-M5 Reason — ONE element-state vocabulary: the same reading Reason ships to the diagnostic
 // model gates the walkthrough locally (disabled/checked/filled/valid + the failed-constraint name).
 import { readElementState, type ReasonElementWire } from './reason.js';
+// Cross-page state lives in the shared store — this file's original inline implementation, promoted
+// so the chat thread (and later the agent run) inherit the same posture instead of copying it.
+import { clearSession, peekSession, readSession, writeSession, type SessionSpec } from './session.js';
 
-// ── Session (the sessionStorage shape — versioned; foreign/expired/corrupt = discarded) ────────
-const STORE_KEY = 'flowbuddy.walkthrough.v1';
+// ── Session (the stored shape — versioned; foreign/expired/corrupt = discarded) ─────────────────
 const WALK_TTL_MS = 30 * 60_000; // an abandoned tab stops observing within the half hour
 const AWAIT_NAV_TIMEOUT_MS = 10_000; // a click that never navigates goes back to waiting
 const SETTLE_QUIET_MS = 500; // mutation-quiet window = "the page finished reacting" (recorder R2)
@@ -49,11 +52,9 @@ interface AwaitingNav {
   postRoute?: string;
   at: number;
 }
+/** Domain state only — version, workspace-key scoping and the created/updated stamps belong to the
+ *  storage envelope (`session.ts`), so this shape never has to remember to maintain them. */
 interface WalkSession {
-  v: 1;
-  k: string; // the public key this session belongs to (mismatch = discard)
-  startedAt: number;
-  updatedAt: number; // TTL anchor — refreshed on every transition
   runId?: string; // server analytics run id (from the `started` response)
   queryId?: string; // the originating question, when known
   sourceId: string;
@@ -110,34 +111,28 @@ export function walkthroughActive(): boolean {
 }
 
 // ── Storage (best-effort — a blocked sessionStorage just means no cross-nav resume) ────────────
+// v2 = the shape moved into the shared envelope (`session.ts`); a v1 record is simply orphaned,
+// which lands a mid-walkthrough tab on the same silent discard an expired session already gets.
+const WALK_SESSION: SessionSpec<WalkSession> = {
+  slot: 'walkthrough',
+  version: 2,
+  ttlMs: WALK_TTL_MS,
+  validate: (s) => Boolean(s?.workflow?.steps?.length) && Number.isInteger(s?.step),
+};
+
 function persist(): void {
-  if (!session) return;
-  session.updatedAt = Date.now();
-  try {
-    sessionStorage.setItem(STORE_KEY, JSON.stringify(session));
-  } catch {
-    /* privacy mode / quota — the walkthrough still works within this page view */
-  }
+  if (!session || !cfgRef) return;
+  writeSession(WALK_SESSION, cfgRef.key, session);
 }
 function clearStore(): void {
-  try {
-    sessionStorage.removeItem(STORE_KEY);
-  } catch {
-    /* best-effort */
-  }
+  clearSession(WALK_SESSION);
 }
-function readStore(key: string): WalkSession | null {
-  try {
-    const raw = sessionStorage.getItem(STORE_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as WalkSession;
-    if (s?.v !== 1 || s.k !== key) return null;
-    if (!s.workflow?.steps?.length || !Number.isInteger(s.step)) return null;
-    if (Date.now() - s.updatedAt > WALK_TTL_MS) return null;
-    return s;
-  } catch {
-    return null;
-  }
+
+/** Is a walkthrough waiting to be resumed on this page load? Answers synchronously and without
+ *  starting anything — `resumeWalkthrough` is async, so index.ts needs to know BEFORE it paints
+ *  whether the step card is about to take the screen (a resuming walkthrough closes the chat). */
+export function walkthroughPending(key: string): boolean {
+  return peekSession(WALK_SESSION, key);
 }
 
 // ── Analytics (fire-and-forget; failures never affect the walkthrough) ─────────────────────────
@@ -765,10 +760,6 @@ export function startWalkthrough(
   cfgRef = cfg;
   hooksRef = hooks;
   session = {
-    v: 1,
-    k: cfg.key,
-    startedAt: Date.now(),
-    updatedAt: Date.now(),
     ...(queryId ? { queryId } : {}),
     sourceId: workflow.sourceId,
     segmentIndex: workflow.segmentIndex,
@@ -795,7 +786,7 @@ export function startWalkthrough(
  * ends the walkthrough silently — absence = not approved, applied to resumption.
  */
 export async function resumeWalkthrough(root: ShadowRoot, cfg: WalkCfg, hooks: WalkHooks = {}): Promise<void> {
-  const stored = readStore(cfg.key);
+  const stored = readSession(WALK_SESSION, cfg.key);
   if (!stored) {
     clearStore(); // expired/foreign/corrupt — discard silently
     return;
@@ -803,7 +794,7 @@ export async function resumeWalkthrough(root: ShadowRoot, cfg: WalkCfg, hooks: W
   rootRef = root;
   cfgRef = cfg;
   hooksRef = hooks;
-  session = stored;
+  session = stored.data;
   const path = normalizePath(location.pathname);
 
   const freshShard = await ensureShard(cfg.apiBase, cfg.key, path, 1500);

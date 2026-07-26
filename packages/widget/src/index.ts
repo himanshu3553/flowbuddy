@@ -35,15 +35,29 @@ import { log, setDebug } from './log.js';
 import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeResult, type SenseWorkflow } from './sense.js';
 // P4-M0 Guided walkthrough — "Walk me through it" on positional answers (zero-acting; the user
 // does everything, the widget highlights + observes). Resumes across full-page navigations.
-import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActive } from './walkthrough.js';
+import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActive, walkthroughPending } from './walkthrough.js';
 // P2-M5 Reason — the selective diagnostic trigger + structured page-state capture (+ lazy image tier).
 import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
+// P5-M0 cut 1 — the conversation survives full-page navigations (see the chat-persistence section).
+import { clearSession, readSession, writeSession, type SessionSpec } from './session.js';
 
 interface Citation { segmentTitle: string | null }
 interface AnswerPosition { sourceId: string; segmentIndex: number; step: number }
+
+/**
+ * What a message IS — an open vocabulary, and the axis persistence decides on (P5-M0 cut 1).
+ *
+ * Later modes append their own kinds rather than reshaping the message: 'assistant.narration' for
+ * a run commentary, 'agent.tool_call', and critically D3's 'user.value' for a value the user typed
+ * into the chat for the agent to use. What survives a navigation is decided by the PERSISTED_KINDS
+ * allowlist — never by the message shape — so excluding chat-supplied sensitive values later means
+ * declining to add one string to a set. No storage migration, no retrofit (docs/unified-agent.md §6).
+ */
+type MsgKind = 'user.question' | 'assistant.answer' | 'assistant.decline' | 'assistant.error';
+
 interface Msg {
-  role: 'user' | 'assistant'; content: string; citations?: Citation[]; decline?: boolean;
-  error?: boolean; queryId?: string; feedback?: 'up' | 'down';
+  role: 'user' | 'assistant'; kind: MsgKind; content: string; citations?: Citation[];
+  queryId?: string; feedback?: 'up' | 'down';
   // P4-M0 — a positional answer that maps to a walkable workflow carries the offer.
   walkOffer?: { workflow: SenseWorkflow; startStep: number };
 }
@@ -244,7 +258,7 @@ function render(): void {
   list.replaceChildren();
   if (messages.length === 0) list.appendChild(el('div', 'fb-greeting', cfg.greeting));
   for (const m of messages) {
-    const row = el('div', `fb-msg fb-${m.role}${m.decline ? ' fb-decline' : ''}${m.error ? ' fb-error' : ''}`);
+    const row = el('div', `fb-msg fb-${m.role}${m.kind === 'assistant.decline' ? ' fb-decline' : ''}${m.kind === 'assistant.error' ? ' fb-error' : ''}`);
     row.appendChild(bubbleEl(m));
     const titles = [...new Set((m.citations ?? []).map((c) => c.segmentTitle).filter((t): t is string => !!t))];
     if (titles.length) {
@@ -254,7 +268,7 @@ function render(): void {
       pill.appendChild(document.createTextNode('Source: ' + titles.join(' · ')));
       row.appendChild(pill);
     }
-    if (m.decline) {
+    if (m.kind === 'assistant.decline') {
       const pill = el('div', 'fb-flag');
       pill.appendChild(el('span', 'fb-dot'));
       pill.appendChild(document.createTextNode('Honest decline'));
@@ -273,15 +287,18 @@ function render(): void {
           offer.startStep,
           m.queryId,
           {
-            onExit: () => { open = true; render(); }, // exiting the walkthrough brings the chat back
+            // Exiting the walkthrough brings the chat back — persisted so a later navigation
+            // restores the panel in the state the user last left it in.
+            onExit: () => { open = true; render(); persistChat(); },
             onExplain: explainBlocker, // blocked/invalid → the Reason diagnostic path, in chat
           },
         );
         render();
+        persistChat(); // the panel closed for the run — remember that across the steps that navigate
       });
       row.appendChild(btn);
     }
-    if (m.role === 'assistant' && !m.error && m.queryId) {
+    if (m.role === 'assistant' && m.kind !== 'assistant.error' && m.queryId) {
       const fb = el('div', 'fb-feedback');
       for (const v of ['up', 'down'] as const) {
         const b = el('button', `fb-thumb${m.feedback === v ? ' fb-thumb-on' : ''}`, v === 'up' ? '👍' : '👎');
@@ -353,13 +370,18 @@ async function postAnswer(
 }
 
 async function ask(question: string): Promise<void> {
-  messages.push({ role: 'user', content: question });
+  messages.push({ role: 'user', kind: 'user.question', content: question });
   loading = true;
   clearSpotlight(); // a new question retires the previous highlight
   render();
+  // Persist the question NOW, not just with its answer: a walkthrough step that navigates while
+  // the request is in flight must not lose what the user just asked.
+  persistChat();
   // Prior turns (exclude the question we just pushed; it's sent separately). Only the last 10
   // ride along — the server slices to 10 anyway, so a long chat must not grow the payload.
-  const history = messages.filter((m) => !m.error).slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content }));
+  // Since P5-M0 cut 1 this history can SPAN NAVIGATIONS — that is the point, and it is the one
+  // behavioral change the cut makes to the answer path.
+  const history = messages.filter((m) => m.kind !== 'assistant.error').slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content }));
   // P2 Sense — re-probe on EVERY message (the user may have advanced since the last turn). The
   // shard is normally cached from panel open; a short budget covers the cold case. null = Sense
   // has nothing to say → the context is simply omitted (the copilot behaves exactly as before).
@@ -380,9 +402,9 @@ async function ask(question: string): Promise<void> {
       reasonPayload = await buildReasonPayload('escalation');
       if (reasonPayload) ({ ok, status, data } = await postAnswer(question, history, reasonPayload));
     }
-    if (!ok) { log.warn('answer request failed', status, data.error); messages.push({ role: 'assistant', content: data.error || `Request failed (${status})`, error: true }); }
+    if (!ok) { log.warn('answer request failed', status, data.error); messages.push({ role: 'assistant', kind: 'assistant.error', content: data.error || `Request failed (${status})` }); }
     else if (data.covered) {
-      const answered: Msg = { role: 'assistant', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId };
+      const answered: Msg = { role: 'assistant', kind: 'assistant.answer', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId };
       messages.push(answered);
       // P2-M3 "show me" (config-gated): the answer positioned the user → highlight that step's
       // element, resolved by THIS question's probe (never a stale one). Fallback: the probe keeps
@@ -410,13 +432,14 @@ async function ask(question: string): Promise<void> {
         else log.debug('walkthrough: position has no walkable shard workflow');
       }
     }
-    else messages.push({ role: 'assistant', content: data.reason || "I don't have that in our help content yet.", decline: true, queryId: data.queryId });
+    else messages.push({ role: 'assistant', kind: 'assistant.decline', content: data.reason || "I don't have that in our help content yet.", queryId: data.queryId });
   } catch (e) {
     log.error('could not reach the assistant', e);
-    messages.push({ role: 'assistant', content: 'Could not reach the assistant. Please try again.', error: true });
+    messages.push({ role: 'assistant', kind: 'assistant.error', content: 'Could not reach the assistant. Please try again.' });
   } finally {
     loading = false;
     render();
+    persistChat();
   }
 }
 
@@ -427,6 +450,7 @@ async function ask(question: string): Promise<void> {
 function explainBlocker(): void {
   open = true;
   render();
+  persistChat(); // ask() persists too, but the panel state must stick even if a request is in flight
   if (!loading) void ask("Why can't I proceed with this step?");
 }
 
@@ -434,6 +458,7 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
   if (!m.queryId || m.feedback) return;
   m.feedback = fb;
   render();
+  persistChat(); // a rated answer stays rated after a navigation
   try {
     await fetch(`${cfg.apiBase}/v1/copilot/feedback`, {
       method: 'POST',
@@ -442,6 +467,111 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
     });
   } catch { /* best-effort */ }
 }
+
+// ---- P5-M0 cut 1 · chat persistence -----------------------------------------------------------
+// The thread survives full-page navigations. The walkthrough already did this for its own run
+// state; the chat never did — so following the copilot's own advice, or a walkthrough step that
+// navigates, wiped the conversation the user was in the middle of. The sharpest case was the
+// walkthrough's own "Explain what's blocking me" escalation landing in an empty panel.
+//
+// MODE-NEUTRAL BY CONSTRUCTION: mode 1 (today's copilot) and mode 2 (the unified agent loop) are
+// the same conversation, so this is the substrate for both — docs/unified-agent.md §8 step 1 ships
+// it to mode 1 as hygiene, not as an agent feature.
+//
+// Everything read back is untrusted (the host page shares this origin and can write these keys):
+// kinds are re-filtered through the allowlist, fields are copied one by one, sizes are capped.
+// Restoring can only ever repopulate the transcript — never a highlight, never a walkthrough
+// offer, never a position; Sense re-measures those every message, by design.
+
+/** What survives a navigation. Absence is the mechanism: a kind not listed here is dropped on the
+ *  way in AND on the way out, so D3's future 'user.value' is excluded by never being added. */
+const PERSISTED_KINDS: ReadonlySet<MsgKind> = new Set<MsgKind>([
+  'user.question', 'assistant.answer', 'assistant.decline',
+]);
+// 'assistant.error' is deliberately absent — a transport failure is about a moment, not about the
+// conversation, and restoring "Request failed (503)" onto a fresh page is noise. The answer
+// history already excludes them for the same reason.
+
+const CHAT_TTL_MS = 30 * 60_000;   // matches the walkthrough's, so both sessions expire together
+const CHAT_REOPEN_MS = 2 * 60_000; // the panel re-opens ITSELF only on a demonstrably live thread
+const CHAT_MAX_MESSAGES = 20;
+const CHAT_MAX_CONTENT = 4000;
+const CHAT_MAX_CITATIONS = 8;
+const CHAT_MAX_TITLE = 200;
+
+interface PersistedMsg {
+  role: Msg['role']; kind: MsgKind; content: string;
+  citations?: Citation[]; queryId?: string; feedback?: 'up' | 'down';
+}
+interface ChatSession { open: boolean; messages: PersistedMsg[] }
+
+const CHAT_SESSION: SessionSpec<ChatSession> = {
+  slot: 'chat',
+  version: 1,
+  ttlMs: CHAT_TTL_MS,
+  validate: (s) => Array.isArray(s?.messages),
+};
+
+/** Off wherever analytics and the heartbeat are off — a Studio preview reloads on every appearance
+ *  edit and must not accumulate a thread across those reloads. */
+const chatPersistEnabled = (): boolean => Boolean(cfg.key) && !cfg.preview;
+
+/** Field-by-field allowlist. `walkOffer` (a full founder-derived plan copy) structurally cannot
+ *  reach storage, and any field added to Msg later has to be opted in here deliberately. */
+function toPersisted(m: Msg): PersistedMsg {
+  const p: PersistedMsg = { role: m.role, kind: m.kind, content: m.content };
+  if (m.citations?.length) p.citations = m.citations;
+  if (m.queryId) p.queryId = m.queryId;
+  if (m.feedback) p.feedback = m.feedback;
+  return p;
+}
+
+/** Rebuild live messages from stored ones, discarding anything malformed rather than trusting it. */
+function fromPersisted(list: PersistedMsg[]): Msg[] {
+  const out: Msg[] = [];
+  for (const raw of list.slice(-CHAT_MAX_MESSAGES)) {
+    if (!raw || typeof raw.content !== 'string') continue;
+    if (raw.role !== 'user' && raw.role !== 'assistant') continue;
+    if (!PERSISTED_KINDS.has(raw.kind)) continue; // unknown, forged, or since-revoked kinds
+    const m: Msg = { role: raw.role, kind: raw.kind, content: raw.content.slice(0, CHAT_MAX_CONTENT) };
+    if (Array.isArray(raw.citations)) {
+      m.citations = raw.citations
+        .filter((c) => Boolean(c) && typeof c === 'object')
+        .slice(0, CHAT_MAX_CITATIONS)
+        .map((c) => ({ segmentTitle: typeof c.segmentTitle === 'string' ? c.segmentTitle.slice(0, CHAT_MAX_TITLE) : null }));
+    }
+    if (typeof raw.queryId === 'string') m.queryId = raw.queryId.slice(0, 64);
+    if (raw.feedback === 'up' || raw.feedback === 'down') m.feedback = raw.feedback;
+    out.push(m);
+  }
+  return out;
+}
+
+function persistChat(): void {
+  if (!chatPersistEnabled()) return;
+  const keep = messages.filter((m) => PERSISTED_KINDS.has(m.kind)).slice(-CHAT_MAX_MESSAGES).map(toPersisted);
+  if (keep.length === 0) { clearSession(CHAT_SESSION); return; }
+  writeSession(CHAT_SESSION, cfg.key, { open, messages: keep });
+}
+
+/** Boot-time restore. Runs BEFORE mount so the first paint already carries the thread. */
+function restoreChat(): void {
+  if (!chatPersistEnabled()) return;
+  const stored = readSession(CHAT_SESSION, cfg.key);
+  if (!stored) return;
+  const restored = fromPersisted(stored.data.messages);
+  if (restored.length === 0) { clearSession(CHAT_SESSION); return; }
+  messages.push(...restored);
+  // Re-open the panel only on a demonstrably live thread. Restoring it from any half-hour-old
+  // session would pop the copilot open on a page the user navigated to for their own reasons — on
+  // someone else's product. The short window keeps continuity where it was clearly intentional and
+  // stays quiet otherwise. A resuming walkthrough owns the screen (starting one closes the panel),
+  // so never fight it — resumeWalkthrough is async, which is why the peek is synchronous.
+  const walkResuming = cfg.walkthrough && senseActive() && walkthroughPending(cfg.key);
+  if (stored.data.open === true && stored.ageMs <= CHAT_REOPEN_MS && !walkResuming) open = true;
+  log.debug('chat: restored', { messages: restored.length, ageMs: stored.ageMs, open, walkResuming });
+}
+// ------------------------------------------------------------------------------------------------
 
 // ---- Drag + expand ----------------------------------------------------------------------------
 // The open panel drags by its header (viewport-clamped; the spot lasts for the page view — a
@@ -500,6 +630,7 @@ window.addEventListener('resize', () => {
 launcher.addEventListener('click', () => {
   open = true;
   render();
+  persistChat();
   // The viewport may have changed while the panel was closed — re-fit the dragged spot.
   if (dragPos) { dragPos = clampPos(dragPos.left, dragPos.top); applyDragPos(); }
   input.focus();
@@ -507,7 +638,7 @@ launcher.addEventListener('click', () => {
   // signal), so the ask-time probe is instant. Fire-and-forget; NOTHING is fetched on page load.
   if (senseActive()) void ensureShard(cfg.apiBase, cfg.key, location.pathname, 1500);
 });
-closeBtn.addEventListener('click', () => { open = false; clearSpotlight(); render(); });
+closeBtn.addEventListener('click', () => { open = false; clearSpotlight(); render(); persistChat(); });
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const q = input.value.trim();
@@ -603,12 +734,15 @@ async function boot(): Promise<void> {
   ensureBrandFonts(); // kick the font download off first — it overlaps the config fetch
   const server = await fetchServerConfig();
   if (server) applyServerConfig(server);
+  // P5-M0 cut 1 — pick the conversation back up BEFORE the first paint, so a restored thread never
+  // flashes the empty greeting first. Needs the resolved config (preview + the walkthrough flag).
+  restoreChat();
   mount();
   // P4-M0 — pick a mid-workflow walkthrough back up after a full-page navigation. Storage-gated
   // inside (no session = no fetch, nothing runs) and best-effort like everything else at boot.
   if (cfg.walkthrough && senseActive()) {
     void resumeWalkthrough(root, { apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason }, {
-      onExit: () => { open = true; render(); },
+      onExit: () => { open = true; render(); persistChat(); },
       onExplain: explainBlocker,
     });
   }
