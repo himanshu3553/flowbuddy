@@ -292,6 +292,44 @@ function senseLogFields(
   };
 }
 
+// ── P5-M0 cut 2 — continuity bias: the workflows the PREVIOUS answer cited ─────────────────────
+// The widget echoes back the citation keys it was given, so a follow-up ("and then what?") can
+// bias retrieval toward the workflow under discussion instead of searching the KB for its own
+// near-empty text. UNTRUSTED like every other context field — any page holding the public key can
+// send anything — so keys are shape-checked AND re-verified against `CopilotApproval`. That second
+// check is the no-leak guarantee: a forged key for an unapproved (or another workspace's) workflow
+// buys nothing, because retrieval only ever scans approved rows anyway and the boost would land on
+// an item that is never in the candidate set. Re-checking here keeps the invariant explicit rather
+// than incidental.
+const MAX_CONTINUITY_KEYS = 4; // one answer's worth of distinct cited workflows
+
+async function resolveContinuityKeys(workspaceId: string, raw: unknown): Promise<string[]> {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const parsed: Array<{ sourceId: string; segmentIndex: number }> = [];
+  const seen = new Set<string>();
+  for (const entry of raw.slice(0, MAX_CONTINUITY_KEYS * 2)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const c = entry as { sourceId?: unknown; segmentIndex?: unknown };
+    const sourceId = String(c.sourceId ?? '');
+    const segmentIndex = Number(c.segmentIndex);
+    if (!/^[a-z0-9-]{1,40}$/i.test(sourceId)) continue; // KnowledgeSource ids are UUIDs (hyphens!)
+    if (!Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999) continue;
+    const key = `${sourceId}:${segmentIndex}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parsed.push({ sourceId, segmentIndex });
+    if (parsed.length >= MAX_CONTINUITY_KEYS) break;
+  }
+  if (parsed.length === 0) return [];
+
+  const approvals = await prisma.copilotApproval.findMany({
+    where: { workspaceId, OR: parsed.map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex })) },
+    select: { sourceId: true, segmentIndex: true },
+  });
+  const approved = new Set(approvals.map((a) => `${a.sourceId}:${a.segmentIndex}`));
+  return parsed.map((c) => `${c.sourceId}:${c.segmentIndex}`).filter((k) => approved.has(k));
+}
+
 // ── P2-M5 Reason — validate the widget's diagnostic evidence package ───────────────────────────
 // Like the sense hypotheses, the whole payload is UNTRUSTED (any page holding the public key can
 // send it): every field is type-checked, de-angled, capped, and PII-backstopped (redactText); the
@@ -462,7 +500,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   const body = (req.body ?? {}) as {
     question?: string;
     history?: unknown;
-    context?: { path?: string; sense?: unknown; reason?: unknown };
+    context?: { path?: string; sense?: unknown; reason?: unknown; lastCited?: unknown };
     preview?: unknown;
   };
   // The Studio's real-widget tester flags its calls `preview`: same key, same engine, but a founder
@@ -485,13 +523,22 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // Bounded — it's untrusted input that lands in the DB and the prompt.
   const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
   // P2 Sense — validate the probe's hypotheses (approval-checked, titles from server truth).
-  const { sense, probed } = await resolveSenseContext(workspaceId, body.context?.sense);
+  // Both context resolutions hit the DB and are independent — run them together so cut 2's
+  // approval re-check costs no extra serial round-trip on the path every question rides.
+  const [{ sense, probed }, continuityKeys] = await Promise.all([
+    // P2 Sense — validate the probe's hypotheses (approval-checked, titles from server truth).
+    resolveSenseContext(workspaceId, body.context?.sense),
+    // P5-M0 cut 2 — the previous answer's cited workflows, approval-re-verified. A follow-up
+    // carries almost no retrievable terms of its own; this keeps it in the workflow discussed.
+    resolveContinuityKeys(workspaceId, body.context?.lastCited),
+  ]);
   const senseKeys = sense?.hypotheses.map((h) => `${h.sourceId}:${h.segmentIndex}`);
   // P1-M3 — hybrid keyword+vector retrieval; the embedding config is best-effort (retrieval
   // degrades to the keyword shortlist on any vector-path failure — never errors here).
   const items = await retrieveApprovedKBItems(prisma, workspaceId, question, {
     contextPath,
     senseKeys,
+    continuityKeys,
     embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
   });
   if (items.length === 0) {
@@ -541,7 +588,6 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       pageImage: reasonPayload.image,
       workflow,
       expected,
-      showCitations: gate.showCitations,
       apiKey: config.openaiApiKey,
       model: config.reasonModel,
     });
@@ -551,13 +597,21 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       history: sanitizeHistory(body.history),
       items,
       context: { path: contextPath, sense: sense ?? undefined },
-      showCitations: gate.showCitations,
       apiKey: config.openaiApiKey,
       model: config.synthModel,
     });
   }
   // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
   const position = result.covered ? result.position : null;
+
+  // The workspace's citation trust setting is a PRESENTATION gate, applied here at the response
+  // boundary rather than inside the answer engines: it hides the visible workflow TITLES from the
+  // end-user while the keys still reach the widget (for P5-M0 cut 2's `lastCited` continuity) and
+  // the full citation — title included — is still logged for the founder's own analytics. Nothing
+  // new is exposed by the keys: `position` already returns them regardless of this setting, and
+  // the widget holds approved workflow keys from its sense shard.
+  const forClient = <T extends { segmentTitle: string | null }>(cites: T[]): T[] =>
+    gate.showCitations === false ? cites.map((c) => ({ ...c, segmentTitle: null })) : cites;
 
   // P2-M5 — the fast-path-failure trigger (§5.2): the fast path declined, the founder's toggle is
   // on, and the widget declared it can capture. Ask it to retry ONCE with evidence instead of
@@ -570,7 +624,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // Preview answers are never persisted — return the engine's result as-is (no queryId).
   if (preview) {
     return result.covered
-      ? { covered: true, answer: result.answer, citations: result.citations, position }
+      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position }
       : { covered: false, answer: null, citations: [], reason: result.reason };
   }
 
@@ -616,7 +670,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }
 
-  return { covered: true, answer: result.answer, citations: result.citations, position, queryId: logged.id };
+  return { covered: true, answer: result.answer, citations: forClient(result.citations), position, queryId: logged.id };
 });
 
 /**

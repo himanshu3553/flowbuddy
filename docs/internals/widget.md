@@ -192,6 +192,15 @@ with the heartbeat and analytics.
 **Consequence to remember:** the `history` sent with `/answer` is derived from `messages[]`, so it
 now **spans navigations**.
 
+**Topic memory (P5-M0 cut 2).** `Citation` carries `sourceId`/`segmentIndex` alongside the title
+(the server always sent them; the widget just ignored them). `lastCitedKeys()` walks back to the
+most recent `assistant.answer` and ships its distinct workflow keys as `context.lastCited` — so a
+term-less follow-up biases retrieval toward the workflow under discussion. An intervening **decline
+is transparent** (it contributed no topic), the list is capped at 4, and the field is omitted
+entirely when empty so a first question is byte-identical to before. The restore path preserves
+these keys deliberately: continuity matters most right after a navigation, which is exactly when
+citations come from storage rather than a live response.
+
 ---
 
 ## 5. Data it reads / writes

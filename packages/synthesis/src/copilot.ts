@@ -140,7 +140,8 @@ export async function answerFromKB(input: {
   history?: CopilotTurn[];
   items: CopilotKBItem[];
   context?: { path?: string | null; sense?: SenseContext }; // P1-M8 route + P2 Sense position
-  showCitations?: boolean; // trust setting (default true): emit citation chips on grounded answers
+  // (No `showCitations` here: the trust setting is a presentation gate applied at the API response
+  // boundary — the engine always reports what it actually grounded on. See the return below.)
   apiKey: string;
   model: string;
 }): Promise<CopilotAnswer> {
@@ -223,6 +224,10 @@ export async function answerFromKB(input: {
     position = { sourceId: match.sourceId, segmentIndex: match.segmentIndex, step: match.step };
   }
 
-  // Citations are gated by the workspace trust setting (default on).
-  return { covered: true, answer: a.answer, citations: input.showCitations === false ? [] : citations, position };
+  // The engine always returns what it actually grounded on. The workspace's `showCitations` trust
+  // setting is about what the END-USER SEES, so it is applied at the API response boundary
+  // (`server.ts`), not here — otherwise a presentation preference silently suppresses the citation
+  // ANALYTICS the founder relies on, and (since P5-M0 cut 2) the `lastCited` continuity bias too.
+  // Unrelated concerns; separate layers.
+  return { covered: true, answer: a.answer, citations, position };
 }

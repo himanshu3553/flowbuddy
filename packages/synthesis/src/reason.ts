@@ -87,7 +87,7 @@ export interface ReasonInput {
   pageImage?: string | null;
   workflow?: ReasonWorkflow | null;
   expected?: ExpectedStepEvidence | null;
-  showCitations?: boolean;
+  // (No `showCitations`: a presentation gate, applied at the API response boundary — see copilot.ts.)
   apiKey: string;
   model: string;
 }
@@ -405,5 +405,7 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
     position = { sourceId: match.sourceId, segmentIndex: match.segmentIndex, step: match.step };
   }
 
-  return { covered: true, answer: a.answer, citations: input.showCitations === false ? [] : citations, position };
+  // Like the fast path: the engine returns what it grounded on, and `showCitations` (a
+  // what-the-end-user-sees setting) is applied at the API response boundary — see copilot.ts.
+  return { covered: true, answer: a.answer, citations, position };
 }

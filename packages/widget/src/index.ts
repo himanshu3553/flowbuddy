@@ -41,7 +41,10 @@ import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload,
 // P5-M0 cut 1 — the conversation survives full-page navigations (see the chat-persistence section).
 import { clearSession, readSession, writeSession, type SessionSpec } from './session.js';
 
-interface Citation { segmentTitle: string | null }
+/** The server sends `{itemId, sourceId, segmentIndex, segmentTitle}`; the widget renders the title
+ *  and — since P5-M0 cut 2 — echoes the workflow key back as `context.lastCited` so a follow-up
+ *  biases retrieval toward the workflow being discussed. `itemId` stays deliberately unread. */
+interface Citation { segmentTitle: string | null; sourceId?: string; segmentIndex?: number }
 interface AnswerPosition { sourceId: string; segmentIndex: number; step: number }
 
 /**
@@ -341,11 +344,41 @@ interface AnswerResponse {
   position?: AnswerPosition | null; escalate?: boolean;
 }
 
+/**
+ * P5-M0 cut 2 — the workflow keys the most recent ANSWER cited, for `context.lastCited`.
+ *
+ * Scans back to the last `assistant.answer`, so an intervening decline is transparent rather than
+ * resetting the thread — a decline contributed no topic, and dropping the bias because of one
+ * would strand the very follow-up ("ok, and then what?") this exists to serve. Bounded by the
+ * 20-message cap, and the server re-verifies every key against `CopilotApproval` regardless.
+ */
+function lastCitedKeys(): Array<{ sourceId: string; segmentIndex: number }> {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || m.kind !== 'assistant.answer') continue;
+    const out: Array<{ sourceId: string; segmentIndex: number }> = [];
+    const seen = new Set<string>();
+    for (const c of m.citations ?? []) {
+      const { sourceId, segmentIndex } = c;
+      if (typeof sourceId !== 'string' || !sourceId) continue;
+      if (typeof segmentIndex !== 'number' || !Number.isInteger(segmentIndex)) continue;
+      const key = `${sourceId}:${segmentIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ sourceId, segmentIndex });
+      if (out.length >= 4) break; // the server caps too; keep the payload small
+    }
+    return out;
+  }
+  return [];
+}
+
 async function postAnswer(
   question: string,
   history: Array<{ role: string; content: string }>,
   reasonPayload: ReasonAskPayload | null,
 ): Promise<{ ok: boolean; status: number; data: AnswerResponse }> {
+  const lastCited = lastCitedKeys();
   const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
@@ -355,6 +388,9 @@ async function postAnswer(
       context: {
         path: location.pathname,
         title: document.title,
+        // P5-M0 cut 2 — what the previous answer cited (omitted entirely when there is nothing to
+        // say, so a first question is byte-identical to today's payload).
+        ...(lastCited.length > 0 ? { lastCited } : {}),
         ...(lastProbe && lastProbe.hypotheses.length > 0
           ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
           : {}),
@@ -538,7 +574,19 @@ function fromPersisted(list: PersistedMsg[]): Msg[] {
       m.citations = raw.citations
         .filter((c) => Boolean(c) && typeof c === 'object')
         .slice(0, CHAT_MAX_CITATIONS)
-        .map((c) => ({ segmentTitle: typeof c.segmentTitle === 'string' ? c.segmentTitle.slice(0, CHAT_MAX_TITLE) : null }));
+        .map((c) => {
+          // The workflow key must survive the restore, not just the title: continuity bias
+          // (cut 2) matters MOST right after a navigation, which is exactly when the citations
+          // come from storage rather than from a live response.
+          const out: Citation = {
+            segmentTitle: typeof c.segmentTitle === 'string' ? c.segmentTitle.slice(0, CHAT_MAX_TITLE) : null,
+          };
+          if (typeof c.sourceId === 'string') out.sourceId = c.sourceId.slice(0, 64);
+          if (typeof c.segmentIndex === 'number' && Number.isInteger(c.segmentIndex)) {
+            out.segmentIndex = c.segmentIndex;
+          }
+          return out;
+        });
     }
     if (typeof raw.queryId === 'string') m.queryId = raw.queryId.slice(0, 64);
     if (raw.feedback === 'up' || raw.feedback === 'down') m.feedback = raw.feedback;

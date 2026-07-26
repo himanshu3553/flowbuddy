@@ -81,6 +81,16 @@ export interface ShortlistOpts {
    * like it a BIAS, never a filter (an unrelated question still out-ranks it).
    */
   senseKeys?: string[];
+  /**
+   * P5-M0 cut 2 — the workflows the PREVIOUS answer cited (`sourceId:segmentIndex`). A follow-up
+   * ("and then what?") carries almost no retrievable terms of its own, so without this the KB is
+   * searched for the literal words of the follow-up. The weakest of the three biases by design:
+   * conversation is the softest signal — where the user IS (route) and where they're STANDING
+   * (sense) are both measured now, while this only says what was being discussed a turn ago.
+   * A BIAS, never a filter — an unrelated question still out-ranks it, which is what lets the
+   * user change subject mid-thread.
+   */
+  continuityKeys?: string[];
   limit?: number;
 }
 
@@ -104,6 +114,11 @@ const ROUTE_RRF_WEIGHT = 2;
 // localized workflow usually also route-matches, so together they dominate exactly when the user
 // is asking about where they stand — and stay out-rankable by the question everywhere else).
 const SENSE_RRF_WEIGHT = 2;
+// P5-M0 cut 2 — continuity is deliberately the WEAKEST of the three biases: half a rank-1 list, so
+// it breaks ties and lifts a plausible follow-up match, but any real keyword/vector consensus (or
+// either measured signal above) beats it. Conversation says what we WERE discussing; route and
+// sense say where the user actually IS — measured signals win over remembered ones.
+const CONTINUITY_RRF_WEIGHT = 1;
 // Query-path embed budget: fail FAST — a missed vector pass costs one keyword-only answer, while a
 // hanging embeddings API must never stall the user-facing answer (SDK default is 600s!).
 const QUERY_EMBED_TIMEOUT_MS = 2000;
@@ -176,13 +191,17 @@ export function shortlistItems(
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
   const senseKeys = new Set(opts.senseKeys ?? []);
+  const continuityKeys = new Set(opts.continuityKeys ?? []);
   const terms = questionTerms(question);
   const scored = items.map((i) => ({
     i,
     score:
       termOverlap(i.text, terms) +
       (routeMatches(i, contextPath) ? 3 : 0) +
-      (senseKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 3 : 0),
+      (senseKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 3 : 0) +
+      // Below both measured signals (P5-M0 cut 2) — enough to carry a term-less follow-up, not
+      // enough to hold the thread against a question that genuinely moved on.
+      (continuityKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 2 : 0),
   }));
   return topK(scored, limit);
 }
@@ -274,12 +293,15 @@ export async function retrieveApprovedKBItems(
   // (a) keyword rank over MATCHING items only — an item with zero term overlap isn't "ranked", it
   //     missed; including the whole corpus would let arbitrary KB order cancel the vector signal
   //     on paraphrased questions (found in verification); (b) vector rank: similarity order over
-  //     the approved-only scan (defense-in-depth re-check below); (c) route: a weighted third
-  //     "list" where every on-screen item ties at rank 1. Items in no list score 0 and fill the
-  //     tail in KB order (the shortlist still always returns up to `limit`).
+  //     the approved-only scan (defense-in-depth re-check below); (c) route, (d) sense and
+  //     (e) continuity: weighted extra "lists" where every matching item ties at rank 1, in
+  //     descending strength (route = sense = 2, continuity = 1 — measured beats remembered).
+  //     Items in no list score 0 and fill the tail in KB order (the shortlist still always
+  //     returns up to `limit`).
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
   const senseKeySet = new Set(opts.senseKeys ?? []);
+  const continuityKeySet = new Set(opts.continuityKeys ?? []);
   const terms = questionTerms(question);
 
   const kwScored = approved.map((i) => ({ i, score: termOverlap(i.text, terms) }));
@@ -302,6 +324,9 @@ export async function retrieveApprovedKBItems(
     if (vr) score += 1 / (RRF_K + vr);
     if (routeMatches(i, contextPath)) score += ROUTE_RRF_WEIGHT / (RRF_K + 1);
     if (senseKeySet.has(`${i.sourceId}:${i.segmentIndex}`)) score += SENSE_RRF_WEIGHT / (RRF_K + 1);
+    if (continuityKeySet.has(`${i.sourceId}:${i.segmentIndex}`)) {
+      score += CONTINUITY_RRF_WEIGHT / (RRF_K + 1);
+    }
     return { i, score };
   });
   return topK(fused, limit);

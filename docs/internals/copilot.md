@@ -36,7 +36,19 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 
 - **`POST /v1/copilot/answer`**
   - **In:** `X-FlowBuddy-Key: <public embed key>`, body `{ question, history?, context?: { path }, preview? }`.
+  - **In (context, P5-M0 cut 2):** `context.lastCited: [{sourceId, segmentIndex}]` — the workflow
+    keys the widget was given with the previous answer, echoed back so a follow-up biases toward the
+    workflow under discussion. Untrusted like every context field: shape-checked, capped at 4,
+    deduped, and **re-verified against `CopilotApproval`** before it can influence retrieval.
   - **Out (covered):** `{ covered: true, answer, citations[], queryId }`.
+    **The `copilotShowCitations` trust setting is a PRESENTATION gate applied here at the response
+    boundary** (2026-07-26), not inside the answer engines: with it off, each citation's
+    `segmentTitle` is nulled (so the widget renders no "Source" pill) while the workflow keys still
+    reach the widget for continuity, and the **full citation is still logged** for the founder's own
+    analytics. Previously the engines returned `citations: []` outright, which silently emptied the
+    Analytics "top workflows by citations" card for those workspaces and would have disabled
+    continuity bias for them too — a what-the-end-user-sees preference must not switch off retrieval
+    quality or founder reporting.
   - **Out (decline):** `{ covered: false, answer: null, citations: [], reason, queryId }`.
   - **`preview: true`** (the Studio real-widget tester) — same engine, but the call skips
     `recordWidgetSeen` and every analytics write (no `CopilotQuery`, no citations, no `CoverageGap`)
@@ -123,14 +135,23 @@ Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
    on the vector path.
 5. **Keyword scoring.** Tokenize the question (lowercase, drop stop-words and ≤2-char tokens), score
    each item by **term-overlap count** against its `text`.
-6. **Fusion (RRF, k=60).** Reciprocal-rank fusion over three signals: the keyword ranking (**matching
-   items only** — a zero-overlap item isn't "ranked", it missed; letting arbitrary KB order into the
-   list would cancel the vector signal on paraphrases), the vector ranking, and the **route signal
-   (P1-M8)** as a **double-weighted** third list (`2/(k+1)` — outranks any single rank-1 signal,
-   ties a keyword+vector double-#1, mirroring the fallback's dominant +3). Route matching is exact
+6. **Fusion (RRF, k=60).** Reciprocal-rank fusion over the keyword ranking (**matching items only**
+   — a zero-overlap item isn't "ranked", it missed; letting arbitrary KB order into the list would
+   cancel the vector signal on paraphrases), the vector ranking, and three weighted context signals
+   added as extra "lists" where every matching item ties at rank 1:
+
+   | Signal | Fusion weight | Keyword-fallback boost | What it means |
+   |---|:---:|:---:|---|
+   | **Route** (P1-M8) | `2/(k+1)` | `+3` | the screen the user is on |
+   | **Sense** (P2-M1) | `2/(k+1)` | `+3` | the workflow they're standing in |
+   | **Continuity** (P5-M0 cut 2) | `1/(k+1)` | `+2` | the workflow the PREVIOUS answer cited |
+
+   Route and sense are double-weighted — each outranks any single rank-1 signal and ties a
+   keyword+vector double-#1. **Continuity is deliberately half that:** route and sense are measured
+   *now*, continuity only recalls what was being discussed a turn ago, and the gap is what lets a
+   user change subject mid-thread. All three are **biases, never filters**. Route matching is exact
    or segment-boundary prefix, never raw substring — a root `contextPath` of `/` carries no screen
    signal and never matches (pre-hardening it matched everything).
-   *(In the keyword-only fallback path, the route signal stays the classic +3 score boost.)*
 7. **Top-K.** Sort by fused score and return up to **24** items as `CopilotKBItem`s
    (`id, sourceId, segmentIndex, segmentTitle, text, narration`). It **always returns up to the
    limit, even on zero matches** (unmatched items fill the tail in KB order), so the *LLM* judges
