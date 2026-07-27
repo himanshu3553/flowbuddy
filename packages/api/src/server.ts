@@ -39,6 +39,7 @@ import {
   type ReasonWorkflow,
   type ExpectedStepEvidence,
   type AgentWorkflow,
+  type CopilotCitation,
 } from '@flowbuddy/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
@@ -279,6 +280,43 @@ async function resolveSenseContext(
     };
   });
   return { sense: { hypotheses, tie: w.tie === true && hypotheses.length >= 2 }, probed };
+}
+
+/**
+ * The `QueryCitation` rows for one answer — ONE PER WORKFLOW, which is what the table has always
+ * claimed to be and, until 2026-07-27, wasn't.
+ *
+ * The answer engine dedupes its citations by KnowledgeItem id (per STEP), because that's the right
+ * granularity for grounding: an answer built from six steps of a workflow legitimately cites six
+ * items. Persisting that list one-to-one, though, wrote six rows that all name the same workflow —
+ * and every reader of this table counts ROWS. So "Top workflows by citations" ranked by how many
+ * steps a workflow has rather than how often it was used, and a single 👍 on a six-step answer
+ * counted as six helpful votes on that workflow.
+ *
+ * The end-user never saw it: the widget dedupes citation titles before rendering the "Source" pill,
+ * which is exactly why this survived so long.
+ *
+ * Collapsing HERE (rather than in each reader) makes the stored shape match the schema's own
+ * comment, so a future reader can't reintroduce the bug by counting rows naively.
+ */
+function citationRows(
+  workspaceId: string,
+  cites: CopilotCitation[],
+): { workspaceId: string; sourceId: string; segmentIndex: number | null; segmentTitle: string | null }[] {
+  const rows = [];
+  const seen = new Set<string>();
+  for (const c of cites) {
+    const key = `${c.sourceId}:${c.segmentIndex ?? '-'}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      workspaceId,
+      sourceId: c.sourceId,
+      segmentIndex: c.segmentIndex,
+      segmentTitle: c.segmentTitle,
+    });
+  }
+  return rows;
 }
 
 /** P2-M4 — the localization-outcome fields logged onto CopilotQuery (step-friction analytics). */
@@ -569,6 +607,19 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   }
   if (!config.openaiApiKey) return reply.code(500).send({ error: 'OPENAI_API_KEY not configured' });
 
+  // The question is PERSISTED (CopilotQuery + CoverageGap) and read back verbatim by the founder in
+  // Studio, so it gets the same P1-M12 scrub every other stored text path already gets — it was the
+  // one that didn't. An end-user typing "card 4242 4242 4242 4242 declined, order #A-9931, mail
+  // me@corp.com" must not put a live card number in the workspace owner's database or on their
+  // screen; the order id, prices and dates survive (redactText is high-precision by design), so the
+  // founder still sees a question they can act on.
+  //
+  // STORAGE ONLY — `question` itself is untouched, so retrieval and the model still see exactly what
+  // the user typed and answer quality is unchanged. Applied once here so every write below agrees:
+  // the CoverageGap dedupe matches on this text, and a mismatch would silently create a new gap row
+  // per repeat of the same question.
+  const storedQuestion = redactText(question);
+
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
   // Bounded — it's untrusted input that lands in the DB and the prompt.
   const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
@@ -596,7 +647,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     const reason = 'This copilot has no approved help content yet.';
     if (preview) return { covered: false, answer: null, citations: [], reason };
     const q = await prisma.copilotQuery.create({
-      data: { workspaceId, question, answered: false, contextPath, ...senseLogFields(sense, probed, null) },
+      data: { workspaceId, question: storedQuestion, answered: false, contextPath, ...senseLogFields(sense, probed, null) },
       select: { id: true },
     });
     return { covered: false, answer: null, citations: [], reason, queryId: q.id };
@@ -728,7 +779,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   const logged = await prisma.copilotQuery.create({
     data: {
       workspaceId,
-      question,
+      question: storedQuestion,
       answered: result.covered,
       contextPath,
       ...senseLogFields(sense, probed, position),
@@ -736,16 +787,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         ? { reasonTrigger: reasonPayload.trigger, reasonImage: Boolean(reasonPayload.image) }
         : {}),
       ...(result.covered && result.citations.length > 0
-        ? {
-            citations: {
-              create: result.citations.map((c) => ({
-                workspaceId,
-                sourceId: c.sourceId,
-                segmentIndex: c.segmentIndex,
-                segmentTitle: c.segmentTitle,
-              })),
-            },
-          }
+        ? { citations: { create: citationRows(workspaceId, result.citations) } }
         : {}),
     },
     select: { id: true },
@@ -754,11 +796,11 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   if (!result.covered) {
     // Decline → log a coverage gap (dedupe: one open gap per distinct question).
     const existing = await prisma.coverageGap.findFirst({
-      where: { workspaceId, prompt: question, status: 'open' },
+      where: { workspaceId, prompt: storedQuestion, status: 'open' },
       select: { id: true },
     });
     if (!existing) {
-      await prisma.coverageGap.create({ data: { workspaceId, prompt: question, reason: result.reason, source: 'copilot' } });
+      await prisma.coverageGap.create({ data: { workspaceId, prompt: storedQuestion, reason: result.reason, source: 'copilot' } });
     }
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }

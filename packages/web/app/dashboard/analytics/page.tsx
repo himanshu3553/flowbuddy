@@ -103,10 +103,18 @@ export default async function AnalyticsPage({
         </div>
 
         <section className="rounded-card border bg-card p-5 shadow-card">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[13.5px] font-bold text-ink">
-              Questions &amp; answer rate
-            </h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-2.5">
+              <h3 className="text-[13.5px] font-bold text-ink">
+                Questions &amp; answer rate
+              </h3>
+              <Link
+                href="/dashboard/analytics/questions"
+                className="shrink-0 text-[11.5px] font-medium text-primary hover:underline"
+              >
+                View all →
+              </Link>
+            </div>
             <ChartLegend />
           </div>
           <MiniBarChart
@@ -290,23 +298,31 @@ export default async function AnalyticsPage({
                   No declines — every question was covered.
                 </p>
               ) : (
-                <ul className="mt-2 space-y-px">
-                  {declines.map((d) => (
-                    <li
-                      key={d.id}
-                      className="flex items-baseline justify-between gap-2 border-b border-[color:var(--gray-100)] py-1.5 last:border-0"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-secondary-foreground">
-                        {d.question}
-                      </span>
-                      {d.contextPath && (
-                        <span className="shrink-0 font-mono text-[10px] text-faint">
-                          {d.contextPath}
+                <>
+                  <ul className="mt-2 space-y-px">
+                    {declines.map((d) => (
+                      <li
+                        key={d.id}
+                        className="flex items-baseline justify-between gap-2 border-b border-[color:var(--gray-100)] py-1.5 last:border-0"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary-foreground">
+                          {d.question}
                         </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        {d.contextPath && (
+                          <span className="shrink-0 font-mono text-[10px] text-faint">
+                            {d.contextPath}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/dashboard/analytics/questions?filter=declined"
+                    className="mt-2.5 inline-block text-[11.5px] font-medium text-primary hover:underline"
+                  >
+                    View all declines →
+                  </Link>
+                </>
               )}
             </section>
           </aside>

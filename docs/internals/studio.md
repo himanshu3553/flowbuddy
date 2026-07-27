@@ -48,7 +48,7 @@ empty / loading / error states.
 | **Recordings** | List of `KnowledgeSource`s with status (`uploaded`/`processing`/`ready`/`error`). | reads `KnowledgeSource` |
 | **Knowledge Base** | The workflows of a recording (distilled steps grouped by `segmentIndex`) **with the approve toggle** — the trust gate. | `listCandidates` + `setCopilotApproval` |
 | **Copilot** | The embed snippet (with the public key), allowed-origins config, and a live widget preview. | `getOrCreateCopilotKey` + settings actions |
-| **Analytics** | Answered/declined trend, helpful %, coverage gaps. | `getCopilotMetrics` |
+| **Analytics** | Answered/declined trend, helpful %, coverage gaps, step friction, top workflows — plus **Questions**, the full searchable log at `analytics/questions`. | `getCopilotMetrics` + `analytics.ts` |
 | **Settings** | Account / workspace / token management. | `auth`, `tokens` |
 
 **Copilot → Settings (2026-07-27)** opens with **How your assistant works** — the operating-mode
@@ -165,6 +165,24 @@ all-time total to pick first-run vs. populated states): answered/declined counts
 up/down, a `helpfulPct`, and a **per-day answered/declined series** for the chart. Home and Analytics
 share this one function so both read identically.
 
+The per-workflow and feedback-loop breakdowns live beside it in
+[`analytics.ts`](../../packages/web/lib/analytics.ts): top workflows by citations, step friction
+("where users get stuck"), ranked coverage gaps, recent declines — and the **question log**.
+
+**The question log (`/dashboard/analytics/questions`, 2026-07-27).** Every aggregate above answers
+*"how is the copilot doing?"*; this answers *"what did people actually ask?"* — the raw
+`CopilotQuery` list, newest first, 25 a page. Search matches the question text **or** the page path
+(so `billing` finds both questions about billing and questions asked while standing on `/billing`);
+filters are all/answered/declined/👍/👎; the range adds **all time** (a log capped at 90 days isn't
+a log — the summary page keeps 7/30/90). All state lives in the URL, so a filtered view is linkable
+and the back button works, and the page clamps an out-of-range `?page=` to the last real page rather
+than showing an empty screen. Entry points are contextual: *View all →* on the chart, *View all
+declines →* on Recent declines (deep-linking to `?filter=declined`). **Reads only — no schema
+change.** No export yet; the in-UI search was the actual need.
+
+> **Counting rule for anything reading `QueryCitation`: count distinct `queryId`, never rows.**
+> See [data-journey.md §15](data-journey.md).
+
 ### 4.7 Coverage gaps ("record this next")
 
 When the copilot declines, the API logs a `CoverageGap(source: 'copilot')`. Studio surfaces open gaps
@@ -178,7 +196,7 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `CopilotApproval`, `CopilotQuery`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status`, **`KnowledgeSource`** (recording **rename `title` / delete / re-process** → status) |
+| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `CopilotApproval`, `CopilotQuery`, `QueryCitation`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status`, **`KnowledgeSource`** (recording **rename `title` / delete / re-process** → status) |
 | **Object storage (R2/MinIO)** | — | **deletes** a recording's artifact prefix on delete (`lib/storage` `deleteSessionPrefix`) |
 | **Redis / BullMQ** | — | **enqueues re-process jobs** onto the same synthesis queue the worker consumes (`lib/queue.ts` — lazy, best-effort, no API hop) |
 | **API service** | — | — (Studio is a privileged server — it talks to Postgres/Redis/storage **directly**, never through the API) |

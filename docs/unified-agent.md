@@ -59,7 +59,8 @@ Founder-selected per workspace, strictly ordered (mode 3 *is* mode 2 plus one to
 |:---|:---|:---|
 | **Done, live** | Answering · knowing where the user is (Sense) · diagnosing why they're stuck (Reason) · guided walkthroughs (P4-M0) | 1 |
 | **Done 2026-07-26** | **P5-M0** — the conversation survives page changes, and the copilot remembers the TOPIC on follow-ups. **Cuts 1 + 2 ✅ built + user-verified; cut 3 (LLM query condensation) DROPPED** — cut 2 took its common case for free and the agent absorbs the rest. **Shipped to mode 1 as well — a bug fix, not an agent feature.** | 1 + 2 |
-| **Done 2026-07-27** | ~~Turn the answering path into the agent loop, read-only tools first~~ — **built and verified. The thesis held.** Mode 2 is selectable in Studio; every workspace still defaults to mode 1 | 2 |
+| **Done 2026-07-27** | ~~Turn the answering path into the agent loop, read-only tools first~~ — **built and verified. The thesis held.** Mode 2 is selectable in Studio. | 2 |
+| **Done 2026-07-27** | **Mode 2 became the DEFAULT** — a new workspace signs up already a Copilot, with `copilotShowMe`/`copilotWalkthrough` permitted so it can actually point and guide. Existing workspaces untouched (column defaults apply to new rows only). The product default and the fail-closed floor split into two constants, and mode 1's long-asserted runtime fallback was finally built. **In production.** | 2 |
 | **The big one** | Teaching it to actually click and type (**P4-M2**) — the last piece and the riskiest | 3 |
 
 **The destination:** a customer records their product once, approves what the assistant may touch, and their users get something that explains, points, and does — always inside approved workflows, never improvising.

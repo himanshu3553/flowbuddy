@@ -256,6 +256,15 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
   `queryId` (the handle the widget uses for thumbs feedback).
 - **A decline** additionally logs a `CoverageGap(source: 'copilot')` — **deduped**: at most one *open*
   gap per distinct question per workspace. This is the "record this next" feed Studio surfaces.
+- **The stored question is PII-scrubbed (2026-07-27).** `CopilotQuery.question` and
+  `CoverageGap.prompt` go through the same `redactText` as KB text and narration — it was the one
+  stored text path that didn't, and the founder reads it back verbatim in Studio. **Storage only:**
+  retrieval and the model still see the raw question, so answer quality is unchanged. The scrub is
+  applied ONCE, before both writes, because the coverage-gap dedupe matches on that text.
+- **Citations are logged one row per WORKFLOW, not per cited step (2026-07-27).** `shapeAnswer`
+  dedupes by `KnowledgeItem` id — correct for grounding — so an answer built from six steps carries
+  six citations naming one workflow. `citationRows` collapses them before insert; see
+  [data-journey.md §15](data-journey.md) for the analytics distortion this used to cause.
 
 `/v1/copilot/feedback` re-auths, validates `feedback ∈ {up,down}`, and updates the `CopilotQuery`
 **scoped to the workspace** (`updateMany({ id, workspaceId })`) so one tenant can't write another's
@@ -267,7 +276,7 @@ rows.
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `Workspace` (key/allowlist), `CopilotApproval` (the gate), `KnowledgeItem` (candidates) | `CopilotQuery` (every Q), `CoverageGap` (on decline), `CopilotQuery.feedback` (thumbs) |
+| **Postgres** | `Workspace` (key/allowlist), `CopilotApproval` (the gate), `KnowledgeItem` (candidates) | `CopilotQuery` (every Q — question PII-scrubbed), `QueryCitation` (one per cited **workflow**), `CoverageGap` (on decline), `CopilotQuery.feedback` (thumbs) |
 | **OpenAI** | the chat model (`answerFromKB`) | — |
 | **In-memory** | the rate-limit buckets | per-key request counts (ephemeral) |
 

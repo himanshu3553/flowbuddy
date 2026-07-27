@@ -308,6 +308,13 @@ model QueryCitation {
   // Analytics: one row per workflow the copilot CITED to answer a question. Powers
   // "Top workflows by citations" (group by sourceId+segmentIndex). Cascades from the
   // parent CopilotQuery (which cascades from Workspace), so workspace delete cleans up.
+  //
+  // "One row per WORKFLOW" is enforced by the writer (api `citationRows`, 2026-07-27) — before that
+  // the answer's per-STEP citation list was persisted one-to-one, so a workflow appeared once per
+  // cited step and every reader that counted rows over-counted it. Rows written before that date
+  // still hold those duplicates: they are left in place, and the readers in web/lib/analytics.ts
+  // count DISTINCT queryId so old and new rows produce the same (correct) numbers. If you add a
+  // reader, count distinct questions — do not count rows.
   id           String   @id @default(cuid())
   queryId      String
   workspaceId  String // denormalized for direct per-workspace aggregation (cf. KnowledgeItem)
