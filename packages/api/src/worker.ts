@@ -21,6 +21,12 @@ const worker = new Worker(
       log.warn({ sessionId }, 'source not found — skipping');
       return;
     }
+    // The row now exists from the first uploaded artifact, so it can legitimately be reached before
+    // the recording was ever stopped and finalized. Nothing to synthesize until the manifest lands.
+    if (!rec.manifest) {
+      log.warn({ sessionId, status: rec.status }, 'no manifest yet — recording not finalized, skipping');
+      return;
+    }
     await prisma.knowledgeSource.update({ where: { id: sessionId }, data: { status: 'processing' } });
 
     try {

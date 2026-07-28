@@ -49,6 +49,18 @@ Screenshots / audio / DOM snapshots live in **Cloudflare R2** (S3-compatible). A
 touch prod artifacts. Pre-create the bucket — the API runs `HeadBucket` at boot, so it never needs
 bucket-create permission.
 
+Since the direct-upload change the **recorder also writes artifacts itself, via presigned PUT URLs**
+(`POST /v1/uploads/sign`, 900s TTL), so the API never relays artifact bytes. Two consequences for a
+deploy:
+- **R2 must accept those PUTs directly from the extension.** The recorder holds `<all_urls>` host
+  permissions, so no bucket CORS rule is expected to be needed — **unverified against real R2 as of
+  this change**; confirm on dev before relying on it in prod.
+- **The presigner runs with `requestChecksumCalculation: 'WHEN_REQUIRED'`**
+  ([`packages/api/src/storage.ts`](../packages/api/src/storage.ts)). With the SDK default the signer
+  bakes an empty-body CRC32 into the signed URL; **MinIO ignores it and R2 rejects it** — i.e. the
+  failure passes local dev and appears only in the cloud. Never "simplify" that back onto the shared
+  client.
+
 ### 2.3 The worker is folded into the API (both environments)
 
 The synthesis worker runs *inside* the api web service via the `start:all` entrypoint
@@ -401,10 +413,10 @@ Full manual test plan (3 levels — local · dev · prod): [`e2e-testing.md`](e2
 
 1. Work lands on `dev`; the dev cloud env auto-deploys it for cloud E2E.
 2. On an explicit go: FF-sync `main` → Render auto-deploys the prod services.
-3. Migrations run automatically on the api boot (additive-only keeps this safe).
+3. Migrations run automatically on the api boot. Additive columns and **widening** changes (e.g. dropping a NOT NULL) are safe to roll forward; a new UNIQUE index is safe only while the column is nullable and unpopulated (which is how `20260727230000_upload_identity` ships). Anything narrowing still needs a plan.
 4. Both widget bundles republish automatically (they're one static build).
 5. The landing page redeploys only when `packages/landing` changes.
-6. Extension releases are independent (store review cycle) — see [`extension-releases.md`](extension-releases.md).
+6. Extension releases run on the store review cycle — and they are **no longer independent of the API**. **Standing ordering rule (since the upload-identity change): a recorder build that a new API requires must be LIVE ON THE STORE BEFORE that API reaches prod.** `/v1/sessions` now rejects any upload without the `X-FlowBuddy-Upload-Id` header, and store build v0.6.0 does not send it — deploying the API first breaks recording for every installed user. See [`extension-releases.md`](extension-releases.md).
 
 ---
 
@@ -464,6 +476,38 @@ column defaults apply only to rows created afterwards.
    **AI Chatbot** — instant, per workspace, no deploy. Individual loop failures already degrade to
    an AI Chatbot answer on their own.
 
+### 8.4 The upload-identity drop (recording uploads) — on `dev`, **not deployed**
+
+Fixes the duplicate-recording bug: a slow upload timed out client-side while the server committed it
+anyway, and the Retry the user was then told to press minted a *second* recording. Recordings now
+carry a client-minted `uploadId`, and artifacts stream to object storage **during** the capture.
+
+**⚠️ ORDER MATTERS — this is the first drop where the API and the extension are coupled.**
+`POST /v1/sessions` now returns `400` without an `X-FlowBuddy-Upload-Id` header, and the live store
+build **v0.6.0 does not send it**. **A newer recorder must be live on the Chrome Web Store before this
+API reaches production**, or every installed recorder stops being able to upload. No store build has
+been cut yet and the extension version has **not** been bumped
+([`extension-releases.md`](extension-releases.md)).
+
+1. **Migration runs automatically** on api boot: `20260727230000_upload_identity` — adds
+   `RecSession.uploadId` (nullable) + `UNIQUE (workspaceId, uploadId)`, and drops `NOT NULL` on
+   `RecSession.manifest`. No back-fill; existing rows keep `uploadId = NULL` and stay valid (the
+   unique index tolerates many NULLs).
+2. **New status value `recording`** — a row exists from the first uploaded artifact, before Stop.
+   Studio renders it as a pending **Recording** badge; the worker skips a row with no manifest.
+3. **No new env vars, no widget rebuild.** The only infra requirement is that R2 accepts presigned
+   PUTs directly from the recorder (§2.2) — **prove this on dev before prod**; it cannot be proven
+   against local MinIO.
+4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 6 — a **Recording** badge appears in Studio
+   *while* capturing, Stop finishes in seconds, and a **retry produces no second recording**.
+5. **Known gaps shipped with this drop:** an abandoned recording leaves a `recording` row + orphaned
+   objects with **no cleanup path**, and the presigned URLs carry **no size ceiling**
+   (`MAX_BUNDLE_BYTES` only ever covered the `/v1/sessions` bundle, which artifacts now bypass).
+6. **If it misbehaves:** there is no runtime toggle. The recorder degrades to the old all-in-one
+   bundle on its own whenever signing fails, so disabling `/v1/uploads/sign` is a usable stopgap —
+   but the identity-header requirement on `/v1/sessions` remains, so rolling the API back is the only
+   way to serve an old recorder.
+
 ---
 
 ## 9. The scaling ladder (future prod)
@@ -501,6 +545,8 @@ custom domains make every underlying swap invisible to customers.
 | `AggregateError [ECONNREFUSED] … 127.0.0.1:9000` | `R2_ENDPOINT` unset → API defaults to local MinIO; `ensureBucket()` runs at **boot** | Set the R2 group (endpoint/keys/bucket) and redeploy the api |
 | `[auth][error] MissingSecret: Please define a 'secret'` | `AUTH_SECRET` unset (pages still render — GET-only) | Set `AUTH_SECRET` on the web service; also set `AUTH_URL` to the real URL. ⚠️ Secrets typed during a **failed** blueprint sync die with it — re-enter after a clean apply |
 | `[worker] failed …: 401 You didn't provide an API key` | `OPENAI_API_KEY` unset on the api | Set it on the api; **re-record** (failed jobs don't auto-retry — `attempts=1`) |
+| `400 missing or malformed X-FlowBuddy-Upload-Id` on `/v1/sessions` | A recorder older than the upload-identity change (incl. store v0.6.0) uploading to a new API — the deploy-ordering rule in §7.6 was violated | Ship the newer recorder first, or roll the API back; a local rebuild fixes it for developers only |
+| Presigned artifact `PUT` rejected by R2 (`400`/`403`) while it worked on MinIO | The signer emitted checksum params (the SDK default bakes an empty-body CRC32 into the URL) — R2 enforces them, MinIO ignores them | Keep the dedicated presigning client at `requestChecksumCalculation: 'WHEN_REQUIRED'` (§2.2); this class of bug is invisible locally |
 | Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via the **api** `/v1/copilot/answer`. Cause is on the api: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real Studio URL) on the api; the web service needs **no** OpenAI key |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash (dev only — prod is always-on) |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
@@ -528,3 +574,7 @@ first boot; user-verified E2E). What this means for anything pre-rename:
 - **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). (The widget title stays per-workspace configurable.)
 - **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card. The full marketing page (hero · how-it-works · features · CTA; optionally dogfood the live widget as the demo) remains to build on top.
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the v0.6.0 store listing URL) so the Home checklist CTA reads "Add to Chrome".
+- **Blocks the next prod deploy: a new recorder store build.** The API on `dev` requires `X-FlowBuddy-Upload-Id`; v0.6.0 doesn't send it. Bump the version, cut and publish a build, *then* FF `main` (§7.6, §8.4).
+- **Prove the presigned-PUT path against real R2 on dev** — never proven locally (MinIO ignores the checksums R2 enforces); bucket CORS may or may not be required (§2.2).
+- **No cleanup for abandoned recordings.** A capture that is started and never stopped leaves a `recording` row and orphaned objects; nothing sweeps either, and `recording` isn't eligible for the stalled badge.
+- **Presigned uploads have no size ceiling.** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass.

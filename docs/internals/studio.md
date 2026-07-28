@@ -45,7 +45,7 @@ empty / loading / error states.
 | Nav item | What it does | Backing logic |
 |---|---|---|
 | **Home** | Steady-state dashboard: approved-workflow count, recent answer metrics, open coverage gaps ("record this next"). | `getCopilotMetrics` + `listApprovedWorkflows` + coverage gaps |
-| **Recordings** | List of `KnowledgeSource`s with status (`uploaded`/`processing`/`ready`/`error`). | reads `KnowledgeSource` |
+| **Recordings** | List of `KnowledgeSource`s with status (`recording`/`uploaded`/`processing`/`ready`/`error`). `recording` = artifacts still arriving (the row exists from the first upload, before Stop) and renders as a pending **"Recording"** badge inside the in-flight filter bucket — it has its own branch in `recordingStatusBadge` precisely so a live capture is never shown as a red "Failed". | reads `KnowledgeSource` |
 | **Knowledge Base** | The workflows of a recording (distilled steps grouped by `segmentIndex`) **with the approve toggle** — the trust gate. | `listCandidates` + `setCopilotApproval` |
 | **Copilot** | The embed snippet (with the public key), allowed-origins config, and a live widget preview. | `getOrCreateCopilotKey` + settings actions |
 | **Analytics** | Answered/declined trend, helpful %, coverage gaps, step friction, top workflows — plus **Questions**, the full searchable log at `analytics/questions`. | `getCopilotMetrics` + `analytics.ts` |

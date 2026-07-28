@@ -55,6 +55,33 @@ export async function kvEntriesByPrefix<T>(prefix: string): Promise<Array<{ key:
   });
 }
 
+/**
+ * Keys under a prefix, WITHOUT deserializing their values (`openKeyCursor`, not `openCursor`).
+ * Use this whenever only names are needed: the artifact buffer holds hundreds of base64
+ * screenshots and DOM snapshots, so reading it with a value cursor drags the entire recording —
+ * hundreds of MB — through the service worker's heap just to learn what is in it.
+ */
+export async function kvKeysByPrefix(prefix: string): Promise<string[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const out: string[] = [];
+    const t = db.transaction(STORE, 'readonly');
+    const range = IDBKeyRange.bound(prefix, prefix + '￿');
+    const cursorReq = t.objectStore(STORE).openKeyCursor(range);
+    cursorReq.onsuccess = () => {
+      const cur = cursorReq.result;
+      if (cur) {
+        out.push(String(cur.key));
+        cur.continue();
+      } else {
+        resolve(out);
+      }
+    };
+    cursorReq.onerror = () => reject(cursorReq.error);
+    t.oncomplete = () => db.close();
+  });
+}
+
 /** Cheap count of keys under a prefix (no value deserialization) — used for live step counts. */
 export async function kvCountByPrefix(prefix: string): Promise<number> {
   const range = IDBKeyRange.bound(prefix, prefix + '￿');

@@ -1,6 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
-import { randomUUID } from 'node:crypto';
 import { prisma } from '@flowbuddy/db';
 import {
   modeUsesAgentLoop,
@@ -12,13 +11,14 @@ import {
 } from '@flowbuddy/shared';
 import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
-import { authWorkspace } from './auth';
+import { authWorkspace, type AuthedWorkspace } from './auth';
 import {
   ensureBucket,
   putObjectStream,
-  deleteSessionPrefix,
   sessionKey,
   sessionArtifactReader,
+  signPutUrl,
+  UPLOAD_URL_TTL_SECONDS,
 } from './storage';
 import { synthesisQueue } from './queue';
 // Retrieval + history sanitizing come from the SHARED @flowbuddy/synthesis seam (P1-M5 no-leak) —
@@ -53,7 +53,7 @@ const app = Fastify({ loggerInstance: createLogger('api') });
 app.addHook('onRequest', async (req, reply) => {
   reply.header('Access-Control-Allow-Origin', '*');
   reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-FlowBuddy-Key');
+  reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-FlowBuddy-Key, X-FlowBuddy-Upload-Id');
   if (req.method === 'OPTIONS') return reply.code(204).send();
 });
 
@@ -67,75 +67,188 @@ app.get('/healthz', async () => ({ ok: true }));
 // A real session is tens of MB (JPEG shots + audio); this only stops abuse/runaway bundles.
 const MAX_BUNDLE_BYTES = 500 * 1024 * 1024;
 
+// ── Recorder upload path (idempotent) ─────────────────────────────────────────────────────────
+// ONE recording = ONE `uploadId`, minted by the recorder when Record is pressed and stable across
+// every retry. Both routes below resolve that id to the SAME row, so re-sending a recording can
+// never create a second one. That is not a nicety: a slow upload used to time out client-side while
+// the server went on to commit it, and the Retry the user was then told to click arrived with a
+// fresh server-minted id — which is how one recording became two.
+
+// Case-INSENSITIVE match, but every accepted id is lower-cased before use: the unique index that
+// makes ingestion idempotent compares bytes, so 'AB…' and 'ab…' would otherwise be two recordings.
+const UPLOAD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const normalizeUploadId = (raw: string): string => raw.trim().toLowerCase();
+
+/** Artifact paths the recorder may write. A signed URL is a write capability, so the key it
+ *  authorizes is VALIDATED against this, never merely sanitized. */
+const ARTIFACT_REL_RE = /^(shots\/[A-Za-z0-9._-]{1,120}\.(?:jpe?g|png)|dom\/[A-Za-z0-9._-]{1,120}\.html|audio\.webm)$/;
+
+const MAX_SIGN_BATCH = 100;
+
 /**
- * Token-authenticated bundle upload.
- * Files ride their relative path on the multipart field NAME (multipart strips
- * directories from filenames); we STREAM each part to object storage (never buffering a file in
- * RAM — this instance also serves the public copilot), validate the manifest, persist a
- * RecSession, and enqueue synthesis. Any rejected/failed upload deletes what was already stored
- * so nothing is orphaned in R2.
+ * Statuses a recording can still be uploaded into. Past these it is being (or has been) built.
+ * `error` is in the set DELIBERATELY: a failed synthesis has to stay retryable, and answering a
+ * retry with "already finalized" is worse than useless — the recorder reads a 2xx as success and
+ * clears its local buffer, destroying the only copy of a recording the server never built.
+ */
+const OPEN_STATUSES = new Set(['recording', 'uploaded', 'error']);
+
+function artifactContentType(rel: string): string {
+  if (/\.jpe?g$/i.test(rel)) return 'image/jpeg';
+  if (/\.png$/i.test(rel)) return 'image/png';
+  if (/\.html$/i.test(rel)) return 'text/html';
+  return 'audio/webm';
+}
+
+/**
+ * Resolve the recording row a recorder's `uploadId` refers to, creating it on first contact.
+ * The row therefore exists from the FIRST signed artifact — which is what lets Studio show a
+ * recording while it is still uploading, instead of only after the whole thing succeeds.
+ */
+async function resolveRecording(ws: AuthedWorkspace, uploadId: string) {
+  const where = { workspaceId_uploadId: { workspaceId: ws.workspaceId, uploadId } };
+  try {
+    return await prisma.knowledgeSource.upsert({
+      where,
+      create: { workspaceId: ws.workspaceId, createdById: ws.ownerId, uploadId, status: 'recording' },
+      update: {}, // still bumps updatedAt — a live recording keeps looking alive to the stalled sweep
+    });
+  } catch (err) {
+    // Prisma compiles a compound-unique upsert to SELECT-then-INSERT, not INSERT ... ON CONFLICT,
+    // so two first-contact requests for one uploadId can race and the loser gets P2002. The unique
+    // index is what makes that safe: the row the winner created is the row we wanted.
+    if ((err as { code?: string })?.code !== 'P2002') throw err;
+    const existing = await prisma.knowledgeSource.findUnique({ where });
+    if (!existing) throw err;
+    return existing;
+  }
+}
+
+/**
+ * Mint short-lived PUT URLs so the recorder uploads artifacts DIRECTLY to object storage WHILE the
+ * recording is still running. The API never touches these bytes; it only authorizes one exact key
+ * each, inside the caller's own workspace prefix. This is what removes the all-or-nothing,
+ * multi-minute bundle transfer at Stop.
+ */
+app.post('/v1/uploads/sign', async (req, reply) => {
+  const ws = await authWorkspace(req.headers.authorization);
+  if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
+
+  const body = req.body as { uploadId?: unknown; files?: unknown } | undefined;
+  const uploadId = normalizeUploadId(typeof body?.uploadId === 'string' ? body.uploadId : '');
+  if (!UPLOAD_ID_RE.test(uploadId)) return reply.code(400).send({ error: 'uploadId must be a UUID' });
+
+  const files = Array.isArray(body?.files) ? body.files : [];
+  if (files.length === 0 || files.length > MAX_SIGN_BATCH) {
+    return reply.code(400).send({ error: `files must hold between 1 and ${MAX_SIGN_BATCH} entries` });
+  }
+  const rels: string[] = [];
+  for (const f of files) {
+    const rel = typeof (f as { rel?: unknown })?.rel === 'string' ? (f as { rel: string }).rel : '';
+    if (!ARTIFACT_REL_RE.test(rel)) {
+      return reply.code(400).send({ error: `unsupported artifact path: ${rel.slice(0, 80)}` });
+    }
+    rels.push(rel);
+  }
+
+  const rec = await resolveRecording(ws, uploadId);
+  if (!OPEN_STATUSES.has(rec.status)) {
+    // A stale recorder still uploading into a recording Studio has already built.
+    return reply.code(409).send({ error: `recording is already ${rec.status}` });
+  }
+
+  const urls = await Promise.all(
+    rels.map(async (rel) => ({
+      rel,
+      url: await signPutUrl(sessionKey(ws.workspaceId, rec.id, rel), artifactContentType(rel)),
+    })),
+  );
+  return { sessionId: rec.id, expiresIn: UPLOAD_URL_TTL_SECONDS, urls };
+});
+
+/**
+ * Finalize a recording: the manifest plus whatever artifacts did NOT already upload directly.
+ * Files ride their relative path on the multipart field NAME (multipart strips directories from
+ * filenames); we STREAM each part to object storage (never buffering a file in RAM — this instance
+ * also serves the public copilot), validate the manifest, fill in the row, and enqueue synthesis.
+ *
+ * Idempotent by `uploadId`: a retry overwrites the SAME object keys and updates the SAME row.
+ * Note the cleanup asymmetry vs. the old all-or-nothing route — a failed finalize must NOT delete
+ * the prefix, because artifacts uploaded during recording live there and are not resendable.
  */
 app.post('/v1/sessions', async (req, reply) => {
   const ws = await authWorkspace(req.headers.authorization);
   if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
 
-  const sessionId = randomUUID();
+  const uploadId = normalizeUploadId(String(req.headers['x-flowbuddy-upload-id'] ?? ''));
+  if (!UPLOAD_ID_RE.test(uploadId)) {
+    return reply.code(400).send({ error: 'missing or malformed X-FlowBuddy-Upload-Id header' });
+  }
+
+  // Resolved BEFORE the body is read: the storage prefix depends on this row, and a retry has to
+  // land on the same one. (The id travels as a header rather than in the manifest because parts
+  // stream to storage before the manifest part has been parsed.)
+  const rec = await resolveRecording(ws, uploadId);
+  const sessionId = rec.id;
+
+  // Already built, or being built. This is precisely the lost-response case: the first finalize
+  // committed but its reply never reached the recorder. Drain the body so the client's write
+  // completes cleanly, then report the truth instead of rebuilding anything.
+  const alreadyBuilt = !OPEN_STATUSES.has(rec.status);
+
   let manifestRaw: unknown = null;
   let totalBytes = 0;
 
-  // Best-effort cleanup for every non-success exit below.
-  const discardBundle = () => deleteSessionPrefix(ws.workspaceId, sessionId).catch(() => {});
-
-  try {
-    for await (const part of req.parts()) {
-      if (part.type === 'file') {
-        const rel = part.fieldname || part.filename || `file-${randomUUID()}`;
-        totalBytes += await putObjectStream(
-          sessionKey(ws.workspaceId, sessionId, rel),
-          part.file,
-          part.mimetype,
-        );
-        if (part.file.truncated) {
-          // The multipart fileSize limit cut this file short — the stored object is incomplete.
-          await discardBundle();
-          return reply.code(413).send({ error: 'a bundle file exceeds the per-file size limit' });
-        }
-        if (totalBytes > MAX_BUNDLE_BYTES) {
-          await discardBundle();
-          return reply.code(413).send({ error: 'bundle exceeds the total size limit' });
-        }
-      } else if (part.fieldname === 'manifest') {
-        try {
-          manifestRaw = JSON.parse(String(part.value));
-        } catch {
-          manifestRaw = null;
-        }
+  for await (const part of req.parts()) {
+    if (part.type === 'file') {
+      if (alreadyBuilt) {
+        part.file.resume(); // drain and discard — never overwrite artifacts a worker may be reading
+        continue;
+      }
+      // Same allowlist as the signing route. `sessionKey`'s '..' strip is defeatable ('....//'),
+      // so the key is validated here rather than sanitized downstream.
+      const rel = part.fieldname || part.filename || '';
+      if (!ARTIFACT_REL_RE.test(rel)) {
+        return reply.code(400).send({ error: `unsupported artifact path: ${rel.slice(0, 80)}` });
+      }
+      totalBytes += await putObjectStream(
+        sessionKey(ws.workspaceId, sessionId, rel),
+        part.file,
+        part.mimetype,
+      );
+      if (part.file.truncated) {
+        return reply.code(413).send({ error: 'a bundle file exceeds the per-file size limit' });
+      }
+      if (totalBytes > MAX_BUNDLE_BYTES) {
+        return reply.code(413).send({ error: 'bundle exceeds the total size limit' });
+      }
+    } else if (part.fieldname === 'manifest') {
+      try {
+        manifestRaw = JSON.parse(String(part.value));
+      } catch {
+        manifestRaw = null;
       }
     }
-  } catch (err) {
-    // Storage/stream failure mid-upload — don't leave a partial bundle behind.
-    await discardBundle();
-    throw err;
   }
+
+  if (alreadyBuilt) return { sessionId, status: rec.status, alreadyFinalized: true };
 
   const parsed = sessionManifestSchema.safeParse(manifestRaw);
   if (!parsed.success) {
-    await discardBundle();
     return reply.code(400).send({ error: 'invalid manifest', issues: parsed.error.issues.slice(0, 5) });
   }
   const m = parsed.data;
 
-  await prisma.knowledgeSource.create({
-    data: {
-      id: sessionId,
-      workspaceId: ws.workspaceId,
-      createdById: ws.ownerId,
-      status: 'uploaded',
-      appBaseUrl: m.app.baseUrl,
-      manifest: m as object,
-    },
+  await prisma.knowledgeSource.update({
+    where: { id: sessionId },
+    data: { status: 'uploaded', appBaseUrl: m.app.baseUrl, manifest: m as object, error: null },
   });
 
+  // NO deterministic jobId here. It would dedupe a racing retry, but BullMQ retains finished and
+  // failed jobs (queue.ts removeOnComplete/removeOnFail), so a retained job with that id silently
+  // swallows the re-enqueue — exactly when the recording is in `error` and the retry is the user
+  // asking for another go. The worker is idempotent (it deletes and recreates the recording's
+  // items), so the worst case of a double enqueue is duplicated work, not a duplicated recording.
   await synthesisQueue.add('synthesize', { sessionId, workspaceId: ws.workspaceId });
 
   return { sessionId, status: 'uploaded' };

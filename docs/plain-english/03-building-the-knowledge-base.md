@@ -42,7 +42,28 @@ locally, in the extension, before anything is uploaded.
 
 **Recording survives real conditions** — page navigations, multiple tabs, embedded frames, the
 browser putting the extension to sleep. There's a control bar on the page and you can pause and
-resume. If an upload fails it retries rather than silently losing your session.
+resume.
+
+**It uploads as you go, not all at once at the end.** Each screenshot and page snapshot is sent off to
+storage moments after it's captured, using a one-off permission slip that lets your browser write that
+one file and nothing else. So when you press Stop there's almost nothing left to send — mostly just
+your audio and the index of what happened. A long recording no longer ends in a multi-minute wait.
+
+A side effect you'll notice: **the recording appears in Studio while you're still recording**, marked
+"Recording". That's expected, not a half-finished upload.
+
+**If an upload fails it retries, and a retry can never create a duplicate.** Every recording carries
+its own identity from the moment you press record, so re-sending it lands on the same recording rather
+than making a second copy. (It used to: a slow upload would time out on your side while the server
+kept it anyway, and the retry you were told to press created a twin.)
+
+If any of that isn't available — the storage permission slip can't be obtained, or you're recording
+against an older server — it quietly falls back to the old behaviour and sends everything in one
+bundle when you stop.
+
+Two rough edges that are known and not yet fixed: a recording you start and never stop leaves a
+leftover entry and some orphaned files that nothing cleans up, and there's no size limit on the
+as-you-go uploads.
 
 **Two other ways to record are planned, not built:** just narrating with no clicking (for explaining
 concepts), and uploading a video.
@@ -145,9 +166,10 @@ only the first one exists today.
 
 ## What you can see and do in Studio
 
-**Recordings** — everything you've recorded, with real thumbnails and details. Open one and you get a
-replay player that steps through the screenshots in sync with your audio. You can rename, delete, or
-reprocess a recording.
+**Recordings** — everything you've recorded, with real thumbnails and details. A capture shows up here
+**while it's still being recorded** (marked "Recording"), then "Processing", then "Ready". Open one
+and you get a replay player that steps through the screenshots in sync with your audio. You can
+rename, delete, or reprocess a recording.
 
 **Knowledge Base** — your workflows and their steps, as the assistant sees them. Click a step's
 screenshot and it opens full-size with the clicked element highlighted.

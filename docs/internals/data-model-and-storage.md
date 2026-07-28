@@ -13,7 +13,7 @@
 | Store | Tech | Holds | Written by | Read by |
 |---|---|---|---|---|
 | **Postgres** | Prisma client ([`schema.prisma`](../../packages/db/prisma/schema.prisma)) | All structured state: tenants, tokens, sources, KB items, approvals, queries, gaps | API, worker, Studio | everyone |
-| **Object storage** | S3-compatible — **MinIO** (dev) / **Cloudflare R2** (prod) | Heavy binaries: screenshots, DOM snapshots, audio | API (on upload) | worker (`ArtifactReader`) |
+| **Object storage** | S3-compatible — **MinIO** (dev) / **Cloudflare R2** (prod) | Heavy binaries: screenshots, DOM snapshots, audio | **Recorder** (directly, presigned PUT, during recording) + API (leftovers at finalize) | worker (`ArtifactReader`) |
 | **Redis** | BullMQ | The `synthesis` job queue (ephemeral) | API (producer) | worker (consumer) |
 
 The split is deliberate: **Postgres for queryable truth, object storage for bulk bytes, Redis for the
@@ -61,9 +61,10 @@ erDiagram
     KnowledgeSource ||--o{ KnowledgeItem : "distilled steps"
     KnowledgeSource ||--o{ CopilotApproval : "approved workflows"
     KnowledgeSource {
-        string status "uploaded→processing→ready|error"
+        string uploadId "client-minted recording id, nullable; unique with workspaceId"
+        string status "recording→uploaded→processing→ready|error"
         string title "founder rename (null → appBaseUrl)"
-        json manifest "the raw capture (events, markers, app)"
+        json manifest "the raw capture — NULL until stopped and finalized"
         json transcript "persisted, redacted { text, segments[] }"
     }
     KnowledgeItem {
@@ -77,8 +78,13 @@ erDiagram
 ```
 
 - **`KnowledgeSource`** = one recording. The Prisma model is `KnowledgeSource` but the **table is kept
-  as `RecSession`** via `@@map` so historical data survives the rename. `manifest` is the whole raw
-  capture; `transcript` is added by the worker; `status` is the lifecycle state machine; `title` is the
+  as `RecSession`** via `@@map` so historical data survives the rename. `uploadId` is the
+  **recorder's own id for the recording**, minted once when Record is pressed and stable across every
+  retry; `@@unique([workspaceId, uploadId])` is what makes ingestion idempotent (nullable only so
+  pre-existing rows stay valid, and scoped per workspace so a client-supplied value can never collide
+  across tenants). `manifest` is the whole raw capture but is **nullable** — null while
+  `status='recording'`, filled in when the recording is stopped and finalized;
+  `transcript` is added by the worker; `status` is the lifecycle state machine; `title` is the
   founder's optional rename (null falls back to `appBaseUrl`), settable from the Recordings page.
 - **`KnowledgeItem`** = one **distilled step**. `data` holds the
   [`DistilledStep`](../../packages/synthesis/src/distill.ts)
@@ -110,10 +116,16 @@ track's feature list: [`../v2-portal.md`](../v2-portal.md).
 `KnowledgeSource.status` is the single signal every surface uses to know where a recording is:
 
 ```
-uploaded ──(worker picks up)──▶ processing ──(KB built)──▶ ready
-   │                                 │
-   └──────────────── error ◀─────────┘   (any thrown error, message in .error)
+recording ──(stop + manifest)──▶ uploaded ──(worker picks up)──▶ processing ──(KB built)──▶ ready
+    │                                │                                │
+    └────────────────────────────────┴──────── error ◀────────────────┘   (message in .error)
 ```
+
+`recording` = artifacts are still arriving. The row is upserted by `(workspaceId, uploadId)` on the
+recorder's first signing call, so a capture is visible in Studio while it uploads; `manifest` is null
+throughout and the worker skips any job whose row has no manifest yet. `{recording, uploaded, error}`
+are the statuses a recording can still be uploaded into — `error` deliberately included, so a failed
+build stays retryable.
 
 (`done` is a tolerated legacy value for pre-KB-layer rows.) Defined as `RecSessionStatus` in
 [`@flowbuddy/shared/jobs.ts`](../../packages/shared/src/jobs.ts). `ready` means *KB built + segmented,
@@ -134,8 +146,11 @@ workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>
                                               └── audio.webm
 ```
 
-- Written by the [API](ingestion-api.md) during upload (`putObject` + `sessionKey`), with the relative
-  path **sanitized** (`..` stripped) before it becomes a key.
+- Written **mostly by the [recorder itself](recorder-capture.md)** during capture, over single-object
+  900 s presigned PUT URLs the API mints (`signPutUrl`); the API writes only the leftovers at finalize
+  (`putObjectStream` + `sessionKey`). Either way the relative path is **validated against an
+  allowlist** — `shots/<name>.jpg|.jpeg|.png`, `dom/<name>.html`, `audio.webm` — before it becomes a
+  key; `sessionKey`'s `..` strip is a backstop, not the control (it is defeatable via `....//`).
 - Read by the [worker](knowledge-base.md) through an **`ArtifactReader`** —
   `sessionArtifactReader(ws, id)` returns a `(relPath) => Promise<Buffer|null>` bound to one session;
   a miss returns `null` (the pipeline tolerates missing artifacts).
@@ -179,8 +194,9 @@ early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the 
 `copilot_approval` (the trust gate) → `copilot_embed_key` (public key + allowlist) →
 `copilot_query` (analytics); later waves include `pgvector_hybrid_retrieval` (P1-M3),
 `drop_phase2_article_step_tables` (workflows-as-articles), `sense_in_context_help` (P2),
-`reason_diagnostic` + `reason_image_default_on` (P2-M5), and `walkthrough_guided` (P4-M0) — **see the
-migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
+`reason_diagnostic` + `reason_image_default_on` (P2-M5), `walkthrough_guided` (P4-M0), and
+`upload_identity` (2026-07-27 — `RecSession.uploadId` + `@@unique([workspaceId, uploadId])`,
+`manifest` made nullable) — **see the migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
 `pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../dev-setup.md).
@@ -189,7 +205,8 @@ Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db
 
 ## 8. Connections
 
-- **Written by →** [Ingestion API](ingestion-api.md) (sources, artifacts, jobs),
+- **Written by →** the [recorder](recorder-capture.md) (artifacts, straight into object storage over
+  signed URLs), [Ingestion API](ingestion-api.md) (sources, the leftover artifacts, jobs),
   [worker](knowledge-base.md) (items, transcript, status), [Studio](studio.md) (tokens, keys,
   approvals), [copilot](copilot.md) (queries, gaps).
 - **Read by →** all of them. This module *is* the wiring described in

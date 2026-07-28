@@ -2,8 +2,11 @@
 
 > **Module:** the upload boundary of the Fastify service in
 > [`packages/api/`](../../packages/api/). **Role:** the gate between [capture](recorder-capture.md)
-> and the [Knowledge Base](knowledge-base.md). It accepts a bundle, stores the artifacts, persists a
-> source record, and enqueues the build — then returns immediately. It does **no** AI work.
+> and the [Knowledge Base](knowledge-base.md). It hands the recorder short-lived signed URLs so
+> artifacts land in object storage **directly, while recording**, then accepts a small finalize
+> request (manifest + leftovers), persists the source record, and enqueues the build — returning
+> immediately. Both routes are **idempotent on the recorder's `uploadId`**, so a retry can never
+> create a second recording. It does **no** AI work.
 
 > The same Fastify process also serves the **copilot** routes; those are a different module, covered
 > in [copilot.md](copilot.md). This doc is only the **ingestion** half.
@@ -12,10 +15,11 @@
 
 ## 1. Purpose
 
-Receive a capture bundle over HTTP, durably land the heavy binaries in object storage, validate that
-the manifest is well-formed, write one `KnowledgeSource` row that represents the recording, and put a
-job on the queue so the worker can process it out of band. The design goal is a **fast, dumb accept**:
-everything expensive is deferred to the [worker](knowledge-base.md).
+Authorize the heavy binaries into object storage (the recorder PUTs them there itself, one signed key
+at a time, while it records), then receive the manifest, validate that it is well-formed, fill in the
+one `KnowledgeSource` row that represents the recording, and put a job on the queue so the worker can
+process it out of band. The design goal is a **fast, dumb accept**: everything expensive is deferred
+to the [worker](knowledge-base.md), and the bytes are deferred to storage itself.
 
 ---
 
@@ -23,9 +27,9 @@ everything expensive is deferred to the [worker](knowledge-base.md).
 
 | File | Role |
 |---|---|
-| [`server.ts`](../../packages/api/src/server.ts) | The Fastify app: CORS, multipart, the `/v1/sessions` routes (+ the copilot routes). |
+| [`server.ts`](../../packages/api/src/server.ts) | The Fastify app: CORS, multipart, `/v1/uploads/sign` + the `/v1/sessions` routes (+ the copilot routes). |
 | [`auth.ts`](../../packages/api/src/auth.ts) | Resolve a Bearer recorder token → workspace (by SHA-256 hash). |
-| [`storage.ts`](../../packages/api/src/storage.ts) | The S3-compatible client, bucket bootstrap, key layout, and the `ArtifactReader` the worker uses. |
+| [`storage.ts`](../../packages/api/src/storage.ts) | The S3-compatible clients (one for reads/writes, one for presigning), bucket bootstrap, key layout, `signPutUrl`, and the `ArtifactReader` the worker uses. |
 | [`queue.ts`](../../packages/api/src/queue.ts) | The BullMQ producer (`synthesisQueue`) + the Redis connection options. |
 | [`config.ts`](../../packages/api/src/config.ts) | Env config (port, Redis URL, OpenAI key/models, R2/MinIO creds). |
 
@@ -35,11 +39,21 @@ Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
 
 ## 3. Inputs / Outputs
 
-- **`POST /v1/sessions`** — *the* ingestion route.
-  - **In:** `multipart/form-data` (≤300 MB): a `manifest` field + N artifact files; `Authorization:
-    Bearer <recorder token>`.
-  - **Out:** `{ sessionId, status: "uploaded" }`. Side effects: artifacts in object storage, a
-    `KnowledgeSource` row, a queued job.
+- **`POST /v1/uploads/sign`** — mint short-lived (900 s) presigned PUT URLs so the recorder uploads
+  artifacts **directly** to object storage while recording.
+  - **In:** JSON `{ uploadId, files: [{ rel }] }` (1–100 entries, each `rel` allowlisted to
+    `shots/*.jpg|jpeg|png`, `dom/*.html`, `audio.webm`); `Authorization: Bearer <recorder token>`.
+  - **Out:** `{ sessionId, expiresIn, urls: [{ rel, url }] }`. Side effect: upserts the
+    `KnowledgeSource` row by `(workspaceId, uploadId)` with `status: "recording"`. `409` if the
+    recording is already past the open statuses. **The API never touches these bytes.**
+- **`POST /v1/sessions`** — *finalize*: the manifest plus whatever did not upload directly.
+  - **In:** `multipart/form-data`: a `manifest` field + the leftover artifact files; `Authorization:
+    Bearer <recorder token>` **and a required `X-FlowBuddy-Upload-Id: <uuid>` header** (`400` without
+    it). Every file part's field name is validated against the same artifact allowlist (`400`
+    otherwise).
+  - **Out:** `{ sessionId, status: "uploaded" }` and a queued job — or
+    `{ sessionId, status, alreadyFinalized: true }` when a retry arrives for a recording that was
+    already built (the body is drained, nothing is overwritten).
 - **`GET /v1/sessions/:id`** — status poll for a recording. Returns `{ id, status, error }`, scoped to
   the caller's workspace.
 - **`GET /healthz`** — liveness.
@@ -51,27 +65,50 @@ Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
 ### 4.1 CORS & multipart setup
 
 A global `onRequest` hook sets permissive CORS (`Access-Control-Allow-Origin: *`, allowed headers
-include `Authorization`, `Content-Type`, `X-FlowBuddy-Key`) and short-circuits `OPTIONS` preflights with
-`204`. This is required because the caller origin is `chrome-extension://…` (recorder) or a customer's
+include `Authorization`, `Content-Type`, `X-FlowBuddy-Key`, `X-FlowBuddy-Upload-Id`) and short-circuits
+`OPTIONS` preflights with `204`. This is required because the caller origin is
+`chrome-extension://…` (recorder) or a customer's
 domain (widget). Multipart is registered with generous limits: `fileSize: 300 MB`, `files: 10000`,
 `fieldSize: 100 MB` — a long recording can have thousands of screenshots/DOM files.
 
-### 4.2 The upload pipeline (`/v1/sessions`)
+### 4.2 The upload pipeline (`/v1/uploads/sign` → `/v1/sessions`)
+
+**While the recording runs** — the recorder asks for keys and writes the bytes itself:
 
 ```mermaid
 flowchart TD
-    A["POST /v1/sessions<br/>Bearer token + multipart"] --> B{authWorkspace?}
+    S["POST /v1/uploads/sign<br/>Bearer token + {uploadId, files[]}"] --> S1{authWorkspace?}
+    S1 -- no --> S401["401 invalid/missing token"]
+    S1 -- yes --> S2{"uploadId UUID-shaped?<br/>every rel allowlisted?"}
+    S2 -- no --> S400["400"]
+    S2 -- yes --> S3["resolveRecording(ws, uploadId)<br/>upsert by (workspaceId, uploadId)<br/>status = recording"]
+    S3 --> S4{"status still open?"}
+    S4 -- no --> S409["409 already processing/ready"]
+    S4 -- yes --> S5["signPutUrl(sessionKey(ws, rec.id, rel))<br/>per file, 900 s"]
+    S5 --> S6["return {sessionId, expiresIn, urls[]}"]
+    S6 -.-> S7["recorder PUTs each artifact<br/>DIRECTLY to object storage"]
+```
+
+**At Stop** — finalize, resolved to that same row:
+
+```mermaid
+flowchart TD
+    A["POST /v1/sessions<br/>Bearer token + X-FlowBuddy-Upload-Id + multipart"] --> B{authWorkspace?}
     B -- no --> B401["401 invalid/missing token"]
-    B -- "yes → {workspaceId, ownerId}" --> C["sessionId = randomUUID()"]
-    C --> D["stream each part"]
+    B -- "yes → {workspaceId, ownerId}" --> B2{"header present + UUID-shaped?"}
+    B2 -- no --> B400["400 missing/malformed upload id"]
+    B2 -- yes --> C["resolveRecording(ws, uploadId)<br/>sessionId = rec.id"]
+    C --> C2{"status past recording/uploaded/error?"}
+    C2 -- yes --> C3["drain the body<br/>return {alreadyFinalized:true}"]
+    C2 -- no --> D["stream each part"]
     D --> E{"part.type == file?"}
-    E -- file --> F["putObject(sessionKey(ws, id, relPath))<br/>relPath = field NAME"]
+    E -- file --> F["validate rel against the allowlist<br/>putObjectStream(sessionKey(ws, id, rel))<br/>rel = field NAME"]
     E -- "field 'manifest'" --> G["JSON.parse → manifestRaw"]
     F --> D
     G --> D
     D --> H["sessionManifestSchema.safeParse(manifestRaw)"]
-    H -- invalid --> H400["400 invalid manifest + first 5 zod issues"]
-    H -- valid --> I["prisma.knowledgeSource.create<br/>status=uploaded, manifest stored"]
+    H -- invalid --> H400["400 invalid manifest + first 5 zod issues<br/>(nothing deleted)"]
+    H -- valid --> I["prisma.knowledgeSource.update<br/>status=uploaded, manifest, appBaseUrl, error=null"]
     I --> J["synthesisQueue.add('synthesize', {sessionId, workspaceId})"]
     J --> K["return {sessionId, status:'uploaded'}"]
 ```
@@ -82,21 +119,33 @@ Key mechanics worth understanding:
   req.parts())` and each file part is **piped** to object storage (`part.file` → `putObjectStream`,
   an `@aws-sdk/lib-storage` multipart `Upload` behind a byte-counting `Transform`), so no file is
   ever materialized in RAM — this process also serves the public copilot on a 512 MB instance.
-  A **500 MB total-bundle cap** (checked between files, per-file `fileSize` limit still applies)
-  and a per-file truncation check return `413`; any rejected/failed upload **deletes the session
-  prefix** so nothing is orphaned in storage.
+  A **500 MB total cap** on the finalize request (checked between files, per-file `fileSize` limit
+  still applies) and a per-file truncation check return `413`; a rejected/failed finalize
+  **deliberately deletes nothing**: artifacts that already uploaded directly live under that prefix
+  and cannot be re-sent, so the prefix must survive a bad manifest. Idempotency (same `uploadId` →
+  same row, same keys) is what makes the retry safe instead. Note that these caps now bound only the
+  leftovers — the signed-URL path has no size ceiling.
 - **The field-name-is-the-path trick.** `const rel = part.fieldname || part.filename`. The recorder
   put the relative path (`shots/<id>.jpg`) on the field *name* precisely because multipart strips
-  directories from filenames. The server uses it verbatim (after sanitization) as the object key
-  suffix. This is the matching half of the recorder's upload step.
-- **Validation happens after storage — with cleanup.** Artifacts are written as they stream; the
-  manifest is parsed from its field, then validated with the **zod** `sessionManifestSchema`
-  ([`schemas.ts`](../../packages/shared/src/schemas.ts)). An invalid manifest returns `400` with the
-  first five issues **and deletes the already-streamed artifacts** (`deleteSessionPrefix`) — no
-  orphans.
-- **The `KnowledgeSource` row is the recording's identity.** It stores the **whole manifest as JSON**
-  (`manifest` column), `appBaseUrl`, `status: "uploaded"`, and the owning workspace/user. The worker
-  re-reads the manifest from here, not from the upload.
+  directories from filenames. The server **validates** it against a strict artifact allowlist
+  (`shots/<name>.jpg|.jpeg|.png`, `dom/<name>.html`, `audio.webm`) and rejects anything else with
+  `400` — the same allowlist the signing route enforces. Sanitization alone is not relied on:
+  `sessionKey`'s `..` strip is defeatable (`....//`), so the key is validated before it is built, not
+  cleaned afterwards. This is the matching half of the recorder's upload step.
+- **Validation happens after storage — and now WITHOUT cleanup.** Artifacts are written as they
+  stream; the manifest is parsed from its field, then validated with the **zod**
+  `sessionManifestSchema` ([`schemas.ts`](../../packages/shared/src/schemas.ts)). An invalid manifest
+  returns `400` with the first five issues and **leaves everything in place** — the row stays at
+  `recording` and the retry, carrying the same `uploadId`, resolves to it.
+- **The `KnowledgeSource` row is the recording's identity, and it exists early.** The first signing
+  call upserts it by `(workspaceId, uploadId)` at `status: "recording"` with a null `manifest`;
+  finalize **updates** the same row with the **whole manifest as JSON** (`manifest` column),
+  `appBaseUrl`, `status: "uploaded"`, and clears `error`. The worker re-reads the manifest from here,
+  not from the upload — and skips any job whose row has no manifest yet.
+- **`uploadId` is the recorder's, not the server's.** It is minted in the extension when Record is
+  pressed and is stable across every retry; `@@unique([workspaceId, uploadId])` is what makes both
+  routes idempotent. The server no longer mints a UUID per request — that was how one slow upload
+  plus one Retry used to become two recordings.
 - **Enqueue carries only pointers.** `{ sessionId, workspaceId }` — see [connections.md](connections.md)
   Seam C. The job body is intentionally tiny; the worker rehydrates everything from Postgres + object
   storage.
@@ -113,13 +162,23 @@ Key mechanics worth understanding:
 
 ### 4.4 Object storage (`storage.ts`)
 
-One S3-compatible client points at **MinIO in dev** and **Cloudflare R2 in prod** — identical code,
-different `R2_ENDPOINT`. `forcePathStyle: true` is set (MinIO requires it, R2 tolerates it).
+**Two** S3-compatible clients point at **MinIO in dev** and **Cloudflare R2 in prod** — identical
+code, different `R2_ENDPOINT`. `forcePathStyle: true` is set (MinIO requires it, R2 tolerates it).
+The shared `s3` client does the reads/writes. A **second client exists only for presigning**,
+identical except `requestChecksumCalculation: 'WHEN_REQUIRED'`: with the SDK default the signer bakes
+`x-amz-checksum-crc32` of an **empty body** into the signed query string, which MinIO ignores and
+**R2 enforces** — so a URL signed by the default client passes local dev and fails only in
+production. ⚠️ That failure mode is why the split exists, but **R2 + CORS on a browser-issued
+presigned PUT is still unproven** — everything tested so far is MinIO, which is the permissive side.
 
 - `ensureBucket()` runs at boot — `HeadBucket`, and `CreateBucket` if missing.
+- `signPutUrl(key, contentType)` mints a single-object, 900 s PUT URL (`UPLOAD_URL_TTL_SECONDS`).
+  The URL is the whole credential: it is scoped to exactly one key and cannot list, read, or touch
+  anything else.
 - `sessionKey(workspaceId, sessionId, rel)` builds
   `workspaces/<ws>/sessions/<id>/<rel>` after **sanitizing** `rel` (backslashes → `/`, `..` segments
-  stripped) so a malicious field name can't escape the prefix.
+  stripped). The sanitizer is a backstop, not the control — both routes allowlist `rel` before it
+  ever reaches here.
 - `sessionArtifactReader(ws, id)` returns an **`ArtifactReader`** — a `(relPath) => Promise<Buffer|null>`
   bound to one session. This is the exact function the [worker](knowledge-base.md) calls to fetch the
   audio (and any screenshot it needs); a miss returns `null` rather than throwing.
@@ -150,8 +209,8 @@ Hardening (2026-07-06, review §2.1–2.3 — mirrored by the Studio producer
 
 Re-auths the token, fetches the source **scoped to the caller's workspace** (`findFirst({ id,
 workspaceId })`), and returns `{ id, status, error }`. This is how a caller learns when processing
-moves `uploaded → processing → ready | error`. Studio shows the same status by reading the row
-directly.
+moves `recording → uploaded → processing → ready | error`. Studio shows the same status by reading
+the row directly.
 
 ---
 
@@ -159,21 +218,32 @@ directly.
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `ApiToken` (auth), `KnowledgeSource` (status poll) | `KnowledgeSource` (create, `status=uploaded`, full manifest) |
-| **Object storage** | — | every uploaded artifact under `workspaces/<ws>/sessions/<id>/...` |
-| **Redis** | — | one `synthesis` job per upload |
+| **Postgres** | `ApiToken` (auth), `KnowledgeSource` (status poll, idempotency lookup) | `KnowledgeSource` — **upsert** by `(workspaceId, uploadId)` at `status=recording` (first signed artifact), then **update** to `status=uploaded` + full manifest + `appBaseUrl` at finalize |
+| **Object storage** | — | the **leftover** artifacts streamed at finalize, under `workspaces/<ws>/sessions/<id>/...`; plus **presigned PUT URLs** it mints for keys the *recorder* writes directly |
+| **Redis** | — | one `synthesis` job per finalized recording |
 
 ---
 
 ## 6. Failure modes & edge cases
 
 - **Bad/missing token** → `401`, nothing stored or enqueued.
-- **Malformed manifest** → `400` with zod issues; **no row, no job**, and the streamed artifacts are
-  **cleaned up** (session prefix deleted).
-- **Oversized bundle / truncated file** → `413`, artifacts cleaned up, no row/job; the recorder keeps
-  its buffer for retry (R2).
-- **Object-storage write fails mid-stream** → the request 500s after best-effort cleanup; no row/job,
-  so the recorder treats it as a failed upload and keeps its buffer for retry (R2).
+- **Missing/malformed `X-FlowBuddy-Upload-Id`** → `400`; nothing is read, stored, or enqueued.
+- **Malformed manifest** → `400` with zod issues; **no job**, but the row stays at `status=recording`
+  and the artifacts stay in storage (the retry needs them).
+- **Oversized leftover / truncated file** → `413`; nothing cleaned up, no job; the recorder keeps its
+  buffer for retry (R2).
+- **Object-storage write fails mid-stream** → the request 500s; nothing cleaned up, no job, so the
+  recorder treats it as a failed upload and retries into the same recording (R2).
+- **Retry after a lost success response** → the same `uploadId` resolves to the same row; if it is
+  already past `{recording, uploaded, error}` the body is drained and `{ alreadyFinalized: true }` is
+  returned — nothing is rebuilt and no second recording is created. `error` is deliberately *in* the
+  open set so a failed build stays retryable.
+- **A recording started and never stopped** → the row sits at `recording` with its uploaded objects
+  forever. **There is no cleanup path for this yet** (known gap).
+- **Signed URLs have no size ceiling** — `MAX_BUNDLE_BYTES` bounds only the finalize request, not the
+  direct-upload path (known gap).
+- **An old recorder build** (store v0.6.0) sends no identity header and gets a flat `400` — see the
+  deploy-ordering warning at the end of this section.
 - **OpenAI / processing problems** are **not** this module's concern — it returns success the moment
   the row + job exist. Processing failures retry (attempts: 3) and only then surface as
   `status=error` on the source.
@@ -181,12 +251,20 @@ directly.
   Recordings UI now surfaces this: >15 min without progress renders as **"Stalled — re-process"**
   (driven by `KnowledgeSource.updatedAt`), and the existing re-process action recovers it.
 
+> ⚠️ **Deploy ordering.** This route now rejects a finalize without `X-FlowBuddy-Upload-Id`, and the
+> extension build live on the Chrome Web Store (v0.6.0) does not send one. **The newer recorder has
+> to reach users before this API reaches an environment they use.** As of 2026-07-27 the change is on
+> `dev` only — not deployed — and no store build has been cut (the extension was not version-bumped;
+> `packages/extension/dist/` is a localhost build, so a store artifact needs
+> `STUDIO_URL=… pnpm --filter @flowbuddy/extension build`).
+
 ---
 
 ## 7. Connections
 
 - **Accepts from ←** [Recorder](recorder-capture.md) (Seam A).
-- **Lands artifacts in →** object storage; **persists** the `KnowledgeSource`; **enqueues** the job
+- **Authorizes / lands artifacts in →** object storage (the recorder writes most of them itself with
+  URLs this module signs); **persists** the `KnowledgeSource`; **enqueues** the job
   (Seams B & C in [connections.md](connections.md)).
 - **Hands off to →** the [Knowledge Base worker](knowledge-base.md), which consumes the job and reads
   back the manifest + artifacts.

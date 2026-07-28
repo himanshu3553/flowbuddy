@@ -21,7 +21,7 @@
 
 ## Module 1 — Raw data capture (input modalities)
 
-Job: get raw, un-interpreted signal in. Three capture **kinds**, each producing different raw layers but the **same envelope** (capture → upload → object storage + a source record). A capture carries a `kind`.
+Job: get raw, un-interpreted signal in. Three capture **kinds**, each producing different raw layers but the **same envelope** (capture → object storage + a source record). A capture carries a `kind`. Since 2026-07-27 (on `dev`) the upload is **incremental**: the recorder asks the api for short-lived presigned PUT URLs and writes screenshots / DOM snapshots **straight to object storage while recording** — which also creates the source record on first contact — and Stop sends only the manifest, the audio, and anything unconfirmed.
 
 | Kind | Raw layers | Status |
 |---|---|---|
@@ -41,7 +41,7 @@ Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This
 
 A processing/extraction step (the worker, repurposed) reads a raw capture and writes:
 
-- **`KnowledgeSource`** — one per capture: `kind`, app, **persisted transcript**, status, link to raw artifacts/manifest.
+- **`KnowledgeSource`** — one per capture, **keyed by the recorder's own `uploadId`** (`@@unique([workspaceId, uploadId])`) so a re-sent recording resolves to the same row instead of becoming a second one: `kind`, app, **persisted transcript**, status (`recording` while artifacts are still arriving), link to raw artifacts / **nullable** manifest.
 - **`KnowledgeItem[]`** — the normalized, **indexed units of knowledge** (what makes the KB queryable and modality-agnostic):
   - from a **workflow** capture → *distilled step items* (clean imperative `instruction`, optional `detail`, `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, + searchable `text`). Raw events are **not** persisted as items — they're cleaned + distilled into these steps (2026-06-26); the raw event log remains only in the source `manifest`.
   - from a **narration-only** capture → *topic items* (transcript span text, time range, + searchable `text`)
@@ -61,11 +61,16 @@ model KnowledgeSource {          // evolves RecSession (table kept as "RecSessio
   id           String   @id @default(cuid())
   workspaceId  String
   createdById  String
+  uploadId     String?                        // the RECORDER's own id for the recording, stable across retries;
+                                              // @@unique([workspaceId, uploadId]) is what makes ingestion idempotent
   kind         String   @default("workflow") // workflow | narration | video
   appBaseUrl   String?
-  status       String   @default("uploaded") // uploaded | processing | ready | error
+  status       String   @default("uploaded") // recording | uploaded | processing | ready | error
+                                              // recording = artifacts still arriving; the row exists from the
+                                              // first uploaded artifact, before Stop
   transcript   Json?                          // PERSISTED: { text, segments[] }  (new)
-  manifest     Json                           // raw capture (events for workflow; minimal for narration)
+  manifest     Json?                          // raw capture (events for workflow; minimal for narration)
+                                              // — NULL until the recording is stopped and finalized
   error        String?
   createdAt    DateTime @default(now())
   items        KnowledgeItem[]

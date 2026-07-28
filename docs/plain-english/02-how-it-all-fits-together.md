@@ -54,6 +54,11 @@ knows what success looks like), which URL you were on, and your voice throughout
 Two other ways to record are planned but not built: **just talking, no clicking** (for explaining
 concepts rather than steps), and **uploading a video**.
 
+Those files go **straight to storage as they're captured**, not in one lump when you stop — each one
+with a one-off, short-lived permission slip that lets the browser write that single file. The service
+itself never handles the file contents; at the end it just receives your audio and the index of what
+happened. That's why a recording shows up in Studio while it's still being made.
+
 What comes out of this stage is raw. It isn't knowledge yet.
 
 ### Stage 2 · Turn it into a knowledge base

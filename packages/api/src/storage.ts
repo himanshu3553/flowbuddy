@@ -8,6 +8,7 @@ import {
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Transform, type Readable } from 'node:stream';
 import type { ArtifactReader } from '@flowbuddy/synthesis';
 import { createLogger } from '@flowbuddy/logger';
@@ -22,6 +23,40 @@ export const s3 = new S3Client({
   credentials: { accessKeyId: config.r2.accessKeyId, secretAccessKey: config.r2.secretAccessKey },
   forcePathStyle: true, // required for MinIO; harmless for R2
 });
+
+/**
+ * A SECOND client used only for presigning, identical to `s3` except that default checksum
+ * calculation is off. This is not a style choice: with the SDK default the signer bakes
+ * `x-amz-checksum-crc32=AAAAAA==` — the CRC32 of an EMPTY body, computed at signing time when there
+ * is no body to hash — into the signed query string. MinIO ignores the mismatch and stores the real
+ * bytes anyway; R2 enforces checksums, so a URL signed that way passes local dev and fails only in
+ * production. Verified against the SDK in use (3.1071): WHEN_REQUIRED emits no checksum params.
+ * The shared `s3` client above is deliberately left alone — its PutObject/Upload calls work today.
+ */
+const signer = new S3Client({
+  endpoint: config.r2.endpoint,
+  region: config.r2.region,
+  credentials: { accessKeyId: config.r2.accessKeyId, secretAccessKey: config.r2.secretAccessKey },
+  forcePathStyle: true,
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+});
+
+/** How long a recorder has to use an upload pass. Long enough to survive a slow link + a retry,
+ *  short enough that a leaked URL is worthless quickly. */
+export const UPLOAD_URL_TTL_SECONDS = 900;
+
+/**
+ * Mint a short-lived, single-object PUT URL so the recorder can upload one artifact DIRECTLY to
+ * object storage — the API never touches the bytes. The URL is the only credential: it is scoped to
+ * exactly this key, expires, and cannot list, read, or overwrite anything else.
+ */
+export function signPutUrl(key: string, contentType?: string): Promise<string> {
+  return getSignedUrl(
+    signer,
+    new PutObjectCommand({ Bucket: config.r2.bucket, Key: key, ContentType: contentType }),
+    { expiresIn: UPLOAD_URL_TTL_SECONDS },
+  );
+}
 
 export async function ensureBucket(): Promise<void> {
   try {

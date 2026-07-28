@@ -51,10 +51,16 @@ sequenceDiagram
 
     U->>R: record · narrate · click through the app
     R->>R: buffer events + screenshots + DOM + audio in IndexedDB
+    loop while recording
+        R->>A: POST /v1/uploads/sign { uploadId, files[] }
+        A->>P: upsert KnowledgeSource by (workspaceId, uploadId) — status = recording
+        A-->>R: presigned PUT URLs (900 s)
+        R->>O: PUT each artifact DIRECTLY → workspaces/<ws>/sessions/<id>/...
+    end
     U->>R: stop
-    R->>A: POST /v1/sessions  (Bearer recorder token, multipart bundle)
-    A->>O: stream each artifact → workspaces/<ws>/sessions/<id>/...
-    A->>P: create KnowledgeSource (status = uploaded, manifest stored)
+    R->>A: POST /v1/sessions (Bearer token, X-FlowBuddy-Upload-Id, manifest + audio + leftovers)
+    A->>O: stream only the leftovers
+    A->>P: update the SAME row → status = uploaded, manifest stored
     A->>Q: enqueue { sessionId, workspaceId }
     A-->>R: { sessionId, status: uploaded }   (returns immediately)
     Q->>W: deliver job
@@ -153,20 +159,36 @@ Studio origin and only relays same-origin messages, so a random site can't injec
 
 ### Seam A — Recorder → Ingestion API (HTTP, synchronous)
 
-- **Transport:** `POST /v1/sessions`, `multipart/form-data`, up to 300 MB.
-- **Payload:** one `manifest` JSON field (the [capture contract](#6-the-cross-module-contracts)) plus
-  N binary files (screenshots, DOM snapshots, audio). **Each file's relative path rides on the
-  multipart *field name*** — because multipart strips directory components from filenames, the path
-  (`shots/<id>.jpg`) is preserved as the field name and reconstructed server-side.
-- **Gate:** recorder token (Bearer).
-- **Result:** `{ sessionId, status: "uploaded" }` — and a queued job. Nothing is processed yet.
+- **Transport:** two hops. (1) `POST /v1/uploads/sign` (JSON) during recording, returning 900 s
+  presigned PUT URLs the recorder uses against object storage directly — see Seam B.
+  (2) `POST /v1/sessions`, `multipart/form-data`, at Stop.
+- **Payload (2):** one `manifest` JSON field (the [capture contract](#6-the-cross-module-contracts))
+  plus **only the artifacts storage never confirmed** — normally just `audio.webm`. **Each file's
+  relative path still rides on the multipart *field name*** — because multipart strips directory
+  components from filenames, the path (`shots/<id>.jpg`) is preserved as the field name — and it is
+  now **validated against an artifact allowlist** (`shots/*.jpg|jpeg|png`, `dom/*.html`,
+  `audio.webm`) rather than merely reconstructed.
+- **Gate:** recorder token (Bearer) **plus a required `X-FlowBuddy-Upload-Id` header** — the
+  recorder's own id for the recording, stable across retries. Both routes resolve it to the same row
+  via `@@unique([workspaceId, uploadId])`, so a retry can never create a second recording (it
+  previously did: the server minted a fresh UUID per request).
+- **Result:** `{ sessionId, status: "uploaded" }` and a queued job — or `{ alreadyFinalized: true }`
+  if the recording was already built, in which case the body is drained and nothing is overwritten.
+  Nothing is processed yet.
 
-### Seam B — Ingestion API → Object storage (S3 API, synchronous)
+### Seam B — Recorder / Ingestion API → Object storage (S3 API, synchronous)
 
-- **Transport:** S3 `PutObject` to MinIO (dev) or Cloudflare R2 (prod) — same code, different
-  endpoint ([`storage.ts`](../../packages/api/src/storage.ts)).
+- **Transport:** two writers. (a) **Recorder → storage directly**: a plain `PUT` to a single-object,
+  900 s presigned URL (`signPutUrl`) — the API authorizes the key but never handles the bytes.
+  (b) **API → storage**: S3 `PutObject` / multipart `Upload` for the leftovers at finalize. Same
+  [`storage.ts`](../../packages/api/src/storage.ts), MinIO in dev / R2 in prod. Presigning uses a
+  **separate S3 client** with `requestChecksumCalculation: 'WHEN_REQUIRED'` — the SDK default bakes an
+  empty-body CRC32 into the signed URL, which MinIO ignores and R2 enforces (passes local, fails
+  prod). ⚠️ R2 + CORS on a browser-issued presigned PUT is **still unproven** — all testing so far is
+  against MinIO.
 - **Key layout:** `workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>`. The relative path
-  is sanitized (`..` stripped) before it becomes a key.
+  is **validated against the artifact allowlist** before it becomes a key, in both routes — a signed
+  URL is a write capability, so the key it authorizes is checked, not cleaned.
 - This is where the *bulk* lives. Postgres only stores the manifest JSON + metadata, never the
   binaries.
 

@@ -94,7 +94,8 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 - **The async seam is the queue.** The API accepts an upload and returns immediately; the expensive
   AI work (transcription, segmentation, distillation) happens later in the **worker**, decoupled by a
   Redis/BullMQ job. A recording's lifecycle is tracked by `KnowledgeSource.status`
-  (`uploaded → processing → ready | error`).
+  (`recording → uploaded → processing → ready | error`) — `recording` meaning artifacts are still
+  arriving, since the row is created from the first upload rather than at Stop.
 - **The trust gate is one row.** The copilot can only answer from workflows the operator explicitly
   **approved** — represented by a `CopilotApproval` row keyed by `(sourceId, segmentIndex)`. Retrieval
   filters through it; that's the single "no-leak" enforcement point.

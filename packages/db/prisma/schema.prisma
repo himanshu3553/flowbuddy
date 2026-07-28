@@ -170,11 +170,19 @@ model KnowledgeSource {
   id          String   @id @default(cuid())
   workspaceId String
   createdById String
+  // The RECORDER's own id for this recording, minted once when Record is pressed and stable across
+  // every retry. It is what makes ingestion idempotent: a re-sent recording resolves to this row
+  // instead of creating a second one. Nullable only so pre-existing rows stay valid; every new
+  // recording has it. Deliberately NOT the primary key — the composite unique below scopes it per
+  // workspace, so a client-supplied value can never collide with another workspace's recording.
+  uploadId    String?
   kind        String   @default("workflow") // workflow | narration | video
-  status      String   @default("uploaded") // uploaded | processing | ready | done | error  (ready = KB built + segmented, candidates available, no articles yet)
+  // recording = artifacts are still arriving (the row exists from the first signed upload, so a
+  // recording is visible in Studio while it uploads rather than only after it finishes).
+  status      String   @default("uploaded") // recording | uploaded | processing | ready | done | error  (ready = KB built + segmented, candidates available, no articles yet)
   title       String? // founder-given label for the recording (null = fall back to appBaseUrl)
   appBaseUrl  String?
-  manifest    Json // raw capture manifest (events, markers, meta)
+  manifest    Json? // raw capture manifest (events, markers, meta) — null until the recording is stopped and finalized
   transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval
   error       String?
   createdAt   DateTime @default(now())
@@ -185,6 +193,7 @@ model KnowledgeSource {
   items            KnowledgeItem[]
   copilotApprovals CopilotApproval[]
 
+  @@unique([workspaceId, uploadId])
   @@map("RecSession")
 }
 

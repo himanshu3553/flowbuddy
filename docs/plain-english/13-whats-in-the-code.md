@@ -15,7 +15,9 @@ something works *inside*, `internals/` is the engineering deep-dive — start at
         │        ← the EXTENSION is watching
         ▼
   Uploaded
-        │        ← the API takes it in and files it
+        │        ← screenshots and page snapshots go STRAIGHT to storage as you record;
+        │          the API only hands out one-file permission slips, then takes the
+        │          index and audio when you stop
         ▼
   Processed in the background
         │        ← the WORKER + SYNTHESIS turn it into steps
@@ -32,9 +34,10 @@ something works *inside*, `internals/` is the engineering deep-dive — start at
   They get an answer
 ```
 
-**Three different keys gate three different hops**, and they're never mixed up: the extension has a
-secret token for uploading, Studio has your login, and the widget has a public key that's safe to sit
-in anyone's page source.
+**Four different credentials gate four different hops**, and they're never mixed up: the extension has
+a secret token for uploading, Studio has your login, the widget has a public key that's safe to sit in
+anyone's page source, and each captured file gets its **own one-off, expiring permission slip** that
+can write exactly one file and can't read, list, or overwrite anything else.
 
 ---
 
@@ -48,7 +51,7 @@ Everything is under `packages/`.
 |---|---|
 | **`extension`** | The Chrome recorder. Watches clicks, captures the page and screenshots, masks sensitive data **before anything is uploaded**, and survives navigations and multiple tabs. |
 | **`synthesis`** | The brain. Transcribes audio, cleans raw clicks, splits recordings into workflows, writes readable steps, finds relevant knowledge, and writes answers. **If answer quality is the question, it's in here.** |
-| **`api`** | Takes uploads in, answers the assistant's questions, and *also* runs the background worker that processes recordings. |
+| **`api`** | Hands out one-file permission slips so the recorder uploads straight to storage (**it deliberately never handles those bytes** — that's why long recordings stopped stalling), takes the index and audio when a recording stops, answers the assistant's questions, and *also* runs the background worker that processes recordings. |
 | **`web`** | Studio — the web app you log into. |
 | **`widget`** | The assistant your customers see. One script, no dependencies, isolated from the host page's styling so it can't be broken by someone's CSS. |
 

@@ -12,9 +12,10 @@
 While the operator clicks through their own product and narrates ("now I'll create a project…"), the
 recorder captures, for **every meaningful interaction**: what was clicked (a rich DOM fingerprint),
 where it happened (route), a **screenshot before and after**, a DOM snapshot, and the **microphone
-narration** — all timestamped against a single session clock. On stop, it assembles a
-[`SessionManifest`](../../packages/shared/src/capture.ts) plus the binary artifacts and POSTs them to
-the [Ingestion API](ingestion-api.md).
+narration** — all timestamped against a single session clock. Screenshots and DOM snapshots are pushed
+to object storage **as they are captured**, over short-lived signed URLs; on stop it assembles a
+[`SessionManifest`](../../packages/shared/src/capture.ts) and POSTs it — with the audio and anything
+storage never confirmed — to the [Ingestion API](ingestion-api.md).
 
 The guiding principle is **no silent data loss**: every outcome (success, failure, zero events) is
 surfaced, and a failed upload keeps the buffer so the user can retry.
@@ -51,11 +52,13 @@ and the **`micLevel`** relay that feeds the control-bar meter into the top frame
   — R9), their microphone, and a **"new workflow" marker** dropped from the popup or the on-page
   control bar (a marker *hotkey* is R5 — deferred). Plus a stored **recorder token + API URL** (from
   the connect handshake).
-- **Output:** an HTTP `POST /v1/sessions` carrying:
-  - the `manifest` (a `SessionManifest` JSON),
-  - `audio.webm` (if narration was captured),
-  - `shots/<eventId>.jpg` and `shots/<eventId>-post.jpg` (screenshots — JPEG, R12),
-  - `dom/<eventId>.html` and `dom/<eventId>-post.html` (DOM snapshots).
+- **Output (during recording):** `POST /v1/uploads/sign` (`{ uploadId, files: [{ rel }] }`) followed
+  by direct **`PUT`s to object storage** for `shots/<eventId>.jpg` / `shots/<eventId>-post.jpg`
+  (screenshots — JPEG, R12) and `dom/<eventId>.html` / `dom/<eventId>-post.html` (DOM snapshots).
+- **Output (on stop):** `POST /v1/sessions` with `X-FlowBuddy-Upload-Id: <uploadId>`, carrying the
+  `manifest` (a `SessionManifest` JSON), `audio.webm` (if narration was captured), and **only those
+  artifacts storage never confirmed**. If signing is unavailable (offline, an older server), that set
+  is everything — the old all-in-one bundle, unchanged.
 
 ---
 
@@ -199,18 +202,36 @@ duration, matching the active-time event clock). A **second `AnalyserNode`** on 
 extra `getUserMedia`) samples the mic level ~8×/s and broadcasts `micLevel` → the background relays it
 to the recording tab's top frame for the **control-bar meter** (R7).
 
-### 4.8 Assemble & upload
+### 4.8 Streaming artifacts while recording, then assemble & upload
 
-`finalize()` → `assembleAndUpload()`:
+**Streaming (during the recording).** Every captured event schedules a background drain
+(`scheduleArtifactDrain`). A drain diffs the `shot:*`/`dom:*` buffer against `up:<sessionId>:<rel>`
+markers **using key-only cursors** (`kvKeysByPrefix` → `openKeyCursor` — reading values would drag the
+whole recording through the service worker's heap on every click, which is the exact long-recording
+cost this change exists to remove), asks `POST /v1/uploads/sign` for up to 25 URLs, PUTs them
+6-at-a-time, and writes a marker per confirmed artifact. Every request is deadlined at 30 s; any
+failure (offline, auth, a `409` on an already-built recording) simply gives up quietly, leaving the
+artifact buffered so it rides the Stop bundle — **the degraded path is exactly the old behaviour,
+never data loss.** Markers are scoped by the **server** `sessionId` so that if the row is deleted or
+the DB wiped, a new row correctly starts from zero.
 
-1. Read `meta`, all `event:*` (sorted by key = chronological), and `audio` from IndexedDB.
-2. Build the `manifest` object: `app` meta, `audio` ref, `markers`, `events[]`.
-3. Build a `FormData`: the `manifest` JSON field, `audio.webm`, and every `shot:*`/`dom:*` entry.
-   **The relative path is the field name** (`fd.append('shots/<id>.jpg', blob, ...)`) — because
+**Assemble & upload.** `finalize()` → `assembleAndUpload()`:
+
+1. Read `meta` (now including the `uploadId` minted at Record start, and the server `sessionId`), all
+   `event:*` (sorted by key = chronological), and `audio` from IndexedDB.
+2. Build the `manifest` object: `app` meta, `audio` ref, `markers`, `events[]` — and `manifest.id` is
+   now the `uploadId`, not `''`.
+3. **Flush artifacts one last time** (`flushArtifacts`, hard-deadlined at 20 s so a slow flush can
+   never re-create the hung-Stop symptom), then build a `FormData`: the `manifest` JSON field,
+   `audio.webm`, and **only the `shot:*`/`dom:*` entries storage has not confirmed**.
+   **The relative path is still the field name** (`fd.append('shots/<id>.jpg', blob, ...)`) — because
    multipart strips directories from filenames, the path must ride on the field name so the server can
    reconstruct the object key.
-4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>` (falls back to the stored
-   connection's URL/token if the session's own were lost to a browser restart).
+4. `POST /v1/sessions` with `Authorization: Bearer <recorder token>` **and
+   `X-FlowBuddy-Upload-Id: <uploadId>`** (falls back to the stored connection's URL/token if the
+   session's own were lost to a browser restart). The identity has to ride a header because parts
+   stream to storage before the manifest part is parsed — and it is what makes Retry idempotent: the
+   server resolves the same recording instead of minting a new one.
 5. Record the outcome once (`recordOutcome`): buffer wipe on success, `lastUpload` for the popup's
    result/retry screens, `lastSession` for the persistent **Recent** row, the terminal `phase`, and
    the toolbar badge. The popup's status bar and the control bar's **status pill** both read from
@@ -267,14 +288,19 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 ## 5. Data it reads / writes
 
 - **Writes (transiently):** IndexedDB (`flowbuddy-recorder` DB, `kv` store) keyed by prefix —
-  `meta`, `audio`, `event:*`, `shot:*`, `dom:*`. Cleared on successful upload (R2).
-- **Writes (durably):** nothing in Postgres directly — it hands the bundle to the API, which persists
-  the `KnowledgeSource`.
+  `meta` (now carrying the recording's `uploadId` and, once signing succeeds, the server
+  `sessionId`), `audio`, `event:*`, `shot:*`, `dom:*`, and **`up:<sessionId>:<rel>`** — one marker per
+  artifact confirmed in object storage. The markers, not in-memory state, are what a restarted
+  service worker re-derives the pending set from. All cleared on successful upload (R2).
+- **Writes (durably):** nothing in Postgres directly — but its first signing call is what causes the
+  API to create the `KnowledgeSource` row (`status: "recording"`), and finalize fills it in.
 - **Reads:** `chrome.storage.local` (`apiToken`, `backendUrl`, `connectedEmail`, `lastUpload`, plus
   the v0.3.0 `phase` — the persisted stop→upload pipeline state — and `lastSession` — the Recent
   row's id/status) and `chrome.storage.session` (the live `rec` state).
-- **Object storage:** indirectly — the API writes the uploaded artifacts to
-  `workspaces/<ws>/sessions/<id>/...`.
+- **Object storage: DIRECTLY.** Screenshots and DOM snapshots are PUT by the extension itself to
+  `workspaces/<ws>/sessions/<id>/...`, using single-object 900 s signed URLs minted by
+  `POST /v1/uploads/sign`; the API never sees those bytes. Only the audio and any unconfirmed
+  leftovers still go through the API at Stop.
 
 ---
 
@@ -291,14 +317,27 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 - **Worker killed mid-recording** → no data loss (R4): the 20 s keepalive normally keeps the worker
   warm, and if it's evicted anyway the content script **buffers events and reconnects the port** on the
   next send (waking a fresh worker that re-reads `rec` from `chrome.storage.session`); the IndexedDB
-  buffer survives regardless.
+  buffer survives regardless. Direct artifact upload also survives it: what has been confirmed is
+  recorded in IndexedDB markers, not in the worker's memory.
+- **Signing unavailable** (offline, an older server without `/v1/uploads/sign`, an expired token) →
+  the drain gives up quietly and every artifact rides the Stop bundle — the pre-change behaviour.
+- **Upload interrupted and retried** → no longer a duplicate recording: the `uploadId` minted at
+  Record start is stable across retries and the server resolves it to the same row.
+
+> ⚠️ **Not yet in users' hands.** As of 2026-07-27 this is on `dev` only. The extension was **not**
+> version-bumped and **no store build has been cut**; `packages/extension/dist/` is currently a
+> localhost build (a store artifact needs `STUDIO_URL=… pnpm --filter @flowbuddy/extension build`).
+> Because the API now rejects a finalize without `X-FlowBuddy-Upload-Id` and the live store build
+> (v0.6.0) does not send one, **the newer recorder has to reach users before this API reaches an
+> environment they use.**
 
 ---
 
 ## 7. Connections
 
-- **Hands off to →** [Ingestion API](ingestion-api.md) over `POST /v1/sessions` (Seam A in
-  [connections.md](connections.md)).
+- **Hands off to →** [Ingestion API](ingestion-api.md) over `POST /v1/uploads/sign` (during
+  recording) and `POST /v1/sessions` (at Stop) — Seam A in [connections.md](connections.md).
+- **Writes directly to →** object storage, with the signed URLs that first route hands back (Seam B).
 - **Emits the contract →** [`SessionManifest`](../../packages/shared/src/capture.ts), consumed
   downstream by the [Knowledge Base build](knowledge-base.md).
 - **Gets its token from →** [Studio](studio.md)'s `/connect` page (the handshake).

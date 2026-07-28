@@ -104,6 +104,12 @@ load with no action from anyone.
 **You only need a store release when the recorder itself changes**: new recording features, changed
 permissions, or a new baked-in address for Studio.
 
+**But the order can matter, and it does right now.** The server can start requiring something only a
+newer recorder sends — that's exactly what the recording-upload rewrite sitting on the `dev` branch
+does. When that's the case, **the new recorder has to be live on the store *before* the server change
+reaches production**, otherwise everyone's installed recorder stops being able to upload. So a store
+release isn't always the last step; sometimes it's the blocker.
+
 That last one is a real trap. **The extension has the Studio address compiled into it.** If that
 domain ever changes, every installed copy breaks and you must submit a new version. It happened once
 already, during the rename.
@@ -115,7 +121,10 @@ Two standing rules:
 - **Log every store release.** `extension-releases.md` is a living record of what shipped, which
   permissions changed, and which addresses were baked in. Update it every time.
 
-Currently live: **v0.6.0**, since July 2026.
+Currently live: **v0.6.0**, since July 2026. ⚠️ It **cannot upload to a server built from the `dev`
+branch** — the recording-upload rewrite requires an identity v0.6.0 doesn't send. No replacement has
+been version-bumped, packaged or submitted yet, and one must go live before that server change reaches
+production.
 
 ---
 

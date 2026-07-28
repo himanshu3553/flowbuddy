@@ -35,7 +35,10 @@ export interface RecordingRow {
 type Filter = 'all' | 'ready' | 'processing' | 'failed';
 
 const READY = ['ready', 'done'];
-const PROCESSING = ['uploaded', 'processing'];
+// 'recording' = artifacts still arriving (the row exists from the first upload, before Stop).
+// It belongs in the in-flight bucket: this list classifies "failed" as everything that is neither
+// ready nor in-flight, so leaving it out would count a live capture as a failure.
+const PROCESSING = ['recording', 'uploaded', 'processing'];
 
 function statusMeta(status: string, stalled: boolean) {
   const { label, tone } = recordingStatusBadge(status, { stalled });

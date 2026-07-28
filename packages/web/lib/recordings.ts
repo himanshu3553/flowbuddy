@@ -130,8 +130,15 @@ export function isRecordingStalled(status: string, updatedAt: Date, now: number 
 export function recordingStatusBadge(
   status: string,
   opts: { stalled?: boolean } = {},
-): { label: 'Ready' | 'Processing' | 'Failed' | 'Stalled'; tone: 'success' | 'pending' | 'danger' } {
+): {
+  label: 'Ready' | 'Processing' | 'Failed' | 'Stalled' | 'Recording';
+  tone: 'success' | 'pending' | 'danger';
+} {
   if (status === 'ready' || status === 'done') return { label: 'Ready', tone: 'success' };
+  // Artifacts are still arriving — the row exists from the first upload, before Stop. It MUST have
+  // its own branch: falling through to the default would show a healthy in-progress capture as a
+  // red "Failed", inviting the owner to delete a recording that is still being made.
+  if (status === 'recording') return { label: 'Recording', tone: 'pending' };
   if (status === 'uploaded' || status === 'processing')
     return opts.stalled ? { label: 'Stalled', tone: 'danger' } : { label: 'Processing', tone: 'pending' };
   return { label: 'Failed', tone: 'danger' };

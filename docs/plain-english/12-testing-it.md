@@ -61,6 +61,16 @@ account.
 **4 · Record something.** The standard test case is a sign-in flow, because it's short and exercises
 everything — clicking, typing, a page navigation, and an obvious success state.
 
+**Before you press stop, look at Studio.** The recording should already be listed, marked
+"Recording". That's the new behaviour — files upload as you go, so the entry exists from the first
+screenshot. If it shows as failed, something's wrong.
+
+Stopping should be quick now. If stopping takes minutes, the as-you-go upload isn't working and it
+quietly fell back to sending everything at once.
+
+**Then retry the upload deliberately** — from the recorder, once it has already finished. You must
+still see **exactly one** recording in Studio. Two is the bug this whole change exists to fix.
+
 Watch the worker's log while it processes. It should tell you how many workflows it found and how
 many steps each has.
 
@@ -148,6 +158,13 @@ It runs in preview mode, so a comparison run doesn't pollute your analytics.
 stale after a wipe.
 
 **Recording uploads but nothing happens** — the worker isn't running.
+
+**It's stuck saying "Recording"** — the recording was never stopped. The processor ignores it on
+purpose, because there's nothing to process until you stop. Nothing cleans these up yet; delete it.
+
+**The recorder can't upload at all against a server built from this branch** — you're using the
+published Chrome Web Store version, which is older and doesn't send the identity the server now
+requires. Build and load the recorder from this repo instead.
 
 **The assistant declines everything** — nothing is approved, or the key points at a different
 workspace.

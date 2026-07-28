@@ -113,6 +113,12 @@ generated client at `db:generate` time. So if you change a default in the schema
 regenerate, **nothing happens** — while the database itself reports the new default. It looks exactly
 like the migration didn't work. Run `pnpm build` (which regenerates) after any schema change.
 
+**A second trap of the same shape:** recordings now upload their screenshots straight to file storage
+while you record, using a temporary permission slip the server hands out. **The local file storage is
+more forgiving than the real cloud one** — it accepts permission slips the real one refuses. So
+recording working perfectly on your machine is *not* evidence it works deployed. That path has not
+been proven anywhere but locally yet.
+
 ---
 
 ## Testing the assistant locally

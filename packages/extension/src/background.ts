@@ -1,7 +1,7 @@
 // Background service worker: owns recording lifecycle, captures screenshots,
 // buffers everything in IndexedDB, and uploads the assembled bundle on stop.
 
-import { kvClear, kvEntriesByPrefix, kvGet, kvPut } from './idb.js';
+import { kvClear, kvEntriesByPrefix, kvGet, kvKeysByPrefix, kvPut } from './idb.js';
 import { log } from './log.js';
 import type { CapturedEvent, PortMsg } from './types.js';
 
@@ -276,9 +276,9 @@ async function recoverInterruptedUpload(): Promise<void> {
     if (lastUpload) return; // an outcome exists — the popup's result/retry screens own it
     const phaseName = (phase as { name?: string } | undefined)?.name;
 
-    // Died mid-upload (audio already banked): resume the upload directly. Known edge: if the dead
-    // worker's POST actually reached the server but the response was lost, this re-uploads — a
-    // duplicate recording is the honest failure mode vs. silently losing one.
+    // Died mid-upload (audio already banked): resume the upload directly. This used to risk a
+    // duplicate when the dead worker's POST had reached the server but its response was lost — the
+    // recording now carries a stable uploadId, so the re-send resolves to the same row.
     if (phaseName === 'uploading' && (rec.stopping || rec.backendUrl)) {
       log.info('[recover] resuming an upload interrupted by worker eviction');
       await finalize();
@@ -387,6 +387,7 @@ async function handlePortMsg(msg: PortMsg, windowId?: number, tabId?: number, fr
     const key = `event:${pad(ev.t)}:${ev.id}`;
     idToKey.set(ev.id, key);
     await kvPut(key, ev);
+    scheduleArtifactDrain(); // push this step's artifacts now, not in one lump at Stop
     return;
   }
 
@@ -407,6 +408,7 @@ async function handlePortMsg(msg: PortMsg, windowId?: number, tabId?: number, fr
       settleReason: msg.settleReason,
     };
     await kvPut(key, ev);
+    scheduleArtifactDrain();
   }
 }
 
@@ -514,7 +516,11 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
   await chrome.storage.local.set({ uploadProgress: 0 });
   await setBadge(null);
   const startTime = Date.now();
-  await kvPut('meta', { createdAt: new Date().toISOString(), startTime, app: null, markers: [] });
+  // The recording's OWN identity, minted here and stable for its whole life — including across
+  // every retry. The server keys the recording on it, so a re-sent recording resolves to the same
+  // row instead of becoming a second one. It also namespaces the artifacts we stream up below.
+  const uploadId = crypto.randomUUID();
+  await kvPut('meta', { createdAt: new Date().toISOString(), startTime, uploadId, app: null, markers: [] });
   await setRec({ recording: true, tabId: tab.id, tabIds: [tab.id], windowId: tab.windowId, startTime, backendUrl, token });
 
   await ensureOffscreen();
@@ -679,6 +685,187 @@ async function onRetryUpload(): Promise<{ ok: boolean; error?: string }> {
   return { ok: result.ok, error: result.error };
 }
 
+// ---- artifact streaming: upload screenshots + DOM snapshots WHILE recording ----
+//
+// The recording used to sit entirely in IndexedDB until Stop, then move as one multi-hundred-MB
+// request — hundreds of files the API relayed to object storage one at a time, long after the user
+// thought they were done. Here each artifact goes straight to storage as it is captured, using a
+// single-use signed URL, so Stop has almost nothing left to send.
+//
+// The DURABLE record of what has been sent is an `up:<rel>` marker in IndexedDB, not this module's
+// memory: a worker restart re-derives the pending set by diffing artifacts against markers. Any
+// artifact that never made it is simply still in the buffer, and rides the Stop bundle as before —
+// so a broken or offline direct-upload path degrades to exactly the old behaviour, never to loss.
+
+const UPLOAD_BATCH = 25; // signed URLs per /v1/uploads/sign call
+const UPLOAD_CONCURRENCY = 6; // parallel PUTs — enough to hide latency, gentle on the host's network
+// Every request here is deadlined. A hung upload must never become a hung recording: unconfirmed
+// artifacts simply ride the Stop bundle, which is the design's whole fallback story.
+const ARTIFACT_REQUEST_TIMEOUT_MS = 30_000;
+let artifactDrain: Promise<void> | null = null;
+
+interface PendingArtifact {
+  kvKey: string; // 'shot:shots/x.jpg' | 'dom:dom/x.html'
+  rel: string; //  'shots/x.jpg'      | 'dom/x.html'
+}
+
+/**
+ * "Confirmed in storage" is recorded per SERVER RECORDING — `up:<sessionId>:<rel>` — not per
+ * artifact path. If that row ever goes away (deleted in Studio while the capture is still running,
+ * a wiped database), the next signing call resolves to a NEW recording under a NEW storage prefix;
+ * unscoped markers would then claim artifacts live somewhere they don't, dropping them from the
+ * Stop bundle as well. Scoping by session makes a new row correctly start from zero.
+ */
+const sentMarkerKey = (sessionId: string, rel: string): string => `up:${sessionId}:${rel}`;
+
+/** Relative paths this recording has confirmed in storage. */
+async function sentArtifactRels(sessionId: string | undefined): Promise<Set<string>> {
+  if (!sessionId) return new Set();
+  const prefix = `up:${sessionId}:`;
+  return new Set((await kvKeysByPrefix(prefix)).map((k) => k.slice(prefix.length)));
+}
+
+/**
+ * Artifacts buffered locally that storage hasn't confirmed for THIS recording.
+ * KEYS ONLY — this runs after every captured event, and the buffer it scans is the whole recording.
+ * Reading values here would deserialize every screenshot and DOM snapshot on every click, so the
+ * cost would grow with the square of the recording's length: the exact long-recording path this
+ * whole change exists to make survivable.
+ */
+async function pendingArtifacts(sessionId: string | undefined): Promise<PendingArtifact[]> {
+  const [shots, doms, sent] = await Promise.all([
+    kvKeysByPrefix('shot:'),
+    kvKeysByPrefix('dom:'),
+    sentArtifactRels(sessionId),
+  ]);
+  return [...shots, ...doms]
+    .map((key) => ({ kvKey: key, rel: key.slice(key.indexOf(':') + 1) }))
+    .filter((a) => !sent.has(a.rel));
+}
+
+/** Turn one buffered artifact into the body to PUT (screenshots are data URLs, DOM is raw HTML). */
+async function artifactBlob(a: PendingArtifact): Promise<Blob | null> {
+  const value = await kvGet<string>(a.kvKey);
+  if (!value) return null;
+  return a.kvKey.startsWith('shot:')
+    ? await dataUrlToBlob(value)
+    : new Blob([value], { type: 'text/html' });
+}
+
+/** Fire a background drain unless one is already running (each pass re-reads the buffer). */
+function scheduleArtifactDrain(): void {
+  if (artifactDrain) return;
+  artifactDrain = drainArtifacts()
+    .catch((e) => log.warn('[artifacts] drain failed', e))
+    .finally(() => { artifactDrain = null; });
+}
+
+/**
+ * Await any in-flight drain, then run one more — used at Stop to shrink the final bundle.
+ * HARD-DEADLINED: this runs before the upload watchdog is armed, so an unbounded flush would be a
+ * new way for Stop to hang forever — the very symptom this change exists to remove. On timeout we
+ * simply proceed; anything unconfirmed rides the bundle, and a drain still running in the
+ * background can only mark artifacts already sent, which the bundle then re-sends harmlessly.
+ */
+const FLUSH_DEADLINE_MS = 20_000;
+async function flushArtifacts(): Promise<void> {
+  try {
+    await Promise.race([
+      (async () => {
+        await artifactDrain;
+        await drainArtifacts();
+      })(),
+      sleep(FLUSH_DEADLINE_MS),
+    ]);
+  } catch (e) {
+    log.warn('[artifacts] flush failed — the bundle carries whatever is left', e);
+  }
+}
+
+/**
+ * Push buffered artifacts to storage, marking each confirmed one durably. Deliberately gives up
+ * quietly on ANY failure (offline, auth, a recording the server has already built): the artifacts
+ * stay buffered and the Stop bundle remains the backstop.
+ */
+async function drainArtifacts(): Promise<void> {
+  const rec = await getRec();
+  const conn = await chrome.storage.local.get(['apiToken', 'backendUrl']);
+  const apiBase = (rec.backendUrl || (conn.backendUrl as string) || 'http://localhost:8787').replace(/\/$/, '');
+  const token = rec.token || (conn.apiToken as string | undefined);
+  const meta = await kvGet<{ uploadId?: string }>('meta');
+  if (!token || !meta?.uploadId) return;
+
+  for (;;) {
+    // Which artifacts are outstanding depends on WHICH server recording we're filling, and that is
+    // only known from a signing response — so the first pass asks with an unknown session (nothing
+    // counts as sent) and later passes narrow it.
+    let sessionId = (await kvGet<{ sessionId?: string }>('meta'))?.sessionId;
+    const pending = await pendingArtifacts(sessionId);
+    if (pending.length === 0) return;
+    const batch = pending.slice(0, UPLOAD_BATCH);
+
+    let signed: Array<{ rel: string; url: string }>;
+    try {
+      const res = await fetch(`${apiBase}/v1/uploads/sign`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId: meta.uploadId, files: batch.map(({ rel }) => ({ rel })) }),
+        signal: AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS),
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { sessionId?: string; urls?: Array<{ rel: string; url: string }> };
+      signed = body.urls ?? [];
+      if (!body.sessionId) return;
+      if (body.sessionId !== sessionId) {
+        // First contact, or the row was replaced — remember which recording these markers belong to.
+        sessionId = body.sessionId;
+        await kvPut('meta', { ...(await kvGet<object>('meta')), sessionId });
+      }
+    } catch {
+      return; // offline / server down — Stop still carries everything
+    }
+    const session = sessionId;
+
+    const byRel = new Map(batch.map((a) => [a.rel, a]));
+    let cursor = 0;
+    let confirmed = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(UPLOAD_CONCURRENCY, signed.length) }, async () => {
+        for (;;) {
+          const item = signed[cursor++];
+          if (!item) return;
+          const artifact = byRel.get(item.rel);
+          if (!artifact) continue;
+          try {
+            const blob = await artifactBlob(artifact);
+            if (!blob) {
+              // Vanished from the buffer — nothing to send, so stop reconsidering it.
+              await kvPut(sentMarkerKey(session, item.rel), 1);
+              confirmed++;
+              continue;
+            }
+            const put = await fetch(item.url, {
+              method: 'PUT',
+              body: blob,
+              headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+              signal: AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS),
+            });
+            if (put.ok) {
+              await kvPut(sentMarkerKey(session, item.rel), 1);
+              confirmed++;
+            }
+          } catch {
+            /* leave it unmarked — retried next drain, and it still rides the Stop bundle */
+          }
+        }
+      }),
+    );
+
+    // No forward progress this pass: stop rather than spin on a persistently failing batch.
+    if (confirmed === 0) return;
+  }
+}
+
 /** Build the bundle from IndexedDB and POST it. Throws on assembly errors (caught by finalize). */
 async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   const meta = (await kvGet<any>('meta')) || {};
@@ -698,8 +885,16 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
 
   const audio = await kvGet<{ dataUrl: string | null; durationMs: number }>('audio');
 
+  // The recording's stable identity. Older buffers (captured before this existed) have none; mint
+  // one now and persist it, so even a recovered pre-upgrade recording finalizes idempotently.
+  let uploadId: string = meta.uploadId;
+  if (!uploadId) {
+    uploadId = crypto.randomUUID();
+    await kvPut('meta', { ...meta, uploadId });
+  }
+
   const manifest = {
-    id: '',
+    id: uploadId,
     createdAt: meta.createdAt || new Date().toISOString(),
     app: meta.app || { baseUrl: '', userAgent: navigator.userAgent, viewport: { w: 0, h: 0 }, devicePixelRatio: 1 },
     audio: audio?.dataUrl ? { file: 'audio.webm', durationMs: audio.durationMs } : undefined,
@@ -708,8 +903,19 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
     events,
   };
 
+  // Last chance to push artifacts directly to storage. Whatever it confirms drops out of the bundle
+  // below, so on a healthy connection this request is little more than the manifest and the audio.
+  await flushArtifacts();
+  // Scoped to the recording the server actually gave us — see sentMarkerKey. If signing never
+  // succeeded there is no session and nothing counts as sent, so the bundle carries everything.
+  const sentRels = await sentArtifactRels((await kvGet<{ sessionId?: string }>('meta'))?.sessionId);
+
   const shotEntries = await kvEntriesByPrefix<string>('shot:');
-  log.info(`[capture] summary: events=${events.length}, screenshots=${shotEntries.length}, audio=${audio?.dataUrl ? 'yes' : 'no'}`);
+  const domEntries = await kvEntriesByPrefix<string>('dom:');
+  const artifactCount = shotEntries.length + domEntries.length;
+  log.info(
+    `[capture] summary: events=${events.length}, artifacts=${artifactCount} (${sentRels.size} already uploaded, ${artifactCount - sentRels.size} riding the bundle), audio=${audio?.dataUrl ? 'yes' : 'no'}`,
+  );
 
   // Each file's relative PATH rides on the field NAME (multipart strips directories from
   // filenames), matching what the API expects. `manifest` is a plain text field (no filename).
@@ -719,11 +925,13 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   }
   for (const { key, value } of shotEntries) {
     const rel = key.slice('shot:'.length);
+    if (sentRels.has(rel)) continue; // already in storage — don't send it twice
     const contentType = /\.jpe?g$/i.test(rel) ? 'image/jpeg' : 'image/png'; // R12 — shots are JPEG now
     parts.push({ name: rel, filename: rel, contentType, body: await dataUrlToBlob(value) });
   }
-  for (const { key, value } of await kvEntriesByPrefix<string>('dom:')) {
+  for (const { key, value } of domEntries) {
     const rel = key.slice('dom:'.length);
+    if (sentRels.has(rel)) continue;
     parts.push({ name: rel, filename: rel, contentType: 'text/html', body: new Blob([value], { type: 'text/html' }) });
   }
 
@@ -733,7 +941,13 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   const apiBase = (rec.backendUrl || (conn.backendUrl as string) || 'http://localhost:8787').replace(/\/$/, '');
   const token = rec.token || (conn.apiToken as string | undefined);
   const url = `${apiBase}/v1/sessions`;
-  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const authHeaders: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    // Carries the recording's identity ahead of the body: the server has to resolve which recording
+    // this is BEFORE it starts streaming parts into that recording's storage prefix, and the
+    // manifest part isn't parsed until the body is already flowing.
+    'X-FlowBuddy-Upload-Id': uploadId,
+  };
 
   // Watchdog: a fetch with no deadline can hang forever (the exact failure that stranded a stop on
   // a cold-starting server) — the badge would show ↑ indefinitely with no outcome. Abort when no
@@ -775,7 +989,7 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
       armWatchdog(STALL_MS);
       res = await streamingUpload(
         url,
-        token,
+        authHeaders,
         parts,
         (pct) => { armWatchdog(STALL_MS); void setUploadProgress(pct); },
         aborter.signal,
@@ -847,7 +1061,7 @@ interface Part {
 const FINISHING = -2;
 async function streamingUpload(
   url: string,
-  token: string | undefined,
+  authHeaders: Record<string, string>,
   parts: Part[],
   report: (pct: number) => void,
   signal?: AbortSignal,
@@ -909,7 +1123,7 @@ async function streamingUpload(
   const init = {
     method: 'POST',
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...authHeaders,
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
     },
     body: stream,

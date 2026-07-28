@@ -9,7 +9,16 @@
 
 ---
 
-## v0.6.0 — ✅ LIVE (submitted 2026-07-17 · confirmed live 2026-07-23)
+## Unreleased — ⚠️ a new build is REQUIRED before the API ships to prod (no build cut yet)
+
+**Not packaged, not submitted, version NOT bumped** (`src/manifest.json` still says `0.6.0`) — logged here because it changes what the *live* build can do.
+
+- **What changed in `packages/extension` (on `dev`, unreleased):** the recorder mints an `uploadId` at record start and sends it as `X-FlowBuddy-Upload-Id`; screenshots and DOM snapshots upload **directly to object storage while recording** via short-lived presigned PUT URLs; confirmed artifacts are tracked as `up:<sessionId>:<rel>` markers in IndexedDB; everything degrades to the old all-in-one Stop bundle if signing fails or the server is older.
+- **⚠️ COMPATIBILITY BREAK — deploy ordering:** the API now returns `400` on `/v1/sessions` without that header, and **live build v0.6.0 does not send it**. **A build carrying this must be live on the store BEFORE the API reaches production**, or recording breaks for every installed user ([`deploy.md`](deploy.md) §7.6 and §8.4).
+- **Permissions:** unchanged (the direct PUTs are covered by the existing `<all_urls>` host permission — so no bucket CORS rule is expected, but this is **unverified against real R2**).
+- **Local `dist/` is a LOCALHOST build.** A store artifact needs `STUDIO_URL="…" NODE_ENV=production pnpm --filter @flowbuddy/extension build` first — never zip what's on disk.
+
+## v0.6.0 — ✅ LIVE (submitted 2026-07-17 · confirmed live 2026-07-23) — ⚠️ **incompatible with the API on `dev`** (sends no `X-FlowBuddy-Upload-Id`; see the Unreleased entry above)
 
 **The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
 
@@ -74,8 +83,9 @@ Same localhost-only limitation as 0.2.0. Kept for history: the first time the re
 2. **Prod build:** `STUDIO_URL="https://app.flowbuddyai.com,https://flowbuddy-dev-web.onrender.com,http://localhost:3000" NODE_ENV=production pnpm --filter @flowbuddy/extension build` (prod Studio FIRST = the popup's primary target; use the real deployed dev URL — Render *may* append a random suffix to a service name) — never zip a stale `dist/` (a default-env build is localhost-only and useless on the store).
 3. **Verify the artifact:** `dist/manifest.json` has the new version + bridge `matches` for all three origins; the popup bundle contains `app.flowbuddyai.com`; prod-only expectations hold (minified, `__DEV__` stripped).
 4. **Zip:** `cd packages/extension/dist && zip -r ../flowbuddy-recorder-<version>.zip .` (the zip is gitignored).
-5. **Upload** via the Web Store developer dashboard → submit for review. New permissions = slower review; call them out in the entry.
-6. **Restore the dev build:** plain `pnpm --filter @flowbuddy/extension build` (local unpacked loads should point at localhost again).
-7. **Update the docs:** add the entry HERE (newest first, with commits/permissions/baked targets), plus the store-version notes in [`deploy.md`](deploy.md) §5 and the roadmap P1-M1 row; flip this doc's older entry statuses when a version goes live.
+5. **Check the API contract both ways.** Confirm the artifact sends every header the API requires (today: `X-FlowBuddy-Upload-Id` on `/v1/sessions`), and record in the entry whether this build **must go live before** the matching API reaches prod. Since the upload-identity change, extension and API releases are **ordered, not independent** ([`deploy.md`](deploy.md) §7.6).
+6. **Upload** via the Web Store developer dashboard → submit for review. New permissions = slower review; call them out in the entry.
+7. **Restore the dev build:** plain `pnpm --filter @flowbuddy/extension build` (local unpacked loads should point at localhost again).
+8. **Update the docs:** add the entry HERE (newest first, with commits/permissions/baked targets), plus the store-version notes in [`deploy.md`](deploy.md) §5 and the roadmap P1-M1 row; flip this doc's older entry statuses when a version goes live.
 
 > ⚠️ **The baked Studio URL is part of the artifact.** Moving to a custom domain = rebuild + resubmission (add the new domain to the `STUDIO_URL` list; keep the old one during the transition).

@@ -20,7 +20,7 @@ Before the journey, know the shelves. Only two of them are ours; three are on so
 | # | Where | What it holds | Who writes it | Lifetime |
 |---|---|---|---|---|
 | **1** | **Postgres** (13 tables) | Every queryable fact: accounts, workspaces, recordings, knowledge steps, approvals, questions, analytics | Studio, Ingestion API, worker | **Permanent** until deleted |
-| **2** | **Object storage** (MinIO local / Cloudflare R2 prod) | The heavy bytes of a recording: screenshots, page HTML snapshots, the audio file | Ingestion API on upload | **Permanent** until the recording is deleted |
+| **2** | **Object storage** (MinIO local / Cloudflare R2 prod) | The heavy bytes of a recording: screenshots, page HTML snapshots, the audio file | **The recorder directly** (presigned PUT, during recording) + the Ingestion API (the leftovers, at Stop) | **Permanent** until the recording is deleted |
 | **3** | **Redis** | One job message: *"go build the KB for recording X"* | Ingestion API | **Seconds** — consumed and gone |
 | **4** | **The founder's Chrome** (extension storage + IndexedDB) | A recording *in progress*, before it's uploaded | The recorder extension | Until upload succeeds |
 | **5** | **The end-user's browser tab** (`sessionStorage`) | The open chat thread + any live walkthrough | The widget | **30 minutes**, and gone when the tab closes |
@@ -117,10 +117,14 @@ side. The extension keeps it in `chrome.storage.local`.
 
 ---
 
-## 5. Recording a workflow → **nothing reaches our servers**
+## 5. Recording a workflow → **a row + artifacts start landing while you record**
 
-While the founder records their product, **nothing is written to Postgres or R2.** Everything buffers
-locally in their own Chrome:
+While the founder records, most of the recording is **already on its way to us**. After every captured
+step the recorder asks the API to sign short-lived (900 s) PUT URLs (`POST /v1/uploads/sign`) and
+pushes that step's screenshot + page HTML **straight to object storage** — the API never touches those
+bytes. The first signing call also creates the recording's row in Postgres with `status: "recording"`,
+so Studio shows the capture while it is still being made. Everything is still buffered in Chrome as
+well, and anything storage never confirmed simply rides the Stop bundle exactly as it used to:
 
 | Browser store | What's in it |
 |---|---|
@@ -141,21 +145,26 @@ are replaced with `••••••` at capture time
 
 ---
 
-## 6. Upload → **3 stores written, in this order**
+## 6. Stop → finalize → **3 stores written, in this order**
 
-The founder hits stop. The extension POSTs the whole bundle to `/v1/sessions`
-([`api/src/server.ts:77`](../../packages/api/src/server.ts#L77)).
+The founder hits stop. The extension does one last artifact flush, then POSTs to `/v1/sessions`
+([`api/src/server.ts`](../../packages/api/src/server.ts)) **only what storage has not already
+confirmed** — normally just the manifest and the audio — carrying the recording's stable identity in
+an `X-FlowBuddy-Upload-Id` header (the request is rejected with `400` without it). That header is what
+makes a retry land on the same recording instead of creating a second one.
 
 **Order matters** — each step only happens if the one before it succeeded:
 
 | # | Store | What's written |
 |---|---|---|
-| 1 | **Object storage** | Every file, **streamed** (never held in memory), under the key `workspaces/<workspaceId>/sessions/<sessionId>/…` → `shots/<eventId>.jpg`, `dom/<eventId>.html`, the audio file. Caps: 300 MB per file, 500 MB per bundle. |
-| 2 | **`KnowledgeSource`** (table name in the DB is still `RecSession`) | `id`, `workspaceId`, `createdById`, `status: "uploaded"`, `appBaseUrl`, and **`manifest`** — the entire raw capture JSON: every event, every target fingerprint, every file reference, the markers, the browser/viewport metadata |
+| 1 | **Object storage** | Whatever did **not** already upload directly during recording — normally just the audio — **streamed** (never held in memory) under the key `workspaces/<workspaceId>/sessions/<sessionId>/…`. Caps: 300 MB per file, 500 MB per finalize request; note these caps cover only the leftovers, not the artifacts that came in over signed URLs. |
+| 2 | **`KnowledgeSource`** (table name in the DB is still `RecSession`) | The row already exists (created at the first signed artifact with `uploadId`, `status: "recording"`, `manifest: null`). Finalize **updates** it: `status: "uploaded"`, `appBaseUrl`, `error: null`, and **`manifest`** — the entire raw capture JSON: every event, every target fingerprint, every file reference, the markers, the browser/viewport metadata |
 | 3 | **Redis** | One BullMQ job: `{ sessionId, workspaceId }` |
 
-**If anything fails**, every object already written under that session prefix is deleted — no orphaned
-bytes in R2.
+**If finalize fails, nothing is deleted** — and that reversal is deliberate. Artifacts uploaded during
+recording live under that prefix and the recorder cannot re-send them, so wiping the prefix on a bad
+manifest would destroy the recording. The retry re-uses the same `uploadId`, overwrites the same keys,
+and updates the same row.
 
 📌 **The `manifest` column is the biggest single thing we store, and it is permanent.** It holds the
 complete raw capture forever — not just what the KB later distills from it. That's deliberate (it's
@@ -429,10 +438,12 @@ flowchart TD
     A --> B["Connect extension"]
     B --> B1["ApiToken (hashed)"]
     B --> C["Record"]
-    C --> C1["Founder's browser only<br/>IndexedDB + chrome.storage"]
-    C --> D["Upload"]
-    D --> D1["R2 objects: shots/ dom/ audio"]
-    D --> D2["KnowledgeSource<br/>status=uploaded + raw manifest"]
+    C --> C1["Founder's browser<br/>IndexedDB + chrome.storage"]
+    C --> C2["R2 objects: shots/ dom/<br/>PUT directly, while recording"]
+    C --> C3["KnowledgeSource<br/>status=recording, manifest null"]
+    C --> D["Stop → finalize"]
+    D --> D1["R2 objects: the leftovers<br/>(normally just audio)"]
+    D --> D2["KnowledgeSource UPDATED<br/>status=uploaded + raw manifest"]
     D --> D3["Redis job"]
     D3 --> E["Worker builds KB"]
     E --> E1["KnowledgeSource<br/>transcript + status=ready"]
@@ -518,8 +529,15 @@ Three, in the order they'd bite:
    values and text, not pixels or raw HTML. A recording made against real customer data stores that
    data as-is.
 
-Two smaller ones: **recorder tokens accumulate and can't be revoked** (§4), and **the raw `manifest`
-is kept forever** (§6) — intentional, but it's the largest permanent per-recording payload we hold.
+Two more, new with direct artifact upload (2026-07-27, on `dev` — not deployed yet):
+**abandoned recordings are never cleaned up** — a capture that is started and never stopped leaves a
+`status='recording'` row plus its uploaded objects, with no sweeper and no expiry; and **signed PUT
+URLs carry no size ceiling** — `MAX_BUNDLE_BYTES` now bounds only the finalize request, so the
+artifact path is limited by nothing but the 900 s URL lifetime and the allowlisted key.
+
+Plus the two older ones: **recorder tokens accumulate and can't be revoked** (§4), and **the raw
+`manifest` is kept forever** (§6) — intentional, but it's the largest permanent per-recording payload
+we hold.
 
 ---
 
