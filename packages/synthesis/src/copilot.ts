@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 // The loop + the answer shaper are shared with the diagnostic path (and, from mode 2, the agent).
-import { runAnswerLoop, shapeAnswer } from './engine';
+import { runAnswerLoop, shapeAnswer, type AnswerLoopResult } from './engine';
 
 /**
  * P1-M6 — the copilot answer engine: conversational, grounded ANSWER-or-DECLINE over a set of
@@ -150,6 +150,10 @@ export async function answerFromKB(input: {
   context?: { path?: string | null; sense?: SenseContext }; // P1-M8 route + P2 Sense position
   // (No `showCitations` here: the trust setting is a presentation gate applied at the API response
   // boundary — the engine always reports what it actually grounded on. See the return below.)
+  /** What the loop did, for the caller to log. Always `rounds: 1` with no tool calls here — which
+   *  is the point: it makes "AI Chatbot is the loop with nothing bound" a recorded fact rather than
+   *  a claim, and lets one analytics query compare all three engines without special cases. */
+  onLoop?: (stats: AnswerLoopResult) => void;
   apiKey: string;
   model: string;
 }): Promise<CopilotAnswer> {
@@ -207,13 +211,15 @@ export async function answerFromKB(input: {
   // (docs/unified-agent.md · engine.ts.)
   // (Only `content` is used here: with nothing bound there is no tool activity to report, and
   // mode 1's behaviour and wire shape are unchanged by the loop returning more than it used to.)
-  const { content } = await runAnswerLoop({
+  const loop = await runAnswerLoop({
     openai,
     model: input.model,
     messages,
     maxOutputTokens: 700,
     maxRounds: 1,
   });
+  input.onLoop?.(loop);
+  const { content } = loop;
 
   // The engine always returns what it actually grounded on. The workspace's `showCitations` trust
   // setting is about what the END-USER SEES, so it is applied at the API response boundary

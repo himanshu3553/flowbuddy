@@ -8,7 +8,7 @@ import {
   type SenseContext,
 } from './copilot';
 // The loop + the answer shaper are shared with the fast path (and, from mode 2, with the agent).
-import { runAnswerLoop, shapeAnswer, type EngineTool } from './engine';
+import { runAnswerLoop, shapeAnswer, type AnswerLoopResult, type EngineTool } from './engine';
 
 /**
  * P2-M5 — REASON, the diagnostic answer engine (docs/phase-2-reason.md). Sense locates the user;
@@ -87,6 +87,9 @@ export interface ReasonInput {
   pageImage?: string | null;
   workflow?: ReasonWorkflow | null;
   expected?: ExpectedStepEvidence | null;
+  /** What the loop did, for the caller to log — how many rounds, and which expensive evidence
+   *  (the founder's screenshot, the DOM, the page image) it actually reached for. */
+  onLoop?: (stats: AnswerLoopResult) => void;
   // (No `showCitations`: a presentation gate, applied at the API response boundary — see copilot.ts.)
   apiKey: string;
   model: string;
@@ -322,13 +325,15 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
   // now lives in engine.ts, shared with the fast path (and, from mode 2, with the agent).
   // (Its three tools all take NO_ARGS, so the loop's argument-aware de-dup collapses to exactly the
   // once-per-tool behaviour this path has always had — "never call the same tool twice", above.)
-  const { content } = await runAnswerLoop({
+  const loop = await runAnswerLoop({
     openai,
     model: input.model,
     messages,
     tools: buildTools(input),
     maxOutputTokens: 900,
   });
+  input.onLoop?.(loop);
+  const { content } = loop;
 
   // Like the fast path: the engine returns what it grounded on, and `showCitations` (a
   // what-the-end-user-sees setting) is applied at the API response boundary — see copilot.ts.

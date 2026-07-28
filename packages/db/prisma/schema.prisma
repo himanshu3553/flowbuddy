@@ -276,6 +276,25 @@ model CopilotQuery {
   // blocked (the current step's target was disabled) | escalation (the fast path declined and the
   // widget retried with evidence). Null = the fast path answered. `reasonImage` = whether the
   // user's rendered page image rode along on the diagnostic call.
+  // What the ANSWER PATH did for this question (2026-07-29). Until these existed the founder could
+  // see that a question was declined but nothing about how — a decline after three fruitless
+  // searches and a decline with no attempt at all looked identical, and switching a workspace to
+  // Copilot mode produced no visible evidence it behaved any differently.
+  //
+  // `engine` is the one that matters, and it is NOT the same as the workspace's configured mode:
+  // the diagnostic path preempts the agent whenever the widget shipped page state, and the safety
+  // floor answers as AI Chatbot while the mode still reads "copilot". Recording the mode alone
+  // would attribute both to the wrong engine. Both are stored so the gap between them is visible.
+  //   mode   — the workspace setting at ask time: chatbot | copilot | agent
+  //   engine — what actually produced this answer: chatbot | agent | reason
+  //   rounds — model calls made (1 = answered straight from retrieval, no tool use)
+  //   toolCalls — tool invocations the model asked for, INCLUDING ones the loop refused
+  // Deliberately strings, not enums, and all nullable: pre-2026-07-29 rows keep meaning "unknown"
+  // rather than being back-filled with a guess, and a fourth mode slots in without a migration.
+  mode        String?
+  engine      String?
+  rounds      Int?
+  toolCalls   Int?
   reasonTrigger     String?
   reasonImage       Boolean?
   createdAt   DateTime @default(now())

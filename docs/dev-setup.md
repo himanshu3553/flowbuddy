@@ -135,6 +135,26 @@ always differs. `scripts/copilot-baseline-diff.mjs before.json after.json` repor
 decision-level changes. Runs in `preview` mode, so a capture writes no analytics. Saved reference
 captures for both modes live in `scripts/`.
 
+**Multi-turn cases (2026-07-29).** A question may carry `"after"` — the turns to play FIRST, so it
+arrives as a FOLLOW-UP with real conversation state behind it (`--only t` runs just those). The
+setup turns are asked for real rather than canned, so they cannot rot when the KB is re-recorded,
+and `setupFailures` in the output flags a row whose SETUP declined — that row is measuring a broken
+conversation, not the question under test.
+
+> **Why this exists, and the lesson in it.** A whole class of failure is invisible to a
+> one-question-at-a-time harness. The copilot shipped for months **answering the PREVIOUS question**
+> whenever a conversation changed subject — asked about pricing right after a login question it
+> replied with the login steps and marked itself covered — and every question in this file passed
+> throughout, because none of them had a conversation in front of them. When adding a case, ask what
+> STATE it needs, not just what words it uses. The `topic-shift` group is verified to fail without
+> the fix (t1/t2 → 0/3) *and* to catch the opposite failure (t6 answers a weather question → 3/3),
+> so it guards both wrongly-declining and wrongly-answering.
+
+**Two things it still cannot see**, both worth knowing before trusting a green run: it sends
+`--path` but never live page STATE, so the diagnostic path has no automated coverage; and `preview`
+suppresses the decline→diagnostic escalation, so that retry is never exercised. Both need a real
+browser — [`e2e-testing.md`](e2e-testing.md).
+
 ---
 
 ## 5. Common gotchas

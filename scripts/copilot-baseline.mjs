@@ -16,9 +16,16 @@
 // Runs in `preview` mode: the identical answer path, but the API skips analytics writes — a
 // baseline must never pollute the founder's own numbers with dozens of synthetic questions.
 //
-// LIMITATION: this is the TEXT path only. It sends no page context, so questions that depend on
-// live page state ("why can't I create the account?") exercise the fast path here, not the
-// diagnostic one. Those still need a real browser — see docs/e2e-testing.md.
+// MULTI-TURN (2026-07-29). A question may carry `after`: the turns to play FIRST, so the question
+// under test arrives as a FOLLOW-UP with real conversation state behind it. This exists because a
+// whole class of failure is invisible to a single-question harness — the copilot shipped for months
+// answering the PREVIOUS question whenever a conversation changed subject, and every question here
+// passed throughout, because none of them had a conversation in front of them. The setup turns are
+// asked for real (not canned) so they cannot rot as the KB changes, and each run replays them fresh.
+//
+// LIMITATION: this is the TEXT path only. It sends `--path` when given but never live page STATE,
+// so questions that depend on it ("why can't I create the account?") exercise the fast path here,
+// not the diagnostic one. Those still need a real browser — see docs/e2e-testing.md.
 //
 // Usage:
 //   node scripts/copilot-baseline.mjs --key pk_xxx [--api http://localhost:8787]
@@ -61,14 +68,19 @@ const questions = only.length
   : allQuestions;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function ask(question) {
+async function ask(question, history = [], lastCited = []) {
   const res = await fetch(`${api}/v1/copilot/answer`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'X-FlowBuddy-Key': key },
     body: JSON.stringify({
       question,
-      history: [],
-      context: contextPath ? { path: contextPath } : {},
+      history,
+      context: {
+        ...(contextPath ? { path: contextPath } : {}),
+        // Sent exactly as the widget sends it, so a multi-turn case reproduces production rather
+        // than an idealised version of it.
+        ...(lastCited.length ? { lastCited } : {}),
+      },
       preview: true, // identical answer path, zero analytics writes
     }),
   });
@@ -82,20 +94,61 @@ async function ask(question) {
       .map((c) => c.segmentTitle)
       .filter(Boolean)
       .filter((t, i, a) => a.indexOf(t) === i),
+    // The raw keys, for `lastCited` on a following turn (the widget's continuity payload).
+    citedKeys: (data.citations ?? [])
+      .filter((c) => typeof c.sourceId === 'string' && Number.isInteger(c.segmentIndex))
+      .map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex }))
+      .slice(0, 4),
     position: data.position ? `${data.position.sourceId}:${data.position.segmentIndex}#${data.position.step}` : null,
     // Copilot mode only — what the assistant decided to do ON the page. Absent in AI Chatbot.
     intents: data.intents ?? null,
   };
 }
 
+/**
+ * Play a question's `after` turns for real, and return the conversation state they leave behind.
+ *
+ * WHY THE SETUP TURNS ARE ASKED RATHER THAN CANNED (2026-07-29). A question that only fails as a
+ * FOLLOW-UP is invisible to a single-question harness — which is exactly how the copilot shipped
+ * for months answering the PREVIOUS question whenever a conversation changed subject. Hard-coding
+ * a prior answer would have worked too, but it rots: the moment the KB is re-recorded the canned
+ * text stops matching what the copilot would really have said, and the case quietly stops
+ * reproducing. Asking for real costs one extra call per turn and always stays true.
+ *
+ * `priorAnswered` is reported so a case whose SETUP declined is visibly invalid rather than
+ * silently counted as a failure of the question under test.
+ */
+async function playSetup(turns) {
+  const history = [];
+  let lastCited = [];
+  let priorAnswered = true;
+  for (const t of turns) {
+    const r = await ask(t, history, lastCited);
+    if (!r.ok || !r.covered) priorAnswered = false;
+    history.push({ role: 'user', content: t });
+    history.push({ role: 'assistant', content: r.ok ? r.answer : '' });
+    if (r.ok && r.citedKeys.length) lastCited = r.citedKeys;
+    await sleep(delayMs);
+  }
+  return { history, lastCited, priorAnswered };
+}
+
 console.log(`\nBaseline · ${questions.length} questions × ${runs} run(s) → ${api}\n`);
 
 const results = [];
 for (const item of questions) {
+  // `after` = the turns that must happen BEFORE this question, replayed fresh on every run so the
+  // conversation state is real rather than reused. A string is shorthand for a single turn.
+  const setupTurns = item.after ? (Array.isArray(item.after) ? item.after : [item.after]) : [];
   const attempts = [];
+  let setupFailures = 0;
   for (let r = 0; r < runs; r++) {
     try {
-      attempts.push(await ask(item.q));
+      const { history, lastCited, priorAnswered } = setupTurns.length
+        ? await playSetup(setupTurns)
+        : { history: [], lastCited: [], priorAnswered: true };
+      if (!priorAnswered) setupFailures++;
+      attempts.push(await ask(item.q, history, lastCited));
     } catch (e) {
       attempts.push({ ok: false, error: String(e) });
     }
@@ -108,6 +161,10 @@ for (const item of questions) {
     id: item.id,
     group: item.group,
     question: item.q,
+    ...(setupTurns.length ? { after: setupTurns } : {}),
+    // >0 means the SETUP turn declined on some runs, so this row measures a broken conversation
+    // rather than the question under test. Investigate before reading its rate as a result.
+    ...(setupFailures ? { setupFailures } : {}),
     answeredRate: `${coveredCount}/${attempts.length}`,
     citedWorkflows: cited,
     positions: [...new Set(good.map((a) => a.position).filter(Boolean))],
@@ -120,6 +177,10 @@ for (const item of questions) {
   console.log(
     `  ${item.id.padEnd(3)} ${row.answeredRate.padEnd(5)} ${item.group.padEnd(14)} ${item.q}${flag}`,
   );
+  if (setupTurns.length) {
+    console.log(`        after: ${setupTurns.map((t) => `"${t}"`).join(' → ')}`);
+    if (setupFailures) console.log(`        ⚠ the setup turn declined on ${setupFailures}/${runs} run(s) — this row is not measuring what it looks like`);
+  }
   if (cited.length) console.log(`        cited: ${cited.join(' · ')}`);
 }
 

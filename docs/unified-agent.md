@@ -281,7 +281,7 @@ The design already exists — **P5-M2 Product Profile** ([`phase-5-converse.md`]
 
 **Sequence it AFTER more workflows are recorded** — otherwise an improvement can't be attributed to the profile rather than to the KB finally having depth.
 
-### 🟨 Gap 2 — nothing records what the agent did *(HALF-CLOSED 2026-07-29 — logs yes, columns no)*
+### ✅ Gap 2 — nothing records what the agent did *(CLOSED 2026-07-29)*
 
 Verified in the code 2026-07-27: `CopilotQuery` logs the question, `answered`, `contextPath`, the Sense outcome and the Reason trigger — **but not which MODE answered, how many ROUNDS it took, or which TOOLS it called.**
 
@@ -292,7 +292,11 @@ Two consequences, and the second is the important one:
 
 **Half of this closed 2026-07-29.** `server.ts` now emits one `copilot answer` log line per question — the scrubbed question, the configured **mode**, the **engine that actually answered** (`agent` \| `chatbot` \| `reason` — the two come apart in both directions, so mode alone was never the right field), `covered`, `rounds`, **every tool call with the exact query it searched**, and on a decline the assistant's **own words**. Diagnosing one incident no longer means reading source. Two things forced it: a decline used to be indistinguishable from a decline that searched three times and found nothing, and the escalation short-circuited before the `CopilotQuery` write, so the agent's own reason was never stored anywhere — the surviving `CoverageGap` held the *diagnostic engine's* text, filed against content the KB actually had. That second half is fixed too: a mode-2 decline no longer escalates, so it reaches the write.
 
-**Still open: the columns.** Logs answer *"why did this question fail"*; they do not answer *"how often, and is the upgrade paying for itself"*. Consequence 2 above is untouched — §7 Q6 still needs `mode` · `rounds` · `toolCalls` on `CopilotQuery` (additive, defaults on new rows only), pairing with the roadmap §9 backlog's token-usage column. The plumbing is done: `runAnswerLoop` already returns a `ToolCallRecord[]` ledger and `answerAsAgent` hands it to the caller via `onLoop`, so persisting it is a migration plus one write — not new machinery.
+**And the columns landed the same day.** `CopilotQuery` now carries `mode` · `engine` · `rounds` · `toolCalls` (migration `20260728201609_copilot_query_answer_path` — four nullable columns, nothing back-filled, so a pre-2026-07-29 row still honestly reads "unknown"). All three engines report through the same `onLoop` hook, so **AI Chatbot's `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim** and one query compares all three without special-casing.
+
+**`engine` is the column that matters, and it is deliberately not `mode`.** The two come apart in both directions — the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers as AI Chatbot while `mode` still reads `copilot`. Storing only the configured mode would attribute both to the wrong engine and quietly corrupt the very comparison this exists to enable. Storing both makes the gap between intent and reality countable.
+
+**What this unblocks.** §7 Q6 — *"should AI Chatbot collapse into Copilot?"* — is now a query rather than an opinion: escalation rate, rounds per question, and how often the floor caught a failure. It pairs with the roadmap §9 backlog's token-usage column for real cost analytics. What is still missing is the Studio surface; the data is being recorded from today, so the answer improves the longer it runs before anyone asks.
 
 ### ⏸ Gap 3 — fold the diagnostic path into the agent loop *(deferred with a hard prerequisite)*
 
@@ -305,7 +309,7 @@ Two consequences, and the second is the important one:
 
 **Why it was NOT done in stage 3, and must not be done casually.** `REASON_SYSTEM` is the most heavily tuned prompt in the product — [`phase-2-sense.md`](phase-2-sense.md) Part B records **eight** hardening items, each learned from a real session it got wrong (read the on-page error first · never claim a control is disabled when the state says otherwise · never conclude "looks fine" from structure alone · look at the image before hedging · no speculative declines · …). That is scar tissue, not styling.
 
-And it is **currently untestable**: `scripts/copilot-baseline.mjs` sends no page context, so diagnosis has *zero* automated coverage. Rewriting eight rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
+And it is **still barely testable**: `scripts/copilot-baseline.mjs` gained page paths and multi-turn cases (2026-07-29), but it never sends live page STATE and runs in `preview`, which suppresses the decline→diagnostic escalation — so diagnosis still has *zero* automated coverage. Rewriting eight rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
 
 **The prerequisite, concretely.** Make diagnosis measurable first: capture real `ReasonSnapshot` fixtures from the demo signup page in a few states (empty form · half-filled · invalid email · rejection banner showing), commit them, and teach the baseline script to replay them through `/answer`. Diagnosis then gets before/after numbers like every other path, and the merge becomes verifiable instead of hopeful. Useful on its own — it would be the first coverage Reason has ever had.
 

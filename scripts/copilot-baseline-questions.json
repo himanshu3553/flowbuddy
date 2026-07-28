@@ -10,5 +10,14 @@
 
   { "id": "f1", "group": "should-decline", "q": "How do I reset my password?" },
   { "id": "f2", "group": "should-decline", "q": "How much does it cost?" },
-  { "id": "f3", "group": "should-decline", "q": "How many accounts do I have?" }
+  { "id": "f3", "group": "should-decline", "q": "How many accounts do I have?" },
+
+  { "id": "t1", "group": "topic-shift", "q": "how to sign up?", "after": "how do I log in?" },
+  { "id": "t2", "group": "topic-shift", "q": "how do I create an account?", "after": "how do I log in?" },
+  { "id": "t3", "group": "topic-shift", "q": "how do I log in?", "after": "how do I create an account?" },
+
+  { "id": "t4", "group": "hard", "q": "and then what?", "after": "how do I create an account?" },
+
+  { "id": "t5", "group": "should-decline", "q": "How much does it cost?", "after": "how do I log in?" },
+  { "id": "t6", "group": "should-decline", "q": "What is the weather today?", "after": "how do I log in?" }
 ]

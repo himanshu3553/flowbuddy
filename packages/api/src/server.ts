@@ -882,6 +882,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       history: sanitizeHistory(body.history),
       items,
       context: { path: contextPath, sense: sense ?? undefined },
+      onLoop: (stats) => {
+        loop.stats = stats;
+      },
       apiKey: config.openaiApiKey,
       model: config.synthModel,
     });
@@ -914,6 +917,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       pageImage: reasonPayload.image,
       workflow,
       expected,
+      onLoop: (stats) => {
+        loop.stats = stats;
+      },
       apiKey: config.openaiApiKey,
       model: config.reasonModel,
     });
@@ -1056,6 +1062,12 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       question: storedQuestion,
       answered: result.covered,
       contextPath,
+      // How this answer was produced. `engine` is what ACTUALLY ran, which is not always what
+      // `mode` would predict — the diagnostic path preempts the agent, and the safety floor
+      // answers as AI Chatbot without the mode changing. Storing both makes that gap countable.
+      mode: gate.mode,
+      engine: engineUsed,
+      ...(loop.stats ? { rounds: loop.stats.rounds, toolCalls: loop.stats.toolCalls.length } : {}),
       ...senseLogFields(sense, probed, position),
       ...(reasonPayload
         ? { reasonTrigger: reasonPayload.trigger, reasonImage: Boolean(reasonPayload.image) }
