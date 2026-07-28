@@ -43,13 +43,35 @@ export const ANSWER_SCHEMA = {
   },
 } as const;
 
-/** Render knowledge items for a prompt. One shape everywhere, so an item the model met in the
- *  opening context and the same item returned later by a tool look identical and read as one thing. */
+/**
+ * Render knowledge items for a prompt.
+ *
+ * ONE shape across every place the AGENT meets an item — the opening shortlist, a search result,
+ * a workflow dump — so the same item read twice reads as one thing rather than two. (Mode 1 and
+ * the diagnostic path each keep their own inlined copy of this rendering; their prompts are frozen
+ * and must not move when this one is tuned. It is deliberately not "one shape everywhere".)
+ *
+ * Each line carries the two identifiers the model is asked to hand back:
+ *   `id=`  the item, for citations — resolved against the items WE supplied, never trusted raw.
+ *   `key=` the WORKFLOW the item belongs to, which is what `get_workflow` takes.
+ *
+ * The key used to be absent, and that quietly amputated the tool: the only other place a `key=`
+ * appears is POSITION CONTEXT, which names the workflow the user is standing IN. So the agent could
+ * pull the full steps of a workflow it had already located on the current screen, and nothing else
+ * — while its own tool description offered "the workflow an item belongs to". Asked how to do
+ * something recorded on another screen, it could see fragments of the answer and had no way to ask
+ * for the rest.
+ */
 export function formatItems(items: CopilotKBItem[]): string {
   if (items.length === 0) return '- (none)';
   return items
     .map((i) => {
-      const wf = i.segmentTitle ? ` [workflow: ${i.segmentTitle}]` : '';
+      const tags: string[] = [];
+      if (i.segmentTitle) tags.push(`workflow: ${i.segmentTitle}`);
+      // Null segmentIndex = the item belongs to no workflow, so there is nothing `get_workflow`
+      // could be aimed at. Emitting `key=src:null` would hand the model a key that cannot resolve.
+      if (i.segmentIndex !== null) tags.push(`key=${i.sourceId}:${i.segmentIndex}`);
+      const wf = tags.length > 0 ? ` [${tags.join(' · ')}]` : '';
       const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
       return `- id=${i.id}${wf}: ${i.text}${narr}`;
     })
@@ -85,9 +107,67 @@ export interface EngineTool {
   run: (rawArgs: string) => Promise<ToolResult>;
 }
 
+/**
+ * One invocation the model asked for — the loop's own record of what it did.
+ *
+ * ONE structure, two consumers (which is why it replaced a bare `Set<string>`): it is the de-dup
+ * KEY, and it is the caller's TELEMETRY. Before it existed the loop remembered tool NAMES only, so
+ * `search_knowledge("create a project")` and `search_knowledge("new project setup")` were the same
+ * request and the second was refused — while the prompt was busy telling the model to re-search
+ * with different words. Correct for the diagnostic path, whose tools take no arguments at all;
+ * wrong the moment a tool grew a parameter. An acting mode's `execute_step(workflowId, k, inputs)`
+ * would have inherited the same defect, and there it is not a bad answer but a skipped action.
+ */
+export interface ToolCallRecord {
+  name: string;
+  /** The model's arguments in canonical form (key-sorted, whitespace-normalized) — the de-dup key. */
+  args: string;
+  /** 0-based model call this was requested on. */
+  round: number;
+  /** Set when the call was NOT dispatched. Absent = it ran. */
+  skipped?: 'duplicate' | 'unknown' | 'budget';
+}
+
+/** What the loop did, alongside what it said. Returned rather than logged in here: the engine has
+ *  no logger and no opinion about persistence — the caller owns both. */
+export interface AnswerLoopResult {
+  /** The model's final JSON text, or null if it never produced one. */
+  content: string | null;
+  /** Model calls actually made. */
+  rounds: number;
+  /** Every tool invocation the model asked for, in order — including the ones that did not run. */
+  toolCalls: ToolCallRecord[];
+}
+
+/** Canonical form of a tool's arguments, for de-duplication ONLY — never what the tool receives.
+ *  Key order and incidental whitespace are not a different request; different values are. */
+function canonicalArgs(raw: string): string {
+  try {
+    return stableStringify(JSON.parse(raw || '{}'));
+  } catch {
+    // Malformed JSON is the model's problem, not a reason to treat every bad call as identical:
+    // keep the raw text so two different broken calls stay two different records.
+    return (raw ?? '').trim();
+  }
+}
+
+function stableStringify(v: unknown): string {
+  if (typeof v === 'string') return JSON.stringify(v.trim().replace(/\s+/g, ' '));
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  const o = v as Record<string, unknown>;
+  return `{${Object.keys(o)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`)
+    .join(',')}}`;
+}
+
 // Defaults inherited from the diagnostic path, where they were user-verified in production.
 const DEFAULT_MAX_ROUNDS = 4; // up to 3 tool rounds, then the final answer is forced
-const DEFAULT_MAX_TOOL_CALLS = 4; // across the whole loop — each is money on a public endpoint
+// Counts EXECUTIONS across the whole loop — each is money on a public endpoint. A duplicate, an
+// unknown name, or a call past the budget costs nothing to answer, so none of them spend it; the
+// round cap is what bounds a model that does nothing but repeat itself.
+const DEFAULT_MAX_TOOL_CALLS = 4;
 
 export interface AnswerLoopOpts {
   openai: OpenAI;
@@ -106,24 +186,26 @@ export interface AnswerLoopOpts {
 }
 
 /**
- * Run the answer loop and return the model's final JSON text (or null if it never produced one).
+ * Run the answer loop and return what the model said, plus what it did to get there.
  *
  * With no tools this is byte-for-byte the old fast path: `finalRound` is true immediately, the
  * `tools`/`tool_choice` keys are omitted from the request entirely (not sent as empty), one call
  * is made, and the loop breaks on the first response.
  */
-export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<string | null> {
+export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopResult> {
   const tools = opts.tools ?? [];
   const maxRounds = opts.maxRounds ?? DEFAULT_MAX_ROUNDS;
   const maxToolCalls = opts.maxToolCalls ?? DEFAULT_MAX_TOOL_CALLS;
   const byName = new Map(tools.map((t) => [t.name, t]));
   const { messages } = opts;
   const served = new Set<string>();
-  let toolCalls = 0;
+  const ledger: ToolCallRecord[] = [];
+  let executed = 0;
+  let rounds = 0;
   let content: string | null = null;
 
   for (let round = 0; round < maxRounds; round++) {
-    const finalRound = round === maxRounds - 1 || toolCalls >= maxToolCalls || tools.length === 0;
+    const finalRound = round === maxRounds - 1 || executed >= maxToolCalls || tools.length === 0;
     const res = await opts.openai.chat.completions.create({
       model: opts.model,
       messages,
@@ -140,6 +222,7 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<string | null
       max_completion_tokens: opts.maxOutputTokens,
       temperature: 0.2,
     });
+    rounds++;
 
     const msg = res.choices[0]?.message;
     if (!msg) break;
@@ -159,30 +242,45 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<string | null
     messages.push(msg);
     const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [];
     for (const tc of msg.tool_calls) {
-      toolCalls++;
       const name = tc.type === 'function' ? tc.function.name : '';
+      const rawArgs = tc.type === 'function' ? tc.function.arguments : '';
+      const args = canonicalArgs(rawArgs);
+      const record: ToolCallRecord = { name, args, round };
+      ledger.push(record);
       let reply: string;
-      if (served.has(name)) {
-        // Each tool answers once per conversation — a model that re-requests evidence it already
-        // has is burning the workspace owner's money for nothing.
-        reply = 'Already provided earlier in this conversation — do not request it again.';
+      // The budget is checked HERE, per call, not only between rounds. One round may contain any
+      // number of tool calls, so a between-rounds check alone is not a ceiling — it was only ever
+      // one because the old name-keyed de-dup capped executions at "one per tool, ever". Widening
+      // the key to the arguments removes that accidental cap, so the real one has to be explicit.
+      if (executed >= maxToolCalls) {
+        record.skipped = 'budget';
+        reply = 'The tool budget for this question is used up — answer with what you already have.';
+      } else if (served.has(`${name}:${args}`)) {
+        // The SAME call twice is money for nothing. A different query is a different request and
+        // now runs — which is what the prompt has always told the model it could do.
+        record.skipped = 'duplicate';
+        reply = 'You already made this exact call; its result is above. Use it, or call with different arguments.';
       } else {
         const tool = byName.get(name);
         if (!tool) {
+          // Absence, not refusal — and an unbound name must NOT burn the slot: the model
+          // mistyping a tool once should not cost it the tool that actually exists.
+          record.skipped = 'unknown';
           reply = 'Unknown tool.';
         } else {
-          const result = await tool.run(tc.type === 'function' ? tc.function.arguments : '');
+          const result = await tool.run(rawArgs);
+          served.add(`${name}:${args}`);
+          executed++;
           reply = result.reply;
           if (result.images?.length) imageParts.push(...result.images);
         }
       }
-      served.add(name);
       messages.push({ role: 'tool', tool_call_id: tc.id, content: reply });
     }
     if (imageParts.length > 0) messages.push({ role: 'user', content: imageParts });
   }
 
-  return content;
+  return { content, rounds, toolCalls: ledger };
 }
 
 /**

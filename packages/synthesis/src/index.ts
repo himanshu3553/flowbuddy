@@ -23,6 +23,8 @@ export { diagnoseFromKB } from './reason';
 // prompt untouched; this is the escalation-capable sibling, not a replacement.
 export { answerAsAgent } from './agent';
 export type { AgentInput, AgentWorkflow } from './agent';
+// What a loop DID, for the caller to log — the same record the loop de-duplicates tool calls with.
+export type { AnswerLoopResult, ToolCallRecord } from './engine';
 export type {
   ReasonInput,
   ReasonSnapshot,

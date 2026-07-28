@@ -302,19 +302,27 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }
+  // THE QUESTION IS LABELLED AS THE NEW ONE — same change, same reason, as copilot.ts and agent.ts.
+  // This path is the most exposed of the three: position, the full workflow recipe and an entire
+  // page-state dump all sit between the conversation and the question, so a bare "Question:" at the
+  // bottom is competing with several hundred lines. Carried here for consistency rather than on its
+  // own measurement — the diagnostic path needs page-state fixtures before it can be measured the
+  // way the other two were.
   messages.push({
     role: 'user',
     content:
       senseBlock(input.sense) +
       workflowBlock(input.workflow) +
       pageStateBlock(input.snapshot) +
-      `KNOWLEDGE ITEMS (the only source of product facts):\n${itemBlock}\n\nQuestion: ${input.question}`,
+      `KNOWLEDGE ITEMS (the only source of product facts):\n${itemBlock}\n\nThe user's NEW message — this is the one to answer, not anything asked earlier: ${input.question}`,
   });
 
   // The diagnostic path is the most expensive thing the product does per interaction (§6) — cap
   // output hard; a truncated JSON parses as a decline, the graceful failure mode. The loop itself
   // now lives in engine.ts, shared with the fast path (and, from mode 2, with the agent).
-  const content = await runAnswerLoop({
+  // (Its three tools all take NO_ARGS, so the loop's argument-aware de-dup collapses to exactly the
+  // once-per-tool behaviour this path has always had — "never call the same tool twice", above.)
+  const { content } = await runAnswerLoop({
     openai,
     model: input.model,
     messages,

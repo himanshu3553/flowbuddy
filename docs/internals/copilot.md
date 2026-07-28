@@ -198,6 +198,50 @@ Two properties worth not losing:
   be pure cost — and in a future acting mode, an action taken after the loop decided to stop, which
   nobody observes or verifies. Structural, not advisory.
 
+**The question is labelled as the NEW one (2026-07-29).** All three paths end their user message
+with `The user's NEW message — this is the one to answer, not anything asked earlier: …` rather than
+a bare `Question:`. This is a bug fix, not a style choice. With any earlier turn in the thread the
+previous question is a short clean line of its own while the current one sits at the bottom of a
+wall of knowledge items — and the model answers the older one. Measured on a two-workflow KB: ask
+*"how to login?"*, get a correct answer, then ask *"how to sign up?"* → **declined 10/10 while
+holding all six signup steps**; asked *"How much does it cost?"* from the same position it replied
+with **the login steps** and marked itself covered. Labelling it: **0/10 → 10/10 in both modes**,
+with cold questions, genuine follow-ups (*"and then what?"*) and the must-decline set all unmoved,
+and an uncovered-question guard improving 2/6 → 0/10. Two variants were measured and rejected:
+leading with the question *and* repeating it, and a neutral "latest message" prefix — both fix the
+bug but drop diagnostic-style questions (*"why can't I…"*) to 0/6, because the redundancy makes the
+model read the wording too literally. **A prompt RULE does not work here** — "the conversation does
+not limit what you may answer", added to both system prompts, moved the failing cell 0/8 → 1/8 and
+was reverted. The model did not lack the rule.
+
+> **Known, unshipped:** `covered` is the FIRST property in `ANSWER_SCHEMA`, and structured outputs
+> emit fields in declaration order — so the answer-or-decline decision is sampled before a single
+> token about the items exists. Permuting the schema so it comes later fixes the same failing cell
+> 0/8 → 8/8 with **no text change at all**. A real second lever, deliberately not stacked on the
+> first so each stays measurable. (The "mode 1's wire shape is frozen" comment in `engine.ts`
+> overstates: `shapeAnswer` reads named fields only, so a model-facing field cannot reach the widget.)
+
+**Tool de-duplication is keyed on name + arguments (2026-07-29).** The loop used to remember tool
+NAMES only, so `search_knowledge("create a project")` and `search_knowledge("new project setup")`
+were the same request and the second was refused — while `AGENT_SYSTEM` was busy instructing the
+model to *"re-search with different words rather than declining on the first miss."* Correct for
+`reason.ts`, whose three tools take `NO_ARGS`; wrong the moment a tool grew a parameter, and an
+acting mode's `execute_step(workflowId, k, inputs)` would have inherited it as a **skipped action**.
+The `Set<string>` is now a `ToolCallRecord[]` ledger — one structure serving as both the de-dup key
+and the caller's telemetry. Three riders: an unknown tool name no longer burns the slot (a typo cost
+the model a tool it hadn't used); the budget is enforced **per call, not only between rounds** (the
+old name-keyed de-dup capped executions at "one per tool, ever" *by accident*, and widening the key
+removed that ceiling); and `get_workflow` output is capped at 40 steps, because an uncapped dump
+against the 700-token output cap truncates the final JSON — which `shapeAnswer` turns into a decline.
+
+**`formatItems` emits the workflow key.** Every item now renders as
+`- id=… [workflow: Title · key=sourceId:segmentIndex]: text`. Without it the only `key=` in the
+prompt came from POSITION CONTEXT — the workflow the user is standing *in* — so `get_workflow` could
+only ever be aimed at the current screen, while its own description offered "the workflow an item
+belongs to". Asked about something recorded elsewhere, the agent could see fragments and had no way
+to ask for the rest. Mode 2 only: `copilot.ts` and `reason.ts` keep their own inlined rendering, so
+their prompts are byte-identical.
+
 The mode is resolved server-side from `Workspace.copilotMode` on every call
 ([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding
 the public key can never talk itself into a higher mode.

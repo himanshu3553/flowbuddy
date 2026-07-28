@@ -119,6 +119,19 @@ That memory is deliberately a **nudge, not a rule**. If someone genuinely change
 keyword match wins over what you were just talking about. Otherwise the assistant would hold you
 hostage to the previous topic — which is a worse bug than the one it fixes.
 
+**And it answers the question you just asked.** That sounds like it should go without saying. It
+didn't. If a customer asked about one thing and then asked about something else, the assistant would
+quietly answer the *earlier* question instead — sometimes replying with the previous answer's steps,
+sometimes claiming it had nothing on a workflow it was holding in full. Ask about logging in, then
+ask how to sign up, and it would say it didn't know — with all six signup steps right there.
+
+The cause was mundane. The new question was the last line of a long block of recorded steps, while
+the earlier question sat on its own as a short clean line further up. The assistant went for the
+clean one. It now gets told, in as many words, which message is the new one — and the problem goes
+away. Worth knowing because of what it means for your customers: **this affected any conversation
+with more than one topic in it**, which is most real ones, and it affected the simple assistant more
+than the agent.
+
 ---
 
 ## Your controls

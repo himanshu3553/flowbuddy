@@ -173,9 +173,31 @@ export async function answerFromKB(input: {
   const ctxLine = input.context?.path
     ? `The user is currently on the page "${input.context.path}". Prefer steps relevant to that screen when applicable (but still answer the actual question).\n\n`
     : '';
+  // THE QUESTION IS LABELLED AS THE NEW ONE (2026-07-29).
+  //
+  // It used to be introduced by a bare "Question:" at the end of the block. That reads fine on a
+  // FIRST question and fails on a second: the earlier turn's question is a short clean line of its
+  // own, this one sits at the bottom of a wall of knowledge items, and the model answers the clean
+  // one. Measured on a two-workflow KB — ask "how to login?", get a correct answer, then ask "how
+  // to sign up?" and it declined 10/10 while holding all six signup steps. Asked "How much does it
+  // cost?" from the same position it replied with the LOGIN STEPS and marked itself covered.
+  //
+  // So this is not topic drift and not a missing instruction: the current question was losing a
+  // salience contest to an older one. A rule saying "the conversation does not limit what you may
+  // answer", added to both prompts, moved the failing cell 0/8 → 1/8 and was reverted — the model
+  // did not lack the rule.
+  //
+  // What works is naming this message as the NEW one, in place, at the end. Measured n=6/cell:
+  //   stock → labelled       topic-shift 0/6 → 6/6 · "why can't I create the account?" 3/6 → 5/6
+  //                          an uncovered question that must decline 2/6 → 0/6 (also fixed)
+  // Two variants were tried and rejected against the same cells: leading with the question AND
+  // repeating it (fixes the bug but drops the diagnostic question to 0/6 — repetition makes the
+  // model read the wording too literally), and a neutral "latest message" prefix (same regression).
+  // Redundancy hurt here; a single labelled occurrence in the position the model already reads last
+  // is what carries it.
   messages.push({
     role: 'user',
-    content: `${ctxLine}${senseBlock(input.context?.sense)}KNOWLEDGE ITEMS (the only thing you may use):\n${itemBlock}\n\nQuestion: ${input.question}`,
+    content: `${ctxLine}${senseBlock(input.context?.sense)}KNOWLEDGE ITEMS (the only thing you may use):\n${itemBlock}\n\nThe user's NEW message — this is the one to answer, not anything asked earlier: ${input.question}`,
   });
 
   // AI Chatbot (mode 1) = the shared answer loop with NO tools bound and a forced stop after step
@@ -183,7 +205,9 @@ export async function answerFromKB(input: {
   // single request the fast path always made — the difference is that the machinery is now shared
   // with the agent, which is what makes collapsing the modes later a config change, not a rewrite.
   // (docs/unified-agent.md · engine.ts.)
-  const content = await runAnswerLoop({
+  // (Only `content` is used here: with nothing bound there is no tool activity to report, and
+  // mode 1's behaviour and wire shape are unchanged by the loop returning more than it used to.)
+  const { content } = await runAnswerLoop({
     openai,
     model: input.model,
     messages,

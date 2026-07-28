@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import { describe, expect, it } from 'vitest';
-import { runAnswerLoop, shapeAnswer, type EngineTool } from './engine';
+import { formatItems, runAnswerLoop, shapeAnswer, type EngineTool } from './engine';
 import type { CopilotKBItem, SenseHypothesisContext } from './copilot';
 
 /**
@@ -12,9 +12,15 @@ import type { CopilotKBItem, SenseHypothesisContext } from './copilot';
  * reading two files side by side, and quietly breakable by anyone adding a tool later.
  */
 
+/** A scripted tool call. A bare string is the argument-less form (what the diagnostic path's tools
+ *  look like); the object form is what a PARAMETERIZED tool looks like — and until it existed the
+ *  harness could only script `arguments: '{}'`, so "the same tool called with different arguments"
+ *  was inexpressible and the de-dup defect could not be written down as a test. */
+type StubToolCall = string | { name: string; arguments: string };
+
 interface StubReply {
   content?: string;
-  toolCalls?: string[];
+  toolCalls?: StubToolCall[];
 }
 
 /** A fake OpenAI whose `create` returns scripted replies and records every request it received. */
@@ -36,10 +42,11 @@ function stubOpenAI(replies: StubReply[]) {
                   content: r.content ?? null,
                   ...(r.toolCalls
                     ? {
-                        tool_calls: r.toolCalls.map((name, n) => ({
+                        tool_calls: r.toolCalls.map((c, n) => ({
                           id: `call-${n}`,
                           type: 'function',
-                          function: { name, arguments: '{}' },
+                          function:
+                            typeof c === 'string' ? { name: c, arguments: '{}' } : { name: c.name, arguments: c.arguments },
                         })),
                       }
                     : {}),
@@ -54,19 +61,24 @@ function stubOpenAI(replies: StubReply[]) {
   return { openai: openai as unknown as OpenAI, requests };
 }
 
-function tool(name: string, reply = 'ok', onRun?: () => void): EngineTool {
+/** `onRun` receives the RAW arguments the loop dispatched with — without that, a test can see how
+ *  many times a tool ran but not *what it was asked*, which is the whole question here. */
+function tool(name: string, reply = 'ok', onRun?: (rawArgs: string) => void): EngineTool {
   return {
     name,
     spec: {
       type: 'function',
       function: { name, description: name, parameters: { type: 'object', properties: {}, additionalProperties: false } },
     },
-    run: async () => {
-      onRun?.();
+    run: async (rawArgs: string) => {
+      onRun?.(rawArgs);
       return { reply };
     },
   };
 }
+
+/** A search call, scripted. */
+const search = (query: string) => ({ name: 'search_knowledge', arguments: JSON.stringify({ query }) });
 
 describe('runAnswerLoop — AI Chatbot (mode 1) is the loop with nothing bound', () => {
   it('makes EXACTLY ONE model call when no tools are bound', async () => {
@@ -121,7 +133,7 @@ describe('runAnswerLoop — with tools bound (Copilot mode / the diagnostic path
       { toolCalls: ['peek'] },
       { content: '{"covered":true,"answer":"done"}' },
     ]);
-    const content = await runAnswerLoop({
+    const { content } = await runAnswerLoop({
       openai,
       model: 'm',
       messages: [],
@@ -133,7 +145,7 @@ describe('runAnswerLoop — with tools bound (Copilot mode / the diagnostic path
     expect(content).toBe('{"covered":true,"answer":"done"}');
   });
 
-  it('refuses to serve the same tool twice — repeat requests cost the workspace money for nothing', async () => {
+  it('refuses to serve the IDENTICAL call twice — repeat requests cost the workspace money for nothing', async () => {
     let ran = 0;
     const { openai } = stubOpenAI([
       { toolCalls: ['peek'] },
@@ -150,11 +162,139 @@ describe('runAnswerLoop — with tools bound (Copilot mode / the diagnostic path
     expect(ran).toBe(1);
   });
 
+  it('argument-less tools keep the once-per-tool behaviour the diagnostic path relies on', async () => {
+    // reason.ts binds three tools that all take NO_ARGS, so widening the de-dup key to the
+    // arguments must collapse to exactly what it did before for them: `name:{}` twice is a repeat.
+    let ran = 0;
+    const { openai } = stubOpenAI([
+      { toolCalls: ['get_page_image'] },
+      { toolCalls: [{ name: 'get_page_image', arguments: '{}' }] },
+      { content: '{}' },
+    ]);
+    await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('get_page_image', 'pixels', () => { ran += 1; })],
+      maxOutputTokens: 900,
+    });
+    expect(ran).toBe(1);
+  });
+});
+
+describe('runAnswerLoop — a parameterized tool is a DIFFERENT request per argument', () => {
+  // The bug this pins: the loop used to remember tool NAMES, so a second search with different
+  // wording was refused as a repeat — while the agent's own prompt was telling it to "re-search
+  // with different words rather than declining on the first miss". It was instructed to try again
+  // and then structurally prevented from trying again, leaving "decline honestly" as the only move.
+
+  it('runs the SAME tool again when the arguments differ', async () => {
+    const asked: string[] = [];
+    const { openai } = stubOpenAI([
+      { toolCalls: [search('create a project')] },
+      { toolCalls: [search('new project setup')] },
+      { content: '{"covered":true,"answer":"done"}' },
+    ]);
+    const { toolCalls } = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge', 'results', (raw) => { asked.push(raw); })],
+      maxOutputTokens: 900,
+    });
+    expect(asked).toEqual([
+      JSON.stringify({ query: 'create a project' }),
+      JSON.stringify({ query: 'new project setup' }),
+    ]);
+    expect(toolCalls.every((t) => t.skipped === undefined)).toBe(true);
+  });
+
+  it('still refuses a repeat that differs only in key order or whitespace', async () => {
+    let ran = 0;
+    const { openai } = stubOpenAI([
+      { toolCalls: [{ name: 'search_knowledge', arguments: '{"query":"create a project","scope":"all"}' }] },
+      { toolCalls: [{ name: 'search_knowledge', arguments: '{"scope":"all",  "query":"create  a project "}' }] },
+      { content: '{}' },
+    ]);
+    const { toolCalls } = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge', 'results', () => { ran += 1; })],
+      maxOutputTokens: 900,
+    });
+    expect(ran).toBe(1);
+    expect(toolCalls[1]?.skipped).toBe('duplicate');
+  });
+
+  it('a mistyped tool name does not burn the slot of the tool that exists', async () => {
+    // The name-keyed version marked EVERY requested name as served, including unknown ones, so a
+    // single typo could cost the model a tool it had not used yet.
+    let ran = 0;
+    const { openai } = stubOpenAI([
+      { toolCalls: ['search_knowlege'] }, // typo
+      { toolCalls: [search('create a project')] },
+      { content: '{}' },
+    ]);
+    const { toolCalls } = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge', 'results', () => { ran += 1; })],
+      maxOutputTokens: 900,
+    });
+    expect(toolCalls[0]?.skipped).toBe('unknown');
+    expect(ran).toBe(1);
+  });
+
+  it('caps EXECUTIONS at maxToolCalls even when one round asks for many', async () => {
+    // The old name-keyed de-dup capped executions at "one per tool, ever" by accident. Widening the
+    // key removes that accidental ceiling, so the real budget has to hold WITHIN a round too —
+    // otherwise a single reply asking for ten searches means ten retrievals on a public endpoint.
+    let ran = 0;
+    const { openai } = stubOpenAI([
+      { toolCalls: [search('a'), search('b'), search('c'), search('d'), search('e')] },
+      { content: '{}' },
+    ]);
+    const { toolCalls } = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge', 'results', () => { ran += 1; })],
+      maxOutputTokens: 900,
+      maxToolCalls: 3,
+    });
+    expect(ran).toBe(3);
+    expect(toolCalls.filter((t) => t.skipped === 'budget')).toHaveLength(2);
+  });
+
+  it('reports what the loop did — rounds and every call, including the ones that never ran', async () => {
+    // Without this the two failure modes ("answered the wrong question" vs "wanted to keep looking
+    // and was refused") arrive at the founder as the same silent decline.
+    const { openai } = stubOpenAI([
+      { toolCalls: [search('create a project')] },
+      { toolCalls: [search('create a project')] },
+      { content: '{}' },
+    ]);
+    const { rounds, toolCalls } = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge')],
+      maxOutputTokens: 900,
+    });
+    expect(rounds).toBe(3);
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0]).toMatchObject({ name: 'search_knowledge', round: 0 });
+    expect(toolCalls[0]?.skipped).toBeUndefined(); // it ran
+    expect(toolCalls[1]).toMatchObject({ name: 'search_knowledge', round: 1, skipped: 'duplicate' });
+  });
+
   it('a tool the caller did not bind simply does not exist', async () => {
     // Absence, not refusal: an unbound capability is answered as unknown rather than as forbidden,
     // so the model can never report a workspace's configuration back to an end-user.
     const { openai } = stubOpenAI([{ toolCalls: ['act_on_page'] }, { content: '{}' }]);
-    const content = await runAnswerLoop({
+    const { content } = await runAnswerLoop({
       openai,
       model: 'm',
       messages: [],
@@ -175,6 +315,41 @@ describe('runAnswerLoop — with tools bound (Copilot mode / the diagnostic path
       maxRounds: 3,
     });
     expect(requests).toHaveLength(3);
+  });
+});
+
+describe('formatItems — what the agent can aim a tool at', () => {
+  const item = (over: Partial<CopilotKBItem> = {}): CopilotKBItem => ({
+    id: 'itm1',
+    sourceId: 'src9',
+    segmentIndex: 2,
+    segmentTitle: 'Create a project',
+    text: 'Click New Project',
+    ...over,
+  });
+
+  it('shows the workflow KEY on every item, so get_workflow can reach off-screen workflows', () => {
+    // Without this the only `key=` in the whole prompt comes from POSITION CONTEXT — i.e. the
+    // workflow the user is already standing in — so "how do I do <thing on another screen>?" had
+    // fragments visible and no way to ask for the rest.
+    expect(formatItems([item()])).toBe('- id=itm1 [workflow: Create a project · key=src9:2]: Click New Project');
+  });
+
+  it('omits the key when the item belongs to no workflow — never an unresolvable key', () => {
+    expect(formatItems([item({ segmentIndex: null })])).toBe('- id=itm1 [workflow: Create a project]: Click New Project');
+  });
+
+  it('emits the key even when the workflow has no title', () => {
+    expect(formatItems([item({ segmentTitle: null })])).toBe('- id=itm1 [key=src9:2]: Click New Project');
+  });
+
+  it('keeps segment 0 — a falsy index is a real workflow, not a missing one', () => {
+    expect(formatItems([item({ segmentIndex: 0 })])).toContain('key=src9:0');
+  });
+
+  it('still carries narration, and says so plainly when there is nothing to show', () => {
+    expect(formatItems([item({ narration: 'say hi' })])).toContain('\n   narration: "say hi"');
+    expect(formatItems([])).toBe('- (none)');
   });
 });
 

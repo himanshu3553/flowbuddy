@@ -281,7 +281,7 @@ The design already exists — **P5-M2 Product Profile** ([`phase-5-converse.md`]
 
 **Sequence it AFTER more workflows are recorded** — otherwise an improvement can't be attributed to the profile rather than to the KB finally having depth.
 
-### ⏸ Gap 2 — nothing records what the agent did *(small; unblocks a decision)*
+### 🟨 Gap 2 — nothing records what the agent did *(HALF-CLOSED 2026-07-29 — logs yes, columns no)*
 
 Verified in the code 2026-07-27: `CopilotQuery` logs the question, `answered`, `contextPath`, the Sense outcome and the Reason trigger — **but not which MODE answered, how many ROUNDS it took, or which TOOLS it called.**
 
@@ -290,7 +290,9 @@ Two consequences, and the second is the important one:
 1. **The founder is blind.** After switching to Copilot mode nothing in Studio shows it behaving differently — no evidence the upgrade is doing anything.
 2. **§7 Q6's measurement is currently impossible.** Escalation rate and cost-per-question are exactly the numbers that decide *"should AI Chatbot collapse into Copilot?"* — the founder raised that question himself, and his mode-2 verdict already leans toward yes. Without these columns the decision stays an opinion.
 
-Small: a few additive columns (mode · rounds · tools used), and it pairs naturally with the roadmap §9 backlog's token-usage column, which would make real cost analytics possible for the first time.
+**Half of this closed 2026-07-29.** `server.ts` now emits one `copilot answer` log line per question — the scrubbed question, the configured **mode**, the **engine that actually answered** (`agent` \| `chatbot` \| `reason` — the two come apart in both directions, so mode alone was never the right field), `covered`, `rounds`, **every tool call with the exact query it searched**, and on a decline the assistant's **own words**. Diagnosing one incident no longer means reading source. Two things forced it: a decline used to be indistinguishable from a decline that searched three times and found nothing, and the escalation short-circuited before the `CopilotQuery` write, so the agent's own reason was never stored anywhere — the surviving `CoverageGap` held the *diagnostic engine's* text, filed against content the KB actually had. That second half is fixed too: a mode-2 decline no longer escalates, so it reaches the write.
+
+**Still open: the columns.** Logs answer *"why did this question fail"*; they do not answer *"how often, and is the upgrade paying for itself"*. Consequence 2 above is untouched — §7 Q6 still needs `mode` · `rounds` · `toolCalls` on `CopilotQuery` (additive, defaults on new rows only), pairing with the roadmap §9 backlog's token-usage column. The plumbing is done: `runAnswerLoop` already returns a `ToolCallRecord[]` ledger and `answerAsAgent` hands it to the caller via `onLoop`, so persisting it is a migration plus one write — not new machinery.
 
 ### ⏸ Gap 3 — fold the diagnostic path into the agent loop *(deferred with a hard prerequisite)*
 

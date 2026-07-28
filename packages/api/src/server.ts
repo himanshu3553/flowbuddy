@@ -41,6 +41,7 @@ import {
   type ExpectedStepEvidence,
   type AgentWorkflow,
   type CopilotCitation,
+  type AnswerLoopResult,
 } from '@flowbuddy/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
@@ -861,6 +862,17 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   }
 
   let result: CopilotAnswer;
+  // WHICH ENGINE ACTUALLY ANSWERED — not which mode the workspace is configured for. The two come
+  // apart in both directions: the diagnostic path preempts the agent whenever the widget shipped
+  // evidence, and the safety floor answers as AI Chatbot while `gate.mode` still reads "copilot".
+  // Anything that reasons about how an answer was produced (this log line today; the escalation
+  // decision next) must key on this, or it will misfire on exactly the requests that already went
+  // wrong once.
+  let engineUsed: 'chatbot' | 'agent' | 'reason' = 'chatbot';
+  // What the agent's loop DID — rounds, and every tool call including the ones that did not run.
+  // A holder rather than a bare `let`: the loop reports through a callback, and TypeScript narrows
+  // a `let` that is only ever assigned inside a closure to `null` at every read.
+  const loop: { stats: AnswerLoopResult | null } = { stats: null };
   // AI Chatbot — one grounded call over the items retrieval has already produced. Named rather
   // than inlined because it is BOTH the mode-1 path and the fallback underneath Copilot mode, and
   // a fallback that drifts from the thing it falls back to is worse than none.
@@ -877,10 +889,15 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   if (reasonPayload) {
     // The reasoning path (docs/phase-2-reason.md §4): full workflow recipe + expected-state
     // artifacts for the localized current step, then the stronger model's agentic read-tool loop.
+    engineUsed = 'reason';
     const { workflow, expected } = await buildReasonEvidence(workspaceId, sense);
     req.log.info(
       {
         workspaceId,
+        // The mode rides along because this branch has NO mode guard: it preempts the agent
+        // whenever the widget shipped evidence. `mode: 'copilot'` here means a Copilot-mode
+        // question was answered by the diagnostic engine with the KB tools never bound.
+        mode: gate.mode,
         trigger: reasonPayload.trigger,
         elements: reasonPayload.snapshot.elements.length,
         image: Boolean(reasonPayload.image),
@@ -906,6 +923,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     // fast; the extra rounds are the escalation. Both tools are approval-constrained HERE, in the
     // closures, so the model's action space is the approved KB and nothing else.
     req.log.info({ workspaceId, mode: gate.mode }, 'agent path engaged');
+    engineUsed = 'agent';
     try {
       result = await answerAsAgent({
         question,
@@ -920,6 +938,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
             embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
           }),
         loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
+        onLoop: (stats) => {
+          loop.stats = stats;
+        },
         apiKey: config.openaiApiKey,
         model: config.synthModel,
       });
@@ -935,11 +956,50 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       // is no failure of the loop that is better served by showing the end-user an error than by
       // answering from the same knowledge one rung down.
       req.log.error({ err, workspaceId, mode: gate.mode }, 'agent path failed — falling back to AI Chatbot');
+      engineUsed = 'chatbot'; // the floor answered; downstream must not treat this as the agent
       result = await answerAsChatbot();
     }
   } else {
     result = await answerAsChatbot();
   }
+
+  // WHAT THE ANSWER PATH ACTUALLY DID — one line per question, emitted before anything downstream
+  // can transform, escalate, or discard the result.
+  //
+  // It exists because a decline used to be unreadable. Two very different failures — "answered the
+  // page instead of the question" and "searched, missed, and was refused a second search" — arrive
+  // at the same silent `covered:false`, and the escalation then REPLACES that decline with another
+  // engine's before anything is written down. So the founder saw a page-shaped refusal, and there
+  // was no record anywhere of what the agent itself had said or looked for. Tuning a prompt against
+  // a sentence a different engine wrote is not debugging; it is guessing with extra steps.
+  //
+  // `reason` is included ONLY on a decline: that string is the model's own words to the end-user,
+  // and it is the single most useful field for telling those two failures apart.
+  req.log.info(
+    {
+      workspaceId,
+      // The SCRUBBED question (never the raw one) — the same text the DB stores, so a log line and
+      // a CopilotQuery row can be lined up, and a log file is not a new place PII can land.
+      question: storedQuestion,
+      mode: gate.mode,
+      engine: engineUsed,
+      covered: result.covered,
+      items: items.length,
+      contextPath,
+      sensed: sense?.hypotheses.length ?? 0,
+      ...(loop.stats
+        ? {
+            rounds: loop.stats.rounds,
+            // Every call the model asked for, whether or not it ran — a stream of `duplicate` or
+            // `budget` skips is the loop telling you it wanted to keep looking and could not.
+            tools: loop.stats.toolCalls.map((t) => ({ name: t.name, args: t.args, round: t.round, skipped: t.skipped })),
+          }
+        : {}),
+      ...(result.covered ? {} : { reason: result.reason }),
+    },
+    'copilot answer',
+  );
+
   // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
   const position = result.covered ? result.position : null;
 
@@ -956,7 +1016,26 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // on, and the widget declared it can capture. Ask it to retry ONCE with evidence instead of
   // logging the decline (the retry logs the real outcome; a widget that never retries costs one
   // missing decline row, not a phantom coverage gap).
-  if (!result.covered && !reasonPayload && reasonAvailable && !preview) {
+  //
+  // NOT WHEN THE AGENT ANSWERED (2026-07-28). This escalation was written for the SINGLE-CALL fast
+  // path, where a decline means "one look, nothing found" and a second look with page evidence is a
+  // genuine upgrade. Under Copilot mode it stopped being an upgrade and became a SWAP: the retry
+  // arrives carrying page state, and the diagnostic branch above has no mode guard, so the agent
+  // never runs the second time and its `search_knowledge`/`get_workflow` — the only tools that could
+  // still have found the answer — are dropped. The user then reads a diagnosis of the screen they
+  // happen to be standing on, for a question that was never about that screen.
+  //
+  // Keyed on WHICH ENGINE ANSWERED, not on the workspace's mode, because the two come apart exactly
+  // here: when the agent loop throws, the safety floor answers as AI Chatbot while `gate.mode` still
+  // reads "copilot" — and that decline SHOULD still escalate, since it really was one blind look.
+  //
+  // Little is lost: a genuinely diagnostic question ("why can't I proceed?") never reaches this
+  // line, because the widget's own trigger fires on the FIRST call and takes the diagnostic branch
+  // directly. What this suppresses is the retry for questions that did NOT look diagnostic — where
+  // page state was the least likely thing to help. And the agent's decline now flows on to the
+  // CopilotQuery write below instead of vanishing, so the founder finally sees the copilot's own
+  // words, and the coverage gap records what the AGENT said rather than the diagnostic engine's.
+  if (!result.covered && engineUsed !== 'agent' && !reasonPayload && reasonAvailable && !preview) {
     return { covered: false, answer: null, citations: [], reason: result.reason, escalate: true };
   }
 

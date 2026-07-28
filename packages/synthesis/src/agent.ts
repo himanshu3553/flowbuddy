@@ -7,7 +7,7 @@ import {
   type CopilotTurn,
   type SenseContext,
 } from './copilot';
-import { formatItems, runAnswerLoop, shapeAnswer, type EngineTool } from './engine';
+import { formatItems, runAnswerLoop, shapeAnswer, type AnswerLoopResult, type EngineTool } from './engine';
 
 /**
  * **Copilot mode (mode 2)** — the assistant decides how to help, turn by turn, instead of a fixed
@@ -48,6 +48,10 @@ export interface AgentInput {
   /** Full distilled steps for one workflow key (`sourceId:segmentIndex`), approval-checked.
    *  Null when the key is unknown, unapproved, or not in this workspace. */
   loadWorkflow: (key: string) => Promise<AgentWorkflow | null>;
+  /** What the loop did (rounds, every tool call and whether it ran) — for the caller to log.
+   *  Optional: the engine has no logger, and reporting is not the answer path's job. Without it
+   *  a decline is indistinguishable from a decline that searched three times and found nothing. */
+  onLoop?: (stats: AnswerLoopResult) => void;
   apiKey: string;
   model: string;
 }
@@ -91,6 +95,16 @@ WHAT TO DO ON THEIR SCREEN — you may also point at things and offer to walk th
 - Neither is free: pointing draws on someone else's product, and offering interrupts. Offer when it genuinely helps THIS message — not every time you happen to know where they are. If in doubt, don't.${ANSWER_FORMAT_RULES}`;
 
 const MAX_SEARCH_RESULTS = 12;
+/**
+ * Ceiling on how much of one workflow `get_workflow` may pour into the conversation.
+ *
+ * `search_knowledge` has always been capped; this one was not, because the name-keyed de-dup meant
+ * it could fire at most once per question. Now that a second, different workflow can be loaded, an
+ * uncapped dump is a real path to a long transcript — and a long transcript against the 700-token
+ * output cap truncates the final JSON, which `shapeAnswer` turns into a DECLINE. A change made to
+ * reduce declines must not quietly open a new way to produce one.
+ */
+const MAX_WORKFLOW_STEPS = 40;
 
 /**
  * Copilot mode's answer schema — mode 1's, plus the two on-page intents.
@@ -188,7 +202,7 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
         function: {
           name: 'get_workflow',
           description:
-            'The full ordered steps of one workflow, by its key (the "key=" value shown in POSITION CONTEXT, or the workflow an item belongs to). Use when you need the whole procedure rather than loose fragments.',
+            'The full ordered steps of one workflow, by its key — the "key=" value shown on every knowledge item and in POSITION CONTEXT. Use when you need the whole procedure rather than the loose fragments retrieval returned, INCLUDING for a workflow that happens elsewhere in the product: any item you can see the key of can be opened in full.',
           parameters: {
             type: 'object',
             properties: {
@@ -208,8 +222,17 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
         if (!wf || wf.items.length === 0) {
           return { reply: `No approved workflow with key ${key}.` };
         }
-        remember(wf.items);
-        return { reply: `Workflow "${wf.title}" — every step in order:\n${formatItems(wf.items)}` };
+        // Cite what we SHOWED, not what we loaded: an item the model never saw must not resolve
+        // into a citation, so `remember` and the prompt block stay in step.
+        const shown = wf.items.slice(0, MAX_WORKFLOW_STEPS);
+        const cut = wf.items.length - shown.length;
+        remember(shown);
+        return {
+          reply:
+            cut > 0
+              ? `Workflow "${wf.title}" — its first ${shown.length} steps in order:\n${formatItems(shown)}\n(… and ${cut} further step${cut === 1 ? '' : 's'} not shown.)`
+              : `Workflow "${wf.title}" — every step in order:\n${formatItems(shown)}`,
+        };
       },
     },
   ];
@@ -221,12 +244,18 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
   const ctxLine = input.context?.path
     ? `The user is currently on the page "${input.context.path}". Prefer steps relevant to that screen when applicable (but still answer the actual question).\n\n`
     : '';
+  // THE QUESTION IS LABELLED AS THE NEW ONE — see copilot.ts for the mechanism and the measurements.
+  // The failure is not mode-specific: with any earlier turn in the thread the previous question is a
+  // short clean line while this one sits under a wall of items, and the model answers the previous
+  // one. Mode 2 is if anything more exposed — every extra round pushes this message further back
+  // behind tool results. Verified here too, n=10/cell: the two topic-shift cells 0/10 → 10/10 with
+  // the cold, follow-up and must-decline cells all unmoved.
   messages.push({
     role: 'user',
-    content: `${ctxLine}${senseBlock(input.context?.sense)}KNOWLEDGE ITEMS (what retrieval found for this question — search for more if these don't cover it):\n${formatItems(input.items)}\n\nQuestion: ${input.question}`,
+    content: `${ctxLine}${senseBlock(input.context?.sense)}KNOWLEDGE ITEMS (what retrieval found for this question — search for more if these don't cover it):\n${formatItems(input.items)}\n\nThe user's NEW message — this is the one to answer, not anything asked earlier: ${input.question}`,
   });
 
-  const content = await runAnswerLoop({
+  const loop = await runAnswerLoop({
     openai,
     model: input.model,
     messages,
@@ -236,6 +265,8 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
     maxOutputTokens: 700,
     schema: AGENT_ANSWER_SCHEMA,
   });
+  input.onLoop?.(loop);
+  const { content } = loop;
 
   return shapeAnswer({
     content,
