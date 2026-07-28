@@ -504,6 +504,11 @@ async function onStart(backendUrl: string, token: string): Promise<{ ok: boolean
     return { ok: false, error: 'Open the app you want to record in the active tab first (not a browser/internal page).' };
   }
 
+  // A buffer still holding a `meta` here means the PREVIOUS recording never uploaded successfully
+  // (success clears it) — so it is being abandoned right now, in favour of this one. Hand it back
+  // before wiping the buffer, or its server row and uploaded artifacts are orphaned with no client
+  // left that knows their id. The server ignores this for any recording that did finalize.
+  await discardServerSide();
   await kvClear();
   idToKey.clear();
   pendingPreShot = null; // R12 — drop any stale pre-click shot from a previous session
@@ -651,12 +656,41 @@ async function recordOutcome(result: UploadResult): Promise<void> {
   await setBadge(result.ok ? 'ok' : 'fail');
 }
 
+/**
+ * Tell the server to drop an unfinished recording and everything it already uploaded.
+ *
+ * Since artifacts now go up DURING the capture, throwing a recording away locally is no longer the
+ * whole story — without this, every abandoned capture would leave a row and its objects behind
+ * forever. Best-effort by design: the server sweeps anything this misses, and a failure here must
+ * never stop the user from starting over. The server refuses to discard a finalized recording, so
+ * this can't destroy a recording that actually made it.
+ */
+async function discardServerSide(): Promise<void> {
+  try {
+    const uploadId = (await kvGet<{ uploadId?: string }>('meta'))?.uploadId;
+    if (!uploadId) return;
+    const rec = await getRec();
+    const conn = await chrome.storage.local.get(['apiToken', 'backendUrl']);
+    const apiBase = (rec.backendUrl || (conn.backendUrl as string) || 'http://localhost:8787').replace(/\/$/, '');
+    const token = rec.token || (conn.apiToken as string | undefined);
+    if (!token) return;
+    await fetch(`${apiBase}/v1/uploads/${uploadId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    /* offline / already gone — the server-side sweep is the backstop */
+  }
+}
+
 /** "Start fresh" from the interrupted screen: drop the unsent recording + result, clear the badge. */
 async function onDiscard(): Promise<void> {
   const rec = await getRec();
   if (rec.recording) return; // never discard an in-progress capture
   finalizing = false;
   clearFinalizeFallback();
+  await discardServerSide(); // BEFORE kvClear — it needs the uploadId that lives in `meta`
   await kvClear();
   idToKey.clear();
   lastPct = -1;
@@ -702,6 +736,8 @@ const UPLOAD_CONCURRENCY = 6; // parallel PUTs — enough to hide latency, gentl
 // Every request here is deadlined. A hung upload must never become a hung recording: unconfirmed
 // artifacts simply ride the Stop bundle, which is the design's whole fallback story.
 const ARTIFACT_REQUEST_TIMEOUT_MS = 30_000;
+/** Narration's path in storage — the one artifact whose local key doesn't carry its own path. */
+const AUDIO_REL = 'audio.webm';
 let artifactDrain: Promise<void> | null = null;
 
 interface PendingArtifact {
@@ -733,18 +769,27 @@ async function sentArtifactRels(sessionId: string | undefined): Promise<Set<stri
  * whole change exists to make survivable.
  */
 async function pendingArtifacts(sessionId: string | undefined): Promise<PendingArtifact[]> {
-  const [shots, doms, sent] = await Promise.all([
+  const [shots, doms, audio, sent] = await Promise.all([
     kvKeysByPrefix('shot:'),
     kvKeysByPrefix('dom:'),
+    // Narration is banked under a single fixed key, and only once the offscreen recorder reports at
+    // Stop — so unlike the others it is never pending mid-recording. It goes through the same path
+    // anyway, which is what leaves the finalize request carrying nothing but the manifest.
+    kvKeysByPrefix('audio'),
     sentArtifactRels(sessionId),
   ]);
-  return [...shots, ...doms]
-    .map((key) => ({ kvKey: key, rel: key.slice(key.indexOf(':') + 1) }))
+  return [...shots, ...doms, ...audio]
+    .map((key) => ({ kvKey: key, rel: key === 'audio' ? AUDIO_REL : key.slice(key.indexOf(':') + 1) }))
     .filter((a) => !sent.has(a.rel));
 }
 
-/** Turn one buffered artifact into the body to PUT (screenshots are data URLs, DOM is raw HTML). */
+/** Turn one buffered artifact into the body to PUT. Three shapes: screenshots are data URLs, DOM
+ *  snapshots are raw HTML strings, and narration is a `{ dataUrl, durationMs }` record. */
 async function artifactBlob(a: PendingArtifact): Promise<Blob | null> {
+  if (a.kvKey === 'audio') {
+    const rec = await kvGet<{ dataUrl: string | null }>('audio');
+    return rec?.dataUrl ? await dataUrlToBlob(rec.dataUrl) : null;
+  }
   const value = await kvGet<string>(a.kvKey);
   if (!value) return null;
   return a.kvKey.startsWith('shot:')
@@ -903,8 +948,10 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
     events,
   };
 
-  // Last chance to push artifacts directly to storage. Whatever it confirms drops out of the bundle
-  // below, so on a healthy connection this request is little more than the manifest and the audio.
+  // Last chance to push artifacts — narration included — straight to storage. Whatever it confirms
+  // drops out of the bundle below, so on a healthy connection this request carries the manifest and
+  // nothing else. What remains here is the FALLBACK, not the design: it exists so a browser that
+  // cannot reach object storage directly still delivers a complete recording.
   await flushArtifacts();
   // Scoped to the recording the server actually gave us — see sentMarkerKey. If signing never
   // succeeded there is no session and nothing counts as sent, so the bundle carries everything.
@@ -912,16 +959,20 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
 
   const shotEntries = await kvEntriesByPrefix<string>('shot:');
   const domEntries = await kvEntriesByPrefix<string>('dom:');
-  const artifactCount = shotEntries.length + domEntries.length;
+  const audioPending = Boolean(audio?.dataUrl) && !sentRels.has(AUDIO_REL);
+  const artifactCount = shotEntries.length + domEntries.length + (audio?.dataUrl ? 1 : 0);
+  const riding = shotEntries.filter((e) => !sentRels.has(e.key.slice('shot:'.length))).length
+    + domEntries.filter((e) => !sentRels.has(e.key.slice('dom:'.length))).length
+    + (audioPending ? 1 : 0);
   log.info(
-    `[capture] summary: events=${events.length}, artifacts=${artifactCount} (${sentRels.size} already uploaded, ${artifactCount - sentRels.size} riding the bundle), audio=${audio?.dataUrl ? 'yes' : 'no'}`,
+    `[capture] summary: events=${events.length}, artifacts=${artifactCount} (${artifactCount - riding} uploaded directly, ${riding} riding the bundle), audio=${audio?.dataUrl ? (audioPending ? 'in bundle' : 'uploaded') : 'none'}`,
   );
 
   // Each file's relative PATH rides on the field NAME (multipart strips directories from
   // filenames), matching what the API expects. `manifest` is a plain text field (no filename).
   const parts: Part[] = [{ name: 'manifest', body: JSON.stringify(manifest) }];
-  if (audio?.dataUrl) {
-    parts.push({ name: 'audio.webm', filename: 'audio.webm', contentType: 'audio/webm', body: await dataUrlToBlob(audio.dataUrl) });
+  if (audioPending) {
+    parts.push({ name: AUDIO_REL, filename: AUDIO_REL, contentType: 'audio/webm', body: await dataUrlToBlob(audio!.dataUrl!) });
   }
   for (const { key, value } of shotEntries) {
     const rel = key.slice('shot:'.length);
@@ -949,67 +1000,42 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
     'X-FlowBuddy-Upload-Id': uploadId,
   };
 
-  // Watchdog: a fetch with no deadline can hang forever (the exact failure that stranded a stop on
-  // a cold-starting server) — the badge would show ↑ indefinitely with no outcome. Abort when no
-  // progress happens for STALL_MS (streaming resets it per chunk; cold start ~1 min fits), or after
-  // a flat PLAIN_MS for the no-progress plain POST. An abort surfaces as a retryable timeout.
-  const STALL_MS = 120_000;
-  const PLAIN_MS = 240_000;
+  // A plain multipart POST is all this needs now. It used to hand `fetch` a hand-rolled
+  // ReadableStream over an HTTP/2-only path, with byte progress capped at 90 % and a "Finishing…"
+  // tail — roughly 150 lines that existed for ONE reason: making a multi-hundred-MB request
+  // survivable. Artifacts go straight to storage during the recording, so this request is the
+  // manifest and, at most, whatever storage never confirmed.
+  //
+  // The deadline stays generous anyway, because the FALLBACK path can still be big: if direct
+  // upload was unavailable for a whole recording, every artifact rides this one request and the
+  // server writes them serially. A timeout there is now recoverable rather than destructive —
+  // the recording carries a stable id, so retrying resolves to the same row.
+  const UPLOAD_DEADLINE_MS = 300_000;
   let timedOut = false;
   const aborter = new AbortController();
-  let watchdog: ReturnType<typeof setTimeout> | null = null;
-  const armWatchdog = (ms: number): void => {
-    if (watchdog != null) clearTimeout(watchdog);
-    watchdog = setTimeout(() => { timedOut = true; aborter.abort(); }, ms);
-  };
-  const disarmWatchdog = (): void => {
-    if (watchdog != null) { clearTimeout(watchdog); watchdog = null; }
-  };
-  const timeoutResult = (): UploadResult => ({
-    ok: false,
-    error: 'Upload timed out — the FlowBuddy server may have been waking up. Retry in a moment.',
-  });
+  const watchdog = setTimeout(() => { timedOut = true; aborter.abort(); }, UPLOAD_DEADLINE_MS);
 
-  // Plain multipart POST — no upload progress (fetch(FormData) exposes none), so the popup shows an
-  // indeterminate bar (-1). This is the reliable path that works on HTTP/1.1.
-  const plainUpload = (): Promise<Response> => {
-    void setUploadProgress(-1);
-    armWatchdog(PLAIN_MS);
-    return fetch(url, { method: 'POST', headers: authHeaders, body: partsToFormData(parts), signal: aborter.signal });
-  };
-
-  await setPhase('uploading'); // bundle assembled — bytes start moving now
+  await setPhase('uploading');
   await setUploadProgress(0);
   let res: Response;
   try {
-    // Streamed body gives byte-progress (capped at 90% + a "finishing" tail — see streamingUpload),
-    // but Chrome only allows a streaming request body over HTTP/2 (TLS); plaintext localhost is
-    // HTTP/1.1, where it throws. So only stream over https.
-    if (url.startsWith('https:')) {
-      armWatchdog(STALL_MS);
-      res = await streamingUpload(
-        url,
-        authHeaders,
-        parts,
-        (pct) => { armWatchdog(STALL_MS); void setUploadProgress(pct); },
-        aborter.signal,
-      );
-    } else {
-      res = await plainUpload();
+    res = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders,
+      body: partsToFormData(parts),
+      signal: aborter.signal,
+    });
+  } catch (e) {
+    if (timedOut) {
+      return {
+        ok: false,
+        error: 'Upload timed out. Your recording is still saved here — retrying is safe and cannot create a duplicate.',
+      };
     }
-  } catch {
-    disarmWatchdog();
-    if (timedOut) return timeoutResult();
-    // Streaming failed (e.g. the host didn't negotiate HTTP/2) — fall back to the plain POST.
-    try {
-      res = await plainUpload();
-    } catch (e) {
-      disarmWatchdog();
-      if (timedOut) return timeoutResult();
-      return { ok: false, error: `Could not reach the FlowBuddy API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
-    }
+    return { ok: false, error: `Could not reach the FlowBuddy API at ${apiBase} — is it running? (${(e as Error)?.message || 'network error'})` };
+  } finally {
+    clearTimeout(watchdog);
   }
-  disarmWatchdog();
 
   const json = await res.json().catch(() => ({}));
   if (res.ok && json?.sessionId) {
@@ -1019,7 +1045,7 @@ async function assembleAndUpload(rec: Rec): Promise<UploadResult> {
   return { ok: false, error: json?.error || `Upload failed (HTTP ${res.status})` };
 }
 
-/** Plain multipart body — the HTTP/1.1 fallback for streamingUpload (same field/filename shape). */
+/** Multipart body for the finalize request (each file's relative path rides on the field NAME). */
 function partsToFormData(parts: Part[]): FormData {
   const fd = new FormData();
   for (const p of parts) {
@@ -1029,7 +1055,7 @@ function partsToFormData(parts: Part[]): FormData {
   return fd;
 }
 
-/** Persist upload progress (0–100) for the popup's determinate bar; throttled to percent changes. */
+/** Persist coarse upload state (0 = in flight, 100 = accepted) for the popup; throttled. */
 let lastPct = -1;
 async function setUploadProgress(pct: number): Promise<void> {
   if (pct === lastPct) return;
@@ -1046,91 +1072,6 @@ interface Part {
   filename?: string;
   contentType?: string;
   body: Blob | string;
-}
-
-/**
- * Stream a multipart/form-data body to the API and report progress. MV3 service workers have no
- * XMLHttpRequest, and plain `fetch(FormData)` exposes no upload events — so we hand `fetch` a
- * ReadableStream and count bytes as they're pulled. Two honesty caveats drive the mapping:
- *  - "bytes pulled" = bytes handed to the browser's send buffer, which races ahead of the wire, so
- *    we cap byte-progress at 90% (never let enqueuing alone claim "done").
- *  - after the last byte we still await the server receiving + processing the body, so we emit a
- *    FINISHING sentinel (-2) for that tail. 100% is reserved for the server's success response.
- * Needs `duplex: 'half'` (Chrome only allows a streaming request body over HTTP/2).
- */
-const FINISHING = -2;
-async function streamingUpload(
-  url: string,
-  authHeaders: Record<string, string>,
-  parts: Part[],
-  report: (pct: number) => void,
-  signal?: AbortSignal,
-): Promise<Response> {
-  const enc = new TextEncoder();
-  const CRLF = '\r\n';
-  const boundary = `----FlowBuddyRecorder${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-
-  const segments = parts.map((p) => {
-    let head = `--${boundary}${CRLF}Content-Disposition: form-data; name="${p.name}"`;
-    if (p.filename) head += `; filename="${p.filename}"`;
-    head += CRLF;
-    if (p.contentType) head += `Content-Type: ${p.contentType}${CRLF}`;
-    head += CRLF;
-    const body = typeof p.body === 'string' ? enc.encode(p.body) : p.body;
-    const size = body instanceof Uint8Array ? body.byteLength : body.size;
-    return { header: enc.encode(head), body, size };
-  });
-  const closing = enc.encode(`--${boundary}--${CRLF}`);
-
-  let total = closing.byteLength;
-  for (const s of segments) total += s.header.byteLength + s.size + 2; // + trailing CRLF per part
-
-  async function* chunks(): AsyncGenerator<Uint8Array> {
-    for (const seg of segments) {
-      yield seg.header;
-      if (seg.body instanceof Uint8Array) {
-        yield seg.body;
-      } else {
-        const reader = seg.body.stream().getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          yield value;
-        }
-      }
-      yield enc.encode(CRLF);
-    }
-    yield closing;
-  }
-
-  let sent = 0;
-  const iter = chunks();
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { done, value } = await iter.next();
-      if (done) {
-        controller.close();
-        report(FINISHING); // all bytes handed off — now the server receives + processes the tail
-        return;
-      }
-      controller.enqueue(value);
-      sent += value.byteLength;
-      // Cap at 90%: enqueuing outruns the wire, and the server-processing tail is still ahead.
-      report(total ? Math.round((sent / total) * 90) : 0);
-    },
-  });
-
-  const init = {
-    method: 'POST',
-    headers: {
-      ...authHeaders,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-    },
-    body: stream,
-    duplex: 'half', // required by Chrome when streaming a request body
-    signal,
-  };
-  return fetch(url, init as RequestInit);
 }
 
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {

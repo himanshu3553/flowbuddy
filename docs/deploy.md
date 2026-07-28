@@ -49,12 +49,18 @@ Screenshots / audio / DOM snapshots live in **Cloudflare R2** (S3-compatible). A
 touch prod artifacts. Pre-create the bucket — the API runs `HeadBucket` at boot, so it never needs
 bucket-create permission.
 
-Since the direct-upload change the **recorder also writes artifacts itself, via presigned PUT URLs**
-(`POST /v1/uploads/sign`, 900s TTL), so the API never relays artifact bytes. Two consequences for a
-deploy:
-- **R2 must accept those PUTs directly from the extension.** The recorder holds `<all_urls>` host
-  permissions, so no bucket CORS rule is expected to be needed — **unverified against real R2 as of
-  this change**; confirm on dev before relying on it in prod.
+Since the direct-upload change the **recorder writes every artifact itself, via presigned PUT URLs**
+(`POST /v1/uploads/sign`, 900s TTL) — screenshots and DOM snapshots *while* the capture runs, and the
+**narration track at Stop** — so on a healthy connection the API never relays artifact bytes at all.
+Three consequences for a deploy:
+- **R2 accepts those PUTs directly from the extension — proven on the dev deploy 2026-07-28**, with
+  **no bucket CORS rule added**. The recorder issues them from its service worker under `<all_urls>`
+  host permissions, so there is nothing to configure on the bucket beyond what §3.3 already creates.
+  *(This was the one part of the upload rework that could not be proven locally — MinIO is more
+  permissive than R2 on both checksums and cross-origin PUTs.)*
+- **The R2 token needs delete, not just write.** Cleanup of abandoned recordings (§8.5) removes the
+  objects under a session prefix; the **Object Read & Write** token in §3.3 already covers it, but a
+  read-only or write-only token would leave storage growing silently.
 - **The presigner runs with `requestChecksumCalculation: 'WHEN_REQUIRED'`**
   ([`packages/api/src/storage.ts`](../packages/api/src/storage.ts)). With the SDK default the signer
   bakes an empty-body CRC32 into the signed URL; **MinIO ignores it and R2 rejects it** — i.e. the
@@ -68,8 +74,22 @@ The synthesis worker runs *inside* the api web service via the `start:all` entry
 one process). In **dev** this is forced by Render (background workers are paid-only); in **prod** it's
 a deliberate choice — synthesis is almost entirely I/O-bound (Whisper/GPT-4o/embedding network calls),
 so it barely contends with answer traffic. Trade-off: a deploy restart kills an in-flight synthesis
-job (`attempts=1`, no auto-retry — fix is re-recording). Splitting the worker out is **scaling-ladder
-Step 1** (§9). Migrations run in the same start command (`prisma migrate deploy` before boot).
+job (`attempts=1`, no auto-retry — fix is re-recording). Migrations run in the same start command
+(`prisma migrate deploy` before boot).
+
+**What sharing one instance costs, and how it's paid for (2026-07-28).** The api and the worker share
+one 512 MB container, and the api half serves *customers' end-users* — so an out-of-memory kill in the
+worker takes the public copilot down with it. Two guards, both in the blueprints:
+- **Worker concurrency is `1`, not `2`** ([`worker.ts`](../packages/api/src/worker.ts)) — a synthesis
+  job holds whole screenshots in memory for the vision calls, so two at once is the realistic OOM
+  path. Throughput isn't the constraint: recordings arrive one at a time, from a human pressing Stop.
+- **`NODE_OPTIONS=--max-old-space-size=400`** on the api service — caps the V8 heap *below* the
+  container limit so the process collects garbage instead of being OOM-killed mid-request.
+
+**Splitting the worker into its own Render service is SKIPPED (decision 2026-07-28).** It costs ~$7/mo,
+and most of its rationale evaporated once the api stopped relaying artifact bytes (§2.2): the api's
+memory and time per recording are now a manifest, not hundreds of megabytes. It stays on the scaling
+ladder as **Step 1** (§9) for when the trigger actually appears.
 
 ### 2.4 The service-URL suffix gotcha
 
@@ -101,6 +121,22 @@ dashboard.
 log search ingests). The **Studio browser console** level is separate and **build-time**
 (`NEXT_PUBLIC_LOG_LEVEL`, default `warn` in prod) — changing it means a rebuild, not just an env edit.
 Full model + local usage: [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown).
+
+### 2.6 Health checks (added 2026-07-28)
+
+Both blueprints now declare a `healthCheckPath` per web service. **Without one, Render only checks
+that the port is open** — which a wedged, deadlocked or CPU-pinned process passes trivially, so a
+service in exactly the state you'd want restarted would never be restarted. The same check also gates
+zero-downtime deploys: traffic only moves to the new instance once the path answers.
+
+| Service | Path | Why that path |
+|---|---|---|
+| `flowbuddy-api` / `flowbuddy-dev-api` | `/healthz` | the existing health route in [`server.ts`](../packages/api/src/server.ts) — answers `{"ok":true}` |
+| `flowbuddy-web` | `/login` | Studio has no dedicated health endpoint; `/login` is a public route that needs the Next server to actually be rendering |
+
+Static sites (`flowbuddy-widget`, `flowbuddy-landing`) have no health check — there is no process.
+Note the check is a **liveness** signal only: `/healthz` doesn't touch Postgres or Redis, so a
+database outage does not (and should not) trigger a restart loop.
 
 ---
 
@@ -178,7 +214,8 @@ the [suffix gotcha](#24-the-service-url-suffix-gotcha) — set your best guess n
 | `RESEND_API_KEY` | `flowbuddy-dev-web` | Resend key — **enables** email verification + password reset. ⚠️ Before first enable, backfill: `UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;` — pre-existing accounts can't sign in otherwise. Optional `EMAIL_FROM` needs a Resend-verified domain (default `onboarding@resend.dev` only delivers to the account owner). |
 
 Auto-wired by the blueprint (do **not** set): `DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`,
-`TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`, `LOG_LEVEL` (`info` — tunable live, §2.5).
+`TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`, `LOG_LEVEL` (`info` — tunable live, §2.5),
+`NODE_OPTIONS` (the heap cap for the shared api+worker instance, §2.3).
 
 > **All three of `OPENAI_API_KEY`, `AUTH_SECRET`, and the R2 group are mandatory for a working stack** —
 > and each fails at a *different* moment (see [Troubleshooting](#troubleshooting-real-errors-we-hit)).
@@ -230,7 +267,7 @@ flowbuddy-dev-api      : OPENAI_API_KEY, FLOWBUDDY_STUDIO_URL (= real flowbuddy-
 flowbuddy-dev-web      : AUTH_SECRET, AUTH_URL, FLOWBUDDY_API_URL, FLOWBUDDY_WIDGET_URL, RESEND_API_KEY   # NO OpenAI key
 ```
 Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`,
-`AUTH_TRUST_HOST`) is wired automatically by [`render.dev.yaml`](../render.dev.yaml).
+`AUTH_TRUST_HOST`, `NODE_OPTIONS`) is wired automatically by [`render.dev.yaml`](../render.dev.yaml).
 
 ---
 
@@ -252,7 +289,7 @@ Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_M
 | `flowbuddy-r2` | Env group | — | — | shared Cloudflare R2 credentials (prod bucket) |
 
 **Decisions recorded (and their trade-offs):**
-- **Worker folded into the API** (`start:all`) — see §2.3; split at Scale step 1 (§9).
+- **Worker folded into the API** (`start:all`) — see §2.3, including the heap cap + concurrency-1 guards that make one 512 MB instance safe to share. **Splitting it out was reconsidered and skipped 2026-07-28** (~$7/mo, and the api no longer carries artifact bytes); it remains Scale step 1 (§9).
 - **Key Value is paid (Starter $10) — revised 2026-07-17 at first deploy.** The original "stays free" plan hit a platform limit: Render allows only **one free Key Value instance per workspace**, and dev holds it (`flowbuddy-dev-redis`). Paying also buys **persistence** — the "a restart drops a queued job" caveat is gone in prod (Scale step 2's first option, arrived early). `maxmemoryPolicy: noeviction` stays set.
 - **Studio is paid (Starter)** — customers work here; a ~1-min free-tier cold start reads as "broken product".
 - **The API is paid and always-on, non-negotiable** — it serves customers' end-users on every widget question; a cold start there is a broken copilot on someone else's site.
@@ -290,6 +327,7 @@ later without breaking a single embed.
 The root [`render.yaml`](../render.yaml) is authoritative for the prod spec — plans, env wiring, and
 per-service notes live there as comments (see the two-blueprint model, §2.1). Highlights: paid
 api/web/db per §4.1, `maxmemoryPolicy: noeviction` on the queue, migrations in the api start command,
+a `healthCheckPath` on each web service (§2.6), `NODE_OPTIONS` capping the api's heap (§2.3),
 and the two static sites (widget bundles + the `packages/landing` page) built with
 `pnpm install --frozen-lockfile && pnpm --filter <pkg> build`.
 
@@ -371,7 +409,11 @@ as connected. *(Plain `pnpm --filter @flowbuddy/extension build` with no `STUDIO
 localhost — the committed `src/manifest.json` stays localhost so local dev is unaffected.)*
 
 **Chrome Web Store** (full per-version history + the cut-a-release checklist:
-[`extension-releases.md`](extension-releases.md)): **v0.6.0 "FlowBuddy Recorder" is LIVE** (submitted
+[`extension-releases.md`](extension-releases.md)). **v0.7.0 is cut with the upload rework and is the
+build the current API requires** — it sends `X-FlowBuddy-Upload-Id`, uploads narration directly, and
+discards abandoned recordings; it must be live before the API reaches prod (§7.6). It bakes the same
+three origins as v0.6.0 and adds **no new permissions**. Until it is published, the live listing is
+still **v0.6.0** (submitted
 2026-07-17, confirmed live by 2026-07-23) — the production release: bakes `https://app.flowbuddyai.com`
 (primary) + `https://flowbuddy-dev-web.onrender.com` + localhost, new FlowBuddy "F" icons, no new
 permissions. Listing (extension ID `njkfcfpehcklldmeofolnpdljdhcgofk`, stable across the rename; the
@@ -416,7 +458,7 @@ Full manual test plan (3 levels — local · dev · prod): [`e2e-testing.md`](e2
 3. Migrations run automatically on the api boot. Additive columns and **widening** changes (e.g. dropping a NOT NULL) are safe to roll forward; a new UNIQUE index is safe only while the column is nullable and unpopulated (which is how `20260727230000_upload_identity` ships). Anything narrowing still needs a plan.
 4. Both widget bundles republish automatically (they're one static build).
 5. The landing page redeploys only when `packages/landing` changes.
-6. Extension releases run on the store review cycle — and they are **no longer independent of the API**. **Standing ordering rule (since the upload-identity change): a recorder build that a new API requires must be LIVE ON THE STORE BEFORE that API reaches prod.** `/v1/sessions` now rejects any upload without the `X-FlowBuddy-Upload-Id` header, and store build v0.6.0 does not send it — deploying the API first breaks recording for every installed user. See [`extension-releases.md`](extension-releases.md).
+6. Extension releases run on the store review cycle — and they are **no longer independent of the API**. **Standing ordering rule (since the upload-identity change): a recorder build that a new API requires must be LIVE ON THE STORE BEFORE that API reaches prod.** `/v1/sessions` rejects any upload without the `X-FlowBuddy-Upload-Id` header, and store build **v0.6.0 does not send it** — deploying the API first breaks recording for every installed user. **v0.7.0 is the build that satisfies this** (cut with the upload rework; it sends the header, uploads narration directly, and calls the discard route). Check its live status in [`extension-releases.md`](extension-releases.md) before the FF to `main`.
 
 ---
 
@@ -476,17 +518,19 @@ column defaults apply only to rows created afterwards.
    **AI Chatbot** — instant, per workspace, no deploy. Individual loop failures already degrade to
    an AI Chatbot answer on their own.
 
-### 8.4 The upload-identity drop (recording uploads) — on `dev`, **not deployed**
+### 8.4 The upload-identity drop (recording uploads)
 
 Fixes the duplicate-recording bug: a slow upload timed out client-side while the server committed it
 anyway, and the Retry the user was then told to press minted a *second* recording. Recordings now
 carry a client-minted `uploadId`, and artifacts stream to object storage **during** the capture.
 
+*(This drop and §8.5 ship together as one deploy — §8.4 is the identity + direct-upload half, §8.5
+the completion of it.)*
+
 **⚠️ ORDER MATTERS — this is the first drop where the API and the extension are coupled.**
-`POST /v1/sessions` now returns `400` without an `X-FlowBuddy-Upload-Id` header, and the live store
-build **v0.6.0 does not send it**. **A newer recorder must be live on the Chrome Web Store before this
-API reaches production**, or every installed recorder stops being able to upload. No store build has
-been cut yet and the extension version has **not** been bumped
+`POST /v1/sessions` now returns `400` without an `X-FlowBuddy-Upload-Id` header, and the previous
+store build **v0.6.0 does not send it**. **The newer recorder (v0.7.0) must be live on the Chrome Web
+Store before this API reaches production**, or every installed recorder stops being able to upload
 ([`extension-releases.md`](extension-releases.md)).
 
 1. **Migration runs automatically** on api boot: `20260727230000_upload_identity` — adds
@@ -496,17 +540,60 @@ been cut yet and the extension version has **not** been bumped
 2. **New status value `recording`** — a row exists from the first uploaded artifact, before Stop.
    Studio renders it as a pending **Recording** badge; the worker skips a row with no manifest.
 3. **No new env vars, no widget rebuild.** The only infra requirement is that R2 accepts presigned
-   PUTs directly from the recorder (§2.2) — **prove this on dev before prod**; it cannot be proven
-   against local MinIO.
+   PUTs directly from the recorder — **proven on the dev deploy 2026-07-28** (§2.2).
 4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 6 — a **Recording** badge appears in Studio
    *while* capturing, Stop finishes in seconds, and a **retry produces no second recording**.
-5. **Known gaps shipped with this drop:** an abandoned recording leaves a `recording` row + orphaned
-   objects with **no cleanup path**, and the presigned URLs carry **no size ceiling**
-   (`MAX_BUNDLE_BYTES` only ever covered the `/v1/sessions` bundle, which artifacts now bypass).
-6. **If it misbehaves:** there is no runtime toggle. The recorder degrades to the old all-in-one
-   bundle on its own whenever signing fails, so disabling `/v1/uploads/sign` is a usable stopgap —
-   but the identity-header requirement on `/v1/sessions` remains, so rolling the API back is the only
-   way to serve an old recorder.
+5. **If it misbehaves:** there is no runtime toggle. The recorder degrades to the all-in-one bundle on
+   its own whenever signing fails, so disabling `/v1/uploads/sign` is a usable stopgap — but the
+   identity-header requirement on `/v1/sessions` remains, so rolling the API back is the only way to
+   serve an old recorder.
+
+### 8.5 Completing the upload rework + ops hardening (2026-07-28)
+
+Ships in the same deploy as §8.4. Three independent pieces: narration joins the direct-upload path,
+abandoned recordings finally get cleaned up, and the shared api/worker instance gets the guards it
+should always have had.
+
+1. **Narration uploads directly too** — same signed-URL path, at **Stop** rather than during capture
+   (the offscreen recorder only hands over the encoded track when the capture ends). The practical
+   result: on a healthy connection the finalize request to `/v1/sessions` carries the **manifest and
+   nothing else**. **The multipart bundle path stays** as the fallback for a browser that cannot
+   reach object storage directly — that is deliberate and load-bearing, not leftover code.
+2. **Abandoned recordings are cleaned up — the §8.4 gap is CLOSED.** Two halves:
+   - **`DELETE /v1/uploads/:uploadId`** (new route) discards an *unfinished* recording and its
+     uploaded objects. Only a row still in `recording` is discardable; a finalized one answers `409`
+     ("delete it in Studio"), and an unknown id is a clean `200` no-op. The recorder calls it on
+     **"Start fresh"** and when **starting a new recording while an old unsent buffer exists** — a
+     buffer still holding its upload identity means the previous recording never uploaded
+     successfully, so it is being abandoned right now.
+   - **A server-side sweep** deletes `recording` rows idle **> 12 hours** plus their storage, riding
+     **fire-and-forget on finalize** (no cron service to pay for or monitor). The threshold is
+     deliberately generous: a *paused* capture signs nothing either, and deleting a recording someone
+     is still making would be far worse than carrying a few orphaned objects for a day. A false
+     positive self-heals — upload markers are scoped to the row id, and the recorder's local buffer is
+     never cleared until an upload actually succeeds, so a swept recording simply re-uploads into a
+     fresh row.
+   - Ops consequence: the R2 token must permit **delete** (§2.2).
+3. **Health checks + memory limits + worker concurrency** — see **§2.6** and **§2.3**. All three are
+   blueprint changes only, so they land with the normal deploy; nothing to click.
+4. **The api's BullMQ producer got its own connection** with `connectTimeout` /
+   `maxRetriesPerRequest` / a backing-off `retryStrategy`, and the enqueue itself is now a **bounded
+   5s race that logs and continues**. Rationale: by the time a job is enqueued the recording is
+   already safe in Postgres and object storage, so a sick Redis must not turn a *delivered* recording
+   into a failed upload that sends the user back to Retry. Recovery for a dropped enqueue is Studio →
+   **Stalled → Re-process**.
+   **⚠️ Subtlety worth keeping:** the *shared* `connection` object in
+   [`queue.ts`](../packages/api/src/queue.ts) must stay **bare** — the worker needs BullMQ to own
+   `maxRetriesPerRequest: null`, and a blocking consumer that gives up on a request instead of
+   blocking stops consuming jobs. Studio's producer gets away with fail-fast options only because it
+   is never a consumer. Do not "unify" the two connection objects.
+5. **No migration, no new env vars, no widget rebuild.** The only new blueprint values are
+   `healthCheckPath` and `NODE_OPTIONS` (§2.6, §2.3).
+6. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 6 — Stop finishes in seconds with the log
+   line reporting the audio as `uploaded` rather than `in bundle`; **6c** covers discard (start a
+   capture, throw it away, confirm the row *and* its objects are gone).
+7. **Still open by decision:** the presigned URLs carry **no size ceiling** — deferred deliberately,
+   with the full reasoning and the eventual fix recorded in [`roadmap.md`](roadmap.md) §9.
 
 ---
 
@@ -515,7 +602,7 @@ been cut yet and the extension version has **not** been bumped
 Each step is a dashboard/plan change plus a small `render.yaml` edit — no re-architecture, and the
 custom domains make every underlying swap invisible to customers.
 
-**Step 1 — split the worker out (~$27/mo).** *Trigger:* synthesis jobs dying on deploys, or answer latency dipping while jobs run.
+**Step 1 — split the worker out (~$27/mo). ⏸ Considered and skipped 2026-07-28** — see §2.3: it costs ~$7/mo, and the rationale largely evaporated once the api stopped relaying artifact bytes; the heap cap + concurrency-1 make the shared instance safe enough for now. Still the right move at the trigger below. *Trigger:* synthesis jobs dying on deploys, answer latency dipping while jobs run, or repeated OOM restarts on the api.
 - New `type: worker` service `flowbuddy-worker`, `dockerCommand: pnpm --filter @flowbuddy/api worker`, Starter plan.
 - `flowbuddy-api` `dockerCommand` → plain `pnpm --filter @flowbuddy/api start`.
 - Move migrations to `preDeployCommand: pnpm --filter @flowbuddy/db exec prisma migrate deploy` (paid plans support it). *(The standalone-worker blueprint shape is in git history — commit `3488326`.)*
@@ -529,7 +616,7 @@ custom domains make every underlying swap invisible to customers.
 
 **Step 4 — ops hardening (any time, cheap):**
 - Uptime monitoring on `api.flowbuddyai.com` + `app.flowbuddyai.com` (also keeps first-byte warm).
-- Render health-check paths; alerting on failed deploys.
+- ~~Render health-check paths~~ — **done 2026-07-28** (§2.6). Still to do: alerting on failed deploys.
 - Log level stays `info` (JSON), tunable live via `LOG_LEVEL` (§2.5).
 - Postgres paid plans include point-in-time recovery; verify the recovery window fits.
 
@@ -547,6 +634,8 @@ custom domains make every underlying swap invisible to customers.
 | `[worker] failed …: 401 You didn't provide an API key` | `OPENAI_API_KEY` unset on the api | Set it on the api; **re-record** (failed jobs don't auto-retry — `attempts=1`) |
 | `400 missing or malformed X-FlowBuddy-Upload-Id` on `/v1/sessions` | A recorder older than the upload-identity change (incl. store v0.6.0) uploading to a new API — the deploy-ordering rule in §7.6 was violated | Ship the newer recorder first, or roll the API back; a local rebuild fixes it for developers only |
 | Presigned artifact `PUT` rejected by R2 (`400`/`403`) while it worked on MinIO | The signer emitted checksum params (the SDK default bakes an empty-body CRC32 into the URL) — R2 enforces them, MinIO ignores them | Keep the dedicated presigning client at `requestChecksumCalculation: 'WHEN_REQUIRED'` (§2.2); this class of bug is invisible locally |
+| `could not enqueue synthesis — recording is stored; re-process from Studio` | Redis unreachable or slow at the moment the recording finalized; the enqueue is a bounded 5s race by design (§8.5) so the upload still succeeded | Fix/restart the Key Value instance, then Studio → the recording → **Re-process**. The recording itself is safe — do **not** ask the user to re-record |
+| Recordings pile up with a **Recording** badge and never process | Captures that were started and abandoned. Expected on a testing environment; they are swept after 12h idle on the next finalize (§8.5) | Nothing to do — or force it by finishing any recording in that workspace. Deleting the row by hand also works |
 | Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via the **api** `/v1/copilot/answer`. Cause is on the api: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real Studio URL) on the api; the web service needs **no** OpenAI key |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash (dev only — prod is always-on) |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
@@ -574,7 +663,7 @@ first boot; user-verified E2E). What this means for anything pre-rename:
 - **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). (The widget title stays per-workspace configurable.)
 - **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card. The full marketing page (hero · how-it-works · features · CTA; optionally dogfood the live widget as the demo) remains to build on top.
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the v0.6.0 store listing URL) so the Home checklist CTA reads "Add to Chrome".
-- **Blocks the next prod deploy: a new recorder store build.** The API on `dev` requires `X-FlowBuddy-Upload-Id`; v0.6.0 doesn't send it. Bump the version, cut and publish a build, *then* FF `main` (§7.6, §8.4).
-- **Prove the presigned-PUT path against real R2 on dev** — never proven locally (MinIO ignores the checksums R2 enforces); bucket CORS may or may not be required (§2.2).
-- **No cleanup for abandoned recordings.** A capture that is started and never stopped leaves a `recording` row and orphaned objects; nothing sweeps either, and `recording` isn't eligible for the stalled badge.
-- **Presigned uploads have no size ceiling.** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass.
+- **Gates the prod deploy: recorder v0.7.0 must be LIVE on the store first.** The API requires `X-FlowBuddy-Upload-Id`; v0.6.0 doesn't send it. v0.7.0 is cut with this change — confirm it is published, *then* FF `main` (§7.6, §8.4).
+- **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9 — not repeated here.
+- **RESOLVED 2026-07-28 — the presigned-PUT path is proven against real R2** on the dev deploy, with no bucket CORS rule needed (§2.2).
+- **RESOLVED 2026-07-28 — abandoned recordings are cleaned up:** explicit discard from the recorder plus a 12-hour server-side sweep (§8.5).

@@ -21,7 +21,7 @@
 
 ## Module 1 — Raw data capture (input modalities)
 
-Job: get raw, un-interpreted signal in. Three capture **kinds**, each producing different raw layers but the **same envelope** (capture → object storage + a source record). A capture carries a `kind`. Since 2026-07-27 (on `dev`) the upload is **incremental**: the recorder asks the api for short-lived presigned PUT URLs and writes screenshots / DOM snapshots **straight to object storage while recording** — which also creates the source record on first contact — and Stop sends only the manifest, the audio, and anything unconfirmed.
+Job: get raw, un-interpreted signal in. Three capture **kinds**, each producing different raw layers but the **same envelope** (capture → object storage + a source record). A capture carries a `kind`. Since 2026-07-27 the upload is **incremental**: the recorder asks the api for short-lived presigned PUT URLs and writes screenshots / DOM snapshots **straight to object storage while recording** — which also creates the source record on first contact — and since 2026-07-28 the **narration takes the same path at Stop**, so on a healthy connection the finalize request carries **the manifest and nothing else**. The old all-in-one bundle survives as the **fallback** for a browser that cannot reach storage directly, and a capture that is *abandoned* rather than stopped is cleaned up: the recorder discards it explicitly, and the api sweeps any row left mid-recording (see §Data model).
 
 | Kind | Raw layers | Status |
 |---|---|---|
@@ -41,7 +41,7 @@ Job: turn raw captures (any kind) into **normalized, queryable knowledge**. This
 
 A processing/extraction step (the worker, repurposed) reads a raw capture and writes:
 
-- **`KnowledgeSource`** — one per capture, **keyed by the recorder's own `uploadId`** (`@@unique([workspaceId, uploadId])`) so a re-sent recording resolves to the same row instead of becoming a second one: `kind`, app, **persisted transcript**, status (`recording` while artifacts are still arriving), link to raw artifacts / **nullable** manifest.
+- **`KnowledgeSource`** — one per capture, **keyed by the recorder's own `uploadId`** (`@@unique([workspaceId, uploadId])`) so a re-sent recording resolves to the same row instead of becoming a second one: `kind`, app, **persisted transcript**, status (`recording` while artifacts are still arriving), link to raw artifacts / **nullable** manifest. A row that never leaves `recording` is an **abandoned** capture: the recorder discards it (row + uploaded objects) when the user starts fresh or starts a new recording over an unsent one, and the api sweeps whatever that misses after **12 h idle** — a deliberately generous threshold, because a *paused* capture also uploads nothing.
 - **`KnowledgeItem[]`** — the normalized, **indexed units of knowledge** (what makes the KB queryable and modality-agnostic):
   - from a **workflow** capture → *distilled step items* (clean imperative `instruction`, optional `detail`, `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, + searchable `text`). Raw events are **not** persisted as items — they're cleaned + distilled into these steps (2026-06-26); the raw event log remains only in the source `manifest`.
   - from a **narration-only** capture → *topic items* (transcript span text, time range, + searchable `text`)
@@ -67,7 +67,8 @@ model KnowledgeSource {          // evolves RecSession (table kept as "RecSessio
   appBaseUrl   String?
   status       String   @default("uploaded") // recording | uploaded | processing | ready | error
                                               // recording = artifacts still arriving; the row exists from the
-                                              // first uploaded artifact, before Stop
+                                              // first uploaded artifact, before Stop — and is discardable
+                                              // (row + objects) until it finalizes; swept after 12h idle
   transcript   Json?                          // PERSISTED: { text, segments[] }  (new)
   manifest     Json?                          // raw capture (events for workflow; minimal for narration)
                                               // — NULL until the recording is stopped and finalized

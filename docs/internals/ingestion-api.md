@@ -3,10 +3,11 @@
 > **Module:** the upload boundary of the Fastify service in
 > [`packages/api/`](../../packages/api/). **Role:** the gate between [capture](recorder-capture.md)
 > and the [Knowledge Base](knowledge-base.md). It hands the recorder short-lived signed URLs so
-> artifacts land in object storage **directly, while recording**, then accepts a small finalize
-> request (manifest + leftovers), persists the source record, and enqueues the build — returning
-> immediately. Both routes are **idempotent on the recorder's `uploadId`**, so a retry can never
-> create a second recording. It does **no** AI work.
+> artifacts land in object storage **directly, while recording** — narration included — then accepts a
+> finalize request that on a healthy connection carries **the manifest and nothing else**, persists the
+> source record, and enqueues the build — returning immediately. The upload routes are **idempotent on
+> the recorder's `uploadId`**, so a retry can never create a second recording, and a third route plus a
+> server-side sweep **clean up recordings that were never finished**. It does **no** AI work.
 
 > The same Fastify process also serves the **copilot** routes; those are a different module, covered
 > in [copilot.md](copilot.md). This doc is only the **ingestion** half.
@@ -21,16 +22,20 @@ one `KnowledgeSource` row that represents the recording, and put a job on the qu
 process it out of band. The design goal is a **fast, dumb accept**: everything expensive is deferred
 to the [worker](knowledge-base.md), and the bytes are deferred to storage itself.
 
+A second, quieter responsibility comes with that design: because bytes land **before** anyone commits
+to a recording, the API also has to **take them away again** when the recording is abandoned — one
+explicit discard route plus a background sweep (§4.6).
+
 ---
 
 ## 2. Where it lives
 
 | File | Role |
 |---|---|
-| [`server.ts`](../../packages/api/src/server.ts) | The Fastify app: CORS, multipart, `/v1/uploads/sign` + the `/v1/sessions` routes (+ the copilot routes). |
+| [`server.ts`](../../packages/api/src/server.ts) | The Fastify app: CORS, multipart, `/v1/uploads/sign` + the `/v1/sessions` routes + `DELETE /v1/uploads/:uploadId` and the abandoned-recording sweep (+ the copilot routes). |
 | [`auth.ts`](../../packages/api/src/auth.ts) | Resolve a Bearer recorder token → workspace (by SHA-256 hash). |
-| [`storage.ts`](../../packages/api/src/storage.ts) | The S3-compatible clients (one for reads/writes, one for presigning), bucket bootstrap, key layout, `signPutUrl`, and the `ArtifactReader` the worker uses. |
-| [`queue.ts`](../../packages/api/src/queue.ts) | The BullMQ producer (`synthesisQueue`) + the Redis connection options. |
+| [`storage.ts`](../../packages/api/src/storage.ts) | The S3-compatible clients (one for reads/writes, one for presigning), bucket bootstrap, key layout, `signPutUrl`, `deleteSessionPrefix` (used by both cleanup paths), and the `ArtifactReader` the worker uses. |
+| [`queue.ts`](../../packages/api/src/queue.ts) | The BullMQ producer (`synthesisQueue`) + **two** Redis connection objects — a bare one for the worker, a fail-fast one for the producer. |
 | [`config.ts`](../../packages/api/src/config.ts) | Env config (port, Redis URL, OpenAI key/models, R2/MinIO creds). |
 
 Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
@@ -50,10 +55,20 @@ Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
   - **In:** `multipart/form-data`: a `manifest` field + the leftover artifact files; `Authorization:
     Bearer <recorder token>` **and a required `X-FlowBuddy-Upload-Id: <uuid>` header** (`400` without
     it). Every file part's field name is validated against the same artifact allowlist (`400`
-    otherwise).
+    otherwise). **On a healthy connection there are no files at all** — narration goes up over signed
+    URLs like everything else, so this request is normally just the manifest field.
   - **Out:** `{ sessionId, status: "uploaded" }` and a queued job — or
     `{ sessionId, status, alreadyFinalized: true }` when a retry arrives for a recording that was
     already built (the body is drained, nothing is overwritten).
+- **`DELETE /v1/uploads/:uploadId`** — *discard*: throw away an unfinished recording **and the
+  artifacts it already uploaded**. The recorder calls it when a capture is abandoned rather than
+  stopped (§4.6).
+  - **In:** `Authorization: Bearer <recorder token>`; the `uploadId` in the path (`400` if it isn't
+    UUID-shaped).
+  - **Out:** `{ discarded: true }` after the storage prefix and the row are gone ·
+    `{ discarded: false, reason: "not found" }` for an id we have never seen (a clean no-op — nothing
+    was uploaded, so there is nothing to remove) · `409` if the recording is past `recording`, with
+    the message *"delete it in Studio"*.
 - **`GET /v1/sessions/:id`** — status poll for a recording. Returns `{ id, status, error }`, scoped to
   the caller's workspace.
 - **`GET /healthz`** — liveness.
@@ -109,8 +124,9 @@ flowchart TD
     D --> H["sessionManifestSchema.safeParse(manifestRaw)"]
     H -- invalid --> H400["400 invalid manifest + first 5 zod issues<br/>(nothing deleted)"]
     H -- valid --> I["prisma.knowledgeSource.update<br/>status=uploaded, manifest, appBaseUrl, error=null"]
-    I --> J["synthesisQueue.add('synthesize', {sessionId, workspaceId})"]
+    I --> J["synthesisQueue.add('synthesize', {sessionId, workspaceId})<br/>bounded 5 s race — on failure log + continue"]
     J --> K["return {sessionId, status:'uploaded'}"]
+    J -.-> S8["sweepAbandonedRecordings(workspaceId)<br/>NOT awaited"]
 ```
 
 Key mechanics worth understanding:
@@ -124,7 +140,13 @@ Key mechanics worth understanding:
   **deliberately deletes nothing**: artifacts that already uploaded directly live under that prefix
   and cannot be re-sent, so the prefix must survive a bad manifest. Idempotency (same `uploadId` →
   same row, same keys) is what makes the retry safe instead. Note that these caps now bound only the
-  leftovers — the signed-URL path has no size ceiling.
+  leftovers — **the signed-URL path has no size ceiling, deferred by decision** (the reasoning and the
+  eventual fix are in [`../roadmap.md`](../roadmap.md) §9, not repeated here).
+- **The finalize request is small now — but the code still assumes it might not be.** Narration was
+  the last thing that always rode this request; it goes over a signed URL too, so a healthy recording
+  finalizes with a manifest field and zero files. The streaming parse, the caps, and the recorder's
+  generous deadline all remain for the **fallback** case: if direct upload was unavailable for a whole
+  recording, every artifact arrives here in one request, exactly as it did before signed URLs existed.
 - **The field-name-is-the-path trick.** `const rel = part.fieldname || part.filename`. The recorder
   put the relative path (`shots/<id>.jpg`) on the field *name* precisely because multipart strips
   directories from filenames. The server **validates** it against a strict artifact allowlist
@@ -168,8 +190,9 @@ The shared `s3` client does the reads/writes. A **second client exists only for 
 identical except `requestChecksumCalculation: 'WHEN_REQUIRED'`: with the SDK default the signer bakes
 `x-amz-checksum-crc32` of an **empty body** into the signed query string, which MinIO ignores and
 **R2 enforces** — so a URL signed by the default client passes local dev and fails only in
-production. ⚠️ That failure mode is why the split exists, but **R2 + CORS on a browser-issued
-presigned PUT is still unproven** — everything tested so far is MinIO, which is the permissive side.
+production. That failure mode is why the split exists, and the split is now **verified against the
+real thing**: R2 + CORS on a browser-issued presigned PUT was exercised end-to-end on dev/Render
+(2026-07-28). Local MinIO is the permissive side, so it proves nothing on its own — R2 does.
 
 - `ensureBucket()` runs at boot — `HeadBucket`, and `CreateBucket` if missing.
 - `signPutUrl(key, contentType)` mints a single-object, 900 s PUT URL (`UPLOAD_URL_TTL_SECONDS`).
@@ -182,6 +205,8 @@ presigned PUT is still unproven** — everything tested so far is MinIO, which i
 - `sessionArtifactReader(ws, id)` returns an **`ArtifactReader`** — a `(relPath) => Promise<Buffer|null>`
   bound to one session. This is the exact function the [worker](knowledge-base.md) calls to fetch the
   audio (and any screenshot it needs); a miss returns `null` rather than throwing.
+- `deleteSessionPrefix(ws, id)` removes every object under one recording's prefix. Studio has always
+  used it when a founder deletes a recording; both cleanup paths in §4.6 now use it too.
 
 ### 4.5 The queue producer (`queue.ts`)
 
@@ -190,6 +215,23 @@ A single BullMQ `Queue` named `synthesis` (the `SYNTHESIS_QUEUE` constant shared
 user/pass, TLS for `rediss:`) are passed — not a pre-built client — so BullMQ can apply the settings
 workers need. The producer (API) and consumer ([worker](knowledge-base.md)) share only this queue
 name and the `{ sessionId, workspaceId }` shape.
+
+**Two connection objects, and the difference matters** (2026-07-28). The exported `connection` is
+deliberately **bare** — BullMQ has to own a blocking consumer's settings (notably
+`maxRetriesPerRequest: null`), and a worker that gives up on a Redis command instead of blocking stops
+consuming jobs. So producer-style fail-fast options can never be added there. The queue is instead
+constructed on a separate `producerConnection` that spreads `connection` and adds
+`connectTimeout: 4000`, `maxRetriesPerRequest: 2`, and a capped-backoff `retryStrategy`. Studio's
+producer ([`web/lib/queue.ts`](../../packages/web/lib/queue.ts)) has had these settings since it was
+written and got away with putting them on its only connection **because Studio is never a consumer**;
+the API is both, in one process, which is why it needs two.
+
+**The enqueue itself is best-effort and bounded.** By the time finalize reaches this line the
+recording is already safe — the row is in Postgres and the bytes are in object storage — so the
+`add()` is raced against a 5 s timer and any failure is logged and stepped over. Left unbounded, an
+unreachable Redis buffering commands forever looks exactly like the upload hanging, and would send the
+recorder to its Retry screen for a recording that actually arrived. The recovery path when this does
+drop a job is Studio's **"Stalled → Re-process"** (§6).
 
 Hardening (2026-07-06, review §2.1–2.3 — mirrored by the Studio producer
 [`web/lib/queue.ts`](../../packages/web/lib/queue.ts)):
@@ -205,7 +247,45 @@ Hardening (2026-07-06, review §2.1–2.3 — mirrored by the Studio producer
   the Prisma pool, then let the process drain (unref'd failsafe exit); the worker's own handler
   waits for the in-flight job. Safe when both run in one process (`all.ts`).
 
-### 4.6 Status polling (`GET /v1/sessions/:id`)
+### 4.6 Abandoned-recording cleanup (the cost of uploading early)
+
+Uploading during the capture buys a fast Stop, but it moves the moment of commitment: bytes and a row
+exist **before** anyone has decided the recording is worth keeping. A capture that is thrown away —
+the founder starts over, closes the browser, loses the tab — would otherwise leave a `recording` row
+and its objects behind permanently. Two mechanisms remove them, one precise and one for everything the
+first one misses.
+
+**1. Explicit discard — `DELETE /v1/uploads/:uploadId`.** The recorder calls it in two places: on
+**"Start fresh"** from the interrupted screen, and **when a new recording starts while an old unsent
+buffer is still present** — a buffer still holding its `meta` means the previous recording never
+uploaded successfully, so starting a new one abandons it. Both calls happen *before* the local buffer
+is wiped, because the `uploadId` lives in that buffer; wipe first and the server row is orphaned with
+no client left that knows its id. The route's rules:
+
+| Situation | Response | Why |
+|---|---|---|
+| Row exists at `status = recording` | `deleteSessionPrefix` → delete the row → `{ discarded: true }` | Storage first, so a failure mid-way leaves a row the sweep can retry. |
+| Row exists at any later status | `409 recording is already <status> — delete it in Studio` | Once a recording finalizes it is the founder's, and deleting it is Studio's job, not the recorder's. This is what stops a stray discard from destroying a recording that actually made it. |
+| No such row | `200 { discarded: false, reason: 'not found' }` | Nothing was ever uploaded. A clean no-op, not an error — the recorder must not be blocked from starting over. |
+
+The recorder treats the whole call as best-effort (deadlined, failures swallowed): being offline must
+never prevent someone from starting a new recording.
+
+**2. The sweep — `recording` rows idle more than 12 hours.** `sweepAbandonedRecordings(workspaceId)`
+finds up to 20 `recording` rows whose `updatedAt` is older than `ABANDONED_AFTER_MS`, deletes each
+prefix then each row, and rides **fire-and-forget on finalize** — a finished recording being the
+cheapest reliable signal that this workspace is active. It is `void`-called and wrapped in a
+`try/catch`: cleanup may never delay or fail the request that delivers a recording. There is no cron
+and no separate service.
+
+**Why 12 hours, which sounds enormous.** A *paused* capture signs nothing either, so idle time is not
+proof of abandonment, and deleting a recording someone is still making is far worse than carrying a
+few orphaned objects for a day. The generous threshold is also cheap insurance, because a false
+positive **self-heals**: upload markers are scoped to the row's id, so if a swept recording resumes,
+the next signing call creates a fresh row and every artifact re-uploads from the recorder's local
+buffer — which is never cleared until an upload actually succeeds.
+
+### 4.7 Status polling (`GET /v1/sessions/:id`)
 
 Re-auths the token, fetches the source **scoped to the caller's workspace** (`findFirst({ id,
 workspaceId })`), and returns `{ id, status, error }`. This is how a caller learns when processing
@@ -218,9 +298,9 @@ the row directly.
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `ApiToken` (auth), `KnowledgeSource` (status poll, idempotency lookup) | `KnowledgeSource` — **upsert** by `(workspaceId, uploadId)` at `status=recording` (first signed artifact), then **update** to `status=uploaded` + full manifest + `appBaseUrl` at finalize |
-| **Object storage** | — | the **leftover** artifacts streamed at finalize, under `workspaces/<ws>/sessions/<id>/...`; plus **presigned PUT URLs** it mints for keys the *recorder* writes directly |
-| **Redis** | — | one `synthesis` job per finalized recording |
+| **Postgres** | `ApiToken` (auth), `KnowledgeSource` (status poll, idempotency lookup, the sweep's stale-row scan) | `KnowledgeSource` — **upsert** by `(workspaceId, uploadId)` at `status=recording` (first signed artifact), then **update** to `status=uploaded` + full manifest + `appBaseUrl` at finalize; **deletes** `recording` rows on discard or sweep |
+| **Object storage** | — | the **leftover** artifacts streamed at finalize, under `workspaces/<ws>/sessions/<id>/...`; plus **presigned PUT URLs** it mints for keys the *recorder* writes directly; and **prefix deletes** for discarded/swept recordings |
+| **Redis** | — | one `synthesis` job per finalized recording (best-effort, 5 s bound) |
 
 ---
 
@@ -238,10 +318,18 @@ the row directly.
   already past `{recording, uploaded, error}` the body is drained and `{ alreadyFinalized: true }` is
   returned — nothing is rebuilt and no second recording is created. `error` is deliberately *in* the
   open set so a failed build stays retryable.
-- **A recording started and never stopped** → the row sits at `recording` with its uploaded objects
-  forever. **There is no cleanup path for this yet** (known gap).
+- **A recording started and never stopped** → the recorder discards it explicitly the next time it is
+  asked to start fresh or start over; anything that never gets that call (browser closed for good) is
+  removed by the 12-hour sweep on the next finalize in that workspace. §4.6.
+- **A discard arrives for a recording that finalized** → `409`, nothing touched. Deleting a real
+  recording is Studio's job.
+- **The sweep deletes a paused recording someone resumes** → the next signing call mints a fresh row
+  and the artifacts re-upload from the recorder's still-intact local buffer. Wasteful, not lossy.
+- **Redis is down at finalize** → the enqueue times out after 5 s, the failure is logged, and the
+  recording still returns `uploaded`. It sits without a job until Studio's **"Stalled → Re-process"**.
 - **Signed URLs have no size ceiling** — `MAX_BUNDLE_BYTES` bounds only the finalize request, not the
-  direct-upload path (known gap).
+  direct-upload path. **Deferred by decision**, with the reasoning and the eventual fix in
+  [`../roadmap.md`](../roadmap.md) §9.
 - **An old recorder build** (store v0.6.0) sends no identity header and gets a flat `400` — see the
   deploy-ordering warning at the end of this section.
 - **OpenAI / processing problems** are **not** this module's concern — it returns success the moment
@@ -251,12 +339,11 @@ the row directly.
   Recordings UI now surfaces this: >15 min without progress renders as **"Stalled — re-process"**
   (driven by `KnowledgeSource.updatedAt`), and the existing re-process action recovers it.
 
-> ⚠️ **Deploy ordering.** This route now rejects a finalize without `X-FlowBuddy-Upload-Id`, and the
-> extension build live on the Chrome Web Store (v0.6.0) does not send one. **The newer recorder has
-> to reach users before this API reaches an environment they use.** As of 2026-07-27 the change is on
-> `dev` only — not deployed — and no store build has been cut (the extension was not version-bumped;
-> `packages/extension/dist/` is a localhost build, so a store artifact needs
-> `STUDIO_URL=… pnpm --filter @flowbuddy/extension build`).
+> ⚠️ **Deploy ordering.** This route rejects a finalize without `X-FlowBuddy-Upload-Id`, and the
+> extension build previously live on the Chrome Web Store (v0.6.0) does not send one. **The newer
+> recorder has to reach users before this API reaches an environment they use.** Recorder **v0.7.0**
+> carries the header and is cut for the store alongside this change, which ships to production — see
+> [`../extension-releases.md`](../extension-releases.md) for the release itself.
 
 ---
 
@@ -269,5 +356,10 @@ the row directly.
 - **Hands off to →** the [Knowledge Base worker](knowledge-base.md), which consumes the job and reads
   back the manifest + artifacts.
 - **Shares its process with →** the [Copilot endpoints](copilot.md) (different routes, same Fastify
-  app, same `config`/`storage`).
+  app, same `config`/`storage`) **and, in production, with the synthesis
+  [worker](knowledge-base.md)** — `start:all` runs both on one 512 MB Render instance. That is why the
+  service sets `NODE_OPTIONS=--max-old-space-size=400` (cap the heap below the container limit so V8
+  collects instead of the container being OOM-killed) and why the worker runs at `concurrency: 1`: an
+  OOM caused by synthesis takes the public copilot down with it. Render also health-checks
+  **`/healthz`** rather than only probing that the port is open, which a wedged process passes.
 - **Schema reference →** the row shapes are in [data-model-and-storage.md](data-model-and-storage.md).

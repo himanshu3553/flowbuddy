@@ -66,8 +66,9 @@ flowchart TB
         RDS[("Redis<br/>(BullMQ queue)")]
     end
 
-    REC -- "①  POST bundle<br/>(secret token)" --> API
-    API -- "② stream artifacts" --> OBJ
+    REC -- "①  sign URLs, then POST the manifest<br/>(secret token)" --> API
+    REC -- "①ᵃ PUT artifacts directly<br/>(signed URLs, while recording)" --> OBJ
+    API -- "② stream leftovers (fallback path)" --> OBJ
     API -- "③ KnowledgeSource row" --> PG
     API -- "④ enqueue job" --> RDS
     RDS -- "⑤ job" --> WRK

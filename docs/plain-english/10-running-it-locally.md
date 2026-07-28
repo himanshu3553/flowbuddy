@@ -116,8 +116,9 @@ like the migration didn't work. Run `pnpm build` (which regenerates) after any s
 **A second trap of the same shape:** recordings now upload their screenshots straight to file storage
 while you record, using a temporary permission slip the server hands out. **The local file storage is
 more forgiving than the real cloud one** — it accepts permission slips the real one refuses. So
-recording working perfectly on your machine is *not* evidence it works deployed. That path has not
-been proven anywhere but locally yet.
+recording working perfectly on your machine is *not* evidence it works deployed; that one has to be
+tried on a real server. It has been: the same path is now confirmed working against the real cloud
+storage on the staging server, from a real browser (July 2026).
 
 ---
 

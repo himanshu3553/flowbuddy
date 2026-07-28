@@ -65,11 +65,18 @@ everything — clicking, typing, a page navigation, and an obvious success state
 "Recording". That's the new behaviour — files upload as you go, so the entry exists from the first
 screenshot. If it shows as failed, something's wrong.
 
-Stopping should be quick now. If stopping takes minutes, the as-you-go upload isn't working and it
-quietly fell back to sending everything at once.
+Stopping should be quick now — your narration is the last thing to go up, and after that there's only
+a small index left to send. There's no percentage to watch; it should just say it's finishing up and
+then be done. If stopping takes minutes, the as-you-go upload isn't working and it quietly fell back
+to sending everything at once.
 
 **Then retry the upload deliberately** — from the recorder, once it has already finished. You must
 still see **exactly one** recording in Studio. Two is the bug this whole change exists to fix.
+
+**And test throwing one away.** Start a recording, let a few screenshots go up so it appears in Studio
+marked "Recording", then choose "start fresh" in the recorder. The entry should disappear from Studio,
+along with its files. Starting a brand-new recording while an unsent one is still sitting there should
+do the same thing. Neither should ever be able to remove a recording you actually finished.
 
 Watch the worker's log while it processes. It should tell you how many workflows it found and how
 many steps each has.
@@ -160,11 +167,12 @@ stale after a wipe.
 **Recording uploads but nothing happens** — the worker isn't running.
 
 **It's stuck saying "Recording"** — the recording was never stopped. The processor ignores it on
-purpose, because there's nothing to process until you stop. Nothing cleans these up yet; delete it.
+purpose, because there's nothing to process until you stop. It will clear itself away after half a day
+of silence, and "start fresh" in the recorder removes it immediately, so you rarely need to touch it.
 
-**The recorder can't upload at all against a server built from this branch** — you're using the
-published Chrome Web Store version, which is older and doesn't send the identity the server now
-requires. Build and load the recorder from this repo instead.
+**The recorder can't upload at all** — you're using an older Chrome Web Store version that doesn't
+send the identity the server now requires. Build and load the recorder from this repo instead, or wait
+for the current store version to be live.
 
 **The assistant declines everything** — nothing is approved, or the key points at a different
 workspace.

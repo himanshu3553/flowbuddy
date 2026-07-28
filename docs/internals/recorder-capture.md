@@ -13,9 +13,10 @@ While the operator clicks through their own product and narrates ("now I'll crea
 recorder captures, for **every meaningful interaction**: what was clicked (a rich DOM fingerprint),
 where it happened (route), a **screenshot before and after**, a DOM snapshot, and the **microphone
 narration** — all timestamped against a single session clock. Screenshots and DOM snapshots are pushed
-to object storage **as they are captured**, over short-lived signed URLs; on stop it assembles a
-[`SessionManifest`](../../packages/shared/src/capture.ts) and POSTs it — with the audio and anything
-storage never confirmed — to the [Ingestion API](ingestion-api.md).
+to object storage **as they are captured**, over short-lived signed URLs, and the narration goes the
+same way at Stop; the recorder then assembles a
+[`SessionManifest`](../../packages/shared/src/capture.ts) and POSTs it to the
+[Ingestion API](ingestion-api.md) — on a healthy connection, the manifest and nothing else.
 
 The guiding principle is **no silent data loss**: every outcome (success, failure, zero events) is
 surfaced, and a failed upload keeps the buffer so the user can retry.
@@ -183,7 +184,7 @@ workflow's final step.
 | **R4 — survive service-worker eviction (MV3)** | During quiet narration the MV3 worker is evicted after ~30 s idle, dropping the `capture` port; events after it are lost while audio keeps going. | **Keepalive:** the top frame pings the port every **20 s** to reset the idle timer. **Reconnect + buffer:** events flow through an in-memory `outbox`; `flush()` reconnects on a dead port (waking a fresh worker — state lives in `chrome.storage.session`, `idToKey` rebuilds from IDB) and retries in-place so the event + its screenshot land immediately. |
 | **R2 — never lose a recording to a network blip** | A failed upload could discard the buffer. | The IndexedDB buffer is **only cleared on upload success**. On failure, `lastUpload` is marked `retryable` and the popup shows a **Retry** that re-runs `assembleAndUpload` from the still-intact buffer. |
 | **R3 — don't drop narration by finalizing early** | The offscreen audio may take time to stop/encode/flush on long recordings. | On stop, a **generous 30 s fallback** finalizes without audio only if the offscreen doc never reports back; normally finalize is triggered by the `audioData` message. The fallback is a `setTimeout` (fast path) **plus a `chrome.alarms` twin** that survives worker eviction; both are tracked + cancelled so a stale one can't finalize a later session. |
-| **Stop→upload can't strand (v0.3.0)** | The stop pipeline had no persisted state and no deadline: a worker eviction after Stop (or a fetch hung on a cold-starting server) left a stuck `↑` badge, no outcome, and a popup that claimed **idle** mid-upload. | Three mechanisms: **(1) the persisted `phase`** (`recording → saving → uploading → done/failed`, in `chrome.storage.local`) is the pipeline's single truth — the popup and the on-page pill route on it; **(2) boot-time recovery** — a fresh worker instance that finds `phase=uploading` with no outcome resumes `finalize()` (audio already banked), and an orphaned buffer (browser crash) is surfaced as a **retryable interruption**; **(3) an upload watchdog** (`AbortController`: no progress for 2 min streaming / 4 min flat plain POST) turns a hung fetch into a retryable timeout. |
+| **Stop→upload can't strand (v0.3.0)** | The stop pipeline had no persisted state and no deadline: a worker eviction after Stop (or a fetch hung on a cold-starting server) left a stuck `↑` badge, no outcome, and a popup that claimed **idle** mid-upload. | Three mechanisms: **(1) the persisted `phase`** (`recording → saving → uploading → done/failed`, in `chrome.storage.local`) is the pipeline's single truth — the popup and the on-page pill route on it; **(2) boot-time recovery** — a fresh worker instance that finds `phase=uploading` with no outcome resumes `finalize()` (audio already banked), and an orphaned buffer (browser crash) is surfaced as a **retryable interruption**; **(3) an upload deadline** (`AbortController`, a single flat 300 s) turns a hung fetch into a retryable timeout — and the retry is now safe to take, because the recording's `uploadId` resolves to the same row. |
 | **R8 — iframe capture** | Content scripts were top-frame only, so iframe UIs (Stripe, embedded editors) captured nothing. | `all_frames:true`; each frame self-arms via the `hello` handshake; `bbox` is translated to top-document coords (cross-origin frames omit it) and `framePath` recorded; `appMeta` stays gated to the top frame. |
 | **R9 — multi-tab / popups (Option A)** | Capture was bound to one `tabId`; OAuth popups / "open in new tab" lost capture. | `Rec.tabIds` is a **set**; `tabs.onCreated` + `openerTabId` **adopts tabs opened FROM a recording tab**; stop/pause/resume/hello span the set; screenshots use the event tab's `windowId`; closed tabs pruned. |
 | **Pause / Resume** | The operator needs to pause for a sensitive screen or a break. | Pause detaches page listeners + `MediaRecorder.pause()` + freezes the timer; event `t` is **active-time** (`pausedTotal`) so audio and events stay aligned. Reachable from the popup and the on-page control bar. |
@@ -215,6 +216,29 @@ artifact buffered so it rides the Stop bundle — **the degraded path is exactly
 never data loss.** Markers are scoped by the **server** `sessionId` so that if the row is deleted or
 the DB wiped, a new row correctly starts from zero.
 
+**Narration takes the same path — just later.** The audio blob only exists once the offscreen recorder
+reports at Stop, so unlike screenshots and DOM snapshots it is never pending *during* the capture; the
+drain simply picks it up on the final flush. It is banked under a single fixed key rather than a
+prefixed one, so the pending set maps that key to the fixed relative path `audio.webm`. This is the
+one change that makes the finalize request carry **the manifest and nothing else** on a healthy
+connection.
+
+**Abandoning a recording tells the server.** Because artifacts land in storage while you record,
+throwing a capture away locally is no longer the whole story — the row and its objects would be
+orphaned with no client left that knows their id. `discardServerSide()` sends
+`DELETE /v1/uploads/:uploadId` in two situations, **both before `kvClear()`**, since the `uploadId`
+lives in the buffer's `meta`:
+
+- **"Start fresh"** on the interrupted screen (`onDiscard`).
+- **Starting a new recording while an old buffer still holds a `meta`** (`onStart`) — success clears
+  the buffer, so a surviving `meta` means the previous recording never uploaded, and starting a new
+  one abandons it.
+
+It is best-effort by construction (deadlined, all failures swallowed): the server's own sweep is the
+backstop, and being offline must never stop someone starting over. It also cannot destroy a recording
+that made it — the server refuses to discard anything past `recording`. See
+[ingestion-api.md](ingestion-api.md) §4.6.
+
 **Assemble & upload.** `finalize()` → `assembleAndUpload()`:
 
 1. Read `meta` (now including the `uploadId` minted at Record start, and the server `sessionId`), all
@@ -222,8 +246,9 @@ the DB wiped, a new row correctly starts from zero.
 2. Build the `manifest` object: `app` meta, `audio` ref, `markers`, `events[]` — and `manifest.id` is
    now the `uploadId`, not `''`.
 3. **Flush artifacts one last time** (`flushArtifacts`, hard-deadlined at 20 s so a slow flush can
-   never re-create the hung-Stop symptom), then build a `FormData`: the `manifest` JSON field,
-   `audio.webm`, and **only the `shot:*`/`dom:*` entries storage has not confirmed**.
+   never re-create the hung-Stop symptom), then build a `FormData`: the `manifest` JSON field plus
+   **only what storage has not confirmed** — the unconfirmed `shot:*`/`dom:*` entries and, if its own
+   upload didn't get through, `audio.webm`. On a healthy connection that list is empty.
    **The relative path is still the field name** (`fd.append('shots/<id>.jpg', blob, ...)`) — because
    multipart strips directories from filenames, the path must ride on the field name so the server can
    reconstruct the object key.
@@ -232,6 +257,15 @@ the DB wiped, a new row correctly starts from zero.
    session's own were lost to a browser restart). The identity has to ride a header because parts
    stream to storage before the manifest part is parsed — and it is what makes Retry idempotent: the
    server resolves the same recording instead of minting a new one.
+   **One plain `fetch(FormData)` under a single 300 s deadline** — no more, and that is the point.
+   What used to live here was ~150 lines of hand-rolled multipart `ReadableStream` (an HTTP/2-only
+   `duplex: 'half'` request with byte progress capped at 90 %, a `FINISHING` sentinel for the
+   server-processing tail, an HTTP/1.1 plain-POST fallback, and two re-arming stall watchdogs). All of
+   it existed to narrate and survive a multi-hundred-megabyte request that no longer happens. The
+   deadline stays generous anyway because the **fallback** case can still be big: if direct upload was
+   unavailable for a whole recording, every artifact rides this one request. A timeout there is now
+   recoverable rather than destructive — the stable id means a retry resolves to the same row instead
+   of creating a duplicate, which is exactly what it used to do.
 5. Record the outcome once (`recordOutcome`): buffer wipe on success, `lastUpload` for the popup's
    result/retry screens, `lastSession` for the persistent **Recent** row, the terminal `phase`, and
    the toolbar badge. The popup's status bar and the control bar's **status pill** both read from
@@ -249,17 +283,25 @@ disconnected ──connect handshake──▶ idle ──Start──▶ recordin
 
 During **recording** it shows *real* data read from the background's `getState`: a live pause-aware
 `REC`/`PAUSED` timer, the captured **domain**, and **step / workflow counts** (steps = `event:` key
-count in the current workflow; workflows = markers + 1), polled every 2 s. The mic meter, Pause/Resume,
-and determinate upload-% are all **real** now (formerly placeholders): the meter is a WebAudio
-`AnalyserNode` off the popup's own `getUserMedia`, and upload-% comes from a streamed HTTP/2 body
-(indeterminate fallback on HTTP/1.1). The toolbar **badge** is a parallel state machine: `REC` (red) →
+count in the current workflow; workflows = markers + 1), polled every 2 s. The mic meter and
+Pause/Resume are **real** (formerly placeholders): the meter is a WebAudio `AnalyserNode` off the
+popup's own `getUserMedia`. The toolbar **badge** is a parallel state machine: `REC` (red) →
 `↑` (uploading) → `✓` / `!`, with a **blinking red-dot action icon** while recording.
+
+**There is no upload percentage any more, and that is deliberate.** A determinate bar needs a
+streamed request body to count bytes against; with the artifacts already in storage there are almost
+no bytes left to count, so the honest rendering is an indeterminate one. The stored `uploadProgress`
+survives as a coarse marker only (`0` = in flight, `100` = accepted).
 
 **Honest mid-pipeline states (v0.3.0):** the popup routes on the persisted `phase` at open, so a
 popup reopened mid-upload lands back on the **uploading** view (never a false idle) with stage-true
-labels — *Saving narration…* (stop → audio flush), *Uploading securely… N%*, *Finishing…*, and after
-~8 s with no bytes moving, *Waking the FlowBuddy server — this can take a minute…* (the free-tier
-cold-start, named instead of a mute spinner). The idle view's **Recent** row is persistent and live:
+labels — *Saving narration…* (stop → audio flush), then *Finishing up…*, and if that stage runs past
+**~8 s**, *Sending the rest of your recording…* **with a running elapsed timer**. The escalation is
+the honest diagnosis: the only reason this stage drags now is that the direct uploads didn't get
+through and the whole recording is going in one request. The elapsed timer is the fix for the original
+complaint — *"Finishing…"* with nothing moving was exactly what read as **stuck forever**. The
+**retry** screen shows no percentage either, and its timeout message says plainly that retrying is
+safe and cannot create a duplicate. The idle view's **Recent** row is persistent and live:
 it polls `GET /v1/sessions/:id` (4 s, only while the popup is open) to show
 `uploaded · queued → processing… → ready / processing failed`, with a **View in Studio ↗** deep link
 to the recording's detail page; a 404 (wiped dev DB) drops the row.
@@ -270,9 +312,13 @@ status (timer, step count, mic meter) are reachable without opening the popup. I
 `getState` and sends the same background commands; it **survives Pause** and **re-appears after a
 full-page nav** (its state is polled, not tied to the per-frame capture), and is draggable. It does
 not replace the popup. **On Stop it doesn't vanish** (v0.3.0): it collapses into a **status pill**
-that mirrors the persisted `phase` (*Saving narration… → Uploading… N% → ✓ Uploaded — FlowBuddy is
+that mirrors the persisted `phase` (*Saving narration… → Uploading… → ✓ Uploaded — FlowBuddy is
 processing it*, or the failure variant pointing at the extension), then removes itself — the pill
 also appears when Stop came from the popup, since the user's attention is on the page either way.
+⚠️ The pill's label ladder was **not** rewritten alongside the popup's: its percentage and
+*"finishing"* branches are still in the code but unreachable now that `uploadProgress` only ever
+carries `0` or `100`, so in practice it reads *Uploading…* and then, after ~8 s, *Uploading… waking
+the FlowBuddy server*. Harmless, but it is the one surface still using the old vocabulary.
 
 ### 4.10 Getting connected (the token handshake)
 
@@ -290,17 +336,19 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 - **Writes (transiently):** IndexedDB (`flowbuddy-recorder` DB, `kv` store) keyed by prefix —
   `meta` (now carrying the recording's `uploadId` and, once signing succeeds, the server
   `sessionId`), `audio`, `event:*`, `shot:*`, `dom:*`, and **`up:<sessionId>:<rel>`** — one marker per
-  artifact confirmed in object storage. The markers, not in-memory state, are what a restarted
-  service worker re-derives the pending set from. All cleared on successful upload (R2).
+  artifact confirmed in object storage, `audio.webm` included. The markers, not in-memory state, are
+  what a restarted service worker re-derives the pending set from. All cleared on successful upload
+  (R2) — which is why a surviving buffer is proof that the previous recording never landed.
 - **Writes (durably):** nothing in Postgres directly — but its first signing call is what causes the
-  API to create the `KnowledgeSource` row (`status: "recording"`), and finalize fills it in.
+  API to create the `KnowledgeSource` row (`status: "recording"`), finalize fills it in, and
+  `DELETE /v1/uploads/:uploadId` **removes** it (row + objects) when a capture is abandoned.
 - **Reads:** `chrome.storage.local` (`apiToken`, `backendUrl`, `connectedEmail`, `lastUpload`, plus
   the v0.3.0 `phase` — the persisted stop→upload pipeline state — and `lastSession` — the Recent
   row's id/status) and `chrome.storage.session` (the live `rec` state).
-- **Object storage: DIRECTLY.** Screenshots and DOM snapshots are PUT by the extension itself to
-  `workspaces/<ws>/sessions/<id>/...`, using single-object 900 s signed URLs minted by
-  `POST /v1/uploads/sign`; the API never sees those bytes. Only the audio and any unconfirmed
-  leftovers still go through the API at Stop.
+- **Object storage: DIRECTLY.** Screenshots, DOM snapshots **and the narration audio** are PUT by the
+  extension itself to `workspaces/<ws>/sessions/<id>/...`, using single-object 900 s signed URLs
+  minted by `POST /v1/uploads/sign`; the API never sees those bytes. Only unconfirmed leftovers still
+  go through the API at Stop, and on a healthy connection there are none.
 
 ---
 
@@ -322,21 +370,28 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 - **Signing unavailable** (offline, an older server without `/v1/uploads/sign`, an expired token) →
   the drain gives up quietly and every artifact rides the Stop bundle — the pre-change behaviour.
 - **Upload interrupted and retried** → no longer a duplicate recording: the `uploadId` minted at
-  Record start is stable across retries and the server resolves it to the same row.
+  Record start is stable across retries and the server resolves it to the same row. The popup says so
+  in the timeout message, because "retry" used to be the advice that created the duplicate.
+- **Finalize times out at 300 s** → a retryable failure with the buffer intact. Reaching that deadline
+  at all means the direct-upload path was unavailable for the whole recording, so the entire capture
+  was in that one request.
+- **Capture abandoned** (Start fresh, or a new recording started over an unsent buffer) → the recorder
+  asks the server to discard the row and its uploaded objects. If that call can't be made — offline,
+  browser closed for good — the server's 12-hour sweep removes them instead
+  ([ingestion-api.md](ingestion-api.md) §4.6).
 
-> ⚠️ **Not yet in users' hands.** As of 2026-07-27 this is on `dev` only. The extension was **not**
-> version-bumped and **no store build has been cut**; `packages/extension/dist/` is currently a
-> localhost build (a store artifact needs `STUDIO_URL=… pnpm --filter @flowbuddy/extension build`).
-> Because the API now rejects a finalize without `X-FlowBuddy-Upload-Id` and the live store build
-> (v0.6.0) does not send one, **the newer recorder has to reach users before this API reaches an
-> environment they use.**
+> ⚠️ **Deploy ordering.** The API rejects a finalize without `X-FlowBuddy-Upload-Id` and the previously
+> live store build (v0.6.0) does not send one, so **the newer recorder has to reach users before this
+> API reaches an environment they use.** Recorder **v0.7.0** carries the header and is cut for the
+> store alongside this change — details in [`../extension-releases.md`](../extension-releases.md).
 
 ---
 
 ## 7. Connections
 
 - **Hands off to →** [Ingestion API](ingestion-api.md) over `POST /v1/uploads/sign` (during
-  recording) and `POST /v1/sessions` (at Stop) — Seam A in [connections.md](connections.md).
+  recording), `POST /v1/sessions` (at Stop), and `DELETE /v1/uploads/:uploadId` (on abandon) — Seam A
+  in [connections.md](connections.md).
 - **Writes directly to →** object storage, with the signed URLs that first route hands back (Seam B).
 - **Emits the contract →** [`SessionManifest`](../../packages/shared/src/capture.ts), consumed
   downstream by the [Knowledge Base build](knowledge-base.md).

@@ -55,9 +55,14 @@ services:
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
     dockerCommand: pnpm --filter @flowbuddy/api start:all
+    # Port-open detection alone would pass for a wedged process; /healthz exists (server.ts).
+    healthCheckPath: /healthz
     envVars:
       - fromGroup: flowbuddy-dev-r2
       - { key: PORT, value: 8787 }
+      # api + synthesis worker share one small instance — cap the heap below the container limit so
+      # V8 collects instead of the container being OOM-killed mid-request.
+      - { key: NODE_OPTIONS, value: --max-old-space-size=400 }
       # Structured JSON logs at info+ (NODE_ENV=production is set in the Dockerfile). Lower to `debug`
       # to trace a request path, or raise to `warn` to quieten — no redeploy of code needed.
       - { key: LOG_LEVEL, value: info }

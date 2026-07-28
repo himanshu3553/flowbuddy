@@ -3,7 +3,7 @@
 *(The plain-English version of `roadmap.md`, plus the leftovers from `archive/phase-1-review.md`
 and `landing-page.md`.)*
 
-**As of 2026-07-27.**
+**As of 2026-07-28.**
 
 ---
 
@@ -120,6 +120,14 @@ Nothing here blocks anything. Roughly by usefulness:
 - **Cost visibility** — no record of what any question cost to answer
 - **Recording quality** — form values are lost on a full page reload; better labels for typed and
   scrolled actions
+- **No size limit on what a recording uploads** — now that files go straight from the browser to
+  storage, nothing caps how much a single recording can write. **Deliberately left alone for now**,
+  not overlooked. It isn't a way in for a stranger — you need an account's own recorder key to upload
+  at all — but a runaway recording would show up as a storage bill rather than an error, and a leaked
+  recorder key does more damage than it used to. The fix is to state each file's exact size when the
+  permission slip is issued, so storage itself rejects anything else; that means the recorder has to
+  prepare each file before asking permission, which is a reordering of a hot path and not something to
+  rush into a batch of small hardening fixes
 - **A private-beta gate** — signup is deliberately open right now
 - **Tightening the extension's permissions** — it currently asks for access to all sites; it could
   ask only for the tabs actually being recorded, which reads better both to the Chrome Web Store and

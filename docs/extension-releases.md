@@ -9,16 +9,24 @@
 
 ---
 
-## Unreleased — ⚠️ a new build is REQUIRED before the API ships to prod (no build cut yet)
+## v0.7.0 — 📦 PACKAGED 2026-07-28 (not yet submitted) — ⚠️ **REQUIRED: prod is already running the API that needs it**
 
-**Not packaged, not submitted, version NOT bumped** (`src/manifest.json` still says `0.6.0`) — logged here because it changes what the *live* build can do.
+**The upload-identity release** — one recording now has one identity, and its artifacts upload while you record instead of in one lump at Stop.
 
-- **What changed in `packages/extension` (on `dev`, unreleased):** the recorder mints an `uploadId` at record start and sends it as `X-FlowBuddy-Upload-Id`; screenshots and DOM snapshots upload **directly to object storage while recording** via short-lived presigned PUT URLs; confirmed artifacts are tracked as `up:<sessionId>:<rel>` markers in IndexedDB; everything degrades to the old all-in-one Stop bundle if signing fails or the server is older.
-- **⚠️ COMPATIBILITY BREAK — deploy ordering:** the API now returns `400` on `/v1/sessions` without that header, and **live build v0.6.0 does not send it**. **A build carrying this must be live on the store BEFORE the API reaches production**, or recording breaks for every installed user ([`deploy.md`](deploy.md) §7.6 and §8.4).
-- **Permissions:** unchanged (the direct PUTs are covered by the existing `<all_urls>` host permission — so no bucket CORS rule is expected, but this is **unverified against real R2**).
-- **Local `dist/` is a LOCALHOST build.** A store artifact needs `STUDIO_URL="…" NODE_ENV=production pnpm --filter @flowbuddy/extension build` first — never zip what's on disk.
+- **Why it exists:** a ~10-minute recording stalled at "Finishing…", the recorder aborted after a flat 120 s, the API committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Full analysis in [`phase-1-copilot.md`](phase-1-copilot.md) §8·A (R14).
+- **Content:**
+  - Mints an `uploadId` at Record and sends it as `X-FlowBuddy-Upload-Id`, so a retry resolves to the same recording instead of creating another.
+  - Screenshots and DOM snapshots upload **directly to object storage while recording** over short-lived presigned PUT URLs; narration follows the same path at Stop. On a healthy connection the finalize request carries **the manifest and nothing else**. Confirmed artifacts are tracked as `up:<sessionId>:<rel>` markers in IndexedDB.
+  - **Removed** (net −85 lines): the hand-rolled `streamingUpload()` ReadableStream, the HTTP/2-only path and its HTTP/1.1 fallback, the 90 %-capped byte progress, the `FINISHING` sentinel, and the dual re-arming watchdogs. **"Finishing… forever" is no longer a reachable state.** The popup shows "Finishing up…", then after 8 s "Sending the rest of your recording…" *with a running timer*.
+  - Discards an abandoned recording server-side (`DELETE /v1/uploads/:uploadId`) on "Start fresh" and when a new recording starts over an unsent buffer — so a thrown-away capture no longer strands uploaded artifacts.
+  - Degrades to the old all-in-one Stop bundle if signing is unavailable; that path is a deliberate fallback, not leftover.
+- **⚠️ COMPATIBILITY — this build is now REQUIRED, not optional.** The API returns `400` on `/v1/sessions` without the identity header, and **v0.6.0 does not send it**. The intended ordering was store-first; it was not followed — the API shipped to production on 2026-07-28 by explicit decision (no customers on prod). **Until this build is live, any installed v0.6.0 cannot upload a recording.** Ordering rule for next time: [`deploy.md`](deploy.md) §7.6.
+- **Permissions:** **unchanged.** The direct PUTs to object storage are covered by the existing `<all_urls>` host permission — a Chrome MV3 service worker is not subject to CORS for hosts it holds permission for, so **no bucket CORS rule was needed**. Verified end to end against real Cloudflare R2 on dev/Render, 2026-07-28.
+- **Baked targets:** `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only).
+- **Artifact:** `packages/extension/flowbuddy-recorder-0.7.0.zip` (gitignored) — built `NODE_ENV=production`.
+- **Next:** upload via the Web Store dashboard → submit for review. No permissions delta, so review should be the fast path. Flip this entry to `submitted`, then `live`.
 
-## v0.6.0 — ✅ LIVE (submitted 2026-07-17 · confirmed live 2026-07-23) — ⚠️ **incompatible with the API on `dev`** (sends no `X-FlowBuddy-Upload-Id`; see the Unreleased entry above)
+## v0.6.0 — ⛔ SUPERSEDED by v0.7.0 (live 2026-07-23 → cannot upload since the API shipped 2026-07-28; sends no `X-FlowBuddy-Upload-Id`)
 
 **The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
 

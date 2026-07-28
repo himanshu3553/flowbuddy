@@ -15,6 +15,7 @@ import { authWorkspace, type AuthedWorkspace } from './auth';
 import {
   ensureBucket,
   putObjectStream,
+  deleteSessionPrefix,
   sessionKey,
   sessionArtifactReader,
   signPutUrl,
@@ -52,7 +53,7 @@ const app = Fastify({ loggerInstance: createLogger('api') });
 // CORS so the extension (chrome-extension://...) can upload.
 app.addHook('onRequest', async (req, reply) => {
   reply.header('Access-Control-Allow-Origin', '*');
-  reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  reply.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-FlowBuddy-Key, X-FlowBuddy-Upload-Id');
   if (req.method === 'OPTIONS') return reply.code(204).send();
 });
@@ -123,6 +124,75 @@ async function resolveRecording(ws: AuthedWorkspace, uploadId: string) {
     return existing;
   }
 }
+
+/**
+ * How long a recording may sit in `recording` — no new artifact signed — before it counts as
+ * abandoned. DELIBERATELY generous: a paused capture signs nothing either, and deleting a recording
+ * someone is still making would be far worse than carrying a few orphaned objects for a day.
+ *
+ * A false positive is also self-healing: upload markers are scoped to the row's id, so if a swept
+ * recording resumes, the next signing call creates a fresh row and every artifact re-uploads from
+ * the recorder's local buffer, which is never cleared until an upload actually succeeds.
+ */
+const ABANDONED_AFTER_MS = 12 * 60 * 60_000;
+const SWEEP_BATCH = 20;
+
+/**
+ * Drop recordings that were started and never finished, with their artifacts.
+ *
+ * Uploading during the capture buys a fast Stop, but it means a recording that is abandoned — the
+ * browser closed, the tab dropped, the founder simply walked away — has already written a row and
+ * objects that nothing would otherwise ever remove. Only `recording` rows are eligible: anything
+ * that reached the finalize step is the founder's to keep or delete in Studio.
+ *
+ * Best-effort and fire-and-forget: never allowed to fail or delay the request that triggered it.
+ */
+async function sweepAbandonedRecordings(workspaceId: string): Promise<void> {
+  try {
+    const stale = await prisma.knowledgeSource.findMany({
+      where: {
+        workspaceId,
+        status: 'recording',
+        updatedAt: { lt: new Date(Date.now() - ABANDONED_AFTER_MS) },
+      },
+      select: { id: true },
+      take: SWEEP_BATCH,
+    });
+    if (stale.length === 0) return;
+    for (const { id } of stale) {
+      await deleteSessionPrefix(workspaceId, id); // storage first — a surviving row can be re-swept
+      await prisma.knowledgeSource.delete({ where: { id } }).catch(() => {});
+    }
+    app.log.info({ workspaceId, count: stale.length }, 'swept abandoned recordings');
+  } catch (err) {
+    app.log.warn({ workspaceId, err }, 'abandoned-recording sweep failed');
+  }
+}
+
+/**
+ * Discard an unfinished recording and everything it has already uploaded — what the recorder calls
+ * when a capture is thrown away instead of stopped. Only a recording still in `recording` can be
+ * discarded this way; once finalized, deleting is Studio's job, not the recorder's.
+ */
+app.delete('/v1/uploads/:uploadId', async (req, reply) => {
+  const ws = await authWorkspace(req.headers.authorization);
+  if (!ws) return reply.code(401).send({ error: 'invalid or missing token' });
+
+  const uploadId = normalizeUploadId(String((req.params as { uploadId?: string }).uploadId ?? ''));
+  if (!UPLOAD_ID_RE.test(uploadId)) return reply.code(400).send({ error: 'uploadId must be a UUID' });
+
+  const rec = await prisma.knowledgeSource.findUnique({
+    where: { workspaceId_uploadId: { workspaceId: ws.workspaceId, uploadId } },
+  });
+  if (!rec) return { discarded: false, reason: 'not found' }; // nothing was ever uploaded — fine
+  if (rec.status !== 'recording') {
+    return reply.code(409).send({ error: `recording is already ${rec.status} — delete it in Studio` });
+  }
+
+  await deleteSessionPrefix(ws.workspaceId, rec.id);
+  await prisma.knowledgeSource.delete({ where: { id: rec.id } });
+  return { discarded: true };
+});
 
 /**
  * Mint short-lived PUT URLs so the recorder uploads artifacts DIRECTLY to object storage WHILE the
@@ -249,7 +319,19 @@ app.post('/v1/sessions', async (req, reply) => {
   // swallows the re-enqueue — exactly when the recording is in `error` and the retry is the user
   // asking for another go. The worker is idempotent (it deletes and recreates the recording's
   // items), so the worst case of a double enqueue is duplicated work, not a duplicated recording.
-  await synthesisQueue.add('synthesize', { sessionId, workspaceId: ws.workspaceId });
+  // Best-effort, and bounded. The recording is already safe in Postgres and object storage by this
+  // point, so a sick Redis must not turn a delivered recording into a failed upload — which would
+  // send the recorder back to Retry for something that actually succeeded. Studio's
+  // "Stalled → Re-process" is the recovery path if this drops.
+  await Promise.race([
+    synthesisQueue.add('synthesize', { sessionId, workspaceId: ws.workspaceId }),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]).catch((err) => req.log.error({ sessionId, err }, 'could not enqueue synthesis — recording is stored; re-process from Studio'));
+
+  // A finished recording is the cheapest reliable signal that this workspace is active, so it is
+  // where the abandoned-recording sweep rides along. Deliberately NOT awaited: cleanup must never
+  // delay — or fail — the request that delivers a recording.
+  void sweepAbandonedRecordings(ws.workspaceId);
 
   return { sessionId, status: 'uploaded' };
 });

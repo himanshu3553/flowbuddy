@@ -181,9 +181,8 @@ async function pollStatusPill(): Promise<void> {
   if (Date.now() - pillSince > 300_000) { removeControlBar(); return; }
   let phase: { name?: string } | undefined;
   let lastUpload: { ok?: boolean } | undefined;
-  let uploadProgress: number | undefined;
   try {
-    ({ phase, lastUpload, uploadProgress } = await chrome.storage.local.get(['phase', 'lastUpload', 'uploadProgress']));
+    ({ phase, lastUpload } = await chrome.storage.local.get(['phase', 'lastUpload']));
   } catch {
     removeControlBar(); // extension reloaded/invalidated under us
     return;
@@ -193,10 +192,12 @@ async function pollStatusPill(): Promise<void> {
   if (phase?.name === 'idle' || phase?.name === 'recording') { removeControlBar(); return; } // outcome consumed elsewhere
   const p = root.querySelector('.ptext');
   if (!p) return;
+  // Mirrors the popup: no percentage, and no "finishing" tail. Artifacts upload during the
+  // recording, so Stop has almost nothing left to send — a percentage would be noise, and the
+  // sentinel it used to read no longer exists. A stage that drags means the direct uploads didn't
+  // get through and the whole recording is going in one request, which is what this now says.
   if (phase?.name === 'saving') p.textContent = 'Saving narration…';
-  else if (uploadProgress === -2) p.textContent = 'Uploading… finishing';
-  else if (typeof uploadProgress === 'number' && uploadProgress >= 1) p.textContent = `Uploading… ${uploadProgress}%`;
-  else p.textContent = Date.now() - pillSince > 8000 ? 'Uploading… waking the FlowBuddy server' : 'Uploading…';
+  else p.textContent = Date.now() - pillSince > 8000 ? 'Sending the rest of your recording…' : 'Finishing up…';
 }
 
 function finishPill(ok: boolean): void {

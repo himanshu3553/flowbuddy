@@ -20,9 +20,10 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 Chrome Extension ──sign──▶ API /v1/uploads/sign ──▶ short-lived PUT URLs   (while recording)
    (record + narrate)
         │
-        ├──PUT shots + DOM─────────────────────▶ object storage  (the API never sees these bytes)
+        ├──PUT shots + DOM (during capture)─────▶ object storage  (the API never sees these bytes)
+        ├──PUT narration (at Stop)──────────────▶ object storage
         │
-        └──Stop: manifest + audio + leftovers ─▶ API /v1/sessions ──enqueue──▶ Worker (BullMQ)
+        └──Stop: manifest (+ any leftovers)────▶ API /v1/sessions ──enqueue──▶ Worker (BullMQ)
                                                 (Fastify :8787)   transcribe → clean → segment → distill
                                                                          │
                                                                          ▼
@@ -32,7 +33,7 @@ Chrome Extension ──sign──▶ API /v1/uploads/sign ──▶ short-lived 
    Widget (<script>) ──ask──▶ API /v1/copilot/answer ──grounded in APPROVED KB only──▶ answer
 ```
 
-Stores: **Postgres** (data) · **object storage** for screenshots/audio/DOM (**MinIO** locally, **Cloudflare R2** on Render) · **Redis** (job queue). ⚠️ Since the direct-artifact-upload change the **recorder writes to object storage itself** via short-lived presigned PUT URLs — and **MinIO is more forgiving than R2** (R2 enforces request checksums, MinIO ignores them), so the signed-upload path is only really proven at **Level 2/3**, never by Level 1 alone. One Render-specific difference: on Render (dev **and** prod) the worker runs **inside** the api web service (`start:all`) instead of as a separate process (a standalone worker is scaling-ladder Step 1).
+Stores: **Postgres** (data) · **object storage** for screenshots/audio/DOM (**MinIO** locally, **Cloudflare R2** on Render) · **Redis** (job queue). ⚠️ Since the direct-artifact-upload change the **recorder writes every artifact to object storage itself** — screenshots and DOM snapshots during the capture, the narration track at Stop — via short-lived presigned PUT URLs, so on a healthy connection the finalize request carries **the manifest and nothing else**. **MinIO is more forgiving than R2** (R2 enforces request checksums and cross-origin PUT rules, MinIO ignores both), so any *change* to the signing path is only really proven at **Level 2/3**, never by Level 1 alone — the path as it stands was verified against real R2 on the dev deploy **2026-07-28**. The all-in-one multipart bundle survives as the **fallback** when direct upload is unavailable; a run that lands there still passes, it just isn't testing the normal path. One Render-specific difference: on Render (dev **and** prod) the worker runs **inside** the api web service (`start:all`) instead of as a separate process (a standalone worker is scaling-ladder Step 1).
 
 ---
 ---
@@ -185,7 +186,14 @@ This is the core capture → knowledge path **and** the workflow-segmentation qu
 3. Perform: click **Sign in** → type email → type password → (optional) toggle **Remember me** → click **Sign in** → land on dashboard.
 4. **Do NOT add markers** (the popup's marker button) — reproduces the "absent markers → one workflow" path.
 5. **While still recording** (before pressing Stop), open Studio → **Recordings** in another tab and refresh. ✅ The recording is already listed with a pending **Recording** badge — the row is created by the first directly-uploaded artifact, and it must NOT show as a red **Failed**. (Local-only check: MinIO console → `flowbuddy-artifacts` → objects are already appearing under `workspaces/<wsId>/sessions/<sessionId>/shots/`.)
-6. Extension popup → **Stop & upload** (the popup shows the **uploading** state, then the toolbar badge ↑→✓). Stop now sends only the **manifest + audio + any artifacts that were not confirmed in storage** to `POST /v1/sessions` (carrying the `X-FlowBuddy-Upload-Id` header); on a healthy connection this finishes in seconds. The extension log line `[capture] summary: … (N already uploaded, M riding the bundle)` tells you which path was exercised — `M` well above 0 means direct upload degraded to the old all-in-one bundle.
+6. Extension popup → **Stop & upload**. Watch the popup: it shows **Saving narration…** (the track is being stopped + encoded), then **Finishing up…** — and there is deliberately **no percentage**, because there is almost nothing left to send. Toolbar badge goes ↑→✓, in seconds. Stop sends only the **manifest plus any artifact storage never confirmed** to `POST /v1/sessions` (carrying the `X-FlowBuddy-Upload-Id` header); the narration went up through the same signed-URL path just before it.
+   The extension log line tells you which path was exercised:
+   ```
+   [capture] summary: events=…, artifacts=N (N uploaded directly, 0 riding the bundle), audio=uploaded
+   ```
+   ✅ **Expected: `0 riding the bundle` and `audio=uploaded`.** `audio=in bundle` or a non-zero riding count means direct upload degraded to the fallback (see Troubleshooting) — the recording still arrives, but you have not tested the normal path.
+   ❌ A percentage, a `Finishing…` label, or a bar that creeps to 90 % and stops = an **old extension build**; rebuild and reload it.
+7. **If it does drag on** (a fallback run, or a cold-starting dev API): after 8 seconds the popup switches to **"Sending the rest of your recording…"** with a **running elapsed timer**. That is the honest state, not a hang — the old silent "Finishing…" with no clock is exactly what used to read as stuck forever.
 
 ### 6b. Worker processing
 Watch the **worker terminal** — the worker logs (pretty-printed locally, `service: worker`) progress through these messages:
@@ -198,13 +206,60 @@ ready                               (fields: sessionId, workflows = 1, steps = M
 
 ✅ **PASS criteria:**
 - Upload returns a `sessionId` (extension shows success; no 401 and no `400 missing or malformed X-FlowBuddy-Upload-Id`).
-- **A retry does not duplicate.** With the recording already finalized, re-send the same bundle (the popup's **Retry** if a failure offered it, otherwise by hand). ✅ Studio → **Recordings** still shows **exactly one** row for that capture, and the API answers `{ alreadyFinalized: true }` rather than rebuilding. ❌ Two rows = the `(workspaceId, uploadId)` identity is not resolving — the original defect.
+- **A retry does not duplicate.** With the recording already finalized, re-send the same bundle (the popup's **Retry** if a failure offered it, otherwise by hand). ✅ Studio → **Recordings** still shows **exactly one** row for that capture, and the API answers `{ alreadyFinalized: true }` rather than rebuilding. ❌ Two rows = the `(workspaceId, uploadId)` identity is not resolving — the original defect. *(If you can get the retry screen to appear at all: it now shows **no percentage**, and a timeout there reads "your recording is still saved here — retrying is safe and cannot create a duplicate". A retry screen quoting a `%` is an old build.)*
 - Worker reaches `status → ready`.
 - **The recording produces exactly ONE workflow** (the `ready` log shows `workflows: 1`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
 
 ❌ **FAIL:** ≥2 workflows, or any workflow titled by a phase. **If it still over-splits,** the lever is the segmenter prompt + inputs in [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts): strengthen the "default to ONE workflow" framing, confirm the full transcript reaches it as `overallNarration` (needs captured audio narration), and check no markers were placed unintentionally.
 
 **Multi-task split check (positive control):** record a second session doing **two genuinely different tasks** (e.g. *sign in*, then *change your password*), optionally pressing the **marker** button between them. PASS = it returns **two** workflows. This proves the segmenter still splits when it should.
+
+### 6c. Throwing a recording away (abandoned-recording cleanup)
+
+Uploading during the capture means an abandoned recording has **already** written a row and objects.
+Two client-side paths discard it, and a server-side sweep catches whatever they miss. Exercise at
+least Path 1 once — a leak here is invisible until the storage bill or the Recordings list makes it
+obvious.
+
+**Path 1 — "Start fresh" after a failed upload.**
+1. Start a recording, do a handful of clicks so screenshots actually upload, and confirm Studio →
+   **Recordings** shows the pending **Recording** row (and that objects exist in MinIO under
+   `workspaces/<wsId>/sessions/<sessionId>/`).
+2. **Stop the api process** (Ctrl-C in terminal 1), then press **Stop & upload**. The upload fails and
+   the popup lands on **Upload interrupted**.
+3. Bring the api back up, then click **Start fresh** on that screen.
+4. Refresh Studio → **Recordings**.
+
+✅ **PASS:** the **Recording** row is **gone**, and so is its whole prefix in MinIO. The popup returns
+to idle with no badge. *(Clicking Start fresh while the api is still down is fine too — the discard is
+best-effort and the 12-hour sweep below is the backstop — but then you're testing the backstop.)*
+
+**Path 2 — starting a new recording over an unsent one.** The same discard runs on **Start
+recording**, because a locally buffered recording that still knows its upload identity is one that
+never uploaded successfully — pressing Start is abandoning it. Whichever route you took above, the
+observable rule is the same: **after recording again, there must be no leftover `recording` row.**
+
+✅ **PASS:** exactly one row per capture you actually intended. ❌ A stranded row stuck on
+**Recording** means neither discard fired — check the api log, then confirm the sweep below cleans it.
+
+**Path 3 — the server-side sweep (optional, needs patience or a clock nudge).** Anything the client
+misses is swept server-side: `recording` rows idle **more than 12 hours** are deleted with their
+storage, piggybacked on the next finalized recording in that workspace. To see it without waiting,
+age a row by hand and then finish any recording in the same workspace:
+
+```bash
+docker exec flowbuddy-postgres-1 psql -U flowbuddy -d flowbuddy -c \
+  "UPDATE \"RecSession\" SET \"updatedAt\" = now() - interval '13 hours' WHERE status = 'recording';"
+```
+
+✅ **PASS:** the api log reports `swept abandoned recordings` with a count, the row is gone, and its
+objects are gone from MinIO. ⚠️ Only `recording` rows are eligible — a **finalized** recording is never
+swept, and asking the API to discard one answers `409` ("delete it in Studio"). Verify that guard once
+if you're changing this path: a finalized recording must survive both a discard call and a sweep.
+
+*(The 12-hour threshold is deliberately generous because a **paused** capture also signs nothing. A
+false positive self-heals: the recorder's local buffer is never cleared until an upload succeeds, so a
+swept recording simply re-uploads into a fresh row.)*
 
 ---
 
@@ -378,7 +433,8 @@ DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WH
 | Infra | — | Postgres healthy, Redis up, MinIO up, bucket ensured |
 | Auth | Studio | signup → workspace; signin works |
 | Capture | Extension | Connect mints token; record → upload `sessionId`, no 401 |
-| Ingestion | API | `/v1/uploads/sign` mints per-artifact PUT URLs + creates the row (Studio shows **Recording**); `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id` and enqueues; **a retry resolves to the same row, never a second recording**; `/healthz` ok |
+| Ingestion | API | `/v1/uploads/sign` mints per-artifact PUT URLs + creates the row (Studio shows **Recording**); narration goes the same way at Stop, so finalize carries **the manifest and nothing else**; `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id` and enqueues; **a retry resolves to the same row, never a second recording**; `/healthz` ok |
+| Cleanup | API + Extension | an abandoned recording is discarded on **Start fresh** / the next Start, and any `recording` row idle >12h is swept with its objects; a **finalized** recording is never discardable this way (`409`) |
 | KB build | Worker | transcript + **distilled steps** built; `status → ready` |
 | **Segmentation** | Worker | **single task → 1 workflow; multi-task → N** |
 | Review | Studio KB | one goal-titled workflow, steps intact |
@@ -408,8 +464,10 @@ DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WH
 | Recording stuck `processing` / `error` | Missing/invalid `OPENAI_API_KEY` in `packages/api/.env`; check the worker log |
 | Extension upload 401 | Token wiped/expired → redo **Part 5** (`/connect`) |
 | Extension upload `400 missing or malformed X-FlowBuddy-Upload-Id` | An **old recorder build** (anything up to and including store v0.6.0) against the new API — the identity header didn't exist yet. Rebuild + reload the unpacked extension (`pnpm --filter @flowbuddy/extension build`); a store install needs a newer published version |
-| Recording sits on **Recording** and never processes | Capture never stopped/finalized — the row has no manifest yet and the worker deliberately skips it (`no manifest yet — recording not finalized, skipping`). Stop the recording. **Known gap:** an abandoned recording is never cleaned up — it stays `recording` (it isn't even eligible for the stalled badge) and its objects stay in storage; delete it by hand |
-| Stop still takes minutes; the log says most artifacts are `riding the bundle` | Direct upload failed (offline, `/v1/uploads/sign` 4xx/5xx, storage rejected the PUT) and fell back to the old all-in-one bundle. Check the api log for `/v1/uploads/sign`; locally confirm MinIO is up on `:9000` and that `R2_ENDPOINT` is an address the **browser** can reach, not a docker-internal hostname |
+| Recording sits on **Recording** and never processes | Capture never stopped/finalized — the row has no manifest yet and the worker deliberately skips it (`no manifest yet — recording not finalized, skipping`). Stop the recording. If it was **abandoned**, it is cleaned up: the recorder discards it on **Start fresh** / on starting the next recording, and the server sweeps `recording` rows idle >12h on the next finalize (Part 6c) |
+| Stop still takes minutes; the log says artifacts are `riding the bundle` (or `audio=in bundle`) | Direct upload failed (offline, `/v1/uploads/sign` 4xx/5xx, storage rejected the PUT) and fell back to the all-in-one bundle — still a valid upload, just not the path you meant to test. Check the api log for `/v1/uploads/sign`; locally confirm MinIO is up on `:9000` and that `R2_ENDPOINT` is an address the **browser** can reach, not a docker-internal hostname |
+| Popup shows a **percentage** or **"Finishing…"** during upload | An extension build from before the upload rework — there is no byte-progress bar any more (`Finishing up…`, then `Sending the rest of your recording…` + an elapsed timer after 8s). Rebuild + reload the unpacked extension |
+| Upload succeeded but the recording never processes; api log says `could not enqueue synthesis — recording is stored` | Redis was down/slow at finalize; the enqueue is a bounded 5s race so the upload still succeeded. Start Redis (`docker compose up -d`), then **Re-process** the recording from Studio — do **not** re-record |
 | Workflow over-split into phases | Segmenter tuning — see [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts) (prompt · `overallNarration` · markers) |
 | Widget shows no launcher | Serve `demo/` over **HTTP** (not `file://`); refresh stale `data-flowbuddy-key` |
 | Copilot: "no approved help content" | Approve a workflow in **Part 8** |
@@ -475,9 +533,9 @@ then Render → **flowbuddy-dev-api** → **Manual Deploy → Deploy latest** (i
 ## D2. Empty the R2 bucket
 
 Old artifacts are orphaned by the wipe (new workspace = new key prefix) and eat the free quota.
-**Also orphaned: every abandoned recording** — since artifacts upload during capture, a recording that
-is started and never stopped leaves objects in the bucket and a `recording` row in the DB, and there is
-**no cleanup path for either yet**. Expect the dev bucket to accumulate these during testing.
+*(Abandoned recordings are no longer part of this problem — since 2026-07-28 the recorder discards
+them on Start fresh / on the next Start, and the server sweeps any `recording` row idle >12h together
+with its objects. A wipe still leaves everything else behind.)*
 **Keep the bucket** (the API runs `HeadBucket` at boot) — just clear its contents:
 
 ```bash
@@ -551,12 +609,14 @@ Notes when switching targets:
 - **Rebuild _and_ reconnect when you switch.** A localhost build only injects its connect bridge on
   `localhost:3000`, so it can't connect through the Render `/connect` page (and vice-versa); the old
   token won't match either. Rebuild → **Reload** the extension → **Connect** again.
-- **Upload progress differs by transport:** Render serves HTTP/2 → the popup shows a real determinate
-  **%**; local dev is HTTP/1.1 → an **indeterminate** bar (Chrome only allows a streamed request body
-  over HTTP/2). Both upload fine — only the progress UI differs.
-- **⚠️ The API now requires an `X-FlowBuddy-Upload-Id` header on `/v1/sessions`.** Store build **v0.6.0
-  does not send it** and will get a `400` against a dev API carrying this change. Test with a locally
-  rebuilt extension until a newer store build is live — see [`extension-releases.md`](extension-releases.md).
+- **The upload UI no longer varies by transport.** The old HTTP/2-only streamed body (and its
+  determinate **%** on Render vs an indeterminate bar locally) is gone — every environment now shows
+  **Finishing up…**, and **"Sending the rest of your recording…"** with an elapsed timer if it runs
+  past 8 seconds. On dev, that longer state usually means the free-tier api is cold-starting.
+- **⚠️ The API requires an `X-FlowBuddy-Upload-Id` header on `/v1/sessions`.** Store build **v0.6.0
+  does not send it** and gets a `400` against a dev API carrying this change; **v0.7.0** is the build
+  that does. Test with a locally rebuilt extension until v0.7.0 is live — see
+  [`extension-releases.md`](extension-releases.md).
 
 ✅ **PASS:** the extension popup shows **Connected** (to the Studio you built against).
 
@@ -565,11 +625,18 @@ Record a **narrated** workflow → it uploads to the deployed dev API → the em
 
 **⚠️ This is the first level that actually proves the direct-artifact-upload path**, because the presigned
 PUTs are signed against **R2**, not MinIO: R2 enforces request checksums (and cross-origin PUT rules) that
-MinIO ignores, so a URL that works locally can still be rejected here. Watch for: a **Recording** badge
-appearing in Studio *during* the capture, and the extension log reporting most artifacts as already
-uploaded rather than `riding the bundle`. Any `403`/`400` on the PUTs (or a silent fall back to the full
-bundle) means the R2 side of the path is not working — do **not** promote to prod on the strength of a
-Level 1 pass.
+MinIO ignores, so a URL that works locally can still be rejected here. **The path as it stands passed here
+on 2026-07-28** — browser-issued presigned PUTs work against R2 with no bucket CORS rule — so a failure now
+is a regression, not an unknown. Re-run this leg after **any** change to signing or to the artifact keys.
+
+Watch for: a **Recording** badge appearing in Studio *during* the capture, the extension log reporting
+`0 riding the bundle` and `audio=uploaded`, and a Stop that completes in seconds. Any `403`/`400` on the
+PUTs (or a silent fall back to the full bundle) means the R2 side is not working — do **not** promote to
+prod on the strength of a Level 1 pass.
+
+Also worth one pass here: **abandoned-recording cleanup against R2** (Part 6c) — start a capture, throw
+it away, and confirm both the row and the objects disappear from the `flowbuddy-artifacts-dev` bucket.
+Deleting needs the R2 token to permit **delete**, which local MinIO never tests.
 
 ✅ **PASS:** `flowbuddy-dev-api` log shows a `ready` line — `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`; the
 recording appears under Studio → **Recordings**.
@@ -638,8 +705,8 @@ Production is the [`deploy.md`](deploy.md) §4 stack — `app.flowbuddyai.com` (
 - **The walkthrough = Level-2 D5 minus the wipe steps**, pointed at the prod URLs — the embed snippet copied from `app.flowbuddyai.com` already carries the stable `api.`/`widget.` domains.
 - **No cold-start waits** (paid tier is always-on).
 - **Worker logs appear inside `flowbuddy-api`** — prod also folds the worker into the api (`start:all`); a separate worker service is scaling-ladder Step 1 ([`deploy.md`](deploy.md) §9).
-- **Extension:** use the store build — v0.6.0+ bakes `app.flowbuddyai.com` as the primary origin, so no special build is needed.
+- **Extension:** use the store build — v0.6.0+ bakes `app.flowbuddyai.com` as the primary origin, so no special build is needed. **⚠️ Since the upload rework, prod requires v0.7.0 or newer** (v0.6.0 sends no `X-FlowBuddy-Upload-Id` and gets a `400`) — confirm the installed version before concluding anything from a failed recording.
 
 ---
 
-*Last updated 2026-07-27 — recording uploads reworked: artifacts now upload directly to object storage during capture, `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id`, and Studio shows a **Recording** badge mid-capture; added the mid-capture visibility check, the retry-does-not-duplicate check, and the Level-2 note that only R2 proves the signed-upload path. (2026-07-08 — added structured logging (`@flowbuddy/logger`, Pino): refreshed the worker/API log-line PASS signals to the new structured format and added **Logging (local)** + prod (Render) notes with the enable/disable knobs (`LOG_LEVEL` · `LOG_PRETTY` · `NEXT_PUBLIC_LOG_LEVEL` · widget `data-flowbuddy-debug`); canonical reference is [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown). (2026-07-04 — merged `render-reset-and-test.md` in as **Level 2** + **Level 3** prod placeholder. Level 1 content revised 2026-06-27: worker cleans + distills events into per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md).))*
+*Last updated 2026-07-28 — the upload rework completed: **narration** now uploads directly too (at Stop), so finalize carries the manifest and nothing else; the popup's byte-progress bar and "Finishing…" state are gone (**Finishing up…** → **Sending the rest of your recording…** + elapsed timer after 8s), and the retry screen shows no percentage; added **Part 6c** (abandoned-recording discard + the 12-hour sweep) and a Cleanup acceptance row; corrected the now-false notes about orphaned objects, HTTP/2-vs-HTTP/1.1 progress, and the R2 path being unproven (**verified on dev 2026-07-28**); prod/dev now need recorder **v0.7.0**. (2026-07-27 — recording uploads reworked: artifacts now upload directly to object storage during capture, `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id`, and Studio shows a **Recording** badge mid-capture; added the mid-capture visibility check, the retry-does-not-duplicate check, and the Level-2 note that only R2 proves the signed-upload path. (2026-07-08 — added structured logging (`@flowbuddy/logger`, Pino): refreshed the worker/API log-line PASS signals to the new structured format and added **Logging (local)** + prod (Render) notes with the enable/disable knobs (`LOG_LEVEL` · `LOG_PRETTY` · `NEXT_PUBLIC_LOG_LEVEL` · widget `data-flowbuddy-debug`); canonical reference is [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown). (2026-07-04 — merged `render-reset-and-test.md` in as **Level 2** + **Level 3** prod placeholder. Level 1 content revised 2026-06-27: worker cleans + distills events into per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md).)))*

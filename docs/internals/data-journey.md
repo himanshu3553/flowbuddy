@@ -8,7 +8,7 @@
 > describes the schema **by concern** (here are the auth tables, here are the KB tables). This doc
 > describes it **by moment in time** — walk the journey and watch rows appear. Same facts, opposite axis.
 >
-> *Verified against the code on 2026-07-27 (branch `dev`). If a detail here disagrees with the source,
+> *Verified against the code on 2026-07-28 (branch `dev`). If a detail here disagrees with the source,
 > the source wins.*
 
 ---
@@ -20,7 +20,7 @@ Before the journey, know the shelves. Only two of them are ours; three are on so
 | # | Where | What it holds | Who writes it | Lifetime |
 |---|---|---|---|---|
 | **1** | **Postgres** (13 tables) | Every queryable fact: accounts, workspaces, recordings, knowledge steps, approvals, questions, analytics | Studio, Ingestion API, worker | **Permanent** until deleted |
-| **2** | **Object storage** (MinIO local / Cloudflare R2 prod) | The heavy bytes of a recording: screenshots, page HTML snapshots, the audio file | **The recorder directly** (presigned PUT, during recording) + the Ingestion API (the leftovers, at Stop) | **Permanent** until the recording is deleted |
+| **2** | **Object storage** (MinIO local / Cloudflare R2 prod) | The heavy bytes of a recording: screenshots, page HTML snapshots, the audio file | **The recorder directly** (presigned PUT — screenshots and page snapshots while recording, the audio at Stop) + the Ingestion API (only what never got through) | **Permanent** until the recording is deleted — *except* a recording that was never finished, which is cleaned up (§5) |
 | **3** | **Redis** | One job message: *"go build the KB for recording X"* | Ingestion API | **Seconds** — consumed and gone |
 | **4** | **The founder's Chrome** (extension storage + IndexedDB) | A recording *in progress*, before it's uploaded | The recorder extension | Until upload succeeds |
 | **5** | **The end-user's browser tab** (`sessionStorage`) | The open chat thread + any live walkthrough | The widget | **30 minutes**, and gone when the tab closes |
@@ -128,7 +128,7 @@ well, and anything storage never confirmed simply rides the Stop bundle exactly 
 
 | Browser store | What's in it |
 |---|---|
-| `chrome.storage.local` | The API token, the backend URL, connected email/org, the recorder `phase`, upload progress, last upload result |
+| `chrome.storage.local` | The API token, the backend URL, connected email/org, the recorder `phase`, a coarse upload marker (in flight / accepted — there is no percentage any more), last upload result |
 | `chrome.storage.session` | The active recording's live state |
 | **IndexedDB** (`flowbuddy-recorder`) | **The recording itself** — every captured event, every screenshot, every page HTML snapshot, the audio. Buffered here so a crash or a tab close doesn't lose the session. |
 
@@ -143,23 +143,37 @@ fields, fields matching sensitive patterns, and anything the host app marks `dat
 are replaced with `••••••` at capture time
 ([`extension/src/content.ts:428`](../../packages/extension/src/content.ts#L428)).
 
+**What if the recording is never finished?** Writing before Stop means a row and its objects can
+outlive a capture nobody wanted, so both are removed again. The recorder asks the server to **discard**
+them (`DELETE /v1/uploads/:uploadId`) whenever a capture is thrown away — "Start fresh", or simply
+starting a new recording while an old unsent one is still buffered. Anything that never gets that call
+(browser closed for good) is caught by a **server-side sweep of `recording` rows idle more than 12
+hours**, which runs fire-and-forget whenever some other recording in the workspace finalizes. The
+threshold is deliberately generous: a *paused* capture looks identical from the server's side, and a
+false positive costs only a re-upload — the recorder's local buffer is never cleared until an upload
+actually succeeds. Only rows still at `status: "recording"` are eligible; once a recording finalizes,
+deleting it is the founder's decision in Studio.
+
 ---
 
 ## 6. Stop → finalize → **3 stores written, in this order**
 
-The founder hits stop. The extension does one last artifact flush, then POSTs to `/v1/sessions`
+The founder hits stop. The extension does one last artifact flush — **which now includes the narration
+audio**, over the same signed-URL path as everything else — then POSTs to `/v1/sessions`
 ([`api/src/server.ts`](../../packages/api/src/server.ts)) **only what storage has not already
-confirmed** — normally just the manifest and the audio — carrying the recording's stable identity in
-an `X-FlowBuddy-Upload-Id` header (the request is rejected with `400` without it). That header is what
-makes a retry land on the same recording instead of creating a second one.
+confirmed**, which on a healthy connection is **nothing: the manifest and no files at all**. It
+carries the recording's stable identity in an `X-FlowBuddy-Upload-Id` header (the request is rejected
+with `400` without it), and that header is what makes a retry land on the same recording instead of
+creating a second one. The old all-in-one multipart bundle still works and is still the fallback: a
+browser that can't reach object storage directly sends every artifact here, exactly as before.
 
 **Order matters** — each step only happens if the one before it succeeded:
 
 | # | Store | What's written |
 |---|---|---|
-| 1 | **Object storage** | Whatever did **not** already upload directly during recording — normally just the audio — **streamed** (never held in memory) under the key `workspaces/<workspaceId>/sessions/<sessionId>/…`. Caps: 300 MB per file, 500 MB per finalize request; note these caps cover only the leftovers, not the artifacts that came in over signed URLs. |
+| 1 | **Object storage** | Whatever did **not** already upload directly — normally nothing — **streamed** (never held in memory) under the key `workspaces/<workspaceId>/sessions/<sessionId>/…`. Caps: 300 MB per file, 500 MB per finalize request; note these caps cover only the leftovers, not the artifacts that came in over signed URLs. |
 | 2 | **`KnowledgeSource`** (table name in the DB is still `RecSession`) | The row already exists (created at the first signed artifact with `uploadId`, `status: "recording"`, `manifest: null`). Finalize **updates** it: `status: "uploaded"`, `appBaseUrl`, `error: null`, and **`manifest`** — the entire raw capture JSON: every event, every target fingerprint, every file reference, the markers, the browser/viewport metadata |
-| 3 | **Redis** | One BullMQ job: `{ sessionId, workspaceId }` |
+| 3 | **Redis** | One BullMQ job: `{ sessionId, workspaceId }` — **best-effort**, given 5 seconds and then stepped over. The recording is already safe in the two stores above, so an unreachable Redis must not turn a delivered recording into a failed upload; the job is recovered from Studio's "Stalled → Re-process". |
 
 **If finalize fails, nothing is deleted** — and that reversal is deliberate. Artifacts uploaded during
 recording live under that prefix and the recorder cannot re-send them, so wiping the prefix on a bad
@@ -529,11 +543,12 @@ Three, in the order they'd bite:
    values and text, not pixels or raw HTML. A recording made against real customer data stores that
    data as-is.
 
-Two more, new with direct artifact upload (2026-07-27, on `dev` — not deployed yet):
-**abandoned recordings are never cleaned up** — a capture that is started and never stopped leaves a
-`status='recording'` row plus its uploaded objects, with no sweeper and no expiry; and **signed PUT
-URLs carry no size ceiling** — `MAX_BUNDLE_BYTES` now bounds only the finalize request, so the
-artifact path is limited by nothing but the 900 s URL lifetime and the allowlisted key.
+One more, from direct artifact upload: **signed PUT URLs carry no size ceiling** —
+`MAX_BUNDLE_BYTES` bounds only the finalize request, so the artifact path is limited by nothing but
+the 900 s URL lifetime and the allowlisted key. **Deferred by decision** (2026-07-28); the reasoning
+and the eventual fix live in [`../roadmap.md`](../roadmap.md) §9.
+*(Its sibling — abandoned recordings piling up as orphaned rows and objects — is **closed**: they are
+discarded explicitly, and swept after 12 hours. See §5.)*
 
 Plus the two older ones: **recorder tokens accumulate and can't be revoked** (§4), and **the raw
 `manifest` is kept forever** (§6) — intentional, but it's the largest permanent per-recording payload

@@ -51,8 +51,25 @@ private; the app hands out temporary links when they're needed.
 recording is mostly waiting on network calls and barely competes with answering questions.
 
 **The trade-off:** deploying restarts the API, which kills any recording being processed at that
-moment. There's no automatic retry — you re-record. Splitting them apart is the first step on the
-scaling list if that ever starts mattering.
+moment. There's no automatic retry — you re-record.
+
+**Splitting them into two services has been considered and deliberately skipped.** It costs about $7
+a month, and most of the argument for it went away once the service stopped carrying recordings' files
+itself. Instead they share one small machine carefully: the program is told to keep its memory use
+under the machine's limit, and it processes **one recording at a time** rather than two, because a
+single recording holds whole screenshots in memory while the AI looks at them. Two at once was the
+realistic way to run out of memory — and running out of memory there would take the customer-facing
+assistant down along with the processing. Throughput isn't the constraint; recordings arrive one at a
+time, from a person pressing stop.
+
+**The host now checks that each service actually answers a request**, not merely that it has opened a
+port. It used to do only the latter, which a jammed process passes without trouble — so a jammed
+process would never have been restarted.
+
+**A sick job queue can no longer fail a recording that arrived safely.** Handing the recording to the
+processing queue is the very last thing that happens, long after it's been stored, so it's now given a
+few seconds and then given up on. If that happens the recording is still there and you re-process it
+from Studio, rather than the recorder telling the person it failed.
 
 **Database migrations run automatically** when the API starts, before it accepts traffic. You don't
 run anything by hand.
@@ -104,11 +121,11 @@ load with no action from anyone.
 **You only need a store release when the recorder itself changes**: new recording features, changed
 permissions, or a new baked-in address for Studio.
 
-**But the order can matter, and it does right now.** The server can start requiring something only a
-newer recorder sends — that's exactly what the recording-upload rewrite sitting on the `dev` branch
-does. When that's the case, **the new recorder has to be live on the store *before* the server change
-reaches production**, otherwise everyone's installed recorder stops being able to upload. So a store
-release isn't always the last step; sometimes it's the blocker.
+**But the order can matter, and it did for the recording-upload rewrite.** The server can start
+requiring something only a newer recorder sends, and that's exactly what that change does. When that's
+the case, **the new recorder has to be live on the store *before* the server change reaches
+production**, otherwise everyone's installed recorder stops being able to upload. So a store release
+isn't always the last step; sometimes it's the blocker.
 
 That last one is a real trap. **The extension has the Studio address compiled into it.** If that
 domain ever changes, every installed copy breaks and you must submit a new version. It happened once
@@ -121,10 +138,11 @@ Two standing rules:
 - **Log every store release.** `extension-releases.md` is a living record of what shipped, which
   permissions changed, and which addresses were baked in. Update it every time.
 
-Currently live: **v0.6.0**, since July 2026. ⚠️ It **cannot upload to a server built from the `dev`
-branch** — the recording-upload rewrite requires an identity v0.6.0 doesn't send. No replacement has
-been version-bumped, packaged or submitted yet, and one must go live before that server change reaches
-production.
+**v0.7.0** is the recording-upload rewrite: uploading while you record, narration going the same way,
+and abandoned recordings cleaning themselves up. It's packaged and submitted with this change. Until
+it clears review and is live, **v0.6.0 — the version most people have installed — cannot upload**,
+because it doesn't send the identity the newer server requires. That's the ordering trap above, live
+and real.
 
 ---
 

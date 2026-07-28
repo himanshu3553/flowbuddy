@@ -55,9 +55,16 @@ services:
     dockerfilePath: ./packages/api/Dockerfile
     dockerContext: .
     dockerCommand: pnpm --filter @flowbuddy/api start:all
+    # Without this Render only checks that the port is open — which a wedged or CPU-pinned process
+    # passes trivially, so it would never be restarted. /healthz already exists (server.ts).
+    healthCheckPath: /healthz
     envVars:
       - fromGroup: flowbuddy-r2
       - { key: PORT, value: 8787 }
+      # This instance runs the api AND the synthesis worker in one process on 512 MB. Cap the heap
+      # below the container limit so V8 collects garbage instead of the container being OOM-killed
+      # mid-request — an OOM here takes the public copilot down with the worker.
+      - { key: NODE_OPTIONS, value: --max-old-space-size=400 }
       # Structured JSON logs at info+ — tunable live in the dashboard, no redeploy needed.
       - { key: LOG_LEVEL, value: info }
       - { key: DATABASE_URL, fromDatabase: { name: flowbuddy-db, property: connectionString } }
@@ -80,6 +87,7 @@ services:
     plan: starter
     dockerfilePath: ./packages/web/Dockerfile
     dockerContext: .
+    healthCheckPath: /login # a public route — Studio has no dedicated health endpoint
     envVars:
       - fromGroup: flowbuddy-r2
       - { key: LOG_LEVEL, value: info }

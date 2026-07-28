@@ -58,11 +58,14 @@ sequenceDiagram
         R->>O: PUT each artifact DIRECTLY → workspaces/<ws>/sessions/<id>/...
     end
     U->>R: stop
-    R->>A: POST /v1/sessions (Bearer token, X-FlowBuddy-Upload-Id, manifest + audio + leftovers)
-    A->>O: stream only the leftovers
+    R->>A: POST /v1/uploads/sign (audio.webm — narration exists only now)
+    R->>O: PUT audio.webm DIRECTLY
+    R->>A: POST /v1/sessions (Bearer token, X-FlowBuddy-Upload-Id, manifest — leftovers only if storage was unreachable)
+    A->>O: stream the leftovers, if any
     A->>P: update the SAME row → status = uploaded, manifest stored
-    A->>Q: enqueue { sessionId, workspaceId }
+    A->>Q: enqueue { sessionId, workspaceId }   (bounded 5 s — log and continue)
     A-->>R: { sessionId, status: uploaded }   (returns immediately)
+    A-)P: sweep recording-status rows idle over 12 h, and their objects — fire-and-forget
     Q->>W: deliver job
     W->>P: status = processing
     W->>O: read audio + (screenshots referenced later)
@@ -159,15 +162,19 @@ Studio origin and only relays same-origin messages, so a random site can't injec
 
 ### Seam A — Recorder → Ingestion API (HTTP, synchronous)
 
-- **Transport:** two hops. (1) `POST /v1/uploads/sign` (JSON) during recording, returning 900 s
+- **Transport:** three hops. (1) `POST /v1/uploads/sign` (JSON) during recording, returning 900 s
   presigned PUT URLs the recorder uses against object storage directly — see Seam B.
-  (2) `POST /v1/sessions`, `multipart/form-data`, at Stop.
+  (2) `POST /v1/sessions`, `multipart/form-data`, at Stop. (3) `DELETE /v1/uploads/:uploadId` when a
+  capture is abandoned instead of stopped — it removes the row **and** the artifacts already uploaded,
+  which only became necessary once bytes started landing before Stop.
 - **Payload (2):** one `manifest` JSON field (the [capture contract](#6-the-cross-module-contracts))
-  plus **only the artifacts storage never confirmed** — normally just `audio.webm`. **Each file's
+  plus **only the artifacts storage never confirmed** — and since narration takes the signed-URL path
+  too, on a healthy connection that is **nothing at all: the manifest and no files**. **Each file's
   relative path still rides on the multipart *field name*** — because multipart strips directory
   components from filenames, the path (`shots/<id>.jpg`) is preserved as the field name — and it is
   now **validated against an artifact allowlist** (`shots/*.jpg|jpeg|png`, `dom/*.html`,
-  `audio.webm`) rather than merely reconstructed.
+  `audio.webm`) rather than merely reconstructed. The multipart path is kept as the **fallback**: a
+  browser that cannot reach object storage directly still delivers a complete recording through it.
 - **Gate:** recorder token (Bearer) **plus a required `X-FlowBuddy-Upload-Id` header** — the
   recorder's own id for the recording, stable across retries. Both routes resolve it to the same row
   via `@@unique([workspaceId, uploadId])`, so a retry can never create a second recording (it
@@ -175,6 +182,11 @@ Studio origin and only relays same-origin messages, so a random site can't injec
 - **Result:** `{ sessionId, status: "uploaded" }` and a queued job — or `{ alreadyFinalized: true }`
   if the recording was already built, in which case the body is drained and nothing is overwritten.
   Nothing is processed yet.
+- **Cleanup (3):** only a recording still at `status = recording` can be discarded; a finalized one
+  answers `409` ("delete it in Studio") and an unknown id is a clean `200` no-op. Anything the
+  recorder never gets to discard — browser closed, machine gone — is removed by a **server-side sweep
+  of `recording` rows idle more than 12 hours**, which rides fire-and-forget on the next finalize in
+  that workspace.
 
 ### Seam B — Recorder / Ingestion API → Object storage (S3 API, synchronous)
 
@@ -184,8 +196,10 @@ Studio origin and only relays same-origin messages, so a random site can't injec
   [`storage.ts`](../../packages/api/src/storage.ts), MinIO in dev / R2 in prod. Presigning uses a
   **separate S3 client** with `requestChecksumCalculation: 'WHEN_REQUIRED'` — the SDK default bakes an
   empty-body CRC32 into the signed URL, which MinIO ignores and R2 enforces (passes local, fails
-  prod). ⚠️ R2 + CORS on a browser-issued presigned PUT is **still unproven** — all testing so far is
-  against MinIO.
+  prod). R2 + CORS on a browser-issued presigned PUT is **proven on dev/Render as of 2026-07-28** —
+  local MinIO is the permissive side and never proved anything on its own.
+- **Deletes:** the same prefix is removed by three callers — Studio when a founder deletes a
+  recording, and the API on either cleanup path for a recording that was never finished.
 - **Key layout:** `workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>`. The relative path
   is **validated against the artifact allowlist** before it becomes a key, in both routes — a signed
   URL is a write capability, so the key it authorizes is checked, not cleaned.
@@ -200,7 +214,16 @@ Studio origin and only relays same-origin messages, so a random site can't injec
   Postgres and the artifacts from object storage. The job carries no payload of its own.
 - **Why it matters:** this is the only async boundary in the system. It's what lets the upload return
   instantly while transcription/segmentation/distillation (seconds to minutes, several LLM calls)
-  happen out of band. The worker runs at `concurrency: 2`.
+  happen out of band. The worker runs at **`concurrency: 1`** — in production it shares one 512 MB
+  instance with the API that serves the public copilot, and a synthesis job holds whole screenshots in
+  memory for the vision calls, so two at once is the realistic OOM path and an OOM would take the
+  copilot down too. Throughput isn't the constraint: recordings arrive one at a time, from a human
+  pressing Stop.
+- **The producer is deliberately fragile-tolerant.** The API enqueues on its own fail-fast Redis
+  connection (the worker's must stay bare so BullMQ can own `maxRetriesPerRequest: null`), and the
+  `add()` is a bounded 5 s race that logs and continues. By that point the recording is already in
+  Postgres and object storage, so a sick Redis must not turn a delivered recording into a failed
+  upload; the recovery path is Studio's "Stalled → Re-process".
 
 ### Seam D — Worker → Postgres (Prisma, the handoff to everything downstream)
 

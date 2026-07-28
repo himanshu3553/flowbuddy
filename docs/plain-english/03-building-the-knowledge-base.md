@@ -46,8 +46,16 @@ resume.
 
 **It uploads as you go, not all at once at the end.** Each screenshot and page snapshot is sent off to
 storage moments after it's captured, using a one-off permission slip that lets your browser write that
-one file and nothing else. So when you press Stop there's almost nothing left to send — mostly just
-your audio and the index of what happened. A long recording no longer ends in a multi-minute wait.
+one file and nothing else. Your narration goes the same way — it can only be sent once you stop
+talking, so it's handed over the moment you press Stop, but it goes straight to storage too rather
+than through the service.
+
+So when you press Stop, the only thing left to send is **the index of what happened** — a small file.
+A long recording no longer ends in a multi-minute wait.
+
+You'll see that in the recorder itself: there's no percentage bar any more, because there are no
+longer minutes of bytes to narrate. It says "finishing up", and if that somehow takes more than a few
+seconds it says so plainly and shows you how long it's been waiting.
 
 A side effect you'll notice: **the recording appears in Studio while you're still recording**, marked
 "Recording". That's expected, not a half-finished upload.
@@ -55,15 +63,26 @@ A side effect you'll notice: **the recording appears in Studio while you're stil
 **If an upload fails it retries, and a retry can never create a duplicate.** Every recording carries
 its own identity from the moment you press record, so re-sending it lands on the same recording rather
 than making a second copy. (It used to: a slow upload would time out on your side while the server
-kept it anyway, and the retry you were told to press created a twin.)
+kept it anyway, and the retry you were told to press created a twin.) The recorder now says this out
+loud when something times out — retrying is safe.
 
 If any of that isn't available — the storage permission slip can't be obtained, or you're recording
 against an older server — it quietly falls back to the old behaviour and sends everything in one
-bundle when you stop.
+bundle when you stop. That fallback is deliberate and stays: it's what guarantees a complete recording
+from a browser that can't reach storage directly.
 
-Two rough edges that are known and not yet fixed: a recording you start and never stop leaves a
-leftover entry and some orphaned files that nothing cleans up, and there's no size limit on the
-as-you-go uploads.
+**Recordings you start and abandon get cleared away by themselves.** Because files now go up during
+the recording, walking away halfway through would otherwise leave a half-finished entry and its files
+behind forever. Three things prevent that: choosing "start fresh" in the recorder throws the abandoned
+one away immediately, starting a *new* recording while an unsent one is still sitting there does the
+same, and anything that slips through both is swept away by the service after half a day of silence.
+That threshold is generous on purpose — a paused recording also looks silent, and deleting something
+you were still making would be far worse than keeping a few stray files for a day. Nothing you
+actually finished can be removed this way; a finished recording is yours to keep or delete in Studio.
+
+One rough edge remains, and it's a deliberate decision rather than an oversight: **there's no size
+limit on those as-you-go uploads** — see [where we are](09-where-we-are.md) for why that was left
+alone for now.
 
 **Two other ways to record are planned, not built:** just narrating with no clicking (for explaining
 concepts), and uploading a video.

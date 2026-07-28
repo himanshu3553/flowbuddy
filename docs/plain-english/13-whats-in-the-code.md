@@ -51,7 +51,7 @@ Everything is under `packages/`.
 |---|---|
 | **`extension`** | The Chrome recorder. Watches clicks, captures the page and screenshots, masks sensitive data **before anything is uploaded**, and survives navigations and multiple tabs. |
 | **`synthesis`** | The brain. Transcribes audio, cleans raw clicks, splits recordings into workflows, writes readable steps, finds relevant knowledge, and writes answers. **If answer quality is the question, it's in here.** |
-| **`api`** | Hands out one-file permission slips so the recorder uploads straight to storage (**it deliberately never handles those bytes** — that's why long recordings stopped stalling), takes the index and audio when a recording stops, answers the assistant's questions, and *also* runs the background worker that processes recordings. |
+| **`api`** | Hands out one-file permission slips so the recorder uploads straight to storage (**it deliberately never handles those bytes** — that's why long recordings stopped stalling), takes the index of what happened when a recording stops, clears away recordings that were started and never finished, answers the assistant's questions, and *also* runs the background worker that processes recordings. |
 | **`web`** | Studio — the web app you log into. |
 | **`widget`** | The assistant your customers see. One script, no dependencies, isolated from the host page's styling so it can't be broken by someone's CSS. |
 

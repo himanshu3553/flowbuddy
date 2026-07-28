@@ -37,7 +37,11 @@ caring how it was captured.** A step item is just retrievable knowledge.
 | [`synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | LLM per-workflow → clean steps ("A"). |
 | [`synthesis/redact.ts`](../../packages/synthesis/src/redact.ts) | Server-side PII backstop (Cut 1). |
 
-Runs as `pnpm --filter @flowbuddy/api worker`, `concurrency: 2`.
+Runs as `pnpm --filter @flowbuddy/api worker`, **`concurrency: 1`** — in production it is folded into
+the same process and the same 512 MB instance as the API that serves the public copilot, and a job
+holds whole screenshots in memory for the vision calls, so two at once is the realistic
+out-of-memory path and an out-of-memory kill would take the copilot down with it. Throughput isn't the
+constraint: recordings arrive one at a time, from a human pressing Stop.
 
 ---
 

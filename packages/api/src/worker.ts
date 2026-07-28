@@ -131,7 +131,11 @@ const worker = new Worker(
       throw e;
     }
   },
-  { connection, concurrency: 2 },
+  // Concurrency 1, not 2: in production this worker shares one 512 MB instance with the api that
+  // serves the public copilot, and a synthesis job holds whole screenshots in memory for the vision
+  // calls. Two at once is the realistic OOM path, and an OOM kills the copilot too. Throughput is
+  // not the constraint here — recordings arrive one at a time, from a human pressing Stop.
+  { connection, concurrency: 1 },
 );
 
 worker.on('ready', () => log.info({ queue: SYNTHESIS_QUEUE }, 'listening on queue'));

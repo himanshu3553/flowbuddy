@@ -127,6 +127,13 @@ throughout and the worker skips any job whose row has no manifest yet. `{recordi
 are the statuses a recording can still be uploaded into — `error` deliberately included, so a failed
 build stays retryable.
 
+**`recording` is also the only status a row can be *removed* from behind the founder's back.** Because
+the row now exists before anyone commits to the recording, an abandoned capture has to be cleanable:
+`DELETE /v1/uploads/:uploadId` deletes it (plus its objects) when the recorder throws a capture away,
+and a server-side sweep deletes any `recording` row idle more than **12 hours**. Every later status is
+the founder's — a discard against one answers `409` and points at Studio. See
+[ingestion-api.md](ingestion-api.md) §4.6.
+
 (`done` is a tolerated legacy value for pre-KB-layer rows.) Defined as `RecSessionStatus` in
 [`@flowbuddy/shared/jobs.ts`](../../packages/shared/src/jobs.ts). `ready` means *KB built + segmented,
 workflows available to approve* — there are no articles in the copilot-first product.
@@ -146,11 +153,16 @@ workspaces/<workspaceId>/sessions/<sessionId>/<relative-path>
                                               └── audio.webm
 ```
 
-- Written **mostly by the [recorder itself](recorder-capture.md)** during capture, over single-object
-  900 s presigned PUT URLs the API mints (`signPutUrl`); the API writes only the leftovers at finalize
-  (`putObjectStream` + `sessionKey`). Either way the relative path is **validated against an
-  allowlist** — `shots/<name>.jpg|.jpeg|.png`, `dom/<name>.html`, `audio.webm` — before it becomes a
-  key; `sessionKey`'s `..` strip is a backstop, not the control (it is defeatable via `....//`).
+- Written **by the [recorder itself](recorder-capture.md)** — screenshots and DOM snapshots during the
+  capture, `audio.webm` at Stop — over single-object 900 s presigned PUT URLs the API mints
+  (`signPutUrl`). The API writes only what storage never confirmed, at finalize (`putObjectStream` +
+  `sessionKey`), and on a healthy connection that is nothing. Either way the relative path is
+  **validated against an allowlist** — `shots/<name>.jpg|.jpeg|.png`, `dom/<name>.html`, `audio.webm`
+  — before it becomes a key; `sessionKey`'s `..` strip is a backstop, not the control (it is
+  defeatable via `....//`).
+- **Deleted** by `deleteSessionPrefix(ws, id)` — the whole prefix at once — from three places: Studio
+  when the founder deletes a recording, and the API's two cleanup paths for recordings that were never
+  finished (§3). Nothing else ever expires: a `ready` recording's artifacts live until it is deleted.
 - Read by the [worker](knowledge-base.md) through an **`ArtifactReader`** —
   `sessionArtifactReader(ws, id)` returns a `(relPath) => Promise<Buffer|null>` bound to one session;
   a miss returns `null` (the pipeline tolerates missing artifacts).
@@ -168,8 +180,13 @@ A single BullMQ queue, name **`synthesis`** (`SYNTHESIS_QUEUE` in
 [`@flowbuddy/shared/jobs.ts`](../../packages/shared/src/jobs.ts)). Job body:
 `{ sessionId, workspaceId }` — pointers only ([connections.md](connections.md) Seam C). The
 [API](ingestion-api.md) is the producer; the [worker](knowledge-base.md) is the consumer
-(`concurrency: 2`). The connection is built from `REDIS_URL` (TLS auto-enabled for `rediss:`). Redis
-holds **no durable app state** — only in-flight/queued jobs.
+(**`concurrency: 1`** — both run in one process on one small instance, and a synthesis job holds whole
+screenshots in memory for the vision calls). The connection is built from `REDIS_URL` (TLS
+auto-enabled for `rediss:`) — as **two** objects, because the same process is producer *and* consumer
+and they need opposite settings: the consumer's must stay bare so BullMQ can own
+`maxRetriesPerRequest: null`, while the producer's adds connect timeouts and capped retries so a sick
+Redis fails fast instead of buffering forever. Redis holds **no durable app state** — only
+in-flight/queued jobs, and losing them costs a re-process, not a recording.
 
 ---
 

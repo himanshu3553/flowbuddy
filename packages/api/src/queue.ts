@@ -8,6 +8,12 @@ const log = createLogger('synthesis-queue');
 // Pass connection OPTIONS (not an ioredis instance) so BullMQ owns the connection
 // and applies the settings it needs (e.g. maxRetriesPerRequest: null for workers).
 const url = new URL(config.redisUrl);
+
+/**
+ * The WORKER's connection. Deliberately left bare: BullMQ needs to own the settings for a blocking
+ * consumer (notably `maxRetriesPerRequest: null`), so producer-style fail-fast options must NOT be
+ * added here — a worker that gives up on a request instead of blocking stops consuming jobs.
+ */
 export const connection: ConnectionOptions = {
   host: url.hostname,
   port: Number(url.port || '6379'),
@@ -16,8 +22,23 @@ export const connection: ConnectionOptions = {
   ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
 };
 
+/**
+ * The PRODUCER's connection — a separate object precisely because the two have opposite needs.
+ * Enqueueing happens at the very END of ingestion, after the recording row already exists, so an
+ * unreachable Redis buffering commands forever would look exactly like the upload hanging, for a
+ * recording that in fact arrived safely. Studio's producer has had these settings since it was
+ * written (`web/lib/queue.ts`); the api's never did.
+ */
+const producerConnection: ConnectionOptions = {
+  ...connection,
+  connectTimeout: 4000,
+  maxRetriesPerRequest: 2,
+  // Back off on a down/slow Redis (cap 10s) instead of hammering it — the connection self-heals.
+  retryStrategy: (times: number) => Math.min(times * 200, 10_000),
+};
+
 export const synthesisQueue = new Queue(SYNTHESIS_QUEUE, {
-  connection,
+  connection: producerConnection,
   defaultJobOptions: {
     // Transient failures (OpenAI 429/timeout, R2 blip) retry instead of permanently landing the
     // recording in `error`; the worker is idempotent (delete+recreate items, approvals survive).

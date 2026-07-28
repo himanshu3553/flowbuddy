@@ -295,30 +295,36 @@ function enterUploading(): void {
   uploadPoller = setInterval(pollUpload, 500) as unknown as number;
 }
 
-/** Render one honest pipeline stage: what is happening RIGHT NOW, not a generic spinner. */
-function setUploadUI(pct: number, ph?: PhaseState): void {
+/**
+ * Render one honest pipeline stage: what is happening RIGHT NOW, not a generic spinner.
+ *
+ * There is no byte-progress bar any more, and that is the point: screenshots and page snapshots
+ * upload while you record, so by the time Stop is pressed there is almost nothing left to send.
+ * The old determinate bar (capped at 90 %) and its "Finishing…" tail existed to narrate a
+ * multi-minute request that no longer happens — and "Finishing…" with no elapsed time is exactly
+ * what once read as "stuck forever". If this stage does drag, the honest explanation is that the
+ * direct uploads didn't get through and the whole recording is going in one request.
+ */
+function setUploadUI(_pct: number, ph?: PhaseState): void {
   const fill = $('upFill');
   const track = fill.parentElement as HTMLElement;
-  const setBar = (indeterminate: boolean, label: string, pctText: string, width: string): void => {
-    track.classList.toggle('indeterminate', indeterminate);
+  const setBar = (label: string, pctText: string): void => {
+    track.classList.add('indeterminate');
     $('upLabel').textContent = label;
     $('upPct').textContent = pctText;
-    fill.style.width = width;
+    fill.style.width = '';
   };
   if (ph?.name === 'saving') {
     // Between Stop and upload: the narration track is being stopped/encoded/flushed.
-    setBar(true, 'Saving narration…', '', '');
-  } else if (pct === -2) {
-    // Finishing — all bytes sent; the server is receiving + processing before it responds.
-    setBar(true, 'Finishing…', '', '');
-  } else if (pct >= 1) {
-    setBar(false, 'Uploading securely…', `${pct}%`, `${pct}%`);
-  } else {
-    // 0 / -1: no bytes moving yet (or an HTTP/1.1 fallback with no byte progress). If this stage
-    // has been sitting a while, the honest explanation is a cold-starting server, not a hang.
-    const stalled = ph?.at != null && Date.now() - ph.at > 8000;
-    setBar(true, stalled ? 'Waking the FlowBuddy server — this can take a minute…' : 'Uploading securely…', pct === -1 ? '…' : '', '');
+    setBar('Saving narration…', '');
+    return;
   }
+  const elapsed = ph?.at != null ? Date.now() - ph.at : 0;
+  if (elapsed > 8000) {
+    setBar('Sending the rest of your recording…', fmt(elapsed));
+    return;
+  }
+  setBar('Finishing up…', '');
 }
 
 async function pollUpload(): Promise<void> {
@@ -345,10 +351,12 @@ async function pollUpload(): Promise<void> {
 
 async function enterRetry(lastUpload: { error?: string }): Promise<void> {
   stopLoops();
-  const { uploadProgress } = await chrome.storage.local.get('uploadProgress');
-  const pct = typeof uploadProgress === 'number' ? uploadProgress : 0;
-  $('retryPct').textContent = `${pct}%`;
-  $('retryFill').style.width = `${pct}%`;
+  // No percentage to show: most of the recording is already in storage, and what's left is sent in
+  // one request. Retrying is safe — the recording carries a stable id, so it can never be
+  // duplicated by a second attempt, which is what a retry used to risk.
+  $('retryPct').textContent = '';
+  $('retryFill').style.width = '';
+  ($('retryFill').parentElement as HTMLElement)?.classList.add('indeterminate');
   $('retryDetail').textContent = lastUpload?.error ? `Last error: ${lastUpload.error}` : '';
   setState('retry');
 }
