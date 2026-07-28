@@ -6,6 +6,10 @@
 
 *Grouped by role: orientation → build specs (shipped · forward) → operations → reference → go-to-market → archive.*
 
+> **⚠️ The same system is described at THREE altitudes — check all three when behaviour changes.**
+> **Canonical** (`docs/*.md`, ~76k words) = *why and what* — decisions, scope, as-built · **[`internals/`](docs/internals/README.md)** (~30k) = *how it runs* — routes, schemas, sequence diagrams; follows the code, so it goes stale first · **[`plain-english/`](docs/plain-english/README.md)** (~16k) = *the same thing with no jargon*.
+> A change users can SEE (a screen, a wait, an outcome) usually touches all three; a pure internal refactor touches only `internals/`. Ask which altitudes a change is visible at rather than sweeping all three by default — and never leave `plain-english/` behind just because it isn't where the code lives.
+
 **Orientation — start here**
 
 | Doc | Role |
@@ -13,6 +17,7 @@
 | [`roadmap.md`](docs/roadmap.md) | **The map** — versions → phases → modules + status + legacy-ID map. Start here. |
 | [`product.md`](docs/product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model). |
 | [`architecture.md`](docs/architecture.md) | Technical model — the 3 modules (Capture → KB → Article creation), KB schema, decisions. |
+| [`plain-english/`](docs/plain-english/README.md) | **The whole system with no jargon** — 13 numbered chapters (`01-what-flowbuddy-is` → `13-whats-in-the-code`): what it is, how it fits together, the copilot + its three modes, the portal and third-party agents, where we are, and running/deploying/testing it. The gentlest way in, and the layer to reach for when explaining FlowBuddy to someone who doesn't work on it. **No route names, column names or header names belong here — ordinary words only.** |
 
 **Build specs — shipped (Version 1, live)**
 
