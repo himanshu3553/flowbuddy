@@ -78,7 +78,7 @@ That knowledge base powers, in priority order:
 1. **An embedded in-app copilot (primary)** — answers from **approved-KB** in context, cites the workflow it used, declines honestly on gaps.
 2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`phase-2-sense.md`](phase-2-sense.md))
 3. **Self-validation (moat, later)** — periodically re-checks that documented steps still work and flags drift.
-4. **Autopilot (agentic execution — opened ahead of self-validation; the zero-acting P4-M0 guided walkthrough is ✅ built)** — the copilot offers to **execute the approved workflow in the end-user's live session** on consent: grounded actions (only recorded + approved workflows, never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty; the acting modules consume self-validation's certification when it lands. ([`phase-4-autopilot.md`](phase-4-autopilot.md); the goal-based agent on top — Tell → Guide → Do — is drafted in [`phase-5-converse.md`](phase-5-converse.md).)
+4. **Autopilot (agentic execution — opened ahead of self-validation; the zero-acting P4-M0 guided walkthrough is ✅ built)** — the copilot offers to **execute the approved workflow in the end-user's live session** on consent: grounded actions (only recorded + approved workflows, never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty; the acting modules consume self-validation's certification when it lands. ([`agent.md`](agent.md); the goal-based agent on top — Tell → Guide → Do — is drafted in [`agent.md`](agent.md).)
 5. **A published help portal + articles (Version 2 by-product)** — human-readable, searchable articles rendered from the same approved workflows. A *decoupled* publish target, moved to Version 2. ([`v2-portal.md`](v2-portal.md))
 
 > The technical model (capture → KB → consumers, the data model, decisions) lives in [`architecture.md`](architecture.md). The phase/module plan and status live in [`roadmap.md`](roadmap.md).
@@ -125,21 +125,8 @@ That knowledge base powers, in priority order:
 
 ## 7. The four surfaces
 
-FlowBuddy ships as **four distinct surfaces** over one shared structured knowledge base. The **copilot is the headline**; the portal is a decoupled **Version 2** by-product.
-
-| Surface | Who | Purpose |
-|---|---|---|
-| **FlowBuddy Recorder** (Chrome extension) | the builder | effortless multi-layer capture of narrated product workflows |
-| **Studio** (web app) | the builder | review the KB, **approve for the copilot**, configure the copilot + see analytics; *(V2 by-product: approve/publish workflows to the portal)* |
-| **In-App Copilot** (embeddable widget) ⭐ | the builder's customers | grounded, in-context answers inside the builder's product |
-| **Help Portal** (public web) — *Version 2 by-product* | the builder's customers | browse + search published help articles |
-
-- **Recorder** — one-click "Connect with FlowBuddy"; start/stop; **mark new workflow**; **event/DOM-primary** capture (event + DOM + hi-res screenshot + post-action snapshot for `expected_outcome` + continuous audio); **PII masked before upload**; **capture reliability** (survives navigations; artifacts upload continuously *while* recording so Stop is quick; retry on upload failure **can't create a duplicate recording** — each recording carries a stable id the server keys on; narration preserved). *(V1 capture is workflow-only; narration-only + video are Version 2.)*
-- **Studio** — the **approval gate**, **copilot settings** (public key, embed snippet, origin allowlist, rotate, **live-served appearance**), **copilot analytics** (questions, answered %, 👍/👎, coverage gaps), and the KB browser. *(Currently copilot-only; the V2 portal-authoring surface — approve-for-portal + a presentation overlay over the same workflows — is built in Version 2.)*
-- **Copilot widget ⭐** — one `<script>` renders a shadow-DOM launcher + chat panel; grounded in **approved-KB**; **cites its source**; **honest declines**; **context-aware** (biases to the host route); multi-turn; 👍/👎 feedback; embed security (public key + origin allowlist + rate limit). **Since shipped on top:** the "show me" element highlight (P2-M3), positional Sense answers + Reason diagnosis (Phase 2), and the P4-M0 guided walkthrough. *Future:* acting Autopilot (P4-M1…M3) and human handoff.
-- **Help Portal (Version 2)** — published structured articles (steps + screenshots + element highlights), hybrid search, theming/custom domains/SEO/gating/"was this helpful?". **Decoupled** from the copilot.
-
-> Full surface detail: Phase 1 surfaces in [`phase-1-copilot.md`](phase-1-copilot.md); the V2 portal/authoring in [`v2-portal.md`](v2-portal.md).
+Recorder · KB build · copilot · Studio. What each one is and the decisions behind them:
+[`phase-1-copilot.md`](phase-1-copilot.md) §4.
 
 ---
 

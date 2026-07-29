@@ -19,7 +19,7 @@ Seven runtime pieces and one shared substrate:
 | 5 | **Widget** | `<script>` embedded in the customer's app | [widget.md](widget.md) |
 | 6 | **Studio** | Next.js web app, the operator console | [studio.md](studio.md) |
 | 7 | **Synthesis engine** | A library (`@flowbuddy/synthesis`), not a process — called by the worker (KB) and the API (copilot) | covered inside (3) and (4) |
-| — | **Substrate** | Postgres + object storage + Redis | [data-model-and-storage.md](data-model-and-storage.md) |
+| — | **Substrate** | Postgres + object storage + Redis | [data.md](data.md) |
 
 A subtle but important point: **#2, #3, and #4 are all the `api` package.** The HTTP service
 ([`server.ts`](../../packages/api/src/server.ts)) and the worker
@@ -218,7 +218,10 @@ Studio origin and only relays same-origin messages, so a random site can't injec
   instance with the API that serves the public copilot, and a synthesis job holds whole screenshots in
   memory for the vision calls, so two at once is the realistic OOM path and an OOM would take the
   copilot down too. Throughput isn't the constraint: recordings arrive one at a time, from a human
-  pressing Stop.
+  pressing Stop. Paired with that: the api service runs under
+  **`NODE_OPTIONS=--max-old-space-size=400`**, capping the V8 heap *below* the container limit so the
+  process collects garbage instead of being OOM-killed mid-request. The two guards only work together
+  — raising concurrency without raising the instance re-opens the same failure.
 - **The producer is deliberately fragile-tolerant.** The API enqueues on its own fail-fast Redis
   connection (the worker's must stay bare so BullMQ can own `maxRetriesPerRequest: null`), and the
   `add()` is a bounded 5 s race that logs and continues. By that point the recording is already in
@@ -347,10 +350,9 @@ forged credential resolving to the wrong workspace, which none of the three reso
   service, which is for the recorder and the widget only.
 - **The worker never talks to the widget or Studio.** It's a pure queue consumer; its only output is
   Postgres rows. Surfaces discover its work by reading `status`.
-- **The old article engine was removed (2026-07-07).** The raw-event engine (`buildKB`,
-  `segmentItems`, `generateArticleForSegment`) and the `Article`/`Step` tables are gone — superseded
-  by **workflows-as-articles**: the Version-2 portal track renders approved distilled workflows
-  instead ([`../v2-portal.md`](../v2-portal.md)). The worker's distilled `buildWorkflowKB` is the only KB path.
+- **There is exactly one KB path** — the worker's distilled `buildWorkflowKB`. There is no separate
+  article engine and no `Article` table, by design: the Version-2 portal *renders* approved distilled
+  workflows rather than synthesizing a second artifact ([`../v2-portal.md`](../v2-portal.md)).
 
 ---
 
@@ -361,4 +363,4 @@ forged credential resolving to the wrong workspace, which none of the three reso
 - The pipeline that makes knowledge: [knowledge-base.md](knowledge-base.md)
 - The gate + the answer: [studio.md](studio.md) (approval) → [copilot.md](copilot.md) (answer) →
   [widget.md](widget.md) (surface)
-- The tables and keys behind all of it: [data-model-and-storage.md](data-model-and-storage.md)
+- The tables and keys behind all of it: [data.md](data.md)

@@ -9,7 +9,7 @@ import { runAnswerLoop, shapeAnswer, type AnswerLoopResult } from './engine';
  *
  * This is **AI Chatbot (mode 1)**: the shared answer loop with no tools bound and a hard stop after
  * one model call. Not a separate pipeline — the same engine the agent uses, configured to do the
- * one thing (docs/unified-agent.md · engine.ts).
+ * one thing (docs/agent.md · engine.ts).
  */
 
 /** A KB item the copilot may ground on. `id` is the KnowledgeItem id (used for citations). */
@@ -68,7 +68,7 @@ export interface AnswerPosition {
 
 /**
  * What the assistant decided to do ON the page alongside its words — set only in Copilot mode,
- * where judgment replaces the fixed rules mode 1 uses (docs/unified-agent.md D8).
+ * where judgment replaces the fixed rules mode 1 uses (docs/agent.md D8).
  *
  * These are REQUESTS, not permissions. The founder's switches still decide what is possible; these
  * only say whether the assistant thought it would help *this time*. A request for something the
@@ -208,7 +208,7 @@ export async function answerFromKB(input: {
   // one. With zero tools the loop makes exactly one model call and breaks, so this is the same
   // single request the fast path always made — the difference is that the machinery is now shared
   // with the agent, which is what makes collapsing the modes later a config change, not a rewrite.
-  // (docs/unified-agent.md · engine.ts.)
+  // (docs/agent.md · engine.ts.)
   // (Only `content` is used here: with nothing bound there is no tool activity to report, and
   // mode 1's behaviour and wire shape are unchanged by the loop returning more than it used to.)
   const loop = await runAnswerLoop({

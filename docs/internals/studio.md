@@ -12,28 +12,15 @@
 Everything the operator does between "I recorded my product" and "my customers can ask the copilot"
 happens in Studio: mint the recorder token, watch a recording turn into clean workflows, **decide
 which workflows the copilot may use**, grab the embed snippet, and watch answer-quality + coverage
-gaps. Studio is **copilot-first** — the article editor/portal UI was removed (engine removed 2026-07-07), so the
+gaps. Studio is **copilot-first** — there is no article editor or portal UI in it, so the
 shipped IA is about capture → approve → embed → measure.
 
 ---
 
 ## 2. Where it lives
 
-Next.js App Router. Server Components fetch data directly from Postgres; **mutations are Next.js server
-actions** (`'use server'`) — Studio never calls the [API service](ingestion-api.md).
-
-| Area | Files |
-|---|---|
-| **Auth** | [`auth.ts`](../../packages/web/auth.ts) (NextAuth, credentials), [`lib/session.ts`](../../packages/web/lib/session.ts) (`getCurrentWorkspace`), [`lib/workspace.ts`](../../packages/web/lib/workspace.ts) (signup → workspace), [`lib/password.ts`](../../packages/web/lib/password.ts) |
-| **Connect the recorder** | [`app/connect/`](../../packages/web/app/connect/), [`lib/connect-actions.ts`](../../packages/web/lib/connect-actions.ts), [`lib/tokens.ts`](../../packages/web/lib/tokens.ts) |
-| **Recordings / KB** | [`app/dashboard/recordings/`](../../packages/web/app/dashboard/recordings/), [`app/dashboard/kb/`](../../packages/web/app/dashboard/kb/), [`lib/candidates.ts`](../../packages/web/lib/candidates.ts) |
-| **Approval gate** | [`app/dashboard/copilot-approval-panel.tsx`](../../packages/web/app/dashboard/copilot-approval-panel.tsx), [`components/dashboard/kb-workflow-list.tsx`](../../packages/web/components/dashboard/kb-workflow-list.tsx), [`lib/copilot-actions.ts`](../../packages/web/lib/copilot-actions.ts), [`lib/copilot-approvals.ts`](../../packages/web/lib/copilot-approvals.ts) |
-| **Copilot config / embed** | [`app/dashboard/copilot/`](../../packages/web/app/dashboard/copilot/) (incl. the `preview-frame` host-page route), [`lib/copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts), `lib/copilot-settings-actions.ts`, [`components/dashboard/widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) (real-widget iframe), [`app/widget/flowbuddy-copilot.js`](../../packages/web/app/widget/flowbuddy-copilot.js/route.ts) (local bundle fallback) |
-| **Analytics** | [`app/dashboard/analytics/`](../../packages/web/app/dashboard/analytics/), [`lib/copilot-metrics.ts`](../../packages/web/lib/copilot-metrics.ts), [`components/dashboard/home-steady-state.tsx`](../../packages/web/components/dashboard/home-steady-state.tsx) |
-| **Shell / nav** | [`app/dashboard/layout.tsx`](../../packages/web/app/dashboard/layout.tsx), [`components/dashboard/`](../../packages/web/components/dashboard/) (sidebar, page-header, …) |
-
-Runs as `pnpm --filter @flowbuddy/web dev` on **`:3000`**. Built on Tailwind + shadcn/ui under the indigo
-design system ([`../design_system/`](../design_system/README.md)).
+Paths are in `CLAUDE.md` and the source tree. This doc covers what those files *guarantee*, not where
+they sit.
 
 ---
 
@@ -51,7 +38,7 @@ empty / loading / error states.
 | **Analytics** | Answered/declined trend, helpful %, coverage gaps, step friction, top workflows — plus **Questions**, the full searchable log at `analytics/questions`. | `getCopilotMetrics` + `analytics.ts` |
 | **Settings** | Account / workspace / token management. | `auth`, `tokens` |
 
-**Copilot → Settings (2026-07-27)** opens with **How your assistant works** — the operating-mode
+**Copilot → Settings** opens with **How your assistant works** — the operating-mode
 selector (AI Chatbot · Copilot · AI Agent, the last shown but locked). Below it the five ability
 switches (Sense · show-me · guided walkthrough · Reason · image tier) sit inside a folded
 `<details>` **"What it may do on your page / Advanced"**. The split is deliberate: the mode says WHO
@@ -76,7 +63,7 @@ one `Workspace` (slugged from the email) — Phase 1 is **single-user = single-w
 `getCurrentWorkspace()` resolves the signed-in user → their workspace for every server action; a
 `null` means "not authenticated" and the action throws. **Every query is scoped to that workspaceId.**
 
-Hardening (2026-07-06, review §3.6 Cuts 2+3):
+Hardening (review §3.6 Cuts 2+3):
 
 - **Brute-force limits** ([`lib/auth-limits.ts`](../../packages/web/lib/auth-limits.ts)) — failed
   sign-ins counted per-email (5/15 min) and per-IP (20/15 min, `x-forwarded-for`); over the cap the
@@ -140,15 +127,14 @@ delete-and-recreate of items — the rationale is in [knowledge-base.md](knowled
 The read side, [`copilot-approvals.ts`](../../packages/web/lib/copilot-approvals.ts), provides
 `approvedSegmentKeys` / `listApprovedWorkflows` — Studio-UI bookkeeping only (candidate lists,
 counts). The retrieval-side enforcement moved to the shared
-[`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) (2026-07-06); the old
-`listApprovedItems` mirror was retired, and the Studio copilot tester now IS the real widget
-(2026-07-08, Approach B) — it exercises the exact public `/answer` route end-users hit.
+[`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts); the old
+`listApprovedItems` mirror was retired, and the Studio copilot tester now IS the real widget (Approach B) — it exercises the exact public `/answer` route end-users hit.
 
 ### 4.5 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 
 `getOrCreateCopilotKey(workspaceId)` returns the workspace's **public** embed key, minting one
 (`pk_<48 hex>`) on first use, plus the `allowedOrigins` list. The Copilot page renders the
-`<script>` snippet with this key and the **real-widget tester** (2026-07-08):
+`<script>` snippet with this key and the **real-widget tester**:
 [`widget-preview.tsx`](../../packages/web/components/dashboard/widget-preview.tsx) frames the
 session-authed host page [`copilot/preview-frame/route.ts`](../../packages/web/app/dashboard/copilot/preview-frame/route.ts),
 which embeds the actual bundle (`FLOWBUDDY_WIDGET_URL`, or the local fallback route
@@ -169,7 +155,7 @@ The per-workflow and feedback-loop breakdowns live beside it in
 [`analytics.ts`](../../packages/web/lib/analytics.ts): top workflows by citations, step friction
 ("where users get stuck"), ranked coverage gaps, recent declines — and the **question log**.
 
-**The question log (`/dashboard/analytics/questions`, 2026-07-27).** Every aggregate above answers
+**The question log (`/dashboard/analytics/questions`).** Every aggregate above answers
 *"how is the copilot doing?"*; this answers *"what did people actually ask?"* — the raw
 `CopilotQuery` list, newest first, 25 a page. Search matches the question text **or** the page path
 (so `billing` finds both questions about billing and questions asked while standing on `/billing`);
@@ -181,7 +167,7 @@ declines →* on Recent declines (deep-linking to `?filter=declined`). **Reads o
 change.** No export yet; the in-UI search was the actual need.
 
 > **Counting rule for anything reading `QueryCitation`: count distinct `queryId`, never rows.**
-> See [data-journey.md §15](data-journey.md).
+> See [data.md §15](data.md).
 
 ### 4.7 Coverage gaps ("record this next")
 
@@ -219,10 +205,4 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
 
 ## 7. Connections
 
-- **Produces →** recorder tokens (for [recorder-capture.md](recorder-capture.md)) and the embed key
-  (for [widget.md](widget.md)).
-- **Writes the gate →** `CopilotApproval`, enforced by [copilot.md](copilot.md) retrieval.
-- **Reads the KB built by →** [knowledge-base.md](knowledge-base.md) (workflows, steps, status).
-- **Closes the loop with →** `CopilotQuery`/`CoverageGap` written by [copilot.md](copilot.md).
-- **Auth boundaries →** [connections.md](connections.md) §3; **schema →**
-  [data-model-and-storage.md](data-model-and-storage.md).
+Seams, contracts and who-calls-what: [`connections.md`](connections.md).

@@ -20,18 +20,28 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 
 ---
 
-## 2. Where it lives
+## 2. The pieces, and what each one guarantees
 
-| File | Layer |
-|---|---|
-| [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The ranking seam** — only the API routes call it (approval is enforced on every read, and since Copilot mode the agent's `searchKb`/`loadWorkflow` are two more approval-checked readers, constrained at the injection site), and since the Studio preview became the real widget (2026-07-08) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
-| [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
-| [`synthesis/engine.ts`](../../packages/synthesis/src/engine.ts) | **The shared answer loop (2026-07-26)** — ONE loop + ONE answer shaper, used by all three paths. Owns the model call, the tool rounds (caps: 4 rounds / 4 tool calls), the response schema, and `shapeAnswer` (citations resolved only against items WE supplied; position step taken from the PROBE, never the model). |
-| [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer — AI Chatbot (mode 1)**: the shared loop with **no tools bound and `maxRounds: 1`** (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). Not a separate pipeline: with zero tools the loop makes exactly one call and breaks. |
-| [`synthesis/agent.ts`](../../packages/synthesis/src/agent.ts) | **Answer — Copilot (mode 2)**: the same loop with KB-reading tools (`search_knowledge` · `get_workflow`), its OWN prompt and a superset schema (adds the on-page intents). Round one *is* the fast path, so simple lookups cost the same; the extra rounds are escalation. |
-| [`shared/copilot-mode.ts`](../../packages/shared/src/copilot-mode.ts) | **The mode vocabulary** — `chatbot \| copilot \| agent`, founder-facing labels, `SELECTABLE_MODES`, and `parseCopilotMode` which **fails closed** (anything unrecognised → `chatbot`). |
-| [`server.ts`](../../packages/api/src/server.ts) | The `/v1/copilot/answer` + `/feedback` + `/seen` + `/config` + `/sense-plan` (P2-M0) + `/walkthrough` (P4-M0) routes: one shared `copilotGate` (auth + per-route rate buckets), input caps, wiring + analytics logging. |
+Paths are in `CLAUDE.md` and the source; what matters here is the contract each layer holds.
+
+- **Auth** resolves the public embed key to a workspace, then applies the origin allowlist and a
+  per-route rate bucket. Six copilot routes share one gate.
+- **Retrieval is the ranking seam and the no-leak enforcement point.** Approval is checked on every
+  read, including the agent's own `search_knowledge` / `get_workflow` — constrained at the injection
+  site, not by prompt. Since the Studio preview became the real widget, **every surface reaches it
+  through the same public `/answer` route**, so there is exactly one answer path to audit. The Prisma
+  client is injected, which is what keeps `@flowbuddy/synthesis` DB-free.
+- **Embeddings** are the shared half used by both the worker (write) and retrieval (query). The model
+  and its dimensions must change together with the `vector(1536)` column — a width mismatch is the
+  failure mode.
+- **The shared loop** owns the model call, the tool rounds (**capped at 4 rounds / 4 tool calls**) and
+  the answer shaper. Two invariants live in the shaper: **citations resolve only against items we
+  supplied**, and **the position step comes from the probe, never from the model**.
+- **AI Chatbot is not a separate pipeline** — it is the same loop with no tools bound and
+  `maxRounds: 1`, so it makes exactly one call and breaks. A truncated response degrades to a decline.
+- **Copilot mode** is that loop with KB-reading tools, its own prompt, and a superset schema. **Round
+  one *is* the fast path**, so simple lookups cost the same; the extra rounds are escalation.
+- **The mode vocabulary fails closed** — anything unrecognised resolves to the safety floor.
 
 ---
 
@@ -45,7 +55,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
     deduped, and **re-verified against `CopilotApproval`** before it can influence retrieval.
   - **Out (covered):** `{ covered: true, answer, citations[], queryId }`.
     **The `copilotShowCitations` trust setting is a PRESENTATION gate applied here at the response
-    boundary** (2026-07-26), not inside the answer engines: with it off, each citation's
+    boundary**, not inside the answer engines: with it off, each citation's
     `segmentTitle` is nulled (so the widget renders no "Source" pill) while the workflow keys still
     reach the widget for continuity, and the **full citation is still logged** for the founder's own
     analytics. Previously the engines returned `citations: []` outright, which silently emptied the
@@ -58,18 +68,18 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
     and the response carries **no `queryId`** (so the widget shows no thumbs). Self-declared and safe:
     the flag can only suppress your own workspace's stats.
 - **`POST /v1/copilot/feedback`** — `{ queryId, feedback: 'up' | 'down' }` → records the thumb.
-- **`GET /v1/copilot/config`** (2026-07-07) — the widget's mount-time appearance fetch: returns the
+- **`GET /v1/copilot/config`** — the widget's mount-time appearance fetch: returns the
   workspace's saved accent/title/greeting/position/launcher (nulls = widget defaults) **plus the
   behavior flags** (`sense`/`showMe`/`walkthrough`/`reason`/`reasonImage`/`reasonValues`),
   `no-store` so a Studio save shows on the next page load. Same gate (key + origin allowlist, own
   rate bucket); read-only — writes nothing.
-- **`GET /v1/copilot/sense-plan?route=…`** (P2-M0, 2026-07-08) — the ROUTE-SHARDED compiled sense
+- **`GET /v1/copilot/sense-plan?route=…`** (P2-M0) — the ROUTE-SHARDED compiled sense
   plan (approved workflows → steps × ranked locators + routes), gated by `Workspace.senseEnabled`;
   the widget caches per route. Mechanics: [`phase-2-sense.md`](../phase-2-sense.md) Part A.
-- **`POST /v1/copilot/walkthrough`** (P4-M0, 2026-07-15) — guided-walkthrough run analytics:
+- **`POST /v1/copilot/walkthrough`** (P4-M0) — guided-walkthrough run analytics:
   `started` (key re-verified against `CopilotApproval` — no-leak; returns `runId`) then
   `step_advanced`/`completed`/`aborted`/`stalled` update the one `CopilotWalkthrough` row per run
-  (workspace-scoped `updateMany`, own rate bucket). Mechanics: [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8.
+  (workspace-scoped `updateMany`, own rate bucket). Mechanics: [`agent.md`](../agent.md) §A8.
 
 ---
 
@@ -127,7 +137,7 @@ Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
    preview's former mirror (`listApprovedItems` in `copilot-approvals.ts`) was retired, and the
    preview itself now embeds the real widget, so every surface reaches this function through the
    public answer route. Any new copilot read path must go through it or no-leak breaks.
-4. **Vector candidates (P1-M3, 2026-07-07 — best-effort).** The question embed
+4. **Vector candidates (P1-M3 — best-effort).** The question embed
    (`text-embedding-3-small`, via `embeddings.ts`) **starts before the DB reads** and overlaps
    them, with a **2s timeout + 1 retry** (the SDK default is 600s — a hanging embeddings API must
    never stall an answer). The scan pulls the **top-50 by cosine distance** (`embedding <=> $q`
@@ -200,7 +210,7 @@ Two properties worth not losing:
   be pure cost — and in a future acting mode, an action taken after the loop decided to stop, which
   nobody observes or verifies. Structural, not advisory.
 
-**The question is labelled as the NEW one (2026-07-29).** All three paths end their user message
+**The question is labelled as the NEW one.** All three paths end their user message
 with `The user's NEW message — this is the one to answer, not anything asked earlier: …` rather than
 a bare `Question:`. This is a bug fix, not a style choice. With any earlier turn in the thread the
 previous question is a short clean line of its own while the current one sits at the bottom of a
@@ -223,7 +233,7 @@ was reverted. The model did not lack the rule.
 > first so each stays measurable. (The "mode 1's wire shape is frozen" comment in `engine.ts`
 > overstates: `shapeAnswer` reads named fields only, so a model-facing field cannot reach the widget.)
 
-**Tool de-duplication is keyed on name + arguments (2026-07-29).** The loop used to remember tool
+**Tool de-duplication is keyed on name + arguments.** The loop used to remember tool
 NAMES only, so `search_knowledge("create a project")` and `search_knowledge("new project setup")`
 were the same request and the second was refused — while `AGENT_SYSTEM` was busy instructing the
 model to *"re-search with different words rather than declining on the first miss."* Correct for
@@ -248,7 +258,7 @@ The mode is resolved server-side from `Workspace.copilotMode` on every call
 ([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding
 the public key can never talk itself into a higher mode.
 
-**Default vs. floor (2026-07-27).** New workspaces are created in mode 2 (`@default("copilot")` on
+**Default vs. floor.** New workspaces are created in mode 2 (`@default("copilot")` on
 the column, mirrored by `NEW_WORKSPACE_MODE`), while `parseCopilotMode` still resolves anything
 unrecognised to `chatbot` (`DEFAULT_COPILOT_MODE`). These are two constants on purpose: the product
 default may climb the ladder as modes prove out, the fail-closed floor may only descend. Note the
@@ -306,7 +316,7 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
   `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim and one query compares all three.
 - **A decline** additionally logs a `CoverageGap(source: 'copilot')` — **deduped**: at most one *open*
   gap per distinct question per workspace. This is the "record this next" feed Studio surfaces.
-- **A decline from the AGENT is no longer swapped for a diagnostic one (2026-07-29).** The P2-M5
+- **A decline from the AGENT is no longer swapped for a diagnostic one.** The P2-M5
   escalation returns `escalate: true` and logs *nothing*, letting the widget retry once with page
   state — but the retry takes the diagnostic branch, which has no mode guard, so in Copilot mode
   the agent never ran the second time and its `search_knowledge`/`get_workflow` were dropped. The
@@ -315,15 +325,15 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
   still escalate. A consequence worth knowing: the agent's decline now reaches the `CopilotQuery`
   write, so the coverage gap records what the AGENT said rather than the diagnostic engine's
   page-shaped text.
-- **The stored question is PII-scrubbed (2026-07-27).** `CopilotQuery.question` and
+- **The stored question is PII-scrubbed.** `CopilotQuery.question` and
   `CoverageGap.prompt` go through the same `redactText` as KB text and narration — it was the one
   stored text path that didn't, and the founder reads it back verbatim in Studio. **Storage only:**
   retrieval and the model still see the raw question, so answer quality is unchanged. The scrub is
   applied ONCE, before both writes, because the coverage-gap dedupe matches on that text.
-- **Citations are logged one row per WORKFLOW, not per cited step (2026-07-27).** `shapeAnswer`
+- **Citations are logged one row per WORKFLOW, not per cited step.** `shapeAnswer`
   dedupes by `KnowledgeItem` id — correct for grounding — so an answer built from six steps carries
   six citations naming one workflow. `citationRows` collapses them before insert; see
-  [data-journey.md §15](data-journey.md) for the analytics distortion this used to cause.
+  [data.md §15](data.md) for the analytics distortion this used to cause.
 
 `/v1/copilot/feedback` re-auths, validates `feedback ∈ {up,down}`, and updates the `CopilotQuery`
 **scoped to the workspace** (`updateMany({ id, workspaceId })`) so one tenant can't write another's
@@ -360,10 +370,4 @@ It **never writes the KB** — knowledge flows one way (see [connections.md](con
 
 ## 7. Connections
 
-- **Called by →** the [Widget](widget.md) (Seam F) over `/v1/copilot/answer` + `/feedback` (+ `/config` at mount, `/sense-plan` on panel open, `/walkthrough` run events).
-- **Gated by →** the approval rows written in [Studio](studio.md) and built by the
-  [Knowledge Base](knowledge-base.md) (the `(sourceId, segmentIndex)` contract, [connections.md](connections.md) §5).
-- **Feeds back to →** [Studio](studio.md) analytics + "record this next" via `CopilotQuery` /
-  `CoverageGap`.
-- **Shares its process with →** the [Ingestion API](ingestion-api.md) (same Fastify app).
-- **Row shapes →** [data-model-and-storage.md](data-model-and-storage.md).
+Seams, contracts and who-calls-what: [`connections.md`](connections.md).

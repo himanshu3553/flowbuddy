@@ -31,38 +31,16 @@ Nothing found blocks the "Phase 1 done" claim. The findings below are about **ha
 
 ## 2. P0 — before any external user touches the deployed copilot
 
-These are all on the public, unauthenticated-ish surface (the copilot endpoints + ingestion) or affect data durability. Small fixes, high leverage.
+**All eight resolved.** Kept as headings: each records what was wrong and what fixed it.
 
-### 2.1 BullMQ jobs are never cleaned up → Redis fills up and dies — ✅ fixed 2026-07-06 (`1bba47b`)
-Neither producer ([api/src/queue.ts](../../packages/api/src/queue.ts), [web/lib/queue.ts](../../packages/web/lib/queue.ts)) nor the worker sets `removeOnComplete` / `removeOnFail`, so **every completed/failed job is kept in Redis forever**. On Render's free Key Value (25 MB, no persistence) this is a slow-motion outage.
-**Fix:** `defaultJobOptions: { removeOnComplete: { count: 100 }, removeOnFail: { count: 500 } }` on the Queue(s).
-
-### 2.2 No retry on synthesis jobs; no "stuck" recovery — ✅ fixed 2026-07-06 (`1bba47b`: attempts:3 + backoff; final-attempt-only error mark; "Stalled — re-process" surface via new `KnowledgeSource.updatedAt`)
-Jobs run with default `attempts: 1`. Any transient failure (OpenAI 429/timeout, R2 blip) permanently lands the recording in `status: error`; a Redis loss while `processing` leaves it stuck in a state the UI renders as "Processing" forever ([recordings.ts](../../packages/web/lib/recordings.ts) maps `uploaded|processing` → Processing with no age limit).
-**Fix:** (a) `attempts: 3` + exponential backoff on enqueue (the worker is already idempotent — it delete+recreates items, and approvals survive by design); (b) surface age: a source `uploaded/processing` for > ~15 min should render as "Stalled — re-process" in the Recordings UI (the re-process action already exists and covers recovery).
-
-### 2.3 The API process has no `error` listeners on its queue/worker → crashable — ✅ fixed 2026-07-06 (`1bba47b`)
-The [web/lib/queue.ts](../../packages/web/lib/queue.ts) hardening (committed 2026-07-04, `6e174be`) adds an `on('error')` handler *for exactly this reason* (an emitted `'error'` with no listener throws and can take the process down) — but the **API producer** (`api/src/queue.ts`) and the **Worker** (`api/src/worker.ts` has `on('failed')` but not `on('error')`) still have none. On the free tier these run in the *same process as the public API* (`all.ts`), so a Redis hiccup can crash the copilot.
-**Fix:** mirror the web hardening: `synthesisQueue.on('error', …)` + `worker.on('error', …)` (throttled log).
-
-### 2.4 Unbounded question size + no output cap → token-cost abuse — ✅ cheap fix done 2026-07-06 (`1bba47b`: 2000-char cap + widget maxlength, max_completion_tokens 700, temperature 0.2); per-workspace budget counter → backlog
-`/v1/copilot/answer` trims but never caps `question`; `answerFromKB` sets no `max_tokens` and no `temperature`. History is capped (10 × 4000 chars) but the question itself can be megabytes, multiplied by 24 KB items per call. Anyone with the public key (it's in the host page source) can run this 30×/min indefinitely — there's no spend ceiling anywhere.
-**Fix (cheap):** cap `question` (~2,000 chars, 400 in the widget input via `maxlength`), set `max_tokens` (~700) and an explicit low `temperature` in `answerFromKB` (segment/distill already pin `0`), and reject absurd bodies early. **Fix (proper, can be P1):** a per-workspace daily budget counter + log OpenAI `usage` tokens per query (one extra column on `CopilotQuery` — also unlocks real cost analytics later).
-
-### 2.5 Rate limiting covers only `/answer` — ✅ fixed 2026-07-06 (`1bba47b`: shared copilotGate, per-route buckets)
-`/v1/copilot/feedback` and `/v1/copilot/seen` skip `checkRateLimit` — both are DB-writing endpoints reachable with just the public key. Feedback is also a blind write path (`queryId` cuids are hard to guess, so impact is low, but it's free spam).
-**Fix:** apply the same limiter to all three copilot routes (one shared preHandler).
-
-### 2.6 Ingestion buffers whole uploads in memory — ✅ fixed 2026-07-06 (`1bba47b`: streamed via lib-storage + 500 MB bundle cap + orphan cleanup on reject)
-`/v1/sessions` does `await part.toBuffer()` per file with `fileSize: 300 MB, files: 10 000` — a large (or malicious: the recorder token isn't the only thing that can hit this endpoint) bundle is fully materialized in RAM on a 512 MB instance, alongside the copilot serving traffic.
-**Fix:** stream parts to storage (`@aws-sdk/lib-storage` `Upload` accepts a stream), and add a total-bundle cap. Also worth noting: if the manifest fails validation, files already streamed are orphaned in R2 — either validate the manifest part first (require it as the first field) or delete the prefix on reject.
-
-### 2.7 Empty origin allowlist = open copilot, silently — ✅ fixed 2026-07-06 (`1bba47b`: normalize-on-save to Origin-header form + live-widget warning banner; empty-list dev default kept)
-`copilotAllowedOrigins: []` means "allow any origin" (deliberate dev default), and nothing in the Studio pushes owners to set it before going live — so the realistic steady state is *every* workspace running an unlocked endpoint + a public key visible in page source.
-**Fix:** keep the dev semantics, but (a) show a prominent "origin allowlist not set — your copilot will answer from any website" warning on the Copilot page once the widget is detected live, and (b) normalize entries on save (`setCopilotOrigins` currently stores whatever string the user typed; `https://app.acme.com/` with a trailing slash or a bare `app.acme.com` will never match the browser's `Origin` header — parse with `new URL()` and store `origin` exactly).
-
-### 2.8 Free-tier deploy is fine for testing, wrong for a real embed — ✅ executed 2026-07-23 (production launch: the paid two-blueprint stack on flowbuddyai.com — [`deploy.md`](../deploy.md))
-Already documented in [render.yaml](../../render.yaml) — but worth restating as a gate: spin-down means an end-user's first question after 15 idle minutes waits ~60 s, and free Redis losing queued jobs contradicts the recorder's "no silent data loss" promise at the last hop. **Before the first external SaaS embeds:** execute the already-written production plan (split worker service, paid Postgres/Redis, always-on API). Track it as a module (e.g. "P1-M4b — production deploy") rather than a yaml comment.
+- 2.1 BullMQ jobs are never cleaned up → Redis fills up and dies — ✅ fixed 2026-07-06 (`1bba47b`)
+- 2.2 No retry on synthesis jobs; no "stuck" recovery — ✅ fixed 2026-07-06 (`1bba47b`: attempts:3 + backoff; final-attempt-only error mark; "Stalled — re-process" surface via new `KnowledgeSource.updatedAt`)
+- 2.3 The API process has no `error` listeners on its queue/worker → crashable — ✅ fixed 2026-07-06 (`1bba47b`)
+- 2.4 Unbounded question size + no output cap → token-cost abuse — ✅ cheap fix done 2026-07-06 (`1bba47b`: 2000-char cap + widget maxlength, max_completion_tokens 700, temperature 0.2); per-workspace budget counter → backlog
+- 2.5 Rate limiting covers only `/answer` — ✅ fixed 2026-07-06 (`1bba47b`: shared copilotGate, per-route buckets)
+- 2.6 Ingestion buffers whole uploads in memory — ✅ fixed 2026-07-06 (`1bba47b`: streamed via lib-storage + 500 MB bundle cap + orphan cleanup on reject)
+- 2.7 Empty origin allowlist = open copilot, silently — ✅ fixed 2026-07-06 (`1bba47b`: normalize-on-save to Origin-header form + live-widget warning banner; empty-list dev default kept)
+- 2.8 Free-tier deploy is fine for testing, wrong for a real embed — ✅ executed 2026-07-23 (production launch: the paid two-blueprint stack on flowbuddyai.com — [`deploy.md`](../deploy.md))
 
 ---
 
@@ -129,20 +107,6 @@ The API/worker log with `console.log` + Fastify's default logger; there's no err
 
 ---
 
-## 5. The uncommitted work on `dev` (reviewed — commit it) — ✅ done 2026-07-04
-
-*(All three changes below were committed: R10 as `328fd88`, the queue hardening + render.yaml as `6e174be`. Kept for the record.)*
-
-The working tree held three logical changes; all reviewed, all sound:
-
-1. **R10 richer capture** (`content.ts`, `shared/capture.ts` + doc updates) — well-scoped: debounced significant page scroll, dwell-gated `aria-haspopup` hover, normalized shortcut combos with an edit-key denylist. Listener add/remove pairs match (incl. the `{capture:true}` removal), timers are cleaned in `clearScrollHover`, and downstream tolerates the new types (`type` is a free string end-to-end). The only follow-up is the `typed:` prompt nit (§4.1).
-2. **Studio queue hardening** (`web/lib/queue.ts`) — lazy Queue creation, error listener, retry backoff: exactly right, and it *exposes* that the API side lacks the same protections (§2.3).
-3. **render.yaml** — `REDIS_URL` on `flowbuddy-dev-web`: correct and necessary for the re-process action in prod.
-
-Recommendation: commit this batch as-is (respecting your commit-then-push convention) before starting remediation work, so review fixes don't tangle with feature work. Note `git status` also shows branch drift: `dev` is 5+ commits ahead of `main` — decide whether `main` should be fast-forwarded at the "Phase 1 done" milestone like last time.
-
----
-
 ## 6. Doc & housekeeping updates
 
 Docs are in excellent sync overall; these are the only drifts found:
@@ -154,17 +118,3 @@ Docs are in excellent sync overall; these are the only drifts found:
 5. **e2e-testing.md** — optionally add a Part covering R10 events (scroll/hover/shortcut appear in the KB) and the widget feedback → analytics loop; the plan currently ends at analytics basics.
 
 ---
-
-## 7. Suggested sequence
-
-A realistic ordering that front-loads risk reduction without blocking product momentum:
-
-1. ~~**Commit the in-flight batch** (§5) + the two one-line doc/comment fixes (§6.1–6.2)~~ *(✅ done — batch 2026-07-04, comment fixes 2026-07-05)*.
-2. ~~**"Public-surface hardening" PR** — all of P0 §2.1–2.6~~ *(✅ done 2026-07-06, `1bba47b`, user-verified E2E)*.
-3. ~~**"Trust-surface" PR** — origin-allowlist normalization + the Studio warning (§2.7), KB-page honesty reword (§4.5)~~ *(✅ done 2026-07-06, `1bba47b`)*; ~~recorder-token rotation (§3.5)~~ *(deferred — see §3.5)*.
-4. ~~**Retrieval consolidation** (§3.1/3.2)~~ *(✅ done 2026-07-06, `1bba47b`)*.
-5. **Thin test layer** (§3.9 — still open) + ~~transcription degradation (§3.3)~~ *(✅ done 2026-07-06)* + ~~observability minimum (§3.8)~~ *(🔄 pino logging ✅ 2026-07-08; error aggregation still open)*.
-6. ~~**Production deploy plan** (§2.8) — executed whenever the first external embed is scheduled, not before~~ *(✅ executed 2026-07-23 — V1 launched on the paid prod stack, [`deploy.md`](../deploy.md))*.
-7. Then proceed to whatever's next on a clean foundation. *(Since taken up: **pgvector ✅ shipped 2026-07-07**, **Phase-2 direction set to workflows-as-articles** + the engine swept, **Approach-B real-widget tester ✅ merged**, **structured logging ✅ shipped** — so "next" is now Phase 2 · Sense (the portal moved to Version 2) + the remaining P1 debts §3.7/§3.9.)*
-
-Items deliberately **not** recommended at review time: ~~pgvector (wait for the trigger)~~ *(since **shipped** 2026-07-07 — the trigger call was overtaken by the decision to build hybrid retrieval)*, PII Cut 2 (already correctly deferred — now folded into the V2 portal track, V2 · P5), widget a11y & multi-seat auth (pre-beta list), R5/R12/R13 *(R13 since **shipped** 2026-07-06)*.

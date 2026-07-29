@@ -138,17 +138,8 @@ pnpm --filter @flowbuddy/web dev
 
 ## Logging (local)
 
-The Node services (`api`, `worker`, Studio server) share one structured logger (`@flowbuddy/logger`, Pino). **Locally the default is verbose + readable** — level `debug`, pretty-printed — so you can watch capture → synthesis progress in Parts 3–13. Change it with env vars on the process you're running:
-
-```bash
-LOG_LEVEL=warn   pnpm --filter @flowbuddy/api worker   # only warnings + errors
-LOG_LEVEL=silent pnpm --filter @flowbuddy/api dev       # mute a service
-LOG_PRETTY=0     pnpm --filter @flowbuddy/api dev        # emit prod-style JSON locally
-```
-
-The **widget** logs nothing by default (it runs on customer sites) — add `data-flowbuddy-debug="true"` to its `<script>` to see its console diagnostics. The **Studio browser console** level is `NEXT_PUBLIC_LOG_LEVEL` (build-time; `debug` in dev). Full model + prod control: [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown).
-
----
+The Node services log at `debug` in dev, pretty-printed in a terminal. Levels, the env knobs and how
+to quieten a service: [`dev-setup.md`](dev-setup.md) §7 — the canonical reference.
 
 ## 4. Account & workspace (Studio)
 
@@ -258,9 +249,7 @@ objects are gone from MinIO. ⚠️ Only `recording` rows are eligible — a **f
 swept, and asking the API to discard one answers `409` ("delete it in Studio"). Verify that guard once
 if you're changing this path: a finalized recording must survive both a discard call and a sweep.
 
-*(The 12-hour threshold is deliberately generous because a **paused** capture also signs nothing. A
-false positive self-heals: the recorder's local buffer is never cleared until an upload succeeds, so a
-swept recording simply re-uploads into a fresh row.)*
+*(Why the threshold is 12 hours and not minutes — and why a false positive self-heals — is in [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.)*
 
 ---
 
@@ -339,7 +328,7 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 
 ## 11. Sense (positional answers) · Reason (diagnostics) · Guided walkthrough (P4-M0)
 
-All three ride the Part-10 embed (or your own test app — remember to copy **both** widget bundles there after a rebuild). Sense + Reason are ON by default per workspace (Studio → Copilot → Settings); the page image, typed values, "Show me" and **Guided walkthrough** are separate founder opt-ins.
+All three ride the Part-10 embed (or your own test app — remember to copy **both** widget bundles there after a rebuild). For a new workspace, Sense, Reason, the page image, "Show me" and **Guided walkthrough** are all **ON** by default (Studio → Copilot → Settings). **Unmasked typed values is the only opt-in** — it defaults OFF. Verify the switches rather than flipping them; a workspace created before 2026-07-27 may differ, since the defaults apply to new rows only.
 
 **Sense (in-context help):**
 1. Open a recorded flow mid-workflow (e.g. the sign-in form), fill some fields, open the copilot and ask *"what do I do next?"*.
@@ -358,7 +347,7 @@ All three ride the Part-10 embed (or your own test app — remember to copy **bo
 ✅ **PASS:** correct blocker(s) in plain words; the rejection banner beats form theories; `CopilotQuery.reasonTrigger` = `intent`/`blocked` (+ `reasonImage=true` when the tier is on); a plain "how do I…" on the same page stays fast-path (`reasonTrigger` null).
 
 **Guided walkthrough (P4-M0 — zero-acting):**
-1. Studio → Copilot → Settings → flip **Guided walkthrough** ON (toast; switch is disabled while Sense is off) → reload the host page (config is mount-time).
+1. Studio → Copilot → Settings → **confirm Guided walkthrough is ON** (it is, for any workspace created since 2026-07-27; the switch is disabled while Sense is off). If you had to flip it, reload the host page — config is mount-time.
 2. Mid-workflow, ask a positional question → the answer carries a **"Walk me through it"** pill. Click it: the panel closes, the step card shows **your current step k/N** (not 1), and the step's element gets a persistent highlight.
 3. Complete the step yourself (fill the field / click the button) → the card shows **"Detected ✓ — hit Next to continue"** and **stays put** — the pointer must move **only** on your Next click, never on its own. A navigating step survives the full-page load and **resumes on the next page with the step acknowledged** ("Detected ✓ — hit Next"; peek at `sessionStorage["flowbuddy.walkthrough.v2"]` before the nav). Try **Back**, and a stall: delete the highlighted element in DevTools → after ~3s the card safe-stops with Retry/Back/Exit. The final step ends with "hit Next to finish" → Next shows the Done card.
 4. **State-awareness** (the first-E2E fixes): (a) an **invalid field** (e.g. a malformed `type=email`) must NOT advance — the status says the field doesn't look right and names the constraint; (b) an **unchecked checkbox** step must not count as done (and skip-ahead must park on it, not blow past); (c) with a **disabled submit button** as the current step, the status must read *"This button is disabled — check step k (…) first"* — never "click it" — and flip to "click the highlighted element" within ~half a second of the button enabling.
@@ -381,7 +370,7 @@ Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.ser
 
 **Copilot mode — the read-only agent (built + user-verified 2026-07-27):**
 
-1. **Switch it on.** Studio → Copilot → Settings → **How your assistant works** → pick **Copilot** (toast; the AI Agent row is visible but locked). Reload the host page — mode is read at mount, like every other config flag.
+1. **Confirm the mode.** Studio → Copilot → Settings → **How your assistant works** → a workspace created since 2026-07-27 already reads **Copilot**; only select it if it doesn't (toast; the AI Agent row is visible but locked). If you changed it, reload the host page — mode is read at mount, like every other config flag.
 2. **Simple questions must not get worse.** Ask three or four straightforward "how do I…" questions you know are covered. They must answer as before, and at the same speed — round one of the agent loop *is* the old fast path. **This is the non-negotiable check**: a simple lookup that starts declining is the failure mode to watch (one such regression was caught during the build, at roughly 1-in-6).
 3. **Ambiguity → a question back.** With two or more approved workflows that could both match, ask something ambiguous ("how do I cancel?"). It should ask *which one you mean* rather than guessing or declining. *(With a single approved workflow this cannot fire — there is nothing to disambiguate.)*
 4. **It searches on its own.** Ask a follow-up that shifts topic ("what about …?"). It should find the other workflow rather than declining on the user's literal words.
@@ -428,34 +417,21 @@ DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WH
 
 ---
 
-## Acceptance checklist (one line per module)
+## Acceptance checklist
 
-| Area | Module | PASS signal |
-|---|---|---|
-| Build | — | `pnpm typecheck` + `build` + `lint` exit 0 |
-| Infra | — | Postgres healthy, Redis up, MinIO up, bucket ensured |
-| Auth | Studio | signup → workspace; signin works |
-| Capture | Extension | Connect mints token; record → upload `sessionId`, no 401 |
-| Ingestion | API | `/v1/uploads/sign` mints per-artifact PUT URLs + creates the row (Studio shows **Recording**); narration goes the same way at Stop, so finalize carries **the manifest and nothing else**; `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id` and enqueues; **a retry resolves to the same row, never a second recording**; `/healthz` ok |
-| Cleanup | API + Extension | an abandoned recording is discarded on **Start fresh** / the next Start, and any `recording` row idle >12h is swept with its objects; a **finalized** recording is never discardable this way (`409`) |
-| KB build | Worker | transcript + **distilled steps** built; `status → ready` |
-| **Segmentation** | Worker | **single task → 1 workflow; multi-task → N** |
-| Review | Studio KB | one goal-titled workflow, steps intact |
-| Approval | Studio | toggle persists; `CopilotApproval` written |
-| Embed key | Studio | public key + snippet + allowed origins |
-| Copilot answer | API + Widget | grounded answer + citations |
-| Honest decline | API | unknown question declines, no hallucination |
-| Coverage gap | API + Studio | decline → open gap → dismiss |
-| Feedback | API + Studio | thumbs recorded + shown |
-| Sense | Widget + API | positional answer anchored on the measured current step; `senseUsed` logged |
-| Reason | Widget + API + Synthesis | diagnostic question → plain-language blocker diagnosis; `reasonTrigger`/`reasonImage` logged; simple questions stay on the fast path |
-| Walkthrough (P4-M0) | Widget + API | offer on positional answers (toggle-gated) → starts at the measured step, auto-advances on real completions, resumes across a hard nav, safe-stops on a missing element; one `CopilotWalkthrough` row per run |
-| Security | API | origin allowlist + rate limit enforced |
-| Redaction | Synthesis | PII scrubbed from KB text/narration/transcript |
-| Idempotency | Worker | reprocess doesn't duplicate; approval survives |
-| Observability | all services | structured logs at the env-default level (debug local / info prod); secrets redacted; `LOG_LEVEL` tunes it |
+The gate, one line per area. Each step's own **PASS** signal is inline above — not repeated here,
+because a second copy is how this list drifted out of date before (it used to omit `pnpm test`).
 
----
+- [ ] `pnpm typecheck && pnpm test && pnpm build && pnpm lint` all green
+- [ ] Record → the recording reaches `ready` with distilled steps grouped by workflow
+- [ ] Throwing a recording away removes both the row and its objects
+- [ ] Approval gates answers — an un-approved workflow is invisible to the copilot
+- [ ] A covered question is answered with a citation; an uncovered one declines and logs a gap
+- [ ] Sense localizes to workflow + step; Reason diagnoses a blocked page
+- [ ] The walkthrough advances only on Next, and survives a full-page navigation
+- [ ] The conversation survives a navigation; a term-less follow-up stays on topic
+- [ ] Mode switching is instant and reversible; the founder switches always win
+- [ ] Analytics show the questions, the citations and the coverage gaps
 
 ## Troubleshooting (local)
 
@@ -584,94 +560,20 @@ All migrations have been successfully applied.
 
 Mirrors [`deploy.md`](deploy.md) §6 (end-to-end test), with the **post-wipe gotchas** called out.
 
-### D5.1 Create a new account
-Open **https://flowbuddy-dev-web.onrender.com** → sign up. This creates a fresh workspace + a **new**
-public widget key and connect token.
+### D5.1–D5.6 — run Level 1, against the dev deploy
 
-✅ **PASS:** you land in the empty Studio (Home dashboard, no recordings).
+**Level 2 is Level 1 with different URLs.** Do not re-read the steps here; work through Parts 4–12
+above, substituting the dev Studio for `localhost:3000`. Only the differences matter:
 
-### D5.2 Re-connect the extension
-The old connect token is gone. If your prod build is still installed, just click **Connect**.
-
-**Which Studio the extension talks to is baked at build time via `STUDIO_URL`** — since `ffa11a2` it
-takes a comma-separated list (first = primary, the popup's Connect target; all entries get the
-connect bridge), so one build can cover both. Pick the build for what you're testing against:
-
-| Testing against | Build command | What gets baked |
-|---|---|---|
-| **Local** (docker-compose) | `pnpm --filter @flowbuddy/extension build` *(default `http://localhost:3000`)* | connect-bridge `matches` + popup links → **localhost**; handshake carries the local API (`http://localhost:8787`) |
-| **Render** (this dev deploy) | `STUDIO_URL=https://flowbuddy-dev-web.onrender.com pnpm --filter @flowbuddy/extension build` | connect-bridge `matches` + popup links → **Render**; handshake carries the deploy's `FLOWBUDDY_API_URL` |
-| **Both dev + local** | `STUDIO_URL="https://flowbuddy-dev-web.onrender.com,http://localhost:3000" pnpm --filter @flowbuddy/extension build` | popup → **Render dev**; connect bridge on **both** origins — *(the actual store artifact, v0.6.0+, bakes THREE origins with `app.flowbuddyai.com` primary — [`extension-releases.md`](extension-releases.md))* |
-
-Then `chrome://extensions` → **Reload** / **Load unpacked** → `packages/extension/dist` → **Connect**
-(opens `…/connect`, relaying the token + API URL into the extension).
-
-Notes when switching targets:
-- **The upload API URL is _not_ baked** — the extension receives it from the connect handshake (the
-  Studio's `FLOWBUDDY_API_URL`). So a Render build uploads to the deployed **dev** API; a localhost build to `:8787`.
-- **Rebuild _and_ reconnect when you switch.** A localhost build only injects its connect bridge on
-  `localhost:3000`, so it can't connect through the Render `/connect` page (and vice-versa); the old
-  token won't match either. Rebuild → **Reload** the extension → **Connect** again.
-- **The upload UI no longer varies by transport.** The old HTTP/2-only streamed body (and its
-  determinate **%** on Render vs an indeterminate bar locally) is gone — every environment now shows
-  **Finishing up…**, and **"Sending the rest of your recording…"** with an elapsed timer if it runs
-  past 8 seconds. On dev, that longer state usually means the free-tier api is cold-starting.
-- **⚠️ The API requires an `X-FlowBuddy-Upload-Id` header on `/v1/sessions`.** Store build **v0.6.0
-  does not send it** and gets a `400` against a dev API carrying this change; **v0.7.0** is the build
-  that does, and it is **live on the store** — so a store install is fine, provided Chrome has picked
-  up the update. If you see a `400` on finalize, check the installed version before anything else —
-  see [`extension-releases.md`](extension-releases.md).
-
-✅ **PASS:** the extension popup shows **Connected** (to the Studio you built against).
-
-### D5.3 Record a workflow
-Record a **narrated** workflow → it uploads to the deployed dev API → the embedded worker synthesizes it.
-
-**⚠️ This is the first level that actually proves the direct-artifact-upload path**, because the presigned
-PUTs are signed against **R2**, not MinIO: R2 enforces request checksums (and cross-origin PUT rules) that
-MinIO ignores, so a URL that works locally can still be rejected here. **The path as it stands passed here
-on 2026-07-28** — browser-issued presigned PUTs work against R2 with no bucket CORS rule — so a failure now
-is a regression, not an unknown. Re-run this leg after **any** change to signing or to the artifact keys.
-
-Watch for: a **Recording** badge appearing in Studio *during* the capture, the extension log reporting
-`0 riding the bundle` and `audio=uploaded`, and a Stop that completes in seconds. Any `403`/`400` on the
-PUTs (or a silent fall back to the full bundle) means the R2 side is not working — do **not** promote to
-prod on the strength of a Level 1 pass.
-
-Also worth one pass here: **abandoned-recording cleanup against R2** (Part 6c) — start a capture, throw
-it away, and confirm both the row and the objects disappear from the `flowbuddy-artifacts-dev` bucket.
-Deleting needs the R2 token to permit **delete**, which local MinIO never tests.
-
-✅ **PASS:** `flowbuddy-dev-api` log shows a `ready` line — `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`; the
-recording appears under Studio → **Recordings**.
-
-### D5.4 Approve it
-Studio → **Knowledge Base** → **approve** the workflow (the copilot only answers from approved content).
-
-✅ **PASS:** the workflow flips to **approved · live**.
-
-### D5.5 Test the widget
-Studio → **Copilot** → **re-copy the embed `<script>`** — the `data-flowbuddy-key` is **new** after the wipe,
-so don't reuse an old snippet (it's pre-filled with the deployed dev API URL, widget URL, and new public key).
-Set the **origin allowlist** (or leave empty = allow any). Drop it into an HTML page **served over HTTP**
-(not `file://`):
-
-```bash
-mkdir /tmp/widget-test && cd /tmp/widget-test
-# create index.html containing the snippet, then:
-python3 -m http.server 8080      # open http://localhost:8080
-```
-
-✅ **PASS:** the indigo launcher appears → ask about the approved workflow → **grounded answer with
-citations**; ask something off-topic → **honest decline** (logged as a coverage gap). The first question
-may take ~1 min (API cold start).
-
-### D5.6 Verify analytics
-Studio → **Analytics**.
-
-✅ **PASS:** the questions you asked appear; the answered/declined counts and citation stats reflect them.
-
----
+- **Create a fresh account** on the dev Studio (the wipe removed yours).
+- **Re-connect the extension** — the recorder token died with the database, and the store build bakes
+  the dev origin, so no special build is needed.
+- **Free-tier cold starts** are real: the first request after idle can take ~30 s. A timeout on the
+  first call is not a failure.
+- **⚠️ Only Level 2 proves the direct-upload path.** MinIO is more permissive than R2 on both
+  checksums and cross-origin PUTs, so **a green Level 1 is not evidence** that signing works. This is
+  the single reason Level 2 exists.
+- **Worker logs appear inside the api service** — Render folds the worker into it.
 
 ## Post-wipe checklist (the things people forget)
 
@@ -685,19 +587,15 @@ Studio → **Analytics**.
 
 ## Troubleshooting (Render dev)
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `prisma migrate reset` can't connect | Used the **internal** DB URL, or missing SSL | Use the **External Database URL**; append `?sslmode=require` |
-| `503` on first request to flowbuddy-dev-web / flowbuddy-dev-api | Free-tier **cold start** (~1 min after 15 min idle) | Wait ~1 min; not a crash |
-| `AggregateError [ECONNREFUSED] … :9000` in flowbuddy-dev-api | `R2_ENDPOINT` unset → defaults to local MinIO | Confirm the `flowbuddy-dev-r2` group is set; redeploy `flowbuddy-dev-api` |
-| Widget launcher doesn't appear | Page served via `file://`, or origin blocked (403) | Serve over HTTP; add the origin or empty the allowlist |
-| `[worker] failed …: 401 … API key` | `OPENAI_API_KEY` unset on `flowbuddy-dev-api` | Set it; **re-record** (failed jobs don't auto-retry) |
-| Copilot page real-widget tester errors / returns nothing | Since Approach B it answers via **`flowbuddy-dev-api`** (`/v1/copilot/answer`), not the web process: `OPENAI_API_KEY` unset **or** a `403` from `FLOWBUDDY_STUDIO_URL` unset | Set `OPENAI_API_KEY` + `FLOWBUDDY_STUDIO_URL` on **`flowbuddy-dev-api`**; `flowbuddy-dev-web` needs **no** OpenAI key |
+Start with **Troubleshooting (local)** above — most symptoms are identical. Only these are
+environment-specific:
 
-More rows + the URL-suffix gotcha: [`deploy.md` → Troubleshooting](deploy.md#troubleshooting-real-errors-we-hit).
-
----
----
+| Symptom | Cause |
+|---|---|
+| First request after idle hangs ~30 s | Free-tier cold start. Not a failure. |
+| Recording uploads locally but fails on dev | The signing path — R2 enforces request checksums and cross-origin PUT rules that MinIO ignores. This is the failure Level 1 structurally cannot catch. |
+| Worker never picks the job up | The worker runs *inside* the api service here; check that service's logs, not a separate one. |
+| Studio can't reach the api | The service URL carries a random suffix if the plain name was taken — check the real URL in the dashboard. |
 
 # **LEVEL 3 — PROD TESTING ON RENDER** *(live since 2026-07-23)*
 
@@ -712,5 +610,3 @@ Production is the [`deploy.md`](deploy.md) §4 stack — `app.flowbuddyai.com` (
 - **Extension:** use the store build — v0.6.0+ bakes `app.flowbuddyai.com` as the primary origin, so no special build is needed. **⚠️ Since the upload rework, prod requires v0.7.0 or newer** (v0.6.0 sends no `X-FlowBuddy-Upload-Id` and gets a `400`) — confirm the installed version before concluding anything from a failed recording.
 
 ---
-
-*Last updated 2026-07-28 — the upload rework completed: **narration** now uploads directly too (at Stop), so finalize carries the manifest and nothing else; the popup's byte-progress bar and "Finishing…" state are gone (**Finishing up…** → **Sending the rest of your recording…** + elapsed timer after 8s), and the retry screen shows no percentage; added **Part 6c** (abandoned-recording discard + the 12-hour sweep) and a Cleanup acceptance row; corrected the now-false notes about orphaned objects, HTTP/2-vs-HTTP/1.1 progress, and the R2 path being unproven (**verified on dev 2026-07-28**); prod/dev now need recorder **v0.7.0**. (2026-07-27 — recording uploads reworked: artifacts now upload directly to object storage during capture, `/v1/sessions` finalizes by `X-FlowBuddy-Upload-Id`, and Studio shows a **Recording** badge mid-capture; added the mid-capture visibility check, the retry-does-not-duplicate check, and the Level-2 note that only R2 proves the signed-upload path. (2026-07-08 — added structured logging (`@flowbuddy/logger`, Pino): refreshed the worker/API log-line PASS signals to the new structured format and added **Logging (local)** + prod (Render) notes with the enable/disable knobs (`LOG_LEVEL` · `LOG_PRETTY` · `NEXT_PUBLIC_LOG_LEVEL` · widget `data-flowbuddy-debug`); canonical reference is [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-prod-and-how-to-turn-it-updown). (2026-07-04 — merged `render-reset-and-test.md` in as **Level 2** + **Level 3** prod placeholder. Level 1 content revised 2026-06-27: worker cleans + distills events into per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md).)))*

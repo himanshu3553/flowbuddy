@@ -15,41 +15,14 @@ depth, not breadth.**
 
 ---
 
-## What's actually built and working
+## What's built, and what isn't
 
-| | Status |
-|---|---|
-| Recording your product (Chrome extension) | ✅ live on the Chrome Web Store |
-| Turning recordings into clean steps | ✅ built and verified |
-| Splitting one recording into separate workflows | ✅ built |
-| Approving workflows | ✅ built |
-| Studio — recordings, knowledge base, settings, analytics | ✅ built |
-| The in-app assistant, embedded with one line | ✅ **live in production** |
-| Knowing which screen and step a user is on | ✅ built and verified |
-| Pointing at the element on the page | ✅ built |
-| Working out why someone is stuck | ✅ built and verified |
-| Guided walkthroughs, step by step | ✅ built and verified |
-| The conversation surviving page reloads | ✅ built |
-| Staying on topic across follow-ups | ✅ built |
-| **Copilot mode — the assistant that decides how to help** | ✅ **built, verified, and now the default** |
-| Search that works by keyword *and* by meaning | ✅ built |
-| Deployed on real infrastructure, on your own domain | ✅ live at flowbuddyai.com |
+Kept in one place so it can't drift: [`roadmap.md`](../roadmap.md). In one line — **everything in the
+first product is live and real people have used it end to end; the assistant is the only one of the
+consumers that exists.** The verdict after testing Copilot mode: *"much more accurate than the AI
+Chatbot."*
 
-**The verdict after end-to-end testing of Copilot mode:** *"much more accurate than the AI Chatbot."*
-
----
-
-## What isn't built
-
-| | Why it matters |
-|---|---|
-| **The assistant understanding your product** | Every "what does this do?" question gets declined. **The biggest gap.** |
-| **Knowledge that checks itself** | Redesign a screen and the assistant confidently describes the old one forever |
-| **The assistant doing things for users** | The third mode |
-| **The public help portal** | The second consumer |
-| **Opening up to other AI agents** | The third consumer |
-| **Hiding sensitive data inside screenshots** | Blocks the help portal specifically |
-| **Recording by narration only, or from video** | Only click-through recording exists |
+This chapter is about the **gaps**, which is the part a status table can't tell you.
 
 ---
 
@@ -94,7 +67,7 @@ test fixtures for page state. **Do not merge it blind.**
 
 ---
 
-## Two things worth knowing about the current state
+## Three things worth knowing about the current state
 
 **The knowledge base is barely two workflows deep.** A second was recorded on 2026-07-29 — which is
 what finally made a long-standing answering bug reproducible — but Copilot mode's searching and
@@ -109,22 +82,6 @@ itself. Worth remembering: that only went unnoticed because nobody was using it 
 **There's no spending limit.** Copilot mode can go back and forth with the AI model several times on
 a hard question. That was a deliberate decision to skip for now, and it was fine when the smarter
 mode was opt-in and only one person used it. **It's now what every new account gets.**
-
----
-
-## A suggested order
-
-1. **Record more workflows.** Cheap, and it's the only way to find out whether the smarter mode
-   actually earns its keep.
-2. **Let the founder describe their product.** The biggest quality improvement available.
-3. **Fold in the diagnostic reasoning** — but only after there are test fixtures for it.
-
-   *(Recording how the assistant answered used to sit at the top of this list. It's done — see
-   above. What's left of it is a screen to show the numbers on.)*
-
-Then the bigger forks: knowledge that checks itself (hardest, best moat), the assistant doing things
-(highest risk, highest value), the help portal, or opening up to other AI agents (assessed as
-weeks not months, and strategically well-timed).
 
 ---
 
@@ -177,4 +134,4 @@ link to go and search.
 
 Almost everything about the current shape follows from that one decision.
 
-→ Next: [running it on your machine](10-running-it-locally.md)
+→ Next: [running it on your machine](10-running-and-shipping-it.md)

@@ -27,10 +27,9 @@ each module doc below zooms into one piece.
 | [copilot.md](copilot.md) | **Copilot** (answer engine) | Retrieve **approved** KB, ground an answer, cite-or-decline, log the Q&A. The trust gate lives here. |
 | [widget.md](widget.md) | **Widget** (embeddable `<script>`) | The shadow-DOM chat panel a customer drops into their app; talks to the copilot endpoint with a public key. |
 | [studio.md](studio.md) | **Studio** (Next.js web app) | The operator console: connect the recorder, browse recordings/KB, **approve workflows**, configure the embed, read analytics. |
-| [data-model-and-storage.md](data-model-and-storage.md) | **Data substrate** | The Postgres schema, the object-storage layout, and the Redis queue every module reads/writes. |
-| [data-journey.md](data-journey.md) | *(the same substrate, by time)* | **What we store, when, and in which table** — the whole journey from sign-up to an embedded answer, step by step. Plain language; the counterpart axis to the doc above. |
+| [data.md](data.md) | **Data substrate** | The Postgres schema, the object-storage layout and the Redis queue — plus what a real action actually writes. |
 
-Every module doc follows the same template:
+Every module doc follows the same shape:
 
 1. **Purpose** — what it's for, in one paragraph.
 2. **Where it lives** — package + key files.

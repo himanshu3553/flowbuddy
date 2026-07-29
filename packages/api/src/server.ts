@@ -890,7 +890,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     });
 
   if (reasonPayload) {
-    // The reasoning path (docs/phase-2-reason.md §4): full workflow recipe + expected-state
+    // The reasoning path (docs/phase-2-sense.md §B4): full workflow recipe + expected-state
     // artifacts for the localized current step, then the stronger model's agentic read-tool loop.
     engineUsed = 'reason';
     const { workflow, expected } = await buildReasonEvidence(workspaceId, sense);

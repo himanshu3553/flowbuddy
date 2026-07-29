@@ -11,7 +11,7 @@ import { formatItems, runAnswerLoop, shapeAnswer, type AnswerLoopResult, type En
 
 /**
  * **Copilot mode (mode 2)** — the assistant decides how to help, turn by turn, instead of a fixed
- * pipeline deciding once (docs/unified-agent.md).
+ * pipeline deciding once (docs/agent.md).
  *
  * The shape that makes this safe and cheap:
  *

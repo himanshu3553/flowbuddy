@@ -26,64 +26,22 @@
 - **Artifact:** `packages/extension/flowbuddy-recorder-0.7.0.zip` (gitignored) — built `NODE_ENV=production`.
 - **Status:** submitted and **live**. No permissions delta, so review took the fast path.
 
-## v0.6.0 — ⛔ SUPERSEDED by v0.7.0 (live 2026-07-23 → could not upload between the API shipping 2026-07-28 and v0.7.0 going live; sends no `X-FlowBuddy-Upload-Id`)
+## Superseded versions
 
-**The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
+One line each. The listing (extension ID `njkfcfpehcklldmeofolnpdljdhcgofk`) is stable across every
+version, and `git log -- packages/extension` carries the detail.
 
-- **Content:** v0.5.0 (the FlowBuddy rename + R13 + logging) + the **visual rebrand**: all four action/store icons regenerated as the FlowBuddy "F" mark (indigo gradient rounded square — the old ones still showed the Sync "S"), and the popup's org-avatar fallback letter flipped S→F. ⚠️ The **store listing's own icon** is a separate dashboard upload — replace it with `src/icons/icon-128.png` when submitting.
-- **Permissions:** unchanged since 0.3.0.
-- **Baked targets:** `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only) — one artifact connects against prod, dev, and local.
-- **Artifact:** `packages/extension/flowbuddy-recorder-0.6.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.6.0, bridge matches all three origins, popup bakes the prod URL, `__DEV__` stripped.
-- **Store mechanics:** v0.5.0's pending review was **cancelled** and this replaced it (decision 2026-07-17: one review cycle instead of two). Now live: `FLOWBUDDY_EXTENSION_URL` = the listing URL on **both** `flowbuddy-web` (prod) and `flowbuddy-dev-web`.
+| Version | Status | What it was |
+|---|---|---|
+| **v0.6.0** | ⛔ superseded by v0.7.0 | The production release — first build connecting to `app.flowbuddyai.com`, FlowBuddy "F" icons. **Sends no `X-FlowBuddy-Upload-Id`, so it cannot upload against the current API.** |
+| **v0.5.0** | ⚠️ review cancelled 2026-07-17 | The FlowBuddy rename (bridge channels `flowbuddy-ext`/`flowbuddy-page` — a renamed build cannot pair with a pre-rename Studio). Replaced by v0.6.0 to spend one review cycle instead of two. |
+| **v0.4.0** | ⚠️ never uploaded | Packaged 2026-07-13 with R13 + logging; obsolete. Do not upload. |
+| **v0.3.0** | superseded 2026-07-23 | Was live from 2026-07-13. Its baked Studio URL died with the pre-rename re-deploy. |
+| **v0.2.1** | superseded | Approved 2026-07-06. |
+| **v0.2.0** | superseded before use | — |
+| **v0.1.0** | first upload | Dev build. |
 
-## v0.5.0 — ⚠️ review cancelled 2026-07-17 · superseded by v0.6.0 before approval
-
-**The FlowBuddy release** — the first build under the new name, and the first that connects to the renamed dev stack.
-
-- **Rename (`5db16e1`):** manifest name/description/action title → **"FlowBuddy Recorder"**; connect-bridge channels `flowbuddy-ext`/`flowbuddy-page` (must match the Studio side — pre-rename Studios can't pair with this build and vice versa); recorder IndexedDB → `flowbuddy-recorder` (any chunks in the old `sync-spike` DB are orphaned — transient by design); host masking opt-in → `data-flowbuddy-redact`.
-- **Content:** carries everything from the never-uploaded v0.4.0 (R13 ranked locators + structured logging).
-- **Permissions:** unchanged since 0.3.0.
-- **Baked targets:** `https://flowbuddy-dev-web.onrender.com` (primary) + `http://localhost:3000` (bridge only).
-- **Artifact:** `packages/extension/flowbuddy-recorder-0.5.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.5.0 + new name, bridge matches both origins, popup bakes the dev Studio URL, `__DEV__` stripped.
-- **Store mechanics:** uploads to the SAME listing (extension ID `njkf…`) — the listing renames in place; existing v0.3.0 installs auto-update and regain the ability to connect (v0.3.0's baked `sync-web-uir8` URL died with the re-deploy). After it goes live: set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-dev-web`.
-
-## v0.4.0 — 📦 packaged 2026-07-13 · ⚠️ OBSOLETE, never uploaded — do not upload
-
-**Superseded by the FlowBuddy rename (2026-07-17) before it reached the store:** the zip bakes the old `sync-web-uir8.onrender.com` Studio URL (dead once the dev services are recreated as `flowbuddy-dev-*`) and still ships under the "Sync Recorder" name. The next store build (v0.5.0, "FlowBuddy Recorder") carries this release's content plus the rename + new baked URLs.
-
-**The R13 release** — the first store artifact whose recordings carry ranked multi-signal locators.
-
-- **R13 ranked locators** (`351a454`): every captured event target now carries a ranked `{strategy, value, unique}` locator set (testid → human id → aria → name → placeholder → href → text, unique-first, positional css/xpath as tails, ≤8; generated ids rejected). This is what **Sense localization** anchors on and what **Phase-3 replay** will consume — recordings made with ≤0.3.0 builds fall back to brittle positional css/xpath in the sense plan.
-- **Structured-logging pass** (`5d3fa13`): `__DEV__`-gated debug logging, compiled out of prod builds (this artifact ships silent).
-- **Permissions:** unchanged (no new permissions since 0.3.0 — should ease review).
-- **Baked targets:** `https://sync-web-uir8.onrender.com` (primary) + `http://localhost:3000` (bridge only).
-- **Artifact:** `packages/extension/sync-recorder-0.4.0.zip` (gitignored) — built `NODE_ENV=production`, verified: manifest 0.4.0, bridge matches both origins, popup bakes the Render URL, R13 present, `__DEV__` stripped. Manifest bump commit: `07d1bbb`.
-
-## v0.3.0 — ✅ was LIVE 2026-07-13 → superseded by v0.6.0 (2026-07-23)
-
-**Stop→upload feedback & resilience** (`6a06864`) — drove out the "stranded stop" incident found on the first store-install E2E (asleep API + service-worker eviction → stuck upload, popup falsely idle):
-
-- Persisted recording **phase** + boot recovery, `chrome.alarms` fallback twin, upload **watchdog**.
-- Persistent **Recent row** with live status polling (`GET /v1/sessions/:id`) + View-in-Studio link.
-- On-page **status pill** during upload.
-- **Permissions:** added `alarms`.
-- **Baked targets:** same as v0.2.1.
-
-## v0.2.1 — ✅ was LIVE (approved 2026-07-06; superseded by 0.3.0)
-
-**The first prod-targeted artifact.** Multi-origin `STUDIO_URL` support landed (`ffa11a2`): comma-separated list, first entry = primary (popup "Connect with Sync" target), all entries get the connect-bridge content script — so one artifact connects against the deployed Studio **and** local dev.
-
-- **Baked targets:** `https://sync-web-uir8.onrender.com` + `http://localhost:3000` — the first build store installers could actually connect.
-
-## v0.2.0 — ⚠️ uploaded, superseded before use
-
-Dev build — connect-bridge matched `http://localhost:3000/*` only, so store installs could never connect to the deployed Studio. Its pending review was replaced by v0.2.1.
-
-## v0.1.0 — ⚠️ first upload (dev build)
-
-Same localhost-only limitation as 0.2.0. Kept for history: the first time the recorder passed Web Store review.
-
----
+**Permissions have been unchanged since v0.3.0.**
 
 ## Cutting a new store release (the checklist)
 

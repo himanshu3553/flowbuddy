@@ -15,7 +15,6 @@ Everything here was distilled from the **FlowBuddy Studio handoff bundle** (in `
 - **`theme-indigo.css`** — the brand token overrides (`--primary: 232 73% 56%` → `#3b50e0`).
 - **`README.md`** (in the handoff) — the full screen-by-screen spec, IA, data contract, and build order.
 - **`Sync Studio Wireframes.dc.html`** *(the on-disk filename — predates the rename)* — the 20-frame wireframe canvas (F1–F20).
-- **`uploads/product.md`** — product narrative, personas, principles, the four surfaces.
 
 **Two fidelities existed in the source.** The grayscale wireframes carry **structure, IA, copy, and the full set of states**; the hi-fi Home carries **visual fidelity**. This design system makes the **hi-fi indigo brand canonical** and elevates the wireframe structures into it — exactly the jump the handoff asks production to make ("apply the indigo system for final styling").
 

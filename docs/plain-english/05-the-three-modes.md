@@ -1,7 +1,7 @@
 # 5 · The copilot's three modes
 
-*(The plain-English version of `unified-agent.md`, `phase-4-autopilot.md` and
-`phase-5-converse.md`.)*
+*(The plain-English version of `agent.md`, `agent.md` and
+`agent.md`.)*
 
 ---
 

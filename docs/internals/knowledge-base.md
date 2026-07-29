@@ -26,22 +26,8 @@ caring how it was captured.** A step item is just retrievable knowledge.
 
 ## 2. Where it lives
 
-| File | Stage / role |
-|---|---|
-| [`worker.ts`](../../packages/api/src/worker.ts) | The BullMQ consumer. Orchestrates one job: load source → `buildWorkflowKB` → persist. |
-| [`synthesis/index.ts`](../../packages/synthesis/src/index.ts) | `buildWorkflowKB` — the pipeline orchestrator + the persistence-helper types. |
-| [`synthesis/transcribe.ts`](../../packages/synthesis/src/transcribe.ts) | Audio → timestamped transcript (Whisper). |
-| [`synthesis/align.ts`](../../packages/synthesis/src/align.ts) | Attach narration to events by timestamp window. |
-| [`synthesis/clean.ts`](../../packages/synthesis/src/clean.ts) | Deterministic event de-duplication ("B"). |
-| [`synthesis/segment.ts`](../../packages/synthesis/src/segment.ts) | LLM split into workflows (terminal-state driven). |
-| [`synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | LLM per-workflow → clean steps ("A"). |
-| [`synthesis/redact.ts`](../../packages/synthesis/src/redact.ts) | Server-side PII backstop (Cut 1). |
-
-Runs as `pnpm --filter @flowbuddy/api worker`, **`concurrency: 1`** — in production it is folded into
-the same process and the same 512 MB instance as the API that serves the public copilot, and a job
-holds whole screenshots in memory for the vision calls, so two at once is the realistic
-out-of-memory path and an out-of-memory kill would take the copilot down with it. Throughput isn't the
-constraint: recordings arrive one at a time, from a human pressing Stop.
+Paths are in `CLAUDE.md` and the source tree. This doc covers what those files *guarantee*, not where
+they sit.
 
 ---
 
@@ -54,7 +40,7 @@ constraint: recordings arrive one at a time, from a human pressing Stop.
   - `KnowledgeSource.transcript` — the persisted, redacted transcript.
   - `KnowledgeItem[]` — one row per **distilled step**, grouped by workflow via `segmentIndex` /
     `segmentTitle`.
-  - `KnowledgeItem.embedding` (P1-M3, 2026-07-07) — after `createMany`, the worker batch-embeds each
+  - `KnowledgeItem.embedding` (P1-M3) — after `createMany`, the worker batch-embeds each
     item's `text` (`embedTexts`, 60s timeout) and writes the `vector(1536)` via raw SQL. **Strictly
     best-effort:** a failed embed call still lands the build `ready`, but the failure **surfaces as
     a degraded-build notice** in `KnowledgeSource.error` (the §3.3 mechanism — "semantic search
@@ -100,7 +86,7 @@ narration).
 The transcript is then run through **`redactTranscript`** *before* anything else uses it, so every
 narration span derived from it is already PII-clean (see §5).
 
-**Degradation (2026-07-06, review §3.3):** a transcription **failure** (Whisper rejects files
+**Degradation (review §3.3):** a transcription **failure** (Whisper rejects files
 > 25 MB — roughly 25–40 min of narration — or a transient API error) no longer kills the job.
 `buildWorkflowKB` catches it, builds **transcript-less** (steps from captured actions, no narration
 attribution), and returns a `warning` string; the worker persists it on the source (see §6) so the
@@ -186,7 +172,7 @@ Then each model step is *resolved* into the persisted `DistilledStep`:
 | `route` | model's `route`, else the key event's `route.path` |
 | `narration` | the **unique** narration across the step's source events, joined + redacted (`stepNarration`) |
 | `screenshotFile` | **frame rule C** — the key event's *action* screenshot by default; the **post/result** screenshot for the workflow's **last (outcome) step** ("you landed here") |
-| `bbox` | the key event's element rect — powers the element highlight on the screenshot (**rendered in Studio's KB detail page** as a lightbox overlay, scaled to viewport fractions) |
+| `bbox` | the key event's element rect — powers the element highlight on the screenshot (**rendered in Studio's KB detail page** as a lightbox overlay). The overlay is expressed as **viewport fractions** (`bbox / manifest.app.viewport`), which makes it **DPR-independent and needs no coordinate calibration**. That fraction math is implemented once, in the KB page's own render layer — the only implementation in the tree. |
 
 **Fallbacks & guards:** if the model returns zero steps, distillation falls back to **one step per
 cleaned event** (never lose a workflow). Observability logs warn when a workflow sheds most of its
@@ -285,7 +271,7 @@ its approval (and the copilot's access to it) survives. This is the seam between
 
 ---
 
-## 9. The old Phase-2 path — REMOVED (2026-07-07)
+## 9. The old Phase-2 path — REMOVED
 
 The synthesis package used to carry an **older, raw-event path** for the retired article engine
 (`buildKB` — 1:1 raw items with `data = { event, narration }` —, `segmentItems`,
@@ -303,4 +289,4 @@ track renders approved workflows instead: [`../v2-portal.md`](../v2-portal.md).
   [Copilot](copilot.md) grounds on (Seam D).
 - **Hands the approval key to →** the gate in [studio.md](studio.md) and the enforcement in
   [copilot.md](copilot.md), via `(sourceId, segmentIndex)`.
-- **Row shapes →** [data-model-and-storage.md](data-model-and-storage.md).
+- **Row shapes →** [data.md](data.md).

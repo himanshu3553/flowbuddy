@@ -105,7 +105,7 @@ new page and picks up where it was. And when it isn't sure, it stops safely rath
 
 ## The conversation remembers
 
-Two things that used to be broken and now aren't:
+Three things that used to be broken and now aren't:
 
 **The conversation survives page reloads.** It used to die on every full navigation — including
 navigations that a walkthrough itself caused. So the walkthrough's own "explain what's blocking me"

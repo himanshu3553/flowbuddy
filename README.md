@@ -206,66 +206,9 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 ## Documentation
 
-Start with the roadmap; each doc links onward. Grouped by role.
-
-**Orientation — start here**
-
-| Doc | Role |
-|---|---|
-| [`docs/roadmap.md`](docs/roadmap.md) | **The map** — versions → phases → modules + status + legacy-ID map |
-| [`docs/product.md`](docs/product.md) | What FlowBuddy is, who it's for, **why copilot-first** (decision record + grounding model) |
-| [`docs/architecture.md`](docs/architecture.md) | Technical model — the 3 modules, KB schema, data model, decisions |
-
-**Build specs — shipped (Version 1, live)**
-
-| Doc | Role |
-|---|---|
-| [`docs/phase-1-copilot.md`](docs/phase-1-copilot.md) | **Phase 1 (Copilot)** ✅ — scope/DoD + per-module plan & as-built + capture contract |
-| [`docs/phase-2-sense.md`](docs/phase-2-sense.md) | **Phase 2 (Sense + Reason)** ✅ — in-context help (localize the user to workflow + step, answer positionally) + diagnostic reasoning ("why can't I proceed?") |
-| [`docs/kb-step-distillation.md`](docs/kb-step-distillation.md) | KB step quality — raw capture events → clean per-workflow steps |
-
-**Build specs — forward (planned · draft · direction)**
-
-| Doc | Role |
-|---|---|
-| [`docs/phase-4-autopilot.md`](docs/phase-4-autopilot.md) | **Phase 4 (Autopilot)** — P4-M0 guided walkthrough ✅; acting modules to plan |
-| [`docs/phase-5-converse.md`](docs/phase-5-converse.md) | Phase 5 (Converse) 📝 — the goal agent: Tell → Guide → Do |
-| [`docs/phase-6-interop.md`](docs/phase-6-interop.md) | Phase 6 (Interop) 📝 — expose the approved KB to third-party AI agents |
-| [`docs/v2-portal.md`](docs/v2-portal.md) | **Version 2** — Help Portal & Articles track: approved workflows rendered as articles |
-| [`docs/v3-company-agent.md`](docs/v3-company-agent.md) | Version 3 📝 — buyer-side: record the tools you use; the company agent |
-
-**Operations — build, run, ship, test**
-
-| Doc | Role |
-|---|---|
-| [`docs/dev-setup.md`](docs/dev-setup.md) | Local dev / tooling deep-dive (pnpm · Turborepo · docker-compose · Prisma) + the canonical logging reference |
-| [`docs/deploy.md`](docs/deploy.md) | **Render deploy guide — both environments**: shared foundations + dev/staging free-tier walkthrough + production (FlowBuddyAI.com) topology, DNS, two-blueprint model, runbook, scaling ladder |
-| [`docs/e2e-testing.md`](docs/e2e-testing.md) | Manual E2E test plan — 3 levels: local · dev/Render (incl. data reset) · prod |
-| [`docs/extension-releases.md`](docs/extension-releases.md) | Chrome Web Store release log (living) — one entry per store build |
-
-**Reference — deep dives**
-
-| Doc | Role |
-|---|---|
-| [`docs/internals/`](docs/internals/README.md) | How it RUNS — per-module mechanics + connections map (source wins on conflict) |
-| [`docs/design_system/`](docs/design_system/README.md) | **Design system** — the indigo brand: tokens, components, full Studio UI kit. Source of truth for all UI. |
-| [`docs/competitive-claude-chrome.md`](docs/competitive-claude-chrome.md) | Competitive reference (living) — Claude for Chrome vs FlowBuddy |
-
-**Go-to-market**
-
-| Doc | Role |
-|---|---|
-| [`docs/landing-page.md`](docs/landing-page.md) | Landing page plan — one-KB → three-consumers story, positioning direction, page structure, open decisions |
-
-**Archive — historical record**
-
-| Doc | Role |
-|---|---|
-| [`docs/archive/phase-1-review.md`](docs/archive/phase-1-review.md) | Phase-1 E2E review (2026-07-03), archived — the audit that drove post-Phase-1 hardening; still-open items live as the roadmap §9 backlog |
-
-`CLAUDE.md` is a short orientation file for working in this repo with Claude Code.
-
----
+Everything lives in [`docs/`](docs/) — start at **[`docs/README.md`](docs/README.md)**, the doc map.
+For what is built and what is next, see [`docs/roadmap.md`](docs/roadmap.md).
+The gentlest way in is [`docs/plain-english/`](docs/plain-english/README.md).
 
 ## Deployment
 

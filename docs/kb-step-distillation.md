@@ -70,125 +70,18 @@ A simple chatful.co sign-in recording produced **13 raw "knowledge items"** for 
 
 ## 5. Target design
 
-### 5.1 Pipeline sequence (worker)
-
-```
-BEFORE:  transcribe → align → [map events 1:1 → KnowledgeItems] → segment(raw) → tag segmentIndex
-AFTER:   transcribe → align → CLEAN(B) → segment(cleaned) → DISTILL(A) per workflow → persist distilled steps
-```
-
-Segment first (it already works well on the timeline), then distill **per workflow** so the model always sees one coherent task. **The distilled steps are the only KB units persisted** — raw events are *not* written as KnowledgeItems and are *not* kept as evidence. The original `KnowledgeSource.manifest` still holds the raw capture, but only as the immutable upload record needed to **reprocess** a recording — it is never surfaced and is not a citation/evidence source. Citations, if ever added, will reference the published/approved workflow.
-
-### 5.2 B — deterministic cleanup (`clean.ts`)
-
-Pure function `cleanEvents(events): CapturedEvent[]`. Conservative, mechanical only:
-
-1. **Dedupe consecutive same-target events** within a short window (collapse #8/#9/#10 → 1).
-2. **Merge focus-click + input on the same field** → keep the value-bearing `input`, drop the focus `click` (#7, #8).
-3. **Merge submit-button click + form `submit`** → keep the labeled button click, drop the form-blob `submit` (#11 keeps, #12 drops).
-4. *(Optional, conservative)* **Flag** clicks with no interactive ancestor (tag ∉ {a,button,input,select,textarea,label} and no button/link/menuitem/tab role) — but **don't drop** them here; pass the flag to A so the LLM (with narration) makes the final call on #1/#2/#3/#13.
-
-Output feeds both the segmenter and the distiller.
-
-### 5.3 A — distillation engine (`distill.ts`)
-
-`distillSteps(openai, model, workflowTitle, events, narration, transcriptText): DistilledStep[]`
-
-**Model output schema (structured JSON, `temperature: 0`):**
-```ts
-interface DistilledStepLLM {
-  instruction: string;       // imperative, user-facing: "Click 'Sign In' to open the login page"
-  detail?: string;           // optional extra ("the button is top-right")
-  route: string;             // page path the step occurs on (preserves P1-M8 route-boost)
-  sourceEventIds: string[];  // grounding/validation — the events this step merges (anti-hallucination)
-  keyEventId: string;        // the ONE source event that best represents the step visually
-}
-```
-
-The model output is then **resolved** into the persisted step. `sourceEventIds` is a build-time anti-hallucination device (forcing each step to point at real events lets us validate it isn't inventing steps); after validation the *list* is discarded. `keyEventId` is resolved to **one screenshot + bbox**:
-
-```ts
-interface DistilledStep {                 // what we persist (in KnowledgeItem.data)
-  instruction: string;
-  detail?: string;
-  route: string;
-  narration: string | null;               // attributed narration for the step
-  screenshotFile: string | null;          // resolved from keyEventId + frame rule C (below)
-  bbox?: { x: number; y: number; w: number; h: number }; // keyEvent's element rect — for later highlight
-  keyEventId?: string;                    // Sense locator recovery — see phase-2-sense.md
-}
-```
-
-**Screenshot selection (frame rule C, deterministic — no LLM frame choice):**
-- Resolve `keyEventId` → its event in the (cleaned) set. Default to the **action frame** `shots/<keyEventId>.jpg`.
-- For the **last step of the workflow** (the outcome) → use the **result frame** `shots/<keyEventId>-post.jpg` (falls back to the action frame if no post-shot exists).
-- Carry the keyEvent's `target.bbox` onto the step (free; powers the element highlight — **now rendered in Studio's KB detail page** (2026-07-03), see §8).
-- Fallback if `keyEventId` is missing/invalid: the step's last valid `sourceEventId`; if none, `screenshotFile = null`.
-
-**Prompt rules:**
-- Drop orienting/stray actions not needed to reach the goal (the model sees "this is the landing page" in narration → #1/#2/#3 are non-steps).
-- Merge low-level interactions into one user-facing step.
-- Write clear imperative instructions; attribute narration correctly (fixes the smear).
-- Preserve order; **every step must cite ≥1 real event id** and name a `keyEventId` from its own `sourceEventIds`.
-
-**Guardrails:**
-- Validate every `sourceEventId`/`keyEventId` against the known event set (same defensive filter the segmenter uses); drop steps that cite no known id.
-- If distillation returns 0 steps for a non-empty workflow → **fallback** to the cleaned events as steps (never lose a workflow).
-
-### 5.4 Data model
-
-**No Prisma migration** — reuse the existing `KnowledgeItem` row, repurposed to hold a distilled step:
-
-| Field | Before (raw event) | After (distilled step) |
-|---|---|---|
-| `kind` | `'step'` | `'step'` (unchanged) |
-| `orderIndex` | event order | clean step order |
-| `text` | `eventLabel + narration` | **clean instruction** (better retrieval) |
-| `segmentIndex` / `segmentTitle` | per workflow | unchanged |
-| `data` (Json) | `{ event, narration }` | `{ instruction, detail, route, narration, screenshotFile, bbox }` — `+ keyEventId` since 2026-07-08 (Sense locator recovery) |
-
-The persisted step keeps **no raw-event log** — but it does carry **one curated screenshot** (`screenshotFile`, resolved from `keyEventId` + frame rule C) and the element `bbox` as published-step content. `route` is carried for P1-M8 route-boost. The raw event *records* remain solely in `KnowledgeSource.manifest` as the reprocess record, never surfaced. (The unreferenced screenshots from dropped/stray events sit unused in MinIO — a future prune could remove them.)
-
-### 5.5 Consumer impact
-
-| Consumer | Today | Change |
-|---|---|---|
-| retrieval — now [`synthesis/src/retrieval.ts`](../packages/synthesis/src/retrieval.ts) *(was `api/src/copilot.ts`; consolidated 2026-07-06)* | route from `data.event.route.path`; `text`; `data.narration` | read `data.route` + `text` (now clean) + `data.narration` — small shape update |
-| [`synthesis/src/copilot.ts`](../packages/synthesis/src/copilot.ts) (answer) | uses `text` + `narration` | unchanged (cleaner inputs) |
-| [`web/.../kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx) (KB panel) | renders raw items + per-event `data.event.screenshot.file` | render **distilled steps**: `instruction`, `detail`, attributed `narration`, and the **one curated `data.screenshotFile`** per step. Drop the raw-item rendering. Relabel "Knowledge items by workflow" → "Steps". (`bbox` highlight overlay = later.) |
-| Approval (`CopilotApproval`) | keyed by `(sourceId, segmentIndex)` | **unaffected** — still per-workflow |
+The pipeline as it runs — stages, prompts, guards, fallbacks and every tuning constant — is
+[`internals/knowledge-base.md`](internals/knowledge-base.md). What belongs here is the *shape* the
+design settled on: raw events are **cleaned deterministically first** (cheap, no LLM, no semantic
+judgment), then **segmented into workflows** and **distilled into steps** by the model, which needs
+narration context the cleanup stage deliberately doesn't have. That ordering — cheap filter before
+expensive judgment — is the design.
 
 ---
 
 ## 6. Build plan & sequence
 
-Each phase is independently shippable and ends with a checkable DoD. Order matters: cheap filter → engine → rewire → consumers → verify.
-
-### Phase 1 — Deterministic cleanup (B) ✅ done (2026-06-26)
-- **Build:** `packages/synthesis/src/clean.ts` (`cleanEvents` + `isLikelyInteractiveTarget`), exported from the barrel.
-- **DoD (met):** on a fixture of the 13 chatful events, **13 → 8** — focus-clicks (#7/#8), duplicate password clicks (#9/#10), and the form-submit (#12) dropped; the 4 stray non-interactive clicks (#1/#2/#3-ish/#13) are *flagged*, not dropped (left for A). Full repo `pnpm typecheck` green. No pipeline wiring yet.
-
-### Phase 2 — Distillation engine (A) ✅ done (2026-06-26)
-- **Built:** `packages/synthesis/src/distill.ts` — `distillSteps` + `DistilledStepLLM`/`DistilledStep` types + JSON schema + event-id validation + `keyEventId` → screenshot resolution (frame rule C) + `bbox` carry + 0-step fallback. `temperature: 0`. Text fields run through `redactText` (P1-M12).
-- **DoD (met):** mocked-OpenAI unit check (10 assertions) — ungrounded steps dropped, per-step action frame, last step → result frame, `bbox` carried, narration derived, empty-model fallback. `pnpm typecheck` green.
-
-### Phase 3 — Pipeline rewire (synthesis + worker) ✅ done (2026-06-26)
-- **Built:** `buildWorkflowKB` in [`index.ts`](../packages/synthesis/src/index.ts) (transcribe → align → **clean** → segment → **distill** → distilled steps grouped by workflow). [`worker.ts`](../packages/api/src/worker.ts) now calls it and persists **distilled steps** (clean `text` = `distilledStepText` + `data: { instruction, detail, route, narration, screenshotFile, bbox }` + `segmentIndex`/`segmentTitle`, `orderIndex` within workflow). The raw 1:1 persistence + the read-back/tag round-trip are gone.
-- **DoD (met):** `cleanEvents`/`distillSteps` are now in the live call chain; worker log = `N workflow(s), M distilled step(s)`; full repo `pnpm typecheck` + build green.
-- **Known half-state (until Phase 4):** the persisted `data` shape changed, so the **KB page** still shows each step's text + narration but **no screenshot** (it reads the old `data.event.screenshot.file`), and **route-boost** (reads `data.event.route.path`) is off. Copilot *answers* still work (retrieval reads `text` + `data.narration`, both present).
-
-### Phase 4 — Update consumers ✅ done (2026-06-26) — closes the Phase-3 half-state
-- **Built:** the retrieval route-boost now reads `data.route` (with an `event.route.path` fallback for any pre-distillation rows) — built in `api/src/copilot.ts`, since **consolidated into [`synthesis/src/retrieval.ts`](../packages/synthesis/src/retrieval.ts)** (2026-07-06, same logic). The Studio KB page ([`kb/[id]/page.tsx`](../packages/web/app/dashboard/kb/%5Bid%5D/page.tsx)) now reads the distilled shape (`instruction`/`detail`/`narration`/`route`/`screenshotFile`), renders "Step N" with the curated screenshot, and is relabelled "Steps by workflow" (counts say "steps"). The answer engine needed no change (reads `text` + `narration`).
-- **DoD (met):** KB page renders clean steps + curated screenshots from the new shape; route-boost reads `data.route`; full repo `pnpm typecheck` green. Flag 1 (half-state) is closed.
-
-### Phase 5 — End-to-end verification ✅ done (2026-06-27)
-- **Verified by the user** on a fresh recording (Parts 6–11 of [`e2e-testing.md`](./e2e-testing.md)): the pipeline produces clean distilled steps with curated screenshots and the copilot answers correctly. Confirmed working end-to-end.
-
-### Phase 6 — Docs + memory ✅ done (2026-06-27)
-- **Done (2026-06-26):** [`architecture.md`](./architecture.md) (Module 2 = distilled steps; raw events discarded, only in manifest), [`phase-1-copilot.md`](./phase-1-copilot.md) (KB worker pipeline + `KnowledgeItem` data shape + KB-page label), this doc's status → Built, and the auto-memory KB note updated.
-- **Follow-up sync (2026-06-27):** the remaining docs that still described the pre-distillation pipeline were updated to match — [`roadmap.md`](./roadmap.md) (P1-M2 = distilled steps; doc map), the Phase-1 visual map (now [`phase-1-copilot.md §1.1`](./phase-1-copilot.md#11-system-map-the-visual); worker/KB nodes), and [`e2e-testing.md`](./e2e-testing.md) (worker-log lines, KB-page labels, architecture diagram).
-
-**Dependency order:** 1 → 2 → 3 → 4 → 5 → 6. Phases 1 and 2 can be built in parallel (independent modules); 3 depends on both.
+Built in six phases over 2026-06-26/27 (deterministic cleanup → LLM distillation → rewire → consumers → verify), commit `e5f81d8`, **user-verified E2E 2026-06-27**. The sequence itself is spent; `git log -- packages/synthesis` has it if the order ever matters again.
 
 ---
 
@@ -215,17 +108,3 @@ Each phase is independently shippable and ends with a checkable DoD. Order matte
 - First-class Prisma columns for step fields (currently in `data` JSON — migrate only if we need to query them).
 
 ---
-
-## 9. File-change map
-
-**New:**
-- `packages/synthesis/src/clean.ts` — deterministic event cleanup (B)
-- `packages/synthesis/src/distill.ts` — LLM step distillation (A) + `DistilledStep`
-
-**Edit:**
-- `packages/synthesis/src/index.ts` — orchestration (`buildWorkflowKB`), exports
-- `packages/api/src/worker.ts` — persist distilled steps
-- `packages/api/src/copilot.ts` — `data.route` shape *(since consolidated into `packages/synthesis/src/retrieval.ts`, 2026-07-06)*
-- `packages/web/app/dashboard/kb/[id]/page.tsx` — render distilled steps (instruction/detail/narration + curated `screenshotFile`), drop raw-item rendering, relabel panel
-
-**Unchanged:** capture contract (shared), Prisma schema (no migration), approval, answer engine ([`synthesis/copilot.ts`](../packages/synthesis/src/copilot.ts)).

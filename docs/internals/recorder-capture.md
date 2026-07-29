@@ -23,27 +23,30 @@ surfaced, and a failed upload keeps the buffer so the user can retry.
 
 ---
 
-## 2. Where it lives
+## 2. The contexts, and how they talk
 
-MV3 extensions are several cooperating contexts. Each file is one context:
+An MV3 extension is several cooperating contexts, and that split is forced, not chosen — a service
+worker cannot call `getUserMedia`, so narration needs an offscreen document; the popup dies whenever
+it closes, so it can hold no state. The division of labour:
 
-| File | Context | Job |
-|---|---|---|
-| [`background.ts`](../../packages/extension/src/background.ts) | Service worker | **The brain.** Owns recording lifecycle, takes screenshots, buffers to IndexedDB, assembles + uploads the bundle. |
-| [`content.ts`](../../packages/extension/src/content.ts) | Content script (injected into the recorded page, **all frames** — R8) | Listens for DOM events, builds the element fingerprint, serializes DOM, runs the post-action settle watcher, **buffers events + reconnects the capture port (R4)**, and (top frame) **mounts the on-page control bar**. |
-| [`controlbar.ts`](../../packages/extension/src/controlbar.ts) | (imported into `content.ts`, top frame only) | **R7 — the on-page floating control bar** (timer, step/workflow count, live mic meter, ⚑ Mark / Pause·Resume / Stop). |
-| [`offscreen.ts`](../../packages/extension/src/offscreen.ts) | Offscreen document | Records the microphone (service workers can't call `getUserMedia`); also **samples the mic level** and broadcasts it for the control-bar meter (R7). |
-| [`idb.ts`](../../packages/extension/src/idb.ts) | (shared by background) | A tiny IndexedDB key/value store — the crash-safe buffer. |
-| [`popup.ts`](../../packages/extension/src/popup.ts) | Popup | The state-machine UI (**disconnected · idle · recording[/paused] · uploading · retry**) with a live mic meter, timer, and step/workflow counts. |
-| [`connect-bridge.ts`](../../packages/extension/src/connect-bridge.ts) | Content script on the **Studio** origin only | Relays the token handshake from Studio to the extension. |
-| [`permission.ts`](../../packages/extension/src/permission.ts) | A dedicated tab | One-time microphone permission grant. |
-| [`indicator.ts`](../../packages/extension/src/indicator.ts) | (legacy, **unused**) | The old on-page toast — **removed 2026-07-01**; nothing passive is drawn on the page anymore (the R7 control bar is the only on-page surface). File kept dormant in-tree. |
+- **The service worker is the brain** — recording lifecycle, screenshots, the IndexedDB buffer, and
+  the upload. It can be **evicted at any moment**, which is the constraint everything else works around.
+- **The content script is injected into every frame** of the recorded page: DOM events, the element
+  fingerprint, DOM serialization, the post-action settle watcher, and its own event buffer. The top
+  frame additionally mounts the on-page control bar.
+- **The offscreen document owns the microphone**, and also samples the level for the control bar's meter.
+- **IndexedDB is the crash-safe buffer** — the only thing that survives a worker eviction.
+- **A dedicated content script on the Studio origin** relays the token handshake, and nothing else.
+  It is deliberately the only script that runs on a FlowBuddy origin.
 
-These talk over four Chrome messaging channels: **`chrome.runtime` messages** (popup ↔ background,
-offscreen ↔ background), a **long-lived `chrome.runtime.connect` port** named `capture` (content →
-background, the high-volume event stream — with a **keepalive ping + reconnect** so an evicted worker
-never drops it, R4), and **`chrome.tabs.sendMessage`** (background → content, for start/stop/status,
-and the **`micLevel`** relay that feeds the control-bar meter into the top frame — R7).
+They talk over four channels, and the choice of channel is load-bearing: ordinary runtime messages
+(popup ↔ background), a **long-lived port** named `capture` for the high-volume event stream, tab
+messages for start/stop/status, and the mic-level relay into the top frame. The port carries a
+**keepalive ping and reconnects on send**, because an evicted worker would otherwise drop the stream
+silently while audio kept recording — the failure that R4 exists to prevent.
+
+**Nothing passive is drawn on the recorded page.** The control bar is the only on-page surface, and it
+appears solely while recording.
 
 ---
 
@@ -320,6 +323,11 @@ also appears when Stop came from the popup, since the user's attention is on the
 carries `0` or `100`, so in practice it reads *Uploading…* and then, after ~8 s, *Uploading… waking
 the FlowBuddy server*. Harmless, but it is the one surface still using the old vocabulary.
 
+**Two constraints the UI is shaped by.** The brand faces must be **bundled as variable woff2** — MV3's
+CSP forbids fetching them at runtime, so a webfont link renders the fallback stack and the popup
+silently looks wrong. And the popup is styled in **vanilla CSS**, not Tailwind, because the esbuild
+bundle has no build step for it.
+
 ### 4.10 Getting connected (the token handshake)
 
 The recorder needs a workspace token + the API URL, and it gets them without copy-paste. The operator
@@ -382,19 +390,11 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 
 > ⚠️ **Deploy ordering.** The API rejects a finalize without `X-FlowBuddy-Upload-Id` and the previously
 > live store build (v0.6.0) does not send one, so **the newer recorder has to reach users before this
-> API reaches an environment they use.** Recorder **v0.7.0** carries the header and is cut for the
-> store alongside this change — details in [`../extension-releases.md`](../extension-releases.md).
+> API reaches an environment they use** — a standing rule for every future build, not just this one.
+> Current store status: [`../extension-releases.md`](../extension-releases.md).
 
 ---
 
 ## 7. Connections
 
-- **Hands off to →** [Ingestion API](ingestion-api.md) over `POST /v1/uploads/sign` (during
-  recording), `POST /v1/sessions` (at Stop), and `DELETE /v1/uploads/:uploadId` (on abandon) — Seam A
-  in [connections.md](connections.md).
-- **Writes directly to →** object storage, with the signed URLs that first route hands back (Seam B).
-- **Emits the contract →** [`SessionManifest`](../../packages/shared/src/capture.ts), consumed
-  downstream by the [Knowledge Base build](knowledge-base.md).
-- **Gets its token from →** [Studio](studio.md)'s `/connect` page (the handshake).
-- **PII masking pairs with →** the server `redactText` backstop documented in
-  [knowledge-base.md](knowledge-base.md) §"PII redaction".
+Seams, contracts and who-calls-what: [`connections.md`](connections.md).

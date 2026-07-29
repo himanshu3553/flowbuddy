@@ -9,121 +9,19 @@
 
 ---
 
-## Table of contents
-1. [Overview](#1-overview) · [1.1 System map (the visual)](#11-system-map-the-visual)
-2. [Scope & definition of done](#2-scope--definition-of-done)
-3. [Locked decisions & assumptions](#3-locked-decisions--assumptions)
-4. [The four surfaces (as built)](#4-the-four-surfaces-as-built)
-5. [Modules P1-M0…P1-M12](#5-modules-p1-m0p1-m12)
-6. [The capture contract (session bundle)](#6-the-capture-contract-session-bundle)
-7. [Data model](#7-data-model)
-8. [Capture reliability & PII backlog (P1-M11 / P1-M12)](#8-capture-reliability--pii-backlog-p1-m11--p1-m12)
-9. [Privacy & redaction](#9-privacy--redaction)
-10. [Non-functional requirements](#10-non-functional-requirements)
-11. [Risks / decisions to finalize](#11-risks--decisions-to-finalize)
-12. [End-to-end journey](#12-end-to-end-journey)
-
----
-
 ## 1. Overview
 
-**FlowBuddy adds a trustworthy AI help copilot to your SaaS — grounded only in workflows you recorded and approved.**
+Phase 1 is the whole loop: **record your product → it becomes an approved knowledge base → your
+customers get grounded answers inside your app.** Four surfaces make that work — a Chrome recorder, an
+ingestion API plus worker, the Studio console where a human approves what the copilot may say, and an
+embeddable widget.
 
-```
-Record (Chrome extension) → Knowledge Base (auto) → Approve for copilot (one click) → Embed one <script> → In-app Copilot answers your customers (cited; declines honestly)
-                                                                                                                    └─► feedback + coverage gaps ("record this next")
-```
+The one idea everything else serves: **the copilot answers only from workflows a human approved, and
+declines honestly otherwise.** Approval is the product's trust boundary, and the reason a wrong answer
+is a bug rather than an inherent property of the system.
 
-A founder installs the **FlowBuddy Recorder**, connects it to their account, and records themselves clicking through a workflow while narrating *what* and *why*. FlowBuddy captures the session in synchronized layers (events, DOM, screenshots, narration audio), builds an explicit **Knowledge Base**, and lets the founder **approve** which workflows the copilot may use. The founder pastes **one `<script>`** into their product, and their customers get an **in-app copilot** that answers from the approved knowledge — in context, with citations, declining honestly on gaps.
-
-**Grounded authorship (the guiding principle).** Everything the copilot says is synthesized **only** from the customer's own approved recordings — never the model's general knowledge. If a question isn't covered, the copilot **declines and flags a coverage gap** instead of inventing an answer. The KB is the **substrate**; a one-click **per-workflow approval flag is the trust gate** — so no un-approved or raw knowledge ever reaches an end-user (the **no-leak** guarantee).
-
-The foundation (P1-M0…P1-M3) shipped first as a thin slice (record → KB → retrieval/grounding engine); the copilot delivery layer (P1-M5…P1-M12) was built on top.
-
-### 1.1 System map (the visual)
-
-The end-to-end picture — capture raw signal → turn it into a Knowledge Base → gate it with approval → answer customers from it — with everything connecting through **one cumulative KB per workspace**. There are **two halves joined by the KB**:
-
-1. **Builder side** (record → process → approve) — asynchronous (BullMQ): `extension → api ingestion → worker + synthesis → KB → approval`.
-2. **Customer side** (ask → answer) — synchronous: `widget → copilot API → answerFromKB → approved-KB`.
-
-The **approval gate** is the seam between them — a customer can only ever get answers from knowledge the founder explicitly approved (the **no-leak** guarantee). `synthesis` is the shared brain: the *same* package builds the KB on the way in and grounds the answers on the way out.
-
-```mermaid
-%%{ init: { "flowchart": { "htmlLabels": true, "useMaxWidth": true, "nodeSpacing": 45, "rankSpacing": 55 } } }%%
-flowchart TB
-    subgraph BUILDER["🛠️ BUILDER SIDE — record &amp; curate (async · BullMQ)"]
-        direction TB
-
-        EXT["<b>M1 · CAPTURE</b><br/>extension (Chrome MV3)<br/>events + DOM + screenshots + narration<br/>client-side PII mask · reliable upload"]
-
-        ING["<b>INGESTION API</b><br/>api · server.ts<br/>/v1/uploads/sign → presigned PUT URLs (api never touches artifact bytes)<br/>/v1/sessions → the manifest; leftovers only on the fallback path, idempotent per uploadId<br/>DELETE /v1/uploads/:uploadId → discard an unfinished recording + its objects<br/>upsert KnowledgeSource · enqueue job (bounded, best-effort)"]
-
-        WORKER["<b>M2 · KNOWLEDGE BASE worker</b><br/>api · worker.ts + synthesis<br/>transcribe → align → clean events<br/>segment → distill into clean steps · server PII scrub<br/>status: recording → uploaded → processing → ready<br/>(a job whose row has no manifest yet is skipped)"]
-
-        KB[("<b>THE KNOWLEDGE BASE</b> · Postgres<br/>one cumulative KB per workspace<br/>KnowledgeSource + distilled-step KnowledgeItem[]<br/>· segmentIndex · segmentTitle")]
-
-        APPROVAL{{"<b>TRUST GATE — Approval (P1-M5)</b><br/>CopilotApproval (sourceId, segmentIndex)<br/>⇒ defines the approved-KB"}}
-
-        EXT -- "sign requests (while recording)<br/>+ finalize bundle · X-FlowBuddy-Upload-Id" --> ING
-        ING -- "async job" --> WORKER
-        WORKER --> KB
-        KB --> APPROVAL
-    end
-
-    subgraph CUSTOMER["💬 CUSTOMER SIDE — ask &amp; answer (sync)"]
-        direction TB
-
-        WIDGET["<b>WIDGET ⭐</b><br/>widget · flowbuddy-copilot.js<br/>one &lt;script&gt; · shadow-DOM chat<br/>sends page route · 👍/👎 feedback"]
-
-        COPILOTAPI["<b>COPILOT API</b><br/>api · copilot.ts + copilot-auth.ts<br/>/answer · /feedback<br/>embed key · origin allowlist · rate limit"]
-
-        ENGINE["<b>RETRIEVAL &amp; GROUNDING (P1-M3/M6)</b><br/>synthesis · answerFromKB()<br/>retrieve approved-KB → grounded answer + cites<br/>low confidence → honest DECLINE"]
-
-        WIDGET -- "question + route + key" --> COPILOTAPI
-        COPILOTAPI --> ENGINE
-        ENGINE -- "answer + citations / decline" --> COPILOTAPI
-        COPILOTAPI --> WIDGET
-    end
-
-    APPROVAL -- "no-leak: retrieval filters<br/>to APPROVED items only" --> ENGINE
-
-    STUDIO["<b>STUDIO — builder console</b><br/>web (Next.js · Tailwind + shadcn · indigo)<br/>Home · Recordings · Knowledge Base · Copilot · Analytics · Settings"]
-
-    STUDIO -. "approve toggle" .-> APPROVAL
-    KB -. "browse / status" .-> STUDIO
-    ENGINE -. "queries + gaps" .-> STUDIO
-
-    classDef capture fill:#e7f0ff,stroke:#2b6cb0,color:#1a365d;
-    classDef kb fill:#e6fffa,stroke:#2c7a7b,color:#234e52;
-    classDef gate fill:#fffaf0,stroke:#dd6b20,color:#7b341e;
-    classDef customer fill:#faf5ff,stroke:#6b46c1,color:#44337a;
-    classDef studio fill:#f7fafc,stroke:#4a5568,color:#1a202c;
-
-    class EXT,ING capture;
-    class WORKER,KB kb;
-    class APPROVAL gate;
-    class WIDGET,COPILOTAPI,ENGINE customer;
-    class STUDIO studio;
-```
-
-**How the pieces map to packages:**
-
-| Module / role | Package(s) | Key files | Responsible for |
-|---|---|---|---|
-| **M1 · Capture** | `extension` | `content.ts`, `background.ts`, `offscreen.ts`, `controlbar.ts`, `idb.ts` | Record the session (events + DOM + screenshots + audio), client-side PII mask, on-page control bar, **stream screenshots + DOM snapshots to object storage over presigned URLs while recording** — **and the narration the same way at Stop** (confirmed ones tracked as `up:<sessionId>:<rel>` markers in IndexedDB; anything unconfirmed falls back to the Stop bundle), reliable **and idempotent** upload keyed on a recorder-minted `uploadId`, plus **discarding an abandoned capture server-side** (`DELETE /v1/uploads/:uploadId`) on *Start fresh* and when a new recording begins over an unsent buffer |
-| **Ingestion** | `api` | `server.ts`, `storage.ts`, `queue.ts` | `POST /v1/uploads/sign` — mint short-lived (900 s) per-object presigned PUT URLs against an artifact allowlist and upsert the recording row by `(workspaceId, uploadId)` (**the api never touches those bytes**); `POST /v1/sessions` — finalize: require `X-FlowBuddy-Upload-Id`, stream any leftover artifacts to S3/R2 (none, on a healthy connection), validate the manifest, fill in the *same* `KnowledgeSource` → enqueue worker job (idempotent on retry; drains the body without writing if the recording is already built); `DELETE /v1/uploads/:uploadId` — discard an unfinished recording + its objects (`recording` only; **409** once finalized, **200** no-op for an unknown id), plus the **12 h abandoned-recording sweep** that rides fire-and-forget on finalize |
-| **M2 · Knowledge Base** | `api` (worker) + `synthesis` | `worker.ts`; `index.ts` (`buildWorkflowKB`), `transcribe.ts`, `align.ts`, `clean.ts`, `segment.ts`, `distill.ts`, `embeddings.ts`, `redact.ts` | Transcribe → align → **clean** events → segment into workflows → **distill** clean steps → server PII scrub → embed → `ready` |
-| **The KB store** | `db` | `schema.prisma` | One cumulative KB per workspace; `KnowledgeSource` + `KnowledgeItem` + index |
-| **Approval gate (P1-M5)** | `api` + `web` | `CopilotApproval`; Studio toggle | Per-workflow "approve for copilot" → defines **approved-KB** (the trust gate) |
-| **Retrieval & grounding (P1-M3/M6)** | `synthesis` | `retrieval.ts` (the single no-leak seam — hybrid keyword∪pgvector RRF) + `embeddings.ts` → `copilot.ts` `answerFromKB()` | Retrieve approved-KB → grounded answer + citations, or honest decline → `CoverageGap` |
-| **Copilot API (P1-M6/M8/M9)** | `api` | `copilot.ts`, `copilot-auth.ts` | `/v1/copilot/answer` + `/feedback`; embed key auth, origin allowlist, rate limit, route-bias |
-| **Widget (P1-M7/M10)** | `widget` | `index.ts`, `styles.ts` | One `<script>` shadow-DOM chat; renders answers/citations; 👍/👎 feedback (+ the lazy P2-M5 sibling `flowbuddy-copilot-render.js`) |
-| **Studio (P1-M10 + console)** | `web` | `app/dashboard/*` | Builder UI: KB browser, approve toggle, embed snippet, activity + coverage gaps |
-| **Shared contracts** | `shared` | capture contract + zod schemas | The session-bundle shape every module agrees on |
-| **Cross-cutting** | `logger`, `landing` | — | the one Pino logger for every Node service; the flowbuddyai.com marketing page |
-
-*(Module 3 — article creation — and the Help Portal are **Version 2 by-products**, decoupled from this copilot flow — [`v2-portal.md`](v2-portal.md).)*
+How it runs, surface by surface: [`internals/`](internals/README.md) — start at
+[`connections.md`](internals/connections.md), which traces one recording from a click to an answer.
 
 ---
 
@@ -134,21 +32,21 @@ flowchart TB
 **Out (other phases / deferred):**
 - **Help portal + article authoring/publishing** → **Version 2** ([`v2-portal.md`](v2-portal.md)) — decoupled by-products over the same KB.
 - **Grounding Stage B** (also cite a published article) — deferred (a grounding stage, distinct from the product phases).
-- **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight (P2-M3, ✅) and the guided walkthrough (P4-M0, ✅); executing workflows on the end-user's behalf → **Phase 4's acting modules** ([`phase-4-autopilot.md`](phase-4-autopilot.md)); the data exists.
+- **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight (P2-M3, ✅) and the guided walkthrough (P4-M0, ✅); executing workflows on the end-user's behalf → **Phase 4's acting modules** ([`agent.md`](agent.md)); the data exists.
 - **Self-validation / sandbox / drift** → **Phase 3**.
 - **Narration-only & video capture** → **Version 2**.
 - Integrations & public API; i18n; multi-seat/roles; billing (free open-signup beta).
 
 **Definition of done (= the Version 1 release):**
-- [ ] End-to-end: install → record → process → **approve for copilot** → embed snippet → end-user asks → grounded answer.
-- [ ] **Grounded answer with a citation** (source workflow/step) when approved-KB covers it; **honest decline + logged coverage gap** when it doesn't — **no hallucinations**.
-- [ ] **No-leak:** never retrieves/answers from un-approved or raw KB, even when asked directly.
-- [ ] **Scoped to the correct workspace** (public embeddable key + origin allowlist) and **rate-limited**.
-- [ ] **Context-aware** (biases to the host route; degrades gracefully) and **multi-turn**.
-- [ ] **PII-safe:** passwords never captured; input values masked by default **before upload**.
-- [ ] Every Q&A **logged** with answered/hit-miss + 👍/👎; Studio surfaces top questions + coverage gaps.
-- [ ] Works **without touching the portal/articles** (Version 2).
-- [ ] **Cloud deploy is the final step:** whole copilot built & verified locally first, then deployed.
+- [x] End-to-end: install → record → process → **approve for copilot** → embed snippet → end-user asks → grounded answer.
+- [x] **Grounded answer with a citation** (source workflow/step) when approved-KB covers it; **honest decline + logged coverage gap** when it doesn't — **no hallucinations**.
+- [x] **No-leak:** never retrieves/answers from un-approved or raw KB, even when asked directly.
+- [x] **Scoped to the correct workspace** (public embeddable key + origin allowlist) and **rate-limited**.
+- [x] **Context-aware** (biases to the host route; degrades gracefully) and **multi-turn**.
+- [x] **PII-safe:** passwords never captured; input values masked by default **before upload**.
+- [x] Every Q&A **logged** with answered/hit-miss + 👍/👎; Studio surfaces top questions + coverage gaps.
+- [x] Works **without touching the portal/articles** (Version 2).
+- [x] **Cloud deploy is the final step:** whole copilot built & verified locally first, then deployed.
 
 ---
 
@@ -172,76 +70,31 @@ flowchart TB
 
 ---
 
-## 4. The four surfaces (as built)
+## 4. The four surfaces
 
-### 4.1 FlowBuddy Recorder (Chrome extension) — Module 1: Capture
-*UI restyled repeatedly: 2026-06-26 (neutral shadcn) → 2026-06-28 (indigo brand) → **2026-07-01 full rebuild to the [`docs/design_system/design_handoff_recorder_extension`](design_system/design_handoff_recorder_extension/README.md) handoff (F10–F13), with the placeholders replaced by real capabilities.** The popup is a state machine — **disconnected · idle · recording (+paused) · uploading · retry** — 360px on the canonical indigo design system, with **bundled** Plus Jakarta Sans + JetBrains Mono (variable woff2, so the brand faces render under MV3 CSP). Formerly-placeholder features are **now real:** a **live mic meter** (WebAudio `AnalyserNode` off the popup's own `getUserMedia`), **working Pause/Resume** (event timestamps are active-time so audio stays aligned), and an **honest upload stage** — since R14 (2026-07-28) there is no percentage at all, because artifacts upload while you record and Stop has almost nothing left to send: "Saving narration…" → **"Finishing up…"** → after 8 s **"Sending the rest of your recording…"** with a running elapsed timer (the state that means the direct uploads didn't get through and the whole recording is going in one request). Workspace **name + initial avatar** ride the connect handshake; the toolbar action icon **blinks a red dot** while recording (steady when paused); "Start fresh" discards a failed recording; the CAPTURES chips were removed. Vanilla CSS (no Tailwind in the esbuild bundle); class/element hooks preserved.*
-**Connect with FlowBuddy** — the popup's **Connect** opens Studio's `/connect` (already signed in); one click mints a workspace token **server-side** and hands it + the API URL **+ the workspace name** back via a content-script bridge — **no tokens/URLs typed**. The popup then shows the connected **workspace (name + avatar) and "Connected as you@email"**; recording is disabled until connected.
+| Surface | What it is | Mechanics |
+|---|---|---|
+| **Recorder** (Chrome MV3) | Captures narrated workflows — events, DOM fingerprints, screenshots, audio — and uploads them. | [`internals/recorder-capture.md`](internals/recorder-capture.md) |
+| **KB build** (worker) | Transcribes, cleans, segments and distills a raw capture into per-workflow steps. | [`internals/knowledge-base.md`](internals/knowledge-base.md) |
+| **Copilot** ⭐ | The headline: retrieval over approved KB → grounded answer with citations, or an honest decline. | [`internals/copilot.md`](internals/copilot.md) |
+| **Studio** | The builder's console — review, **approve**, configure the embed, read analytics. | [`internals/studio.md`](internals/studio.md) |
 
-**Recording controls** — **Start/Stop** the active tab; **Mark new workflow** drops a marker (one recording → multiple workflows; the strongest segmentation signal); **Grant microphone** via a guided flow.
+Three decisions from building them that are not obvious from the code:
 
-**What gets captured (event/DOM-primary)** — for each meaningful interaction (click, input, submit, SPA nav, **plus (R10) a debounced significant page scroll, a menu-opening hover, and richer keyboard: Enter/Escape + app-command shortcuts like Cmd+K / Ctrl+S**): the **event** (type, timestamp, masked value), **element semantics** (role, accessible name, text, tag, CSS path, XPath, bbox, attributes), **route** (URL/path/hash/title — *also powers context awareness*), a **hi-res screenshot**, a **DOM snapshot** (scripts/styles stripped, size-capped), a **post-action snapshot** after the page settles (the basis for `expected_outcome` and future self-validation), and **continuous narration audio**.
-
-**Recording feedback (no silent failures)** — toolbar badge cycles **`REC` → `↑` → `✓`/`!`** with a **blinking red-dot action icon** while recording. **No passive *status* is drawn on the recorded page** (the on-page toasts were removed 2026-07-01); every *upload outcome* surfaces **in the popup** as a **one-time, self-clearing** bottom status bar — green **✓ Uploaded** / red **Error <message>** (success auto-dismisses; both clear from storage so they don't persist across reopens) — including **zero interaction events** (e.g. an iframe-only UI). Retryable failures use the retry screen (Retry / Start fresh); hard failures (no events) show the error bar. **2026-07-03 (R7):** while recording, a **draggable on-page control bar** *is* shown — an interactive control surface (Stop / Pause / Mark + live timer, step count, mic meter), distinct from the removed passive toasts (§8, §4.1 recorder).
-
-**Capture reliability (P1-M11 core)** — survives *same-tab* full-page navigations **including cross-origin** (R1 — hardened 2026-07-01 with a deterministic **pull-based self-arm handshake**, §8), keeps the bundle + offers **Retry** on upload failure (R2), longer finalize fallback so long recordings keep narration (R3), a (2026-07-01) **hardened finalize lifecycle** — the stop→finalize fallback timer is tracked + cancelled and finalize never runs against an active recording, so a stale timer can't corrupt a later session — and (2026-07-03, R4) **survives service-worker eviction**: a 20s keepalive ping keeps the MV3 worker warm during quiet narration, and captured events are buffered + the capture port reconnects on demand, so an eviction can't silently drop events. *(Backlog: §8.)*
-
-**PII redaction by default (P1-M12 core)** — before upload, masks `password` values/regions (never captured), plus `email`/`tel`, sensitive `autocomplete` (cc-*, current/new-password, one-time-code), card/CVV/SSN/secret/token field patterns, and any host-marked **`data-flowbuddy-redact`** field. *(Backlog: §8.)*
-
-**Known limits (Phase 1):** a tab opened **manually** (not *from* the recording tab) isn't followed (R9 Option B not built); **cross-origin iframe** events are captured but omit `bbox` (no highlight crop, screenshot still shows the pixels — the offset is unknowable across the origin boundary); screenshot/DOM **pixel** PII redaction (Cut 2) deferred to Version 2 (portal track). *(Now captured (2026-07): same-tab **cross-origin** navigation — R1 — **new tabs / popups opened from** the recording tab — R9 Option A — and **events inside iframes** — R8.)*
-
-### 4.2 Knowledge Base — Module 2
-**One cumulative KB per workspace** (not per recording) — every recording compounds into the same KB; each item links to both its source recording (provenance) and its workspace.
-
-Stores **`KnowledgeSource`** (one per recording: kind, app URL, status, persisted transcript, raw manifest) and **`KnowledgeItem`** (the normalized, indexed unit — in V1 a **distilled step item**: a clean imperative `instruction` (+ optional `detail`), `route`, attributed `narration`, one curated `screenshotFile` + element `bbox`, and searchable `text`).
-
-**The worker** (on upload): transcribes narration (`whisper-1`, persisted) → aligns narration to events → **cleans** the raw events (deterministic dedupe/merge of mechanical duplicates) → **segments** into candidate workflows (markers → route changes → narration cues → LLM) → **distills** each workflow (LLM) into clean, user-facing steps — dropping stray clicks, merging low-level interactions, attributing narration, and keeping one curated screenshot per step — then persists those distilled steps tagged by workflow and sets status **`ready`**. Raw events are **not** persisted as items (only the distilled steps are; the raw log stays in the manifest). It **stops at `ready`** (curated model; approval and article generation are separate explicit steps). Items are indexed by text **and embedded at KB build** (`text-embedding-3-small` — P1-M3, 2026-07-07) for **hybrid keyword+vector retrieval**, workspace-wide. See [`kb-step-distillation.md`](kb-step-distillation.md) (2026-06-26).
-
-### 4.3 In-App Copilot ⭐ — the primary KB consumer (the headline)
-*Grounds directly on the approved subset of the KB (Module 2) — parallel to, and independent of, Module 3 article creation (Version 2).*
-- **Approval gate (P1-M5):** a per-**workflow** "approve for copilot" toggle in the KB browser; the **enforcement seam** — retrieval filters to approved items only.
-- **Answer endpoint (P1-M6):** `POST /v1/copilot/answer` retrieves over **approved-KB**, returns a structured **grounded answer + citations** or an **honest decline** (→ `CoverageGap`, `source=copilot`); multi-turn. *(Since 2026-07-27 the route picks its engine from the workspace's mode — single call, agent loop, or the diagnostic path — and since 2026-07-29 records which one answered.)*
-- **Widget & SDK (P1-M7):** `flowbuddy-copilot.js` (esbuild IIFE); shadow-DOM launcher + chat panel; **FlowBuddy-indigo default theme** (`--fb-accent:#3b50e0`, indigo citations + terracotta declines — aligned to the design system, 2026-06-28). **Appearance is LIVE-SERVED (2026-07-08):** at mount the widget fetches `GET /v1/copilot/config` (key-authed, 1.5s best-effort budget) so Studio → Appearance changes reach every embed without re-copying the snippet — the snippet carries only src/api/key; explicit `data-flowbuddy-*` attrs (`-accent`/`-position`/`-title`/`-greeting`/`-launcher`/`-launcher-text`) remain supported as deliberate per-page overrides that win over the server config; renders answers + citations + decline/error states; `demo/index.html` for local testing. **Design-system chrome + typography (2026-07-08):** header bot-badge + mono tagline, borderless input + square ↑ send button, "Source"/"Honest decline" pills, and Plus Jakarta Sans / JetBrains Mono at token sizes (fonts injected document-level by the widget, system-stack fallback).
-- **Context API (P1-M8):** the widget sends `location.pathname`; retrieval **boosts** items whose captured route matches the page; **soft boost** — biases, never excludes.
-- **Embed auth (P1-M9):** the API authenticates via **`X-FlowBuddy-Key`** → resolve key → workspace; enforce **origin allowlist** (CORS + server, empty=any — **origins normalized on save** to exact `Origin`-header form since 2026-07-06, with a Studio warning when the widget is live but the list is empty); **rate-limit** 30/min/key on **all three copilot routes** (`/answer`, `/feedback`, `/seen` — one shared gate, per-route buckets, 2026-07-06). Unknown/missing → 401, disallowed origin → 403, over limit → 429; key rotatable in Studio. Question capped at 2000 chars (+ widget `maxlength` 400) and the answer call pins `max_completion_tokens`/low temperature — the cheap cost ceiling from the review (§2.4).
-- **Feedback & analytics (P1-M10):** every question is logged with its outcome (`CopilotQuery`: question + answered + thumbs; returns `queryId`); widget renders **👍/👎** → `POST /v1/copilot/feedback` (tenant-scoped); Studio shows **Copilot activity** + unified **coverage gaps** ("record this next").
-
-### 4.4 Studio (Dashboard) — the builder's console
-*Redesigned across three passes: 2026-06-26 (`f5197c0`) onto **Tailwind + shadcn/ui** (neutral); 2026-06-28 (`8bc2e1f`) rebuilt under the **indigo brand** with a 6-item nav + empty/loading/error states on every screen; then a 2026-06-28 **design-system alignment pass** (branch `ui-change-copilot`) brought every surface to the canonical [`docs/design_system/`](design_system/README.md) tokens — cool-gray shadcn neutrals, the low-saturation status palette (mono status pills + an indigo "approved · live" tone), the radii + soft-shadow ramps, the indigo-gradient primary CTA, and Plus Jakarta Sans + JetBrains Mono. **All three client surfaces — Studio, recorder, widget — now share the one indigo design system** (the widget keeps host re-branding via `data-flowbuddy-accent`).*
-- **Accounts:** email+password (self-hosted, JWT); sign-up auto-creates the workspace; single-user = single-workspace; full tenant isolation.
-- **Shell & IA:** persistent sidebar (FlowBuddy mark, workspace switcher, user footer w/ sign-out) over a 6-item nav — **Home · Recordings · Knowledge Base · Copilot · Analytics · Settings** — + a **per-page header** (title + subtitle + actions); responsive (mobile drawer + mobile top bar).
-  - **Home** (`/dashboard`): **first-run** = a live activation checklist (token → recording ready → workflow approved → copilot embedded) with a progress ring + two help dialogs (How it works / How to record); flips to a **steady-state dashboard** once a workflow is approved or a question arrives — metric tiles, "record this next" gaps, recent questions, pending approvals, copilot-health bars, weekly questions chart.
-  - **Recordings** (`/dashboard/recordings`): filter tabs (All/Ready/Processing) + search over recording rows (status, workflow count, live **Recording** / processing / failed states — since 2026-07-27 a `recording` row renders as a pending **"Recording"** badge and files under the Processing filter, instead of falling through to a red "Failed" on a capture that is still being made) + empty state; row → a recording's detail.
-  - **Knowledge Base** (`/dashboard/kb`): top-level **workflows list** (the trust gate) — pending-approvals callout + **Approve all** + per-workflow **one-click "In copilot" toggle**; row → the source detail (`/kb/[id]`: distilled steps by workflow w/ screenshots — **click → a same-page lightbox, with the clicked element highlighted from the captured `bbox`** (2026-07-03) — approve toggles, transcript, a "Used by the copilot" citation-stats placeholder). *(Workflows = segments within a source; approval is per-`(sourceId, segmentIndex)`. No standalone Workflow entity/route, no "Draft" state, no per-step selector/expected_outcome in the data — those parts of the design are placeholders.)*
-  - **Copilot** (`/dashboard/copilot`): **tabs** (Install / Settings / Appearance) — embed snippet + copy (with a **local-testing hint** when the widget URL is a placeholder), "not detected yet" listening state + checklist, public key + rotate, origin allowlist, grounding & trust controls (**Cite the workflow used** now persists + is enforced on both the embedded widget and the preview; **decline-threshold** remains a UI-only preview — persistence/enforcement → **Version 2 · D2**, 2026-07-06) — plus the **real-widget tester** (Approach B, **2026-07-06**: the preview IS the actual `flowbuddy-copilot.js` bundle — an iframe host page (`copilot/preview-frame` route, session-authed) embeds it with the workspace's real key against the real API in **`data-flowbuddy-preview` mode**, which starts the panel open **with the launcher still visible below it** (lifted via `--fb-panel-bottom`, so launcher style/text/position edits show live), suppresses the embed-detection heartbeat, and flags `/answer` calls so the API skips ALL analytics writes and returns no `queryId`; the Studio origin is **exempt from origin allowlists** server-side (`FLOWBUDDY_STUDIO_URL`) so the tester survives a customer locking origins down; locally the bundle is served by a `web` fallback route when `FLOWBUDDY_WIDGET_URL` is unset. Replaced the Approach-A session-auth server action — `copilot-preview-actions.ts` deleted; the copilot now has exactly **one** answer path) and real Copilot activity. *(Embed-detection is **wired** (2026-06-30): the widget pings on mount + every `/answer` → `Workspace.widgetLastSeenAt` (`recordWidgetSeen` in `copilot-auth.ts`), read via `lib/embed-status.ts` for the live/idle state. The **F17 origin-blocked** error state → **Version 2 · D2** (2026-07-06; needs a blocked-origin signal).)*
-  - **Analytics** (`/dashboard/analytics`): 7-day answer-quality metrics, answered-vs-declined chart, coverage-gaps "record this next" table (each row: **Record** + **Dismiss**), recent declines, "resolved without a human" + empty state. *(Citation logging **shipped** (2026-06-30) via the **`QueryCitation`** model — **top workflows by citations is now real**. **The searchable question log shipped 2026-07-27** (`/dashboard/analytics/questions`) — search across question text and host route, outcome per row. Still backlog: a real deflection metric (tickets-deflected still shown as ≈answered), 👎-feedback drill-down, period deltas, query log/export, citation backfill.)*
-  - **Settings** (`/dashboard/settings`): extension API token + workspace details.
-  - **Action feedback (Studio-wide convention, 2026-07-08):** every server-mutating action confirms with a **toast** — top-right, filled status color (solid green success / terracotta error, white text; [`components/ui/toast.tsx`](../packages/web/components/ui/toast.tsx), one `<Toaster />` in the root layout), success AND failure — first wired on the Appearance save. New mutating features must include it.
-- **By-product (Version 2):** article authoring + the help portal are decoupled by-products built in Version 2 — the portal renders approved workflows over the same KB. See [`v2-portal.md`](v2-portal.md).
-
-> **Help Portal** is a **Version 2 by-product** (decoupled) — [`v2-portal.md`](v2-portal.md).
+- **The Studio preview *is* the real widget**, running in an iframe host page. There was briefly a
+  second answer path for it; collapsing them means there is exactly one path to audit, and a preview
+  can never diverge from what customers see.
+- **Appearance is live-served, not baked into the snippet.** The snippet carries only src, api and
+  key, so a founder changing their accent colour doesn't have to re-paste anything. Explicit embed
+  attributes still win, as deliberate per-page overrides.
+- **The widget is an overlay and never touches host-page layout.** A dock-to-side mode that displaced
+  the page was built and then discarded — displacing a customer's product is not ours to do.
 
 ---
 
 ## 5. Modules P1-M0…P1-M12
 
-| # | Module | Done when | Status (build) |
-|---|---|---|---|
-| **P1-M0** | Monorepo, infra & auth | Postgres/R2/Redis/Auth.js/api/worker + multi-tenancy in place | ✅ (legacy M0/M1) |
-| **P1-M1** | Recorder / workflow capture | extension emits the full session bundle (§6) with client redaction | ✅ (legacy M2) — **FlowBuddy Recorder v0.6.0 LIVE on the Chrome Web Store since 2026-07-23** ([`extension-releases.md`](extension-releases.md)) |
-| **P1-M2** | Knowledge Base | captures normalize → `KnowledgeSource`+`KnowledgeItem` + transcript + segmentation + keyword index | ✅ (legacy M3/M6) |
-| **P1-M3** | Retrieval & grounding engine | shared retrieve → ground → answer-or-decline engine | ✅ **done** — incl. the **hybrid keyword+pgvector upgrade (2026-07-07)**: RRF fusion in `synthesis/retrieval.ts`, worker embeds at KB build, keyword fallback on any vector failure (legacy M7/M11-retrieval) |
-| **P1-M4** | **Cloud deploy** (Render + R2) | the stack is live; copilot API + widget serve from the deployed origin | ✅ **deployed** — **prod LIVE at flowbuddyai.com since 2026-07-23** (paid two-blueprint stack, worker folded into the api — [`deploy.md`](deploy.md)); dev at `flowbuddy-dev-web.onrender.com` (reset/test → `e2e-testing.md` Level 2) |
-| **P1-M5** | **Approval gate** | builder marks a workflow "approved for copilot"; only approved items are eligible; reversible + audited; survives reprocess | ✅ **built** 2026-06-23 |
-| **P1-M6** | **Answer endpoint** | grounded answer (cite workflow/step) from **only** approved-KB, or honest decline → `CoverageGap`; multi-turn | ✅ **built** 2026-06-23 — verified incl. no-leak |
-| **P1-M7** | **Embeddable widget & SDK** | one `<script>` renders a working chat that talks to P1-M6 + shows citations | ✅ **built** 2026-06-23 — first end-to-end demo |
-| **P1-M8** | **Context API** | widget reports host route; copilot biases to "where the user is"; degrades gracefully | ✅ **built** 2026-06-23 |
-| **P1-M9** | **Embed auth & tenant scoping** | public key + origin allowlist; scoped, rate-limited; end-user sessions | ✅ **built** 2026-06-23 — 401/403/429 verified |
-| **P1-M10** | **Feedback loop & analytics** | every Q&A logged + thumbs; Studio surfaces top questions + coverage gaps | ✅ **built** 2026-06-23 |
-| **P1-M11** | **Capture reliability** | no recording the user made is silently lost (nav/upload/audio) | ✅ **done** — core (R1/R2/R3) + **R6, Pause/Resume, R1 cross-origin re-arm (2026-07-01), R9 multi-tab Option A & R8 iframe (2026-07-02), R4 SW-eviction resilience, R7 on-page control bar, R10 scroll/hover/keyboard & R12 screenshot timing/cost (2026-07-03), R13 ranked locators (2026-07-06) shipped**; R5 → V2·D3 |
-| **P1-M12** | **PII redaction** | passwords never captured; values masked by default before upload; copilot-facing text scrubbed server-side | 🔄 client masking 2026-06-23 + **server text-scrub (Cut 1) 2026-06-26**; screenshot OCR/blur (Cut 2) → Version 2, portal track (§8) |
-
-**Package layout:** `packages/api` (Fastify ingestion + copilot routes + the BullMQ worker), `packages/synthesis` (the shared `answerFromKB` engine + capture synthesis + the `retrieval.ts`/`embeddings.ts` seams), `packages/widget` (the embeddable copilot, esbuild), `packages/web` (Studio: approval toggle, copilot settings, analytics), `packages/logger` (the one Pino structured logger for every Node service — 2026-07-08), plus `shared`/`db`/`extension`/`landing`.
+Status: [`roadmap.md`](roadmap.md) §2. It is the only status surface.
 
 ---
 
@@ -284,24 +137,39 @@ Event {
 - **Identity + idempotency.** One recording = one `uploadId` (UUID), minted by the recorder when Record is pressed and carried on **`X-FlowBuddy-Upload-Id`** — `/v1/sessions` returns **400** without it. It rides a header, not the manifest, because parts stream to storage before the manifest part is parsed. Both routes resolve it to the same row via `@@unique([workspaceId, uploadId])`, so **a retry can never create a second recording**; a finalize arriving after the recording is built drains the body and replies `alreadyFinalized`.
 - **Artifact allowlist.** Both routes validate every relative path against `shots/<name>.jpg|jpeg|png`, `dom/<name>.html`, `audio.webm`. A signed URL is a write capability, so the key is *validated*, never merely sanitized.
 - **Degradation.** If signing fails (offline, auth, an older server), nothing is lost — unconfirmed artifacts simply ride the Stop bundle exactly as before. **The multipart bundle path is kept on purpose**, not leftover: it is the only way a browser that cannot reach object storage directly still delivers a complete recording, and it is why the finalize deadline stays a generous 300 s even though the healthy path sends kilobytes.
-- **Cleanup (2026-07-28).** Uploading during the capture means an *abandoned* recording has already written a row and objects, so discarding is now a server-side act: **`DELETE /v1/uploads/:uploadId`** drops both. The recorder calls it on **Start fresh** and when a new recording starts while an old unsent buffer still holds a `meta` — that buffer surviving is precisely the evidence the previous recording never uploaded successfully. Only a row still in `recording` is discardable (a finalized one answers **409** — deleting it is Studio's job; an unknown id is a clean **200** no-op), and a server-side sweep removes `recording` rows idle **> 12 h** with their storage, riding fire-and-forget on finalize. The threshold is deliberately generous because a **paused** capture signs nothing either; a false positive self-heals, since upload markers are scoped to the row id and the local buffer is never cleared until an upload succeeds.
+- **Cleanup.** Because artifacts upload *during* the capture, an abandoned recording has already written a row and objects — so discarding became a server-side act rather than just clearing a local buffer. Only a row still in `recording` may be discarded; a finalized one must be deleted in Studio. Mechanics, status codes and the sweep: [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.
 
 ---
 
 ## 7. Data model
 
-All **additive** on the foundation schema (`Workspace / ApiToken / KnowledgeSource / KnowledgeItem / CoverageGap`):
+The schema itself is [`packages/db/prisma/schema.prisma`](../packages/db/prisma/schema.prisma), and the
+table-by-table walkthrough is [`internals/data.md`](internals/data.md). What belongs
+here is only what the schema **cannot** say about itself — the invariants a migration could break
+without any type error:
 
-- **KB:** `KnowledgeSource` (kind, appBaseUrl, status — now `recording | uploaded | processing | ready | done | error`, persisted `transcript`, **nullable** `manifest` — null until Stop finalizes the recording — **+ `uploadId`** with `@@unique([workspaceId, uploadId])`: the recorder-minted identity that makes ingestion idempotent; migration `20260727230000_upload_identity`) → `KnowledgeItem[]` (kind `step|topic`, `text` index field, `data` payload — for `step`, the **distilled** `{ instruction, detail, route, narration, screenshotFile, bbox }` (2026-06-26) **+ `keyEventId`** — the step's key manifest event, persisted since 2026-07-08 — `segmentIndex`/`segmentTitle`). The copilot retrieves over `KnowledgeItem`s, not articles.
-- **Approval (P1-M5):** a first-class **`CopilotApproval`** row keyed by `(sourceId, segmentIndex)` (with a `workspaceId` scoping column) — **survives** the worker's item delete+recreate on reprocess. (The enforcement seam P1-M6 retrieves through.)
-- **Copilot embed/config (on `Workspace`):** `copilotPublicKey` (unique, `pk_…`) + `copilotAllowedOrigins[]` + **live-served appearance** (`copilotAccent`, `copilotTitle`, `copilotGreeting`, `copilotPosition`, `copilotLauncherStyle`, `copilotLauncherText`) + `copilotShowCitations` + the embed-detection heartbeat (`widgetLastSeenAt`/`widgetLastSeenOrigin`). *(Appearance is now a **Studio setting, stored server-side** and served to the widget at mount via `GET /v1/copilot/config` — 2026-07-08; explicit `data-flowbuddy-*` embed attrs still win as per-page overrides. This supersedes the earlier "theming is host-driven, not stored server-side" model.)*
-- **Copilot logs (P1-M10):** **`CopilotQuery`** — the question (**PII-scrubbed on write** since 2026-07-27; retrieval and the model still see exactly what the user typed, so answer quality is unchanged), `answered`, thumbs `up|down|null`, the host route, and since 2026-07-29 **how the answer was produced**: `mode` (the workspace setting) · `engine` (what actually answered — not always what `mode` predicts) · `rounds` · `toolCalls`. Cited workflows ARE persisted (`QueryCitation`, 2026-06-30); the answer *text* is returned to the widget but not stored + **`CoverageGap.source`** discriminator (`prompt | copilot`).
-- `KnowledgeItem.embedding vector(1536)` — **P1-M3 hybrid retrieval (2026-07-07)**, nullable (rows without a vector stay keyword-retrievable); written by the worker via raw SQL; migration `20260706200500_pgvector_hybrid_retrieval` also runs `CREATE EXTENSION vector`.
-- **Binary artifacts** (screenshots, audio, DOM snapshots) in S3-compatible storage (MinIO local / R2 prod) under `workspaces/<ws>/sessions/<id>/…`; per-workspace isolation; signed, expiring URLs **both ways** — read URLs for Studio/synthesis and, since 2026-07-27, **900 s presigned PUT URLs** minted by `POST /v1/uploads/sign` so the recorder writes artifacts directly (`signPutUrl` in `api/src/storage.ts` uses a *separate* S3 client with `requestChecksumCalculation: 'WHEN_REQUIRED'` — the SDK default signs in an empty-body CRC32 that Cloudflare R2 rejects and MinIO ignores, so the default passes local dev and fails only in prod; **R2 + CORS on a browser-issued presigned PUT is PROVEN on dev/Render since 2026-07-28** — it was MinIO-only when the path first landed); the api auto-creates the bucket on boot.
+- **`@@unique([workspaceId, uploadId])` is the idempotency guarantee.** The recorder mints `uploadId`
+  at Record, so both ingestion routes resolve to the same row and **a retry can never create a second
+  recording**. Drop that constraint and the duplicate-recording bug returns.
+- **`CopilotApproval` is keyed by `(sourceId, segmentIndex)`, not by item id** — which is precisely why
+  approval **survives the worker's item delete-and-recreate on reprocess**. Re-keying it to items would
+  silently un-approve every workflow on the next reprocess.
+- **`KnowledgeItem.embedding` is nullable on purpose.** A row without a vector stays keyword-retrievable,
+  so a failed embed degrades retrieval instead of hiding knowledge.
+- **The copilot retrieves over `KnowledgeItem`s, never articles.** Approval is the only gate between the
+  KB and an answer.
+- **The answer text is deliberately not stored.** `CopilotQuery` keeps the question (PII-scrubbed on
+  write), the outcome, and — since 2026-07-29 — how the answer was produced. Cited workflows are
+  persisted separately; the prose is not.
+- **Artifacts are private and reached only by signed, expiring URLs, in both directions** — read URLs
+  for Studio and synthesis, and presigned PUT URLs so the recorder writes directly. A signed URL is a
+  write capability, so the key is validated against an allowlist before it is built
+  ([`internals/ingestion-api.md`](internals/ingestion-api.md) §4.2).
 
-**Async processing:** uploads enqueued (Redis + BullMQ) → background worker (transcribe → clean → segment → distill → `ready`). The copilot answers **synchronously** over the answer endpoint.
-
-> **The enqueue is best-effort and bounded (2026-07-28).** It happens *after* the recording is already safe in Postgres and object storage, so a 5 s race caps it: on a slow or unreachable Redis the api logs and returns success rather than sending the recorder back to Retry for a recording that in fact arrived (Studio's **Re-process** is the recovery path). It needs its own `producerConnection` with fail-fast options because the shared `connection` must stay **bare** — BullMQ has to own `maxRetriesPerRequest: null` for the **worker**, a blocking consumer that would stop consuming if it gave up on a request. *(Studio's producer has always had fail-fast options on one connection, which is safe only because Studio is never a consumer.)* Worker concurrency is **1**, not 2: in production the worker shares one 512 MB instance with the api serving the public copilot, and a synthesis job holds whole screenshots in memory for the vision calls — two at once is the realistic OOM path, and an OOM there takes the copilot down too.
+**Async processing:** uploads enqueue onto Redis/BullMQ → the worker transcribes, cleans, segments and
+distills → `ready`. The copilot answers **synchronously**. The enqueue's deliberate fragility-tolerance,
+the two Redis connections and worker concurrency are one story, told in
+[`internals/connections.md`](internals/connections.md) Seam C.
 
 ---
 
@@ -309,35 +177,32 @@ All **additive** on the foundation schema (`Workspace / ApiToken / KnowledgeSour
 
 Brought into Phase 1 because **copilot answer quality = capture quality**, and PII is elevated (end-user-facing). The **core shipped**; the rest is the recorder/PII backlog below. Effort key: **S** ≈ <½ day, **M** ≈ 1–2 days, **L** ≈ 3+ days.
 
-### P1-M11 — Capture reliability (recorder backlog R1–R13)
+### P1-M11 — Capture reliability (recorder backlog R1–R14)
 
-**A. No silent data loss** *(lose nothing the user recorded — highest priority)*
-- **R1 — Survive full-page navigations** *(✅ core shipped; ✅ cross-origin re-arm fixed 2026-07-01)* — **M.** A hard nav re-injects a fresh content script that nothing re-armed, so events after the nav were lost while audio kept going. **Fix (shipped):** a background `tabs.onUpdated` listener scoped to the recording tab re-arms `content.js` with the **original** `startTime` (+ `pausedTotal`) so the `t` timeline stays continuous.
-  - **Cross-origin same-tab re-arm — ✅ fixed 2026-07-01.** Repro (before): start recording on a marketing site, click **Sign in**, land on the app's auth page **in the same tab but a different origin** (e.g. `scribe.com` → `scribehow.com/signin`) → capture silently stopped after the hop; only first-origin actions were recorded. **Cause:** the re-arm was **push-based** — the freshly-loaded content script is entirely passive and only starts when the background's `startCapture` lands; on a full cross-origin load that push is racy (the new page's content script may not be listening at `tabs.onUpdated` `complete`, and the fallback `chrome.scripting.executeScript` can collide with Chrome's own auto-injection) → the new page ended up **loaded-but-not-recording**. Same-origin SPA route changes don't reload the document, so they never hit it (which is why it looked domain-specific). **Fix:** flipped re-arm **push → pull** — on every page load the content script sends the background a `hello`; the background answers from `sender.tab.id` + `rec` (`{ record, startTime, pausedTotal }`), so every freshly loaded page (any origin) **self-arms deterministically**; the `onUpdated` push re-arm is kept as a backup. *(Distinct from R9, which is a **new tab/window**, not same-tab.)*
-- **R2 — Don't destroy the bundle on upload failure; retry** *(✅ core shipped)* — **S.** `finalize()` used to `kvClear()` unconditionally, wiping the IDB buffer before the upload result. **Fix (shipped):** only clear on a **successful** upload; otherwise keep the buffer, set the `fail` badge, and offer **Retry** in the popup (bounded to one pending bundle).
-- **R3 — Protect audio on long recordings** *(✅ core shipped)* — **S/M.** A fixed 5s finalize fallback could run before MediaRecorder finished encoding, dropping narration (the moat). **Fix (shipped):** a longer bounded wait (30–60s) + "still finalizing…" state; consider chunked audio-to-IDB so partial audio survives a crash.
-- **R4 — Service-worker-eviction resilience (MV3)** *(✅ shipped 2026-07-03)* — **M.** During quiet narration (no interaction → no port traffic) the MV3 service worker can be evicted after ~30s idle, which silently drops the capture port so every event after it is lost while audio keeps going. **Fix (shipped):** two defenses in the content script, no new manifest permission. **(1) Keepalive** — while recording, the **top frame** pings the port every **20s** (`{ kind: 'keepalive' }`, a no-op the background just receives), resetting the idle timer so the worker stays warm for the recording's duration. **(2) Reconnect + buffer** — captured messages go through an in-memory **`outbox`**; `flush()` drains it over a live port and, if a post fails on a stale port (evicted-but-`onDisconnect`-not-yet-fired), **reconnects and retries within the same call** so the event *and the screenshot the background takes on receipt* land immediately rather than one interaction late; `port.onDisconnect` nulls the dead port so the next `send()`/keepalive reconnects (which wakes a fresh worker — recording state lives in `chrome.storage.session` + `idToKey` rebuilds from IDB, so a revived worker resumes cleanly). The outbox is bounded (`OUTBOX_CAP`) and drained best-effort on stop. *(Chose the content-script keepalive over a `chrome.alarms` heartbeat to avoid adding the `alarms` permission; sub-frames (R8) skip the keepalive but still reconnect-on-send.)*
+**Shipped.** One line each; the mechanics live in [`internals/recorder-capture.md`](internals/recorder-capture.md), and `git log -- packages/extension` carries the full fix stories.
 
-- **R14 — Idempotent upload identity + direct artifact streaming** *(✅ built 2026-07-27, ✅ completed 2026-07-28 — **shipping to production** with recorder **v0.7.0**)* — **L.** A ~10-minute recording stalled at "Finishing…", the recorder's watchdog aborted after a flat 120 s, the api committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Two causes: `POST /v1/sessions` minted a fresh server-side `randomUUID()` per request (nothing could collapse a retry), and the api awaited one object-storage round-trip **per file, serially, inside the multipart parse loop**, before creating the row or responding. **Fix (built), four parts:** **(1) Identity** — the recorder mints an `uploadId` at Record and sends it on `X-FlowBuddy-Upload-Id`; `KnowledgeSource.uploadId` + `@@unique([workspaceId, uploadId])` make both ingestion routes resolve to the same row, so a retry updates instead of duplicating (and a recovered pre-upgrade buffer mints one at finalize). **(2) Direct upload** — new `POST /v1/uploads/sign` hands out 900 s presigned PUT URLs so screenshots and DOM snapshots go straight to storage **while recording**, tracked durably as `up:<sessionId>:<rel>` markers in IndexedDB (read with a keys-only cursor, so scanning the buffer after every event doesn't deserialize the whole recording). **(3) New status `recording`** — the row exists from the first artifact, so Studio shows a live capture instead of nothing; `manifest` is nullable and the worker skips a job whose row has none yet. **(4) The R2 checksum trap** — presigning uses a *separate* S3 client with `requestChecksumCalculation: 'WHEN_REQUIRED'`; the SDK default bakes an empty-body CRC32 into the signed URL, which MinIO ignores and Cloudflare R2 enforces — i.e. it passes local dev and fails only in production. Everything degrades to the old all-in-one bundle if signing fails. **Completed 2026-07-28, three more parts:** **(5) Narration goes direct too** — the audio takes the same signed-URL path, at Stop rather than during capture (it only exists once the offscreen recorder reports), which is what leaves the finalize request carrying **the manifest and nothing else** on a healthy connection. **(6) The upload code that existed to survive a huge POST is deleted** (net −85 lines in the recorder): the hand-rolled `streamingUpload()` multipart `ReadableStream`, the HTTP/2-only `duplex: half` path *and* its HTTP/1.1 fallback, the 90 %-capped byte progress, the `FINISHING` (−2) sentinel and the dual STALL_MS/PLAIN_MS re-arming watchdogs — replaced by **one plain `fetch(FormData)` with a single 300 s deadline**. The popup drops the percentage and the "Finishing…" state that once read as *stuck forever*: it shows **"Finishing up…"**, and after 8 s **"Sending the rest of your recording…" with a running elapsed timer** — the honest explanation being that the direct uploads didn't get through and the whole recording is going in one request. The retry screen shows no fake percentage either, and its timeout message now says retrying is **safe and cannot duplicate** (which the stable `uploadId` makes true). **The multipart bundle path itself stays** — it is the fallback, not leftover, and the reason the deadline is still generous. **(7) Abandoned-recording cleanup** — see the *Cleanup* bullet in §6: `DELETE /v1/uploads/:uploadId` (recorder-invoked on *Start fresh* and when a new recording starts over an unsent buffer) plus a 12 h server-side sweep riding on finalize. **⚠️ Deploy order (still live):** the api rejects a finalize without the header and the store build **v0.6.0 does not send one**, so recorder **v0.7.0 — version-bumped and cut in this commit** ([`extension-releases.md`](extension-releases.md)) — must reach users before this api serves them; the constraint only clears once 0.7.0 is live. *(Both sibling gaps opened on 2026-07-27 are now **CLOSED**: R2 + CORS on a browser-issued presigned PUT is **proven on dev/Render** 2026-07-28, and abandoned recordings are cleaned up. The remaining one — **presigned PUTs carry no size ceiling**, since `MAX_BUNDLE_BYTES` only ever covered the bundle — is **deferred by decision**; the full entry, with the `ContentLength` fix and why it waits, is [`roadmap.md`](roadmap.md) §9.)*
+| R | Problem | Outcome |
+|---|---|---|
+| **R1** | A hard navigation lost every event after it | Re-arm flipped **push → pull**: each freshly loaded page self-arms via a `hello` handshake, any origin |
+| **R2** | Upload failure wiped the buffer | Clear only on success; otherwise keep the buffer and offer Retry |
+| **R3** | Long recordings dropped narration | Bounded 30–60 s finalize wait instead of a fixed 5 s |
+| **R4** | MV3 worker eviction during quiet narration | 20 s keepalive from the top frame + an outbox that reconnects and retries in the same call |
+| **R6** | Users record blind; a dead mic is found too late | Live WebAudio mic meter + pre-record permission flow |
+| **R7** | Stop/marker/status needed the popup | Draggable shadow-DOM control bar in the top frame |
+| **R8** | iframe UIs captured nothing | `all_frames:true`; bbox translated to top-document coords (cross-origin frames omit bbox rather than crop wrong) |
+| **R9** | OAuth popups / new tabs lost capture | `Rec.tabIds` set; tabs opened **from** a recording tab are adopted via `openerTabId` |
+| **R10** | Only click/change/submit/Enter captured | Debounced page-level scroll, dwell-gated hover on `aria-haspopup`, and modifier-combo keydowns |
+| **R12** | Screenshots landed after the click's side effect | Pre-capture on `pointerdown`, awaited by the click; JPEG instead of PNG; bbox re-validated against scroll delta |
+| **R13** | Only brittle positional selectors | Ranked multi-signal `locators`, uniqueness-verified at capture time — framework-generated ids rejected |
+| **Stop→upload** | Silent, deadline-less upload pipeline | Persisted `phase` + alarms-backed recovery + a status pill on the page. **That pill deliberately reverses the 2026-07-01 "outcomes never render on the page" decision, for the stop moment only.** |
 
-**B. Coverage** *(capture more app types — backlog)*
-- **R8 — iframe / cross-frame capture** *(✅ shipped 2026-07-02)* — **L.** Content scripts were `all_frames:false`, so iframe UIs (Stripe, embedded editors, chat widgets) captured nothing. **Fix (shipped):** `manifest` → `all_frames:true` (inject into every http(s) frame); each frame **self-arms via the existing `hello` handshake** (R1), and stop/pause/resume already broadcast to all frames. `content.ts` translates the element bbox into **top-document viewport coords** (`frameOffset()` walks the ancestor iframe chain) so highlights line up with the full-tab screenshot; a **cross-origin** frame omits `bbox` (offset unknowable — no wrong crop) but still captures the event + screenshot, and records `framePath` (the sub-frame URL). `appMeta` is **gated to the top frame** so a sub-frame can't clobber the session's origin/viewport; the background drops events while paused (multi-frame safety). *(Remaining constraint: cross-origin frames have no highlight bbox — same-origin chains are fully resolved.)*
-- **R9 — Multi-tab / popup workflows** *(✅ shipped 2026-07-02 — Option A)* — **L.** Capture was bound to one `tabId`; OAuth popups / "open in new tab" lost capture (**distinct from R1**, same-tab nav). **Fix (shipped):** `Rec.tabIds` tracks a **set** of session tabs; `tabs.onCreated` + `openerTabId` **adopts tabs opened FROM a recording tab** (Option A — never unrelated tabs), which self-arm via the `hello` handshake (R1); `hello` / re-arm / stop / pause / resume span the whole set; screenshots use the **event tab's `windowId`** (multi-window / popup safe); closed tabs pruned via `tabs.onRemoved`. *(Option B — follow any tab you manually switch to — not built; that's the remaining known limit.)*
-- **R10 — Scroll / hover / richer keyboard** *(✅ shipped 2026-07-03)* — **M.** Only click/change/submit/Enter/popstate were handled. **Fix (shipped):** three low-noise additions in `content.ts`. **(1) Scroll** — a **debounced** (`450ms` idle) **page-level** scroll (inner scroll containers ignored) emits ONE `scroll` event only when the delta clears **35% of the viewport**, with a minimal target (no bbox → the screenshot shows the revealed viewport) and the scroll depth as `value`. **(2) Hover** — a `mouseover` on an **`aria-haspopup`** trigger, **dwell-gated** (`450ms`) + a `:hover` re-check + 4s repeat-suppression, emits a `hover` event that highlights the menu trigger (captures the revealed submenu — a real step). **(3) Richer keyboard** — `shortcutCombo()` captures bare **Enter/Escape** and **app-command modifier combos** (Cmd+K, Ctrl+S, Cmd+Enter…) as `keydown` events with a normalized combo `value`, while dropping plain typing (already covered by `input`), lone modifiers, and clipboard/undo edits (Cmd+A/C/V/X/Z/Y). Downstream is unaffected: ingest validates `type` as a free string, `cleanEvents` collapses bursts, and the LLM segmenter/distiller (`eventLabel` is type-agnostic) drops stray scrolls/hovers unless narration makes them a step. `hover` added to the shared `CaptureEventType`.
+**R14 — idempotent upload identity + direct artifact streaming** *(✅ 2026-07-28, recorder v0.7.0)*. Worth keeping the root cause: a ~10-minute recording stalled at "Finishing…", the watchdog aborted on a flat 120 s deadline, the api committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Two causes — `/v1/sessions` minted a fresh server-side id per request (nothing could collapse a retry), and the api awaited one object-storage round-trip **per file, serially, inside the multipart parse loop**, before creating the row or responding. The fix is an `uploadId` minted at Record (`@@unique([workspaceId, uploadId])`) plus presigned direct-to-storage artifact uploads. **The R2 checksum trap that nearly sank it is recorded in [`deploy.md`](deploy.md) §2.2** — it passes local dev and fails only in production.
 
-**C. Recorder UX & segmentation** *(ride-along — backlog)*
-- **R5 — Marker hotkey + labels** *(→ **Version 2 · D3**, scope decision 2026-07-06; was deferred 2026-07-03)* — **S.** Architecture calls the marker hotkey "the main segmentation-quality lever," but there's no hotkey and markers carry no label. **Fix (if built):** a `commands` entry (e.g. `Alt+Shift+M`) + optional one-line label, surfaced to the worker's segmentation. **Deferred** — markers are already droppable from the popup and the R7 on-page bar (⚑ Mark), so the hotkey/labels are a nice-to-have; revisit only if segmentation quality needs the extra signal.
-- **R6 — Live mic level meter + pre-flight** *(✅ shipped 2026-07-01)* — **S.** Users record blind; a dead mic is found only after a wasted session. **Fix (shipped):** a WebAudio `AnalyserNode` drives the recording-view mic meter live from the popup's own `getUserMedia` stream; mic permission is surfaced pre-record (Grant-microphone flow). *(A hard "block loudly on denial" pre-flight is only partial — a dead mic shows as flat bars rather than a hard block.)*
-- **R7 — On-page floating control bar** *(✅ shipped 2026-07-03)* — **M.** Stop/marker/status used to require opening the popup. **Fix (shipped):** a draggable **shadow-DOM bar** (`controlbar.ts`) mounted in the **top frame** of each recording tab, showing a pause-aware **timer**, current **Workflow N + step count**, a **live mic meter**, and **⚑ Mark / Pause·Resume / Stop** — each reusing the same background commands as the popup. Design-system styled (indigo/terracotta, pill radius, soft frame shadow; system UI font cross-site). State is polled from the background's `getState` (so the bar **survives Pause** and **re-appears after a full-page nav** via the R1 self-arm), and it unmounts itself when the session ends. The bar is real page DOM, so its own clicks would be captured — the recorder drops any event whose `composedPath()` contains the bar host (a capture-phase `stopPropagation` would be too late). The **mic meter** is fed **offscreen recorder → background → top frame** at ~8 fps (a second `AnalyserNode` on the existing recording stream — no extra `getUserMedia`, no host-page mic prompt), dropping to idle while paused so a dead mic reads as flat bars. *(Reuses the R6 mic-meter approach; the bar's ⚑ Mark drops an unlabelled marker — the R5 hotkey + labels are deferred (build TBD). The on-page bar does not replace the popup.)*
-- **Pause / resume** *(✅ shipped 2026-07-01)* — **S/M.** Pause for sensitive screens/breaks. **Fix (shipped):** Pause detaches page listeners + pauses narration (`MediaRecorder.pause()`) + freezes the timer; event timestamps are **active-time** (`pausedTotal`) so audio and events stay aligned across pauses (0 pauses = byte-identical to before). Pairs with R7 (on-page bar — still backlog).
-- **Stop→upload feedback & resilience** *(✅ shipped 2026-07-06, **v0.3.0**)* — **M.** After Stop, the pipeline had **no persisted state and no deadline**: the control bar vanished silently, a reopened popup claimed **idle** mid-upload, a worker eviction or a fetch hung on a cold-starting server stranded the recording with a stuck `↑` badge and no outcome (hit in the first store-install E2E), and nothing reported server-side processing. **Fix (shipped) — four parts:** **(1)** a **persisted `phase`** (`recording → saving → uploading → done/failed` in `storage.local`) as the pipeline's single truth — the popup routes on it at open with stage-true labels (*Saving narration… / Uploading… N% / Finishing… /* after ~8 s stalled, *Waking the FlowBuddy server…*); **(2) resilience** — a `chrome.alarms` twin of the 30 s finalize fallback (survives eviction; adds the `alarms` permission), boot-time recovery (a fresh worker resumes an upload its predecessor died holding; an orphaned buffer surfaces as a retryable interruption), and an **upload watchdog** (abort at 2 min stalled streaming / 4 min plain → retryable timeout instead of an eternal `↑`); **(3)** a persistent popup **Recent** row polling `GET /v1/sessions/:id` while open (`uploaded · queued → processing… → ready/failed`) + a **View in Studio** deep link; **(4)** the control bar collapses into an on-page **status pill** (*Saving → Uploading → ✓ Uploaded / ⚠ failed*) instead of vanishing — it deliberately reverses the earlier "outcomes never render on the page" decision for the stop moment. Mechanics: [`internals/recorder-capture.md`](internals/recorder-capture.md) §4.6/4.8/4.9. *(Deliberately excluded: `chrome.notifications` desktop alerts.)* **Superseded in part by R14 (2026-07-28):** the persisted `phase` and the boot-time recovery stand, but the byte percentage, the "Finishing…" label and the two-deadline watchdog are gone — one 300 s deadline and an elapsed timer replaced them once Stop stopped carrying the recording.
+**Still open.**
 
-**D. Capture quality** *(accuracy & Phase-3 enablers — backlog)*
-- **R12 — Screenshot timing & cost** *(✅ shipped 2026-07-03)* — **M.** Shots are taken after the event round-trips a ~700 ms-spaced queue, so the frame is late (a click that opens a modal / navigates / changes state in place gets captured *after* its side effect — the target ends up occluded/changed under a correct box), and PNGs are heavy. **Fix (shipped) — three parts:** **(1) Cost** — capture **JPEG** (`captureVisibleTab {format:'jpeg', quality:80}`) instead of PNG (~5–10× smaller for UI screenshots; two shots/step); files are `shots/<id>.jpg`/`-post.jpg`, uploaded `image/jpeg` (the API stores by the multipart mimetype, so it flows through). **(2) Snapshot closer to the event** — on **`pointerdown`** (before the click fires and triggers its side effect) the content script sends a `preCapture`; the background starts the snapshot *then* and stashes the **promise** by id; the `click` **awaits** it via `preShotId` (awaiting, not polling, avoids a race where `captureVisibleTab`'s 100–300 ms finishes after the ~150 ms click), so the target is still visible under the highlight. **The last input step reuses it too:** a text field's `change` fires on blur — caused by clicking the next control / the final submit — so the input event references that same click's pre-shot (peek, don't consume; both claim the one frame), fixing the "last field before the submit shows the *post*-submit state" case. No pointerdown (keyboard/Tab) → capture at event time; a stale id self-clears after 1.2 s; works across frames (R8), fixing e.g. an in-`iframe` "Pay" button. **(3) bbox↔scroll re-validation** — for the *fallback* (delayed) capture, the content script tags the event with the **scroll at bbox time**; the background re-checks the top frame's **current scroll** and **shifts the bbox by the delta** (or **omits** it if the element scrolled out of frame). A pre-click shot skips this (it already matches the bbox's moment). *(A further DPR-downscale via OffscreenCanvas would shrink Retina captures more — not done; JPEG is the bulk of the win.)*
-- **R12 follow-ups — deferred (not building now; revisit if needed).** R12 covers deliberate mouse-driven recording; two known boundaries remain, both fine for normal walkthroughs:
-  - **(a) Keyboard/Tab pre-capture** — **S/M.** The pre-capture is triggered by **`pointerdown`**, so a field left via **Tab** or a form submitted via **Enter** gets no pre-shot and falls back to the (late) event-time capture. The browser order is symmetric — `keydown` (Tab/Enter) fires *before* the blur/submit — so the fix is to also fire a `preCapture` on `keydown`, **gated to navigation/action keys only** (Tab/Enter/Escape; never printable keys, or it floods the capture queue), and let the field's `change` + the keydown event reuse it via the existing machinery. **Low payoff:** intermediate Tab-hops are already fine (no side effect); realistically this only rescues *Enter-to-submit on the last field*.
-  - **(b) Rate limit / rapid-fire clicks** — **M–L.** `chrome.tabs.captureVisibleTab` is hard-capped at **~2 shots/s**, so clicking faster than the queue drains still lags. Two levels: **(i) cheaper** — cut capture load (we snap an action **and** a post-action shot per click, but the post-action frame is only *rendered* for a workflow's **last** step; deferring/skipping non-terminal post-action screenshots ~halves the load and raises the ceiling — a heuristic, doesn't remove the cap); **(ii) proper fix** — replace `captureVisibleTab` with a **`chrome.tabCapture` video stream** (run in the offscreen doc alongside the mic) and **grab frames on demand** from it — no per-frame limit, exact-moment frames at pointerdown/click/keydown. This **supersedes most of the R12 pre-capture machinery** (with exact frames you don't need the pointerdown/await/reuse dance) but is a real rebuild (live stream = CPU/mem, `tabCapture` permission + user gesture, offscreen coordination). Only worth it if rapid-fire recording becomes real.
-- **R13 — Ranked, multi-signal selectors** *(✅ shipped 2026-07-06)* — **M.** The slice captured only brittle positional `cssPath`/`xpath`; Phase 3 self-validation depends on resolving these months later. **Fix (shipped):** every event target now carries a **ranked `locators` set** (`{ strategy, value, unique }`), built **and uniqueness-verified against the live document at capture time** — the one moment both are knowable. Strategies best-first: `testid` (`data-testid`/`data-test-id`/`data-test`/`data-cy`/`data-qa`) → human-authored `id` (framework-generated ids — `ember123`, React `:r5:`, uuid/long-digit patterns — are **rejected**; they churn per deploy, so anchoring to one is worse than nothing) → `aria-label` → `name` → `placeholder` → `href` (links) → visible **text** (≤60 chars — the signal that survives redesigns); ranked **unique-first** (ambiguous locators kept lower as healing signals), with `cssPath`/`xpath` appended as last resorts (≤8 entries). Every value except `text` is a ready-to-run, escaped CSS selector; a selector that fails to match its own element at capture time is dropped rather than shipped broken. The `locators` field is **additive** on the capture contract (`shared` capture types + zod schema, mirrored in the extension's `types.ts`) so old bundles still validate; locator-healing/replay itself stays **Phase 3** (walk the list in order, first locator that still resolves wins). Logic verified against a real DOM (31 checks: ranking order, generated-id rejection, quote escaping, selector round-trip); **user-verified E2E 2026-07-06** (real recording → `manifest` events carry ranked `locators`).
+- **R5 — marker hotkey + labels** *(→ Version 2 · D3)* — **S.** [`architecture.md`](architecture.md) calls the marker hotkey **"the main segmentation-quality lever"**, but there is no hotkey and markers carry no label. Deferred because markers are already droppable from the popup and the on-page bar; revisit only if segmentation quality needs the extra signal.
+- **R12(a) — keyboard/Tab pre-capture** — **S/M.** Pre-capture triggers on `pointerdown`, so a field left via **Tab** or a form submitted via **Enter** falls back to the late event-time capture. The browser order is symmetric (`keydown` fires before blur/submit), so the fix is a `preCapture` on `keydown` **gated to Tab/Enter/Escape only** — never printable keys, or it floods the queue. Low payoff: this realistically only rescues *Enter-to-submit on the last field*.
+- **R12(b) — rapid-fire clicks** — **M–L.** `captureVisibleTab` is hard-capped at **~2 shots/s**. Cheaper half-fix: the post-action frame is only rendered for a workflow's **last** step, so deferring non-terminal post-action shots roughly halves the load. Proper fix: replace `captureVisibleTab` with a **`chrome.tabCapture` video stream** and grab frames on demand — no per-frame limit, exact-moment frames. That **supersedes most of the R12 pre-capture machinery**, but it is a real rebuild (CPU/mem, new permission + user gesture, offscreen coordination). Only worth it if rapid-fire recording becomes real.
 
 **Recorder parking lot (→ Version 2 · D3, scope decision 2026-07-06):** pre-upload review (event count/thumbnails, discard); local draft/crash recovery (overlaps R2/R4); undo last event; per-workspace capture profile (event types + redaction list, fetched at connect); network/console capture (likely out of scope).
 
@@ -378,8 +243,8 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 ## 11. Risks / decisions to finalize
 
 - **Grounding strictness (P1-M6):** tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob; confidently-wrong answers are the trust-killer.
-- **Decline threshold — settings control (PENDING / deferred 2026-06-29):** the Settings → "Grounding & trust" slider is UI-only and does **not** persist or affect answers yet. To make it real: (1) add `copilotDeclineThreshold Int @default(50)` to `Workspace`; (2) have `answerFromKB` emit a `confidence` (0–100) in its JSON schema + a prompt line rating how well the items cover the question, accept a `declineThreshold` input, and convert `covered && confidence < threshold` into a friendly decline; (3) persist via a `setCopilotDeclineThreshold` action + wire the slider (drop the "preview" note); (4) pass the value through the answer path — `server.ts` (via `resolveCopilotKey`); *(simplified 2026-07-06: the preview became the real widget, so there is only ONE answer path — `copilot-preview-actions.ts` no longer exists).* Caveats: confidence is **model self-reported** (a heuristic dial, not a calibrated probability); a threshold-decline should still log a coverage gap. This mirrors the **"Cite the workflow used"** control shipped 2026-06-29 (same wiring pattern, plus the engine `confidence` addition).
-- **Retrieval quality (P1-M6 / P1-M3):** ✅ **settled & built 2026-07-07** — hybrid keyword+vector (RRF, k=60), `text-embedding-3-small` @1536 over `KnowledgeItem.text` (which folds in narration), embedded at KB build, no backfill (dev reset), keyword fallback on every vector-path failure. Render `vector` support confirmed 2026-07-06. **Review-hardened same day (8-angle code review):** the vector scan is **approval-constrained in SQL** (unapproved rows can't starve the top-50), the question embed **overlaps the DB reads** with a **2s timeout** (SDK default was 600s), `embedTexts` **validates dims** (wrong-width `EMBED_MODEL` fails loudly), worker embed failures surface as a **degraded-build notice** on the recording, route matching is **segment-boundary** (root `/` no longer matches everything — pre-existing bug), and the route signal is a **double-weighted RRF list** in the hybrid path. *(Still open for later: folding conversation history into the retrieval query; an ANN index (HNSW) if a workspace ever exceeds ~tens of thousands of items.)*
+- **Decline threshold — a settings control that was designed and never built.** There is no such slider in Studio. To build it: add `copilotDeclineThreshold` to `Workspace`; have the engine emit a `confidence` (0–100) plus a prompt line rating how well the items cover the question, accept a `declineThreshold`, and turn `covered && confidence < threshold` into a friendly decline; persist it and wire the control. **Two caveats that make it less attractive than it looks:** confidence is *model self-reported* — a heuristic dial, not a calibrated probability — and a threshold-decline must still log a coverage gap, or the feedback loop goes blind exactly where quality is worst.
+- **Retrieval quality (P1-M6 / P1-M3):** settled — hybrid keyword+vector, keyword fallback on every vector-path failure. The seam and its constants live in [`internals/copilot.md`](internals/copilot.md). **Two things remain open and are recorded nowhere else:** folding **conversation history into the retrieval query** (today only the current question and the continuity bias reach it), and an **ANN index (HNSW)** if a workspace ever exceeds tens of thousands of items.
 - **Citation UX without leaking structure (P1-M6/M7):** Stage A has no articles to link, so a citation points to the workflow/step (e.g. a step thumbnail).
 - **PII in answers (P1-M12):** **Cut 1 done** — the server text-scrub protects the copilot answer path; **Cut 2 (screenshot/DOM pixel redaction)** is the remaining piece, deferred to Version 2 (needed before the public portal renders screenshots).
 - **Embed security & cost (P1-M9):** public key + origin allowlist + rate limiting; per-workspace LLM ceilings; anonymous end-user session model.
@@ -392,11 +257,5 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 
 ## 12. End-to-end journey
 
-1. **Sign up** at Studio → your workspace is created.
-2. **Install** the FlowBuddy Recorder, click **Connect** → one click links it to your account.
-3. **Record:** open your product, **Start**, narrate while clicking a workflow (use **Mark new workflow** between tasks), **Stop** — the recorder shows **REC → ↑ → ✓** and uploads (PII masked first; retry if it hiccups).
-4. **Knowledge Base:** the worker transcribes, normalizes, and **segments**; the recording turns **`ready`**. Browse the KB page (transcript + items grouped by workflow).
-5. **Approve for the copilot:** toggle **"approve for copilot"** on the workflows worth answering (one click each).
-6. **Embed:** copy the **public key** + `<script>` snippet from Studio's copilot settings into your product; set the origin allowlist.
-7. **Customers self-serve in-app:** an end-user opens the widget and asks; the copilot returns a **grounded, cited answer** biased to their current screen — or an **honest decline** that becomes a coverage gap.
-8. **The loop compounds:** 👍/👎 + coverage gaps ("record this next") + more recordings grow the same workspace KB. *(The same KB also feeds articles + a portal as a Version-2 by-product, and — later — self-validation.)*
+One recording from a click to an answer, with the seams named:
+[`internals/connections.md`](internals/connections.md) §2.

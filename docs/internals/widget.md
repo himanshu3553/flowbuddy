@@ -18,27 +18,15 @@ with the host page's styles or globals.
 
 ## 2. Where it lives
 
-| File | Role |
-|---|---|
-| [`src/index.ts`](../../packages/widget/src/index.ts) | The widget shell: config (attrs + live-served `/config`), shadow DOM, render loop, `ask`/`feedback`, drag+expand, boot/resume wiring. |
-| [`src/sense.ts`](../../packages/widget/src/sense.ts) | P2 Sense: sense-plan fetch/cache, the ask-time read-only locator probe + scorer, the show-me spotlight (sticky variant for the walkthrough), `findAlertSurfaces` (alert/error-surface detection incl. red-family text). |
-| [`src/reason.ts`](../../packages/widget/src/reason.ts) | P2-M5 Reason: the selective diagnostic trigger + structured page-state capture (controls as explicit state, `[alert]`-tagged texts, masked) + the lazy image-tier loader; exports `readElementState` (the shared element-state vocabulary). |
-| [`src/walkthrough.ts`](../../packages/widget/src/walkthrough.ts) | P4-M0 guided walkthrough: step card, detection-as-acknowledgment (only Next advances), self-correcting backward pointer, cross-nav resume, run analytics. |
-| [`src/session.ts`](../../packages/widget/src/session.ts) | **The cross-page state store** (P5-M0 cut 1) — one slot per independent piece of state (`walkthrough` · `chat`, later the agent run), owning versioning, workspace-key scoping, created/updated stamps, TTL and silent discard of anything foreign/expired/corrupt. Every consumer brings only its own domain shape. |
-| [`src/render-image.ts`](../../packages/widget/src/render-image.ts) | The SECOND bundle (`flowbuddy-copilot-render.js`, html2canvas) — lazy-loaded sibling, never in the base bundle. |
-| [`src/log.ts`](../../packages/widget/src/log.ts) | Silent-by-default console diagnostics (`data-flowbuddy-debug`). |
-| [`src/styles.ts`](../../packages/widget/src/styles.ts) | The `CSS` string injected into the shadow root (indigo brand + accent var + walkthrough card + spotlight). |
-| [`build.mjs`](../../packages/widget/build.mjs) | esbuild → `dist/flowbuddy-copilot.js` **+ `dist/flowbuddy-copilot-render.js`** (two IIFE bundles — deploy side by side). |
-| [`demo/index.html`](../../packages/widget/demo/index.html) | Local test page (serve over **HTTP**, not `file://`). |
-
-Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrough mechanics are documented at design altitude in [`phase-2-sense.md`](../phase-2-sense.md) and [`phase-4-autopilot.md`](../phase-4-autopilot.md) §8 — this doc covers the widget shell; source wins on conflict.)*
+Paths are in `CLAUDE.md` and the source tree. This doc covers what those files *guarantee*, not where
+they sit.
 
 ---
 
 ## 3. Inputs / Outputs
 
 - **Input (configuration):** the snippet carries only `data-flowbuddy-api` + `data-flowbuddy-key`; the LOOK
-  comes from the server (2026-07-07):
+  comes from the server:
   - **Server config** — at mount the widget fetches `GET /v1/copilot/config` (authed by the key,
     1.5s timeout, best-effort): accent, title, greeting, position, launcher style/text — whatever
     the founder saved in Studio → Copilot → Appearance. So appearance changes reach every embed
@@ -49,7 +37,7 @@ Built with `pnpm --filter @flowbuddy/widget build`. *(The Sense/Reason/walkthrou
     (`icon`|`text`|`text-outline`), `data-flowbuddy-launcher-text`.
   - `data-flowbuddy-key` is the **public** embed key (`pk_…`). *Safe in client HTML — distinct from the
     secret recorder token.*
-  - `data-flowbuddy-preview` — `"1"` marks a **Studio tester** embed (2026-07-08): the panel starts open
+  - `data-flowbuddy-preview` — `"1"` marks a **Studio tester** embed: the panel starts open
     **with the launcher kept visible below it** (panel lifted via `--fb-panel-bottom: 86px`, so
     launcher style/text/position edits show immediately), the mount heartbeat is suppressed,
     `/answer` calls carry `preview: true` so the API skips embed detection + analytics and returns
@@ -92,8 +80,8 @@ fetch failure/timeout mounts with attrs/defaults — the widget always appears.
 ### 4.3 State & the render loop
 
 The widget keeps three pieces of conversation state: `messages[]` (the conversation), `open` (panel
-visibility), and `loading` — plus the panel-geometry pair `dragPos`/`expanded` (2026-07-13, below).
-`messages[]` and `open` **survive full-page navigations** since P5-M0 cut 1 (2026-07-26); `loading`
+visibility), and `loading` — plus the panel-geometry pair `dragPos`/`expanded` (below).
+`messages[]` and `open` **survive full-page navigations** since P5-M0 cut 1; `loading`
 and the geometry pair are deliberately per-page-view. There's no framework — a single `render()`
 function **rebuilds the message list** from `messages[]` on every change
 (`list.replaceChildren(...)`). It's a tiny immediate-mode UI:
@@ -105,14 +93,14 @@ function **rebuilds the message list** from `messages[]` on every change
   **👍/👎** buttons;
 - `loading` → a typing indicator; input/send disabled.
 
-The chrome follows the design system (2026-07-08): header = accent bar with a **bot-icon badge**,
+The chrome follows the design system: header = accent bar with a **bot-icon badge**,
 bold title and the mono *"grounded in your approved workflows"* tagline; input row = borderless
 field + a square accent **↑ send** button. **Typography** = Plus Jakarta Sans / JetBrains Mono at
 the token sizes — `index.ts` injects ONE Google-Fonts `<link>` into the host document
 (`ensureBrandFonts`, guarded; @font-face is document-level so the shadow tree can use it), with
 system-font fallback stacks so a blocked font never breaks the widget.
 
-**Drag + expand (2026-07-13).** The open panel is a movable floating window:
+**Drag + expand.** The open panel is a movable floating window:
 
 - **Drag** — the header is the drag handle (pointer events + `setPointerCapture`, so it works with
   touch too; `touch-action: none` keeps the host page from scrolling underneath). Dragging writes
@@ -176,7 +164,7 @@ on the way *in* and on the way *out*, so an older bundle or the host page cannot
 that has since been excluded. `assistant.error` is deliberately absent: a transport failure is about
 a moment, not the conversation. This is the mechanism that lets D3's chat-supplied sensitive values
 be excluded later by *declining to add a string* rather than migrating storage
-([`unified-agent.md`](../unified-agent.md) §6).
+([`agent.md`](../agent.md) §6).
 
 Writes map fields one by one, so `walkOffer` (a full founder-derived plan copy) structurally cannot
 reach storage; stale plans re-derive on re-ask. Reads cap message count (20), content length, and
@@ -192,7 +180,7 @@ with the heartbeat and analytics.
 **Consequence to remember:** the `history` sent with `/answer` is derived from `messages[]`, so it
 now **spans navigations**.
 
-### 4.8 Operating mode & the on-page gate (2026-07-27)
+### 4.8 Operating mode & the on-page gate
 
 `/v1/copilot/config` also serves the workspace's **mode** (`chatbot` · `copilot` · `agent`), which
 the widget stores in `cfg.mode`. It changes ONE thing on the client: **who decides when an on-page
@@ -254,8 +242,4 @@ citations come from storage rather than a live response.
 
 ## 7. Connections
 
-- **Calls →** the [Copilot API](copilot.md) (Seam F) with the **public embed key** minted in
-  [Studio](studio.md).
-- **Renders →** citations whose `segmentTitle` traces back to the workflows built by the
-  [Knowledge Base](knowledge-base.md) and approved in [Studio](studio.md).
-- **Auth model →** [connections.md](connections.md) §3 (the public key vs. the secret token).
+Seams, contracts and who-calls-what: [`connections.md`](connections.md).

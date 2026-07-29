@@ -30,15 +30,8 @@ explicit discard route plus a background sweep (§4.6).
 
 ## 2. Where it lives
 
-| File | Role |
-|---|---|
-| [`server.ts`](../../packages/api/src/server.ts) | The Fastify app: CORS, multipart, `/v1/uploads/sign` + the `/v1/sessions` routes + `DELETE /v1/uploads/:uploadId` and the abandoned-recording sweep (+ the copilot routes). |
-| [`auth.ts`](../../packages/api/src/auth.ts) | Resolve a Bearer recorder token → workspace (by SHA-256 hash). |
-| [`storage.ts`](../../packages/api/src/storage.ts) | The S3-compatible clients (one for reads/writes, one for presigning), bucket bootstrap, key layout, `signPutUrl`, `deleteSessionPrefix` (used by both cleanup paths), and the `ArtifactReader` the worker uses. |
-| [`queue.ts`](../../packages/api/src/queue.ts) | The BullMQ producer (`synthesisQueue`) + **two** Redis connection objects — a bare one for the worker, a fail-fast one for the producer. |
-| [`config.ts`](../../packages/api/src/config.ts) | Env config (port, Redis URL, OpenAI key/models, R2/MinIO creds). |
-
-Runs as `pnpm --filter @flowbuddy/api dev` on **`:8787`**.
+Paths are in `CLAUDE.md` and the source tree. This doc covers what those files *guarantee*, not where
+they sit.
 
 ---
 
@@ -191,8 +184,7 @@ identical except `requestChecksumCalculation: 'WHEN_REQUIRED'`: with the SDK def
 `x-amz-checksum-crc32` of an **empty body** into the signed query string, which MinIO ignores and
 **R2 enforces** — so a URL signed by the default client passes local dev and fails only in
 production. That failure mode is why the split exists, and the split is now **verified against the
-real thing**: R2 + CORS on a browser-issued presigned PUT was exercised end-to-end on dev/Render
-(2026-07-28). Local MinIO is the permissive side, so it proves nothing on its own — R2 does.
+real thing**: R2 + CORS on a browser-issued presigned PUT was exercised end-to-end on dev/Render. Local MinIO is the permissive side, so it proves nothing on its own — R2 does.
 
 - `ensureBucket()` runs at boot — `HeadBucket`, and `CreateBucket` if missing.
 - `signPutUrl(key, contentType)` mints a single-object, 900 s PUT URL (`UPLOAD_URL_TTL_SECONDS`).
@@ -216,7 +208,7 @@ user/pass, TLS for `rediss:`) are passed — not a pre-built client — so BullM
 workers need. The producer (API) and consumer ([worker](knowledge-base.md)) share only this queue
 name and the `{ sessionId, workspaceId }` shape.
 
-**Two connection objects, and the difference matters** (2026-07-28). The exported `connection` is
+**Two connection objects, and the difference matters**. The exported `connection` is
 deliberately **bare** — BullMQ has to own a blocking consumer's settings (notably
 `maxRetriesPerRequest: null`), and a worker that gives up on a Redis command instead of blocking stops
 consuming jobs. So producer-style fail-fast options can never be added there. The queue is instead
@@ -233,7 +225,7 @@ unreachable Redis buffering commands forever looks exactly like the upload hangi
 recorder to its Retry screen for a recording that actually arrived. The recovery path when this does
 drop a job is Studio's **"Stalled → Re-process"** (§6).
 
-Hardening (2026-07-06, review §2.1–2.3 — mirrored by the Studio producer
+Hardening (review §2.1–2.3 — mirrored by the Studio producer
 [`web/lib/queue.ts`](../../packages/web/lib/queue.ts)):
 
 - **`defaultJobOptions`:** `attempts: 3` with exponential backoff (5 s base) — transient
@@ -341,25 +333,12 @@ the row directly.
 
 > ⚠️ **Deploy ordering.** This route rejects a finalize without `X-FlowBuddy-Upload-Id`, and the
 > extension build previously live on the Chrome Web Store (v0.6.0) does not send one. **The newer
-> recorder has to reach users before this API reaches an environment they use.** Recorder **v0.7.0**
-> carries the header and is cut for the store alongside this change, which ships to production — see
-> [`../extension-releases.md`](../extension-releases.md) for the release itself.
+> recorder has to reach users before this API reaches an environment they use** — a standing rule for
+> every future build, not just this one. Current store status:
+> [`../extension-releases.md`](../extension-releases.md).
 
 ---
 
 ## 7. Connections
 
-- **Accepts from ←** [Recorder](recorder-capture.md) (Seam A).
-- **Authorizes / lands artifacts in →** object storage (the recorder writes most of them itself with
-  URLs this module signs); **persists** the `KnowledgeSource`; **enqueues** the job
-  (Seams B & C in [connections.md](connections.md)).
-- **Hands off to →** the [Knowledge Base worker](knowledge-base.md), which consumes the job and reads
-  back the manifest + artifacts.
-- **Shares its process with →** the [Copilot endpoints](copilot.md) (different routes, same Fastify
-  app, same `config`/`storage`) **and, in production, with the synthesis
-  [worker](knowledge-base.md)** — `start:all` runs both on one 512 MB Render instance. That is why the
-  service sets `NODE_OPTIONS=--max-old-space-size=400` (cap the heap below the container limit so V8
-  collects instead of the container being OOM-killed) and why the worker runs at `concurrency: 1`: an
-  OOM caused by synthesis takes the public copilot down with it. Render also health-checks
-  **`/healthz`** rather than only probing that the port is open, which a wedged process passes.
-- **Schema reference →** the row shapes are in [data-model-and-storage.md](data-model-and-storage.md).
+Seams, contracts and who-calls-what: [`connections.md`](connections.md).

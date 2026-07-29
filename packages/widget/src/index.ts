@@ -54,7 +54,7 @@ interface AnswerPosition { sourceId: string; segmentIndex: number; step: number 
  * a run commentary, 'agent.tool_call', and critically D3's 'user.value' for a value the user typed
  * into the chat for the agent to use. What survives a navigation is decided by the PERSISTED_KINDS
  * allowlist — never by the message shape — so excluding chat-supplied sensitive values later means
- * declining to add one string to a set. No storage migration, no retrofit (docs/unified-agent.md §6).
+ * declining to add one string to a set. No storage migration, no retrofit (docs/agent.md §6).
  */
 type MsgKind = 'user.question' | 'assistant.answer' | 'assistant.decline' | 'assistant.error';
 
@@ -534,7 +534,7 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
 // walkthrough's own "Explain what's blocking me" escalation landing in an empty panel.
 //
 // MODE-NEUTRAL BY CONSTRUCTION: mode 1 (today's copilot) and mode 2 (the unified agent loop) are
-// the same conversation, so this is the substrate for both — docs/unified-agent.md §8 step 1 ships
+// the same conversation, so this is the substrate for both — docs/agent.md §8 step 1 ships
 // it to mode 1 as hygiene, not as an agent feature.
 //
 // Everything read back is untrusted (the host page shares this origin and can write these keys):

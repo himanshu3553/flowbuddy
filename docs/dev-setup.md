@@ -92,6 +92,7 @@ pnpm --filter @flowbuddy/web dev                   # run Studio → http://local
 # for the copilot embed (Phase 1):
 pnpm --filter @flowbuddy/widget build              # builds flowbuddy-copilot.js + flowbuddy-copilot-render.js (lazy P2-M5 image tier) → SERVE the demo over HTTP (cd packages/widget && python3 -m http.server 8080), not file://
 pnpm --filter @flowbuddy/extension build           # build the recorder → load packages/extension/dist/ in Chrome
+pnpm --filter @flowbuddy/landing build             # static marketing page → dist/
 
 # building / checking
 pnpm build                                    # build everything (Turbo)
@@ -170,21 +171,11 @@ browser — [`e2e-testing.md`](e2e-testing.md).
 
 ---
 
-## 6. What runs where (once all packages exist)
+## 6. What runs where
 
-| Package | What it is | Run locally |
-|---|---|---|
-| `web` | Next.js Studio (dashboard/editor + approval + copilot settings) | `pnpm --filter @flowbuddy/web dev` → :3000 |
-| `api` | Fastify HTTP service (ingestion + copilot endpoints) | `pnpm --filter @flowbuddy/api dev` → :8787 |
-| `worker` | BullMQ synthesis worker | `pnpm --filter @flowbuddy/api worker` |
-| `widget` | embeddable copilot `<script>` (esbuild) | `pnpm --filter @flowbuddy/widget build` → serve `demo/` over HTTP (`python3 -m http.server 8080`) |
-| `extension` | Chrome MV3 recorder | `pnpm --filter @flowbuddy/extension build` → load `dist/` |
-| `landing` | static marketing page (flowbuddyai.com) | `pnpm --filter @flowbuddy/landing build` → `dist/` |
-| `shared`, `db`, `logger`, `synthesis` | shared types + Prisma + the Pino logger (§7) + the OpenAI pipeline | built as dependencies of the above |
+Every package, what it is, and its traps: `CLAUDE.md`. The commands to run each one are in §4 above.
 
 *(`portal` — the V2 public help site — is built in Version 2; it's not in the current workspace.)*
-
-(Deploy maps these to Render services + Cloudflare R2 — see [`phase-1-copilot.md`](phase-1-copilot.md) §5 P1-M4.)
 
 ---
 

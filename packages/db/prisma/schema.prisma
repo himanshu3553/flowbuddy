@@ -110,10 +110,10 @@ model Workspace {
   // FlowBuddy never acts). Needs Sense (on by default). Served to the widget via /v1/copilot/config.
   // On by default since 2026-07-27 — same reasoning as `copilotShowMe` above. Still zero-acting.
   copilotWalkthrough    Boolean  @default(true)
-  // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-reason.md §5.3):
+  // P2-M5 Reason (diagnostic reasoning) — the founder toggle ladder (docs/phase-2-sense.md §B5):
   // `reasonEnabled` gates the whole diagnostic path (ask-time structured page-state capture, values
-  // masked). `reasonImageEnabled` adds the DOM-rendered page image (the most sensitive capture —
-  // OFF by default; flipping it surfaces the disclosure snippet in Studio). `reasonIncludeValues`
+  // masked). `reasonImageEnabled` adds the DOM-rendered page image (the most sensitive capture;
+  // for its default and why, see the field below). `reasonIncludeValues`
   // unmasks typed field values in the capture (hard floors apply regardless: passwords are never
   // captured, card/SSN patterns always masked). All served to the widget via /v1/copilot/config.
   // The copilot's OPERATING MODE — how much the assistant is allowed to decide for itself, and

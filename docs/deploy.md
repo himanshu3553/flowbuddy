@@ -259,18 +259,6 @@ Then connect the extension (§5) and run the end-to-end test (§6).
 - **Free web services spin down after ~15 min idle** (~1 min cold start). The embedded worker only runs while `flowbuddy-dev-api` is awake.
 - **750 free instance-hours/month per workspace** (shared); spun-down services don't consume them.
 
-### 3.12 Reference: the dev secrets you provide (all `sync: false`)
-
-```
-flowbuddy-dev-r2 group : R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
-flowbuddy-dev-api      : OPENAI_API_KEY, FLOWBUDDY_STUDIO_URL (= real flowbuddy-dev-web URL)
-flowbuddy-dev-web      : AUTH_SECRET, AUTH_URL, FLOWBUDDY_API_URL, FLOWBUDDY_WIDGET_URL, RESEND_API_KEY   # NO OpenAI key
-```
-Everything else (`DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`, `TRANSCRIBE_MODEL`, `SYNTH_MODEL`,
-`AUTH_TRUST_HOST`, `NODE_OPTIONS`) is wired automatically by [`render.dev.yaml`](../render.dev.yaml).
-
----
-
 ## 4. Production deploy (FlowBuddyAI.com, ~$30/mo)
 
 ### 4.1 Topology + cost (locked 2026-07-16)
@@ -349,44 +337,12 @@ and the two static sites (widget bundles + the `packages/landing` page) built wi
 Because every URL secret is a custom domain, the suffix gotcha only matters for DNS CNAME targets —
 never for env vars or snippets.
 
-### 4.4 First-deploy runbook (as run 2026-07-17)
+### 4.4 First-deploy runbook
 
-**A. Repo prep** (on `dev`, then FF `main`) — **done 2026-07-17**:
-1. `render.dev.yaml` added (a copy of the dev config) and the dev blueprint's file path switched to it in the dashboard **before** step 2 landed — so the dev blueprint never reads the prod spec.
-2. `render.yaml` rewritten to the §4 prod spec.
-3. `packages/landing` built — v1 is a minimal "coming soon + sign in" card (CTA → `app.flowbuddyai.com`); the full marketing page upgrades it later.
-4. Docs updated; code + docs committed together; `main` FF-synced.
-
-**B. Blueprint-file ordering rule (standing):** see §2.1.
-
-**C. Third-party accounts:**
-1. Cloudflare R2 → create bucket `flowbuddy-artifacts` + an Object R/W token scoped to it.
-2. Resend → add + verify `flowbuddyai.com` (DNS records at GoDaddy) → key ready.
-3. `openssl rand -hex 32` → the prod `AUTH_SECRET`.
-
-**D. Apply the prod blueprint:** Render → New + → Blueprint → this repo → branch **`main`** → fill the
-§4.3 secrets (URL vars get the final custom-domain values immediately) → Apply. Watch `flowbuddy-api`
-logs for `All migrations have been successfully applied.` — a fresh DB runs all migrations (including
-`CREATE EXTENSION vector`) from scratch; there is no pending-migration bookkeeping.
-
-**E. Domains:** on each service add its custom domain(s) (§4.2) → create the DNS records at GoDaddy →
-wait for certs → verify `https://app.flowbuddyai.com` renders the sign-in page and
-`https://widget.flowbuddyai.com/flowbuddy-copilot.js` + `/flowbuddy-copilot-render.js` both serve. Do
-this **before** creating any account — `AUTH_URL` already points at the custom domain.
-
-**F. Recorder extension — v0.6.0 (decision 2026-07-17: one review cycle):** the store artifact bakes
-the Studio URL, so prod needs a rebuild + resubmission. v0.5.0's review is **cancelled**; v0.6.0 bakes
-prod + dev + localhost in one artifact — see §5. Set `FLOWBUDDY_EXTENSION_URL` on `flowbuddy-web` once
-live.
-
-**G. Seed + smoke test:** the prod DB is empty — create the founder account (email verification works
-because Resend is live), connect the extension, record + approve the real workflows, then run the
-[`e2e-testing.md`](e2e-testing.md) flow against prod: embed on an HTTP-served page → grounded answer
-with citations → honest decline → a Sense positional question → a Reason "why is this button disabled?"
-diagnosis → analytics populate.
-
-⚠️ **Never point reset/E2E-cleanup scripts at prod** — the data-reset flow in
-[`e2e-testing.md`](e2e-testing.md) is for the dev environment only.
+The production stack was first deployed 2026-07-17 and the step-by-step as-run log is spent — the
+repeatable parts are already the rules above: §2.1 (the blueprint-file ordering rule, the one that
+bites), §4.2 (domains & DNS), §4.3 (the prod blueprint). `git log docs/deploy.md` has the original
+account. What survives from it as standing gotchas is in **Troubleshooting** below.
 
 ---
 
@@ -411,19 +367,13 @@ localhost — the committed `src/manifest.json` stays localhost so local dev is 
 **Chrome Web Store** (full per-version history + the cut-a-release checklist:
 [`extension-releases.md`](extension-releases.md)). **v0.7.0 is cut with the upload rework and is the
 build the current API requires** — it sends `X-FlowBuddy-Upload-Id`, uploads narration directly, and
-discards abandoned recordings. §7.6 says it must be live *before* that API reaches prod; **on 2026-07-28 that ordering was deliberately overridden** (no customers on prod), so the API went out first and for a short window a store-installed v0.6.0 could not upload at all. **v0.7.0 is now live and the window is closed** — but the override is the reason §7.6 exists, and it only survived because nobody was using the product. It bakes the same
-three origins as v0.6.0 and adds **no new permissions**. Until it is published, the live listing is
-still **v0.6.0** (submitted
-2026-07-17, confirmed live by 2026-07-23) — the production release: bakes `https://app.flowbuddyai.com`
-(primary) + `https://flowbuddy-dev-web.onrender.com` + localhost, new FlowBuddy "F" icons, no new
-permissions. Listing (extension ID `njkfcfpehcklldmeofolnpdljdhcgofk`, stable across the rename; the
+discards abandoned recordings. §7.6 says it must be live *before* that API reaches prod; **on 2026-07-28 that ordering was deliberately overridden** (no customers on prod), so the API went out first and for a short window a store-installed v0.6.0 could not upload at all. The override is the reason §7.6 exists, and it only survived because nobody was using the product. v0.7.0 bakes the same
+three origins as its predecessor and adds **no new permissions**: `https://app.flowbuddyai.com`
+(primary) + `https://flowbuddy-dev-web.onrender.com` + localhost, FlowBuddy "F" icons. Listing (extension ID `njkfcfpehcklldmeofolnpdljdhcgofk`, stable across the rename; the
 URL below carries the pre-rename slug — Chrome resolves by ID, so it keeps working):
 <https://chromewebstore.google.com/detail/sync-recorder/njkfcfpehcklldmeofolnpdljdhcgofk>. Its listing
 URL goes in `FLOWBUDDY_EXTENSION_URL` on **both** `flowbuddy-web` (prod) and `flowbuddy-dev-web` so the
-Home checklist's install CTA reads "Add to Chrome". *(History: 0.1.0/0.2.0 dev builds; v0.2.1 first
-prod-targeted; v0.3.0 the previous live version — its pre-rename baked URL died with the FlowBuddy
-re-deploy; v0.4.0 packaged but never uploaded; v0.5.0's review cancelled in favor of one v0.6.0
-cycle.)* The store zip is built from `dist/` (`cd dist && zip -r ../flowbuddy-recorder-<version>.zip .`).
+Home checklist's install CTA reads "Add to Chrome". *(Per-version history: [`extension-releases.md`](extension-releases.md).)* The store zip is built from `dist/` (`cd dist && zip -r ../flowbuddy-recorder-<version>.zip .`).
 ⚠️ The baked Studio URL is part of the store artifact — moving to a new domain later means a rebuild +
 resubmission (add the new domain to the list; keep the old one during the transition). ⚠️ After
 zipping, re-run a plain build so your local `dist/` goes back to the localhost-primary dev build.
@@ -557,26 +507,15 @@ Ships in the same deploy as §8.4. Three independent pieces: narration joins the
 abandoned recordings finally get cleaned up, and the shared api/worker instance gets the guards it
 should always have had.
 
-1. **Narration uploads directly too** — same signed-URL path, at **Stop** rather than during capture
-   (the offscreen recorder only hands over the encoded track when the capture ends). The practical
-   result: on a healthy connection the finalize request to `/v1/sessions` carries the **manifest and
-   nothing else**. **The multipart bundle path stays** as the fallback for a browser that cannot
-   reach object storage directly — that is deliberate and load-bearing, not leftover code.
-2. **Abandoned recordings are cleaned up — the §8.4 gap is CLOSED.** Two halves:
-   - **`DELETE /v1/uploads/:uploadId`** (new route) discards an *unfinished* recording and its
-     uploaded objects. Only a row still in `recording` is discardable; a finalized one answers `409`
-     ("delete it in Studio"), and an unknown id is a clean `200` no-op. The recorder calls it on
-     **"Start fresh"** and when **starting a new recording while an old unsent buffer exists** — a
-     buffer still holding its upload identity means the previous recording never uploaded
-     successfully, so it is being abandoned right now.
-   - **A server-side sweep** deletes `recording` rows idle **> 12 hours** plus their storage, riding
-     **fire-and-forget on finalize** (no cron service to pay for or monitor). The threshold is
-     deliberately generous: a *paused* capture signs nothing either, and deleting a recording someone
-     is still making would be far worse than carrying a few orphaned objects for a day. A false
-     positive self-heals — upload markers are scoped to the row id, and the recorder's local buffer is
-     never cleared until an upload actually succeeds, so a swept recording simply re-uploads into a
-     fresh row.
-   - Ops consequence: the R2 token must permit **delete** (§2.2).
+1. **Narration uploads directly too** — same signed-URL path, at **Stop** rather than during capture.
+   The result: on a healthy connection the finalize request carries the **manifest and nothing else**.
+   **The multipart bundle path stays** as the fallback for a browser that cannot reach object storage
+   directly — that is deliberate and load-bearing, not leftover code.
+2. **Abandoned recordings are cleaned up** — an explicit discard route the recorder calls, plus a
+   server-side sweep riding fire-and-forget on finalize (no cron service to pay for or monitor).
+   **The R2 token must permit delete, not just write** — a write-only token leaves storage growing
+   silently. Route semantics, the sweep, and why the threshold is what it is:
+   [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.
 3. **Health checks + memory limits + worker concurrency** — see **§2.6** and **§2.3**. All three are
    blueprint changes only, so they land with the normal deploy; nothing to click.
 4. **The api's BullMQ producer got its own connection** with `connectTimeout` /
@@ -649,24 +588,19 @@ custom domains make every underlying swap invisible to customers.
 
 ## The FlowBuddy rename cutover (done 2026-07-17)
 
-The product was renamed **Sync → FlowBuddy** and the dev environment was **rebuilt from scratch** the
-same day: the old blueprint, every `sync-*` service, and the `sync-artifacts` bucket were deleted, then
-the current `flowbuddy-dev-*` stack was created fresh from `dev` (fresh DB applied all migrations on
-first boot; user-verified E2E). What this means for anything pre-rename:
-
-- **The contract renamed with the product:** env vars `SYNC_*` → `FLOWBUDDY_*`, bundles `sync-copilot*.js` → `flowbuddy-copilot*.js`, embed attrs `data-sync-*` → `data-flowbuddy-*`, key header `x-sync-key` → `x-flowbuddy-key`, `window.SyncCopilot` → `window.FlowBuddy`, extension "Sync Recorder" → "FlowBuddy Recorder".
-- **Pre-rename embed snippets are dead** (old bundle URL + old attrs) — re-copy from Studio → Copilot.
-- **Pre-rename extension builds can't connect** (old baked URLs + old bridge channels): store v0.3.0 and the never-uploaded v0.4.0 zip are both inert; v0.5.0's review was cancelled (superseded), and **v0.6.0 (live 2026-07-23) is the shipping post-rename build** — [`extension-releases.md`](extension-releases.md).
-- **Old `*.onrender.com` URLs and the `sync_*` database are gone**; dev data was disposable by design.
+The product was renamed Sync → FlowBuddy and the dev environment was rebuilt from scratch the same
+day. The cutover is complete and nothing pre-rename is still running, so only the contract change is
+worth keeping: env vars `SYNC_*` → `FLOWBUDDY_*`, bundles `sync-copilot*.js` → `flowbuddy-copilot*.js`,
+embed attrs `data-sync-*` → `data-flowbuddy-*`, key header `x-sync-key` → `x-flowbuddy-key`,
+`window.SyncCopilot` → `window.FlowBuddy`. **Any pre-rename embed snippet or extension build is inert**
+— re-copy the snippet from Studio → Copilot, and install the current store build.
 
 ---
 
 ## Open items
 
-- **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). (The widget title stays per-workspace configurable.)
-- **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card. The full marketing page (hero · how-it-works · features · CTA; optionally dogfood the live widget as the demo) remains to build on top.
-- **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the v0.6.0 store listing URL) so the Home checklist CTA reads "Add to Chrome".
-- **Recorder v0.7.0 is live on the store — the ordering rule was broken once and got away with it.** The §7.6 rule (recorder first, then the API) was deliberately overridden on 2026-07-28 (no customers on prod): the upload-identity API shipped while the listing still served v0.6.0, which does not send `X-FlowBuddy-Upload-Id` and so could not upload at all. v0.7.0 going live closed the window. **Do not repeat it once there are customers** (§7.6, §8.4).
-- **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9 — not repeated here.
-- **RESOLVED 2026-07-28 — the presigned-PUT path is proven against real R2** on the dev deploy, with no bucket CORS rule needed (§2.2).
-- **RESOLVED 2026-07-28 — abandoned recordings are cleaned up:** explicit discard from the recorder plus a 12-hour server-side sweep (§8.5).
+- **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the store listing URL) so the Home checklist CTA reads "Add to Chrome".
+- **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` and the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9.
+- **`packages/landing` is still the minimal "coming soon + sign in" card.** The full marketing page remains to build ([`landing-page.md`](landing-page.md)).
+
+> **Standing ordering rule** (learned the hard way, §7.6): a recorder build that a new API *requires* must be **live on the Chrome Web Store before that API reaches prod**. It was overridden once, on 2026-07-28, and only survived because nobody was using the product.
