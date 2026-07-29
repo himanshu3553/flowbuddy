@@ -19,7 +19,7 @@ depth, not breadth.**
 
 | | Status |
 |---|---|
-| Recording your product (Chrome extension) | ⚠️ on the store, but the published version **can no longer upload** — see below |
+| Recording your product (Chrome extension) | ✅ live on the Chrome Web Store |
 | Turning recordings into clean steps | ✅ built and verified |
 | Splitting one recording into separate workflows | ✅ built |
 | Approving workflows | ✅ built |
@@ -101,10 +101,10 @@ what finally made a long-standing answering bug reproducible — but Copilot mod
 disambiguating, the whole reason it's better, has still had almost no chance to fire. More
 recordings would test the thing that's supposed to be the improvement.
 
-**The recorder on the store can't upload right now.** The server was updated to require something the
-published version doesn't send, and the newer version is built but hasn't been submitted. Anyone
-building it themselves is fine; anyone installing from the store is not. Submitting it is the open
-job.
+**The recorder and the server briefly disagreed.** The server was updated to require something the
+published recorder didn't send, and for a short window anyone installing from the store had a
+recorder that couldn't upload. The newer version is live now and Chrome updates installed copies
+itself. Worth remembering: that only went unnoticed because nobody was using it yet.
 
 **There's no spending limit.** Copilot mode can go back and forth with the AI model several times on
 a hard question. That was a deliberate decision to skip for now, and it was fine when the smarter

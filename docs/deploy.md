@@ -411,7 +411,7 @@ localhost — the committed `src/manifest.json` stays localhost so local dev is 
 **Chrome Web Store** (full per-version history + the cut-a-release checklist:
 [`extension-releases.md`](extension-releases.md)). **v0.7.0 is cut with the upload rework and is the
 build the current API requires** — it sends `X-FlowBuddy-Upload-Id`, uploads narration directly, and
-discards abandoned recordings. §7.6 says it must be live *before* that API reaches prod; **on 2026-07-28 that ordering was deliberately overridden** (no customers on prod), so the API is already live while v0.7.0 is still unpublished — a store-installed v0.6.0 currently cannot upload at all. It bakes the same
+discards abandoned recordings. §7.6 says it must be live *before* that API reaches prod; **on 2026-07-28 that ordering was deliberately overridden** (no customers on prod), so the API went out first and for a short window a store-installed v0.6.0 could not upload at all. **v0.7.0 is now live and the window is closed** — but the override is the reason §7.6 exists, and it only survived because nobody was using the product. It bakes the same
 three origins as v0.6.0 and adds **no new permissions**. Until it is published, the live listing is
 still **v0.6.0** (submitted
 2026-07-17, confirmed live by 2026-07-23) — the production release: bakes `https://app.flowbuddyai.com`
@@ -528,10 +528,13 @@ carry a client-minted `uploadId`, and artifacts stream to object storage **durin
 the completion of it.)*
 
 **⚠️ ORDER MATTERS — this is the first drop where the API and the extension are coupled.**
-`POST /v1/sessions` now returns `400` without an `X-FlowBuddy-Upload-Id` header, and the previous
-store build **v0.6.0 does not send it**. **The newer recorder (v0.7.0) must be live on the Chrome Web
-Store before this API reaches production**, or every installed recorder stops being able to upload
-([`extension-releases.md`](extension-releases.md)).
+`POST /v1/sessions` returns `400` without an `X-FlowBuddy-Upload-Id` header, and the previous store
+build **v0.6.0 does not send it**. The rule is that the newer recorder must be **live on the Chrome
+Web Store before this API reaches production**, or every installed recorder stops being able to
+upload. **That is not what happened here:** the API shipped first on 2026-07-28 by explicit decision
+(no customers on prod), leaving a window where the published recorder could not upload at all, and
+v0.7.0 going live closed it. It cost nothing because nobody was using the product — which is exactly
+the condition that will not hold next time ([`extension-releases.md`](extension-releases.md)).
 
 1. **Migration runs automatically** on api boot: `20260727230000_upload_identity` — adds
    `RecSession.uploadId` (nullable) + `UNIQUE (workspaceId, uploadId)`, and drops `NOT NULL` on
@@ -663,7 +666,7 @@ first boot; user-verified E2E). What this means for anything pre-rename:
 - **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). (The widget title stays per-workspace configurable.)
 - **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card. The full marketing page (hero · how-it-works · features · CTA; optionally dogfood the live widget as the demo) remains to build on top.
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the v0.6.0 store listing URL) so the Home checklist CTA reads "Add to Chrome".
-- **⚠️ The prod API is already running ahead of any published recorder.** The §7.6 ordering rule was deliberately overridden on 2026-07-28 (no customers on prod): the upload-identity API shipped while the store listing still serves v0.6.0, which does not send `X-FlowBuddy-Upload-Id` and therefore **cannot upload at all**. Publishing v0.7.0 is the open remediation, not a gate on a future deploy (§7.6, §8.4).
+- **Recorder v0.7.0 is live on the store — the ordering rule was broken once and got away with it.** The §7.6 rule (recorder first, then the API) was deliberately overridden on 2026-07-28 (no customers on prod): the upload-identity API shipped while the listing still served v0.6.0, which does not send `X-FlowBuddy-Upload-Id` and so could not upload at all. v0.7.0 going live closed the window. **Do not repeat it once there are customers** (§7.6, §8.4).
 - **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9 — not repeated here.
 - **RESOLVED 2026-07-28 — the presigned-PUT path is proven against real R2** on the dev deploy, with no bucket CORS rule needed (§2.2).
 - **RESOLVED 2026-07-28 — abandoned recordings are cleaned up:** explicit discard from the recorder plus a 12-hour server-side sweep (§8.5).

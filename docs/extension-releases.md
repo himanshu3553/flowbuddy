@@ -9,7 +9,7 @@
 
 ---
 
-## v0.7.0 — 📦 PACKAGED 2026-07-28 (not yet submitted) — ⚠️ **REQUIRED: prod is already running the API that needs it**
+## v0.7.0 — ✅ **LIVE on the Chrome Web Store** (packaged 2026-07-28) — the build production requires
 
 **The upload-identity release** — one recording now has one identity, and its artifacts upload while you record instead of in one lump at Stop.
 
@@ -20,13 +20,13 @@
   - **Removed** (net −85 lines): the hand-rolled `streamingUpload()` ReadableStream, the HTTP/2-only path and its HTTP/1.1 fallback, the 90 %-capped byte progress, the `FINISHING` sentinel, and the dual re-arming watchdogs. **"Finishing… forever" is no longer a reachable state.** The popup shows "Finishing up…", then after 8 s "Sending the rest of your recording…" *with a running timer*.
   - Discards an abandoned recording server-side (`DELETE /v1/uploads/:uploadId`) on "Start fresh" and when a new recording starts over an unsent buffer — so a thrown-away capture no longer strands uploaded artifacts.
   - Degrades to the old all-in-one Stop bundle if signing is unavailable; that path is a deliberate fallback, not leftover.
-- **⚠️ COMPATIBILITY — this build is now REQUIRED, not optional.** The API returns `400` on `/v1/sessions` without the identity header, and **v0.6.0 does not send it**. The intended ordering was store-first; it was not followed — the API shipped to production on 2026-07-28 by explicit decision (no customers on prod). **Until this build is live, any installed v0.6.0 cannot upload a recording.** Ordering rule for next time: [`deploy.md`](deploy.md) §7.6.
+- **⚠️ COMPATIBILITY — this build is REQUIRED, not optional.** The API returns `400` on `/v1/sessions` without the identity header, and **v0.6.0 does not send it**. The intended ordering is store-first; it was not followed here — the API shipped to production on 2026-07-28 by explicit decision (no customers on prod), which left a window where any installed v0.6.0 could not upload at all. **That window is closed: v0.7.0 is live.** Anyone still on v0.6.0 is fixed by Chrome's own auto-update. Ordering rule for next time: [`deploy.md`](deploy.md) §7.6 — and the lesson is that the window is only survivable when nobody is using the product.
 - **Permissions:** **unchanged.** The direct PUTs to object storage are covered by the existing `<all_urls>` host permission — a Chrome MV3 service worker is not subject to CORS for hosts it holds permission for, so **no bucket CORS rule was needed**. Verified end to end against real Cloudflare R2 on dev/Render, 2026-07-28.
 - **Baked targets:** `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only).
 - **Artifact:** `packages/extension/flowbuddy-recorder-0.7.0.zip` (gitignored) — built `NODE_ENV=production`.
-- **Next:** upload via the Web Store dashboard → submit for review. No permissions delta, so review should be the fast path. Flip this entry to `submitted`, then `live`.
+- **Status:** submitted and **live**. No permissions delta, so review took the fast path.
 
-## v0.6.0 — ⛔ SUPERSEDED by v0.7.0 (live 2026-07-23 → cannot upload since the API shipped 2026-07-28; sends no `X-FlowBuddy-Upload-Id`)
+## v0.6.0 — ⛔ SUPERSEDED by v0.7.0 (live 2026-07-23 → could not upload between the API shipping 2026-07-28 and v0.7.0 going live; sends no `X-FlowBuddy-Upload-Id`)
 
 **The production release** — the first build that connects to **app.flowbuddyai.com** (the prod Studio launched 2026-07-17).
 

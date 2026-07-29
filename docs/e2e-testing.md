@@ -618,8 +618,9 @@ Notes when switching targets:
   past 8 seconds. On dev, that longer state usually means the free-tier api is cold-starting.
 - **⚠️ The API requires an `X-FlowBuddy-Upload-Id` header on `/v1/sessions`.** Store build **v0.6.0
   does not send it** and gets a `400` against a dev API carrying this change; **v0.7.0** is the build
-  that does. Test with a locally rebuilt extension until v0.7.0 is live — see
-  [`extension-releases.md`](extension-releases.md).
+  that does, and it is **live on the store** — so a store install is fine, provided Chrome has picked
+  up the update. If you see a `400` on finalize, check the installed version before anything else —
+  see [`extension-releases.md`](extension-releases.md).
 
 ✅ **PASS:** the extension popup shows **Connected** (to the Studio you built against).
 
