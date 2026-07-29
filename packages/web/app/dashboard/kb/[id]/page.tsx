@@ -20,7 +20,7 @@ import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 
 export const dynamic = 'force-dynamic';
 
-// The distilled-step shape persisted in KnowledgeItem.data (see docs/kb-step-distillation.md).
+// The distilled-step shape persisted in KnowledgeItem.data (see docs/build/kb-step-distillation.md).
 type StepData = {
   instruction?: string;
   detail?: string;

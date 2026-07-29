@@ -318,8 +318,8 @@ Three data shapes travel between modules. They're the actual "API" of the system
 | **`DistilledStep`** (the KB step) | [`@flowbuddy/synthesis/distill.ts`](../../packages/synthesis/src/distill.ts) | Worker → `KnowledgeItem.data` → Studio & Copilot | `{ instruction, detail?, route, narration, screenshotFile, bbox, keyEventId? }` (`keyEventId` since 2026-07-08) — a clean, user-facing step with one curated screenshot. **Raw events are not persisted here.** |
 | **`CopilotKBItem`** | [`@flowbuddy/synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | Retrieval → answer engine | `{ id, sourceId, segmentIndex, segmentTitle, text, narration }` — the slimmed item shape the LLM grounds on and that becomes a citation. |
 
-The capture contract is specced in prose in [`../phase-1-copilot.md`](../phase-1-copilot.md) §6; the
-distillation contract in [`../kb-step-distillation.md`](../kb-step-distillation.md).
+The capture contract is specced in prose in [`../phase-1-copilot.md`](../build/phase-1-copilot.md) §6; the
+distillation contract in [`../kb-step-distillation.md`](../build/kb-step-distillation.md).
 
 ---
 
@@ -352,7 +352,7 @@ forged credential resolving to the wrong workspace, which none of the three reso
   Postgres rows. Surfaces discover its work by reading `status`.
 - **There is exactly one KB path** — the worker's distilled `buildWorkflowKB`. There is no separate
   article engine and no `Article` table, by design: the Version-2 portal *renders* approved distilled
-  workflows rather than synthesizing a second artifact ([`../v2-portal.md`](../v2-portal.md)).
+  workflows rather than synthesizing a second artifact ([`../v2-portal.md`](../build/v2-portal.md)).
 
 ---
 

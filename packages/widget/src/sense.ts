@@ -1,5 +1,5 @@
 // P2 Sense (in-context help) — the widget half of the LOCKED hybrid architecture
-// (docs/phase-2-sense.md §2): fetch the ROUTE-SHARDED sense plan on panel open, run an ask-time
+// (docs/build/phase-2-sense.md §2): fetch the ROUTE-SHARDED sense plan on panel open, run an ask-time
 // READ-ONLY probe of the live DOM against it, score deterministic top-k hypotheses ("the user
 // appears to be at step 3 of Create an invoice"), and ship ONLY those hypotheses — evidence
 // booleans plus one MASKED error snippet — on the /answer call. Never screenshots, never DOM,

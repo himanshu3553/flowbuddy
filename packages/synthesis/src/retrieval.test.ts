@@ -11,7 +11,7 @@ import { sanitizeHistory, shortlistItems, type RetrievableKBItem } from './retri
  * decisions executable, so the ordering is enforced rather than remembered.
  *
  * Deliberately NOT tested here: prompt behaviour and LLM output. Those need the E2E legs in
- * docs/e2e-testing.md — a unit test that asserts on model text is a test that fails for the wrong
+ * docs/ops/e2e-testing.md — a unit test that asserts on model text is a test that fails for the wrong
  * reasons. This file only covers the pure, deterministic seams.
  */
 

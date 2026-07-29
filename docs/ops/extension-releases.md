@@ -13,7 +13,7 @@
 
 **The upload-identity release** — one recording now has one identity, and its artifacts upload while you record instead of in one lump at Stop.
 
-- **Why it exists:** a ~10-minute recording stalled at "Finishing…", the recorder aborted after a flat 120 s, the API committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Full analysis in [`phase-1-copilot.md`](phase-1-copilot.md) §8·A (R14).
+- **Why it exists:** a ~10-minute recording stalled at "Finishing…", the recorder aborted after a flat 120 s, the API committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Full analysis in [`phase-1-copilot.md`](../build/phase-1-copilot.md) §8·A (R14).
 - **Content:**
   - Mints an `uploadId` at Record and sends it as `X-FlowBuddy-Upload-Id`, so a retry resolves to the same recording instead of creating another.
   - Screenshots and DOM snapshots upload **directly to object storage while recording** over short-lived presigned PUT URLs; narration follows the same path at Stop. On a healthy connection the finalize request carries **the manifest and nothing else**. Confirmed artifacts are tracked as `up:<sessionId>:<rel>` markers in IndexedDB.

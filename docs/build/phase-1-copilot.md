@@ -2,9 +2,9 @@
 
 > **Phase 1 is the copilot, end-to-end — and it ships as the Version 1 release.** A SaaS records its product, **approves workflows for the copilot**, drops a `<script>` into its app, and its end-users get a chat widget that answers **grounded only in approved Knowledge Base content**, with citations and honest declines. **Decoupled** from the human-facing portal/articles (those are a [Version 2 by-product](v2-portal.md)). This doc is the build plan, the acceptance spec, and the as-built record in one place.
 
-- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done — and Version 1 is LIVE IN PRODUCTION at flowbuddyai.com since 2026-07-23** ([`deploy.md`](deploy.md): paid two-blueprint stack, worker folded into the api; dev stays at `https://flowbuddy-dev-web.onrender.com`, reset/test guide → [`e2e-testing.md`](e2e-testing.md) **Level 2**). Remaining Phase-1 work: only **P1-M12 PII Cut 2** (deferred to the V2 portal track) — **P1-M3 shipped 2026-07-07** as hybrid keyword+pgvector retrieval (§5 / §11). The **P1-M11 capture-reliability backlog is complete** (§8 — **R13 ranked locators shipped 2026-07-06** closing the original list; **R14 — idempotent upload identity + direct artifact streaming — landed 2026-07-27 and completed 2026-07-28** (§8·A — narration goes direct too, abandoned recordings are cleaned up, R2 + CORS proven on dev/Render; shipping to production with recorder **v0.7.0**); **R5** + the recorder UX parking lot → **V2·D3**).
+- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done — and Version 1 is LIVE IN PRODUCTION at flowbuddyai.com since 2026-07-23** ([`deploy.md`](../ops/deploy.md): paid two-blueprint stack, worker folded into the api; dev stays at `https://flowbuddy-dev-web.onrender.com`, reset/test guide → [`e2e-testing.md`](../ops/e2e-testing.md) **Level 2**). Remaining Phase-1 work: only **P1-M12 PII Cut 2** (deferred to the V2 portal track) — **P1-M3 shipped 2026-07-07** as hybrid keyword+pgvector retrieval (§5 / §11). The **P1-M11 capture-reliability backlog is complete** (§8 — **R13 ranked locators shipped 2026-07-06** closing the original list; **R14 — idempotent upload identity + direct artifact streaming — landed 2026-07-27 and completed 2026-07-28** (§8·A — narration goes direct too, abandoned recordings are cleaned up, R2 + CORS proven on dev/Render; shipping to production with recorder **v0.7.0**); **R5** + the recorder UX parking lot → **V2·D3**).
 - **Last updated:** 2026-07-27 · **Branch:** `dev`
-- **Companion docs:** why copilot-first → [`product.md`](product.md) §5 · roadmap/status → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](e2e-testing.md) · deploy → [`deploy.md`](deploy.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · local dev → [`dev-setup.md`](dev-setup.md) *(the Phase-1 visual map is §1.1 above)*
+- **Companion docs:** why copilot-first → [`product.md`](../product/product.md) §5 · roadmap/status → [`roadmap.md`](../roadmap.md) · technical model → [`architecture.md`](../product/architecture.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · deploy → [`deploy.md`](../ops/deploy.md) · V2 portal by-products → [`v2-portal.md`](v2-portal.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md) *(the Phase-1 visual map is §1.1 above)*
 - **Grounding (Stage A):** the copilot grounds on **approved-KB** (`KnowledgeItem`s behind a per-workflow approval flag), **not** published articles. **Stage B** (also cite a published article when one exists) is **deferred**. *(These grounding "Stages" are within Phase 1 — not the product Phases 1/2/3.)*
 
 ---
@@ -20,8 +20,8 @@ The one idea everything else serves: **the copilot answers only from workflows a
 declines honestly otherwise.** Approval is the product's trust boundary, and the reason a wrong answer
 is a bug rather than an inherent property of the system.
 
-How it runs, surface by surface: [`internals/`](internals/README.md) — start at
-[`connections.md`](internals/connections.md), which traces one recording from a click to an answer.
+How it runs, surface by surface: [`internals/`](../internals/README.md) — start at
+[`connections.md`](../internals/connections.md), which traces one recording from a click to an answer.
 
 ---
 
@@ -74,10 +74,10 @@ How it runs, surface by surface: [`internals/`](internals/README.md) — start a
 
 | Surface | What it is | Mechanics |
 |---|---|---|
-| **Recorder** (Chrome MV3) | Captures narrated workflows — events, DOM fingerprints, screenshots, audio — and uploads them. | [`internals/recorder-capture.md`](internals/recorder-capture.md) |
-| **KB build** (worker) | Transcribes, cleans, segments and distills a raw capture into per-workflow steps. | [`internals/knowledge-base.md`](internals/knowledge-base.md) |
-| **Copilot** ⭐ | The headline: retrieval over approved KB → grounded answer with citations, or an honest decline. | [`internals/copilot.md`](internals/copilot.md) |
-| **Studio** | The builder's console — review, **approve**, configure the embed, read analytics. | [`internals/studio.md`](internals/studio.md) |
+| **Recorder** (Chrome MV3) | Captures narrated workflows — events, DOM fingerprints, screenshots, audio — and uploads them. | [`internals/recorder-capture.md`](../internals/recorder-capture.md) |
+| **KB build** (worker) | Transcribes, cleans, segments and distills a raw capture into per-workflow steps. | [`internals/knowledge-base.md`](../internals/knowledge-base.md) |
+| **Copilot** ⭐ | The headline: retrieval over approved KB → grounded answer with citations, or an honest decline. | [`internals/copilot.md`](../internals/copilot.md) |
+| **Studio** | The builder's console — review, **approve**, configure the embed, read analytics. | [`internals/studio.md`](../internals/studio.md) |
 
 Three decisions from building them that are not obvious from the code:
 
@@ -94,7 +94,7 @@ Three decisions from building them that are not obvious from the code:
 
 ## 5. Modules P1-M0…P1-M12
 
-Status: [`roadmap.md`](roadmap.md) §2. It is the only status surface.
+Status: [`roadmap.md`](../roadmap.md) §2. It is the only status surface.
 
 ---
 
@@ -137,14 +137,14 @@ Event {
 - **Identity + idempotency.** One recording = one `uploadId` (UUID), minted by the recorder when Record is pressed and carried on **`X-FlowBuddy-Upload-Id`** — `/v1/sessions` returns **400** without it. It rides a header, not the manifest, because parts stream to storage before the manifest part is parsed. Both routes resolve it to the same row via `@@unique([workspaceId, uploadId])`, so **a retry can never create a second recording**; a finalize arriving after the recording is built drains the body and replies `alreadyFinalized`.
 - **Artifact allowlist.** Both routes validate every relative path against `shots/<name>.jpg|jpeg|png`, `dom/<name>.html`, `audio.webm`. A signed URL is a write capability, so the key is *validated*, never merely sanitized.
 - **Degradation.** If signing fails (offline, auth, an older server), nothing is lost — unconfirmed artifacts simply ride the Stop bundle exactly as before. **The multipart bundle path is kept on purpose**, not leftover: it is the only way a browser that cannot reach object storage directly still delivers a complete recording, and it is why the finalize deadline stays a generous 300 s even though the healthy path sends kilobytes.
-- **Cleanup.** Because artifacts upload *during* the capture, an abandoned recording has already written a row and objects — so discarding became a server-side act rather than just clearing a local buffer. Only a row still in `recording` may be discarded; a finalized one must be deleted in Studio. Mechanics, status codes and the sweep: [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.
+- **Cleanup.** Because artifacts upload *during* the capture, an abandoned recording has already written a row and objects — so discarding became a server-side act rather than just clearing a local buffer. Only a row still in `recording` may be discarded; a finalized one must be deleted in Studio. Mechanics, status codes and the sweep: [`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6.
 
 ---
 
 ## 7. Data model
 
-The schema itself is [`packages/db/prisma/schema.prisma`](../packages/db/prisma/schema.prisma), and the
-table-by-table walkthrough is [`internals/data.md`](internals/data.md). What belongs
+The schema itself is [`packages/db/prisma/schema.prisma`](../../packages/db/prisma/schema.prisma), and the
+table-by-table walkthrough is [`internals/data.md`](../internals/data.md). What belongs
 here is only what the schema **cannot** say about itself — the invariants a migration could break
 without any type error:
 
@@ -164,12 +164,12 @@ without any type error:
 - **Artifacts are private and reached only by signed, expiring URLs, in both directions** — read URLs
   for Studio and synthesis, and presigned PUT URLs so the recorder writes directly. A signed URL is a
   write capability, so the key is validated against an allowlist before it is built
-  ([`internals/ingestion-api.md`](internals/ingestion-api.md) §4.2).
+  ([`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.2).
 
 **Async processing:** uploads enqueue onto Redis/BullMQ → the worker transcribes, cleans, segments and
 distills → `ready`. The copilot answers **synchronously**. The enqueue's deliberate fragility-tolerance,
 the two Redis connections and worker concurrency are one story, told in
-[`internals/connections.md`](internals/connections.md) Seam C.
+[`internals/connections.md`](../internals/connections.md) Seam C.
 
 ---
 
@@ -179,7 +179,7 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 
 ### P1-M11 — Capture reliability (recorder backlog R1–R14)
 
-**Shipped.** One line each; the mechanics live in [`internals/recorder-capture.md`](internals/recorder-capture.md), and `git log -- packages/extension` carries the full fix stories.
+**Shipped.** One line each; the mechanics live in [`internals/recorder-capture.md`](../internals/recorder-capture.md), and `git log -- packages/extension` carries the full fix stories.
 
 | R | Problem | Outcome |
 |---|---|---|
@@ -196,11 +196,11 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 | **R13** | Only brittle positional selectors | Ranked multi-signal `locators`, uniqueness-verified at capture time — framework-generated ids rejected |
 | **Stop→upload** | Silent, deadline-less upload pipeline | Persisted `phase` + alarms-backed recovery + a status pill on the page. **That pill deliberately reverses the 2026-07-01 "outcomes never render on the page" decision, for the stop moment only.** |
 
-**R14 — idempotent upload identity + direct artifact streaming** *(✅ 2026-07-28, recorder v0.7.0)*. Worth keeping the root cause: a ~10-minute recording stalled at "Finishing…", the watchdog aborted on a flat 120 s deadline, the api committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Two causes — `/v1/sessions` minted a fresh server-side id per request (nothing could collapse a retry), and the api awaited one object-storage round-trip **per file, serially, inside the multipart parse loop**, before creating the row or responding. The fix is an `uploadId` minted at Record (`@@unique([workspaceId, uploadId])`) plus presigned direct-to-storage artifact uploads. **The R2 checksum trap that nearly sank it is recorded in [`deploy.md`](deploy.md) §2.2** — it passes local dev and fails only in production.
+**R14 — idempotent upload identity + direct artifact streaming** *(✅ 2026-07-28, recorder v0.7.0)*. Worth keeping the root cause: a ~10-minute recording stalled at "Finishing…", the watchdog aborted on a flat 120 s deadline, the api committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Two causes — `/v1/sessions` minted a fresh server-side id per request (nothing could collapse a retry), and the api awaited one object-storage round-trip **per file, serially, inside the multipart parse loop**, before creating the row or responding. The fix is an `uploadId` minted at Record (`@@unique([workspaceId, uploadId])`) plus presigned direct-to-storage artifact uploads. **The R2 checksum trap that nearly sank it is recorded in [`deploy.md`](../ops/deploy.md) §2.2** — it passes local dev and fails only in production.
 
 **Still open.**
 
-- **R5 — marker hotkey + labels** *(→ Version 2 · D3)* — **S.** [`architecture.md`](architecture.md) calls the marker hotkey **"the main segmentation-quality lever"**, but there is no hotkey and markers carry no label. Deferred because markers are already droppable from the popup and the on-page bar; revisit only if segmentation quality needs the extra signal.
+- **R5 — marker hotkey + labels** *(→ Version 2 · D3)* — **S.** [`architecture.md`](../product/architecture.md) calls the marker hotkey **"the main segmentation-quality lever"**, but there is no hotkey and markers carry no label. Deferred because markers are already droppable from the popup and the on-page bar; revisit only if segmentation quality needs the extra signal.
 - **R12(a) — keyboard/Tab pre-capture** — **S/M.** Pre-capture triggers on `pointerdown`, so a field left via **Tab** or a form submitted via **Enter** falls back to the late event-time capture. The browser order is symmetric (`keydown` fires before blur/submit), so the fix is a `preCapture` on `keydown` **gated to Tab/Enter/Escape only** — never printable keys, or it floods the queue. Low payoff: this realistically only rescues *Enter-to-submit on the last field*.
 - **R12(b) — rapid-fire clicks** — **M–L.** `captureVisibleTab` is hard-capped at **~2 shots/s**. Cheaper half-fix: the post-action frame is only rendered for a workflow's **last** step, so deferring non-terminal post-action shots roughly halves the load. Proper fix: replace `captureVisibleTab` with a **`chrome.tabCapture` video stream** and grab frames on demand — no per-frame limit, exact-moment frames. That **supersedes most of the R12 pre-capture machinery**, but it is a real rebuild (CPU/mem, new permission + user gesture, offscreen coordination). Only worth it if rapid-fire recording becomes real.
 
@@ -244,18 +244,18 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 
 - **Grounding strictness (P1-M6):** tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob; confidently-wrong answers are the trust-killer.
 - **Decline threshold — a settings control that was designed and never built.** There is no such slider in Studio. To build it: add `copilotDeclineThreshold` to `Workspace`; have the engine emit a `confidence` (0–100) plus a prompt line rating how well the items cover the question, accept a `declineThreshold`, and turn `covered && confidence < threshold` into a friendly decline; persist it and wire the control. **Two caveats that make it less attractive than it looks:** confidence is *model self-reported* — a heuristic dial, not a calibrated probability — and a threshold-decline must still log a coverage gap, or the feedback loop goes blind exactly where quality is worst.
-- **Retrieval quality (P1-M6 / P1-M3):** settled — hybrid keyword+vector, keyword fallback on every vector-path failure. The seam and its constants live in [`internals/copilot.md`](internals/copilot.md). **Two things remain open and are recorded nowhere else:** folding **conversation history into the retrieval query** (today only the current question and the continuity bias reach it), and an **ANN index (HNSW)** if a workspace ever exceeds tens of thousands of items.
+- **Retrieval quality (P1-M6 / P1-M3):** settled — hybrid keyword+vector, keyword fallback on every vector-path failure. The seam and its constants live in [`internals/copilot.md`](../internals/copilot.md). **Two things remain open and are recorded nowhere else:** folding **conversation history into the retrieval query** (today only the current question and the continuity bias reach it), and an **ANN index (HNSW)** if a workspace ever exceeds tens of thousands of items.
 - **Citation UX without leaking structure (P1-M6/M7):** Stage A has no articles to link, so a citation points to the workflow/step (e.g. a step thumbnail).
 - **PII in answers (P1-M12):** **Cut 1 done** — the server text-scrub protects the copilot answer path; **Cut 2 (screenshot/DOM pixel redaction)** is the remaining piece, deferred to Version 2 (needed before the public portal renders screenshots).
 - **Embed security & cost (P1-M9):** public key + origin allowlist + rate limiting; per-workspace LLM ceilings; anonymous end-user session model.
 - **Context mapping (P1-M8):** host routes vs. captured routes when paths differ (params/hashes); privacy of host-sent context.
 - **Capture reliability internals (P1-M11):** nav re-arm + buffer durability; upload-retry bounds; audio finalize race; SW reconnect; iframe/multi-tab scope; event-vocabulary noise; selector robustness (defer healing to Phase 3).
 - **Segmentation accuracy:** drives both the approval unit and retrieval grouping; markers + route boundaries reduce reliance on the LLM.
-- **Cloud deploy (P1-M4): ✅ done** — dev env rebuilt 2026-07-17, **prod launched 2026-07-23**; the blueprint/env/extension-rebuild mechanics live in [`deploy.md`](deploy.md).
+- **Cloud deploy (P1-M4): ✅ done** — dev env rebuilt 2026-07-17, **prod launched 2026-07-23**; the blueprint/env/extension-rebuild mechanics live in [`deploy.md`](../ops/deploy.md).
 
 ---
 
 ## 12. End-to-end journey
 
 One recording from a click to an answer, with the seams named:
-[`internals/connections.md`](internals/connections.md) §2.
+[`internals/connections.md`](../internals/connections.md) §2.

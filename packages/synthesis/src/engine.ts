@@ -4,7 +4,7 @@ import type { AnswerPosition, CopilotAnswer, CopilotCitation, CopilotKBItem, Sen
 /**
  * The shared answering engine — ONE loop, ONE answer shape, several configurations.
  *
- * WHY THIS EXISTS (2026-07-26, ahead of mode 2 — docs/agent.md). The two answer paths were
+ * WHY THIS EXISTS (2026-07-26, ahead of mode 2 — docs/build/agent.md). The two answer paths were
  * always the same machine wearing different hats: the diagnostic path runs a tool loop, and the
  * fast path is that identical loop with **no tools bound** — with zero tools the loop makes exactly
  * one model call and breaks. Extracting it makes that literal, which is what lets `AI Chatbot`

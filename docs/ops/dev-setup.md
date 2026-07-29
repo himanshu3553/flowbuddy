@@ -29,7 +29,7 @@ flowbuddy/
   docs/       # the full doc set — start at the map: roadmap.md §10 / the CLAUDE.md doc table
 ```
 
-> **Note:** the `portal/` package (the public help site) is not in the current workspace — it's **built in Version 2** ([`v2-portal.md`](v2-portal.md)).
+> **Note:** the `portal/` package (the public help site) is not in the current workspace — it's **built in Version 2** ([`v2-portal.md`](../build/v2-portal.md)).
 
 Why a monorepo: the extension, api, web, and widget must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
 
@@ -211,7 +211,7 @@ Every line is tagged with its `service` (`api` / `worker` / `synthesis` / `retri
 | `LOG_PRETTY` | all Node services | Force the shape regardless of env: `1` = pretty, `0` = JSON. (Default: pretty in a dev TTY, JSON otherwise.) |
 | `NEXT_PUBLIC_LOG_LEVEL` | Studio **client** bundle | **Build-time** browser log level (inlined by Next). Default: `warn` in prod, `debug` in dev. |
 
-All are documented in the root [`.env.example`](../.env.example).
+All are documented in the root [`.env.example`](../../.env.example).
 
 ### Turn logging up/down — **non-prod (local)**
 
@@ -228,7 +228,7 @@ LOG_PRETTY=0 pnpm --filter @flowbuddy/api dev
 
 ### Turn logging up/down — **prod servers**
 
-Prod defaults to `info` + JSON (`NODE_ENV=production` is set in the Dockerfiles). `LOG_LEVEL=info` is also set explicitly on the Render services in [`render.yaml`](../render.yaml). To change it live, edit the env var in the Render dashboard — **no code redeploy needed** (Render restarts the service on an env change):
+Prod defaults to `info` + JSON (`NODE_ENV=production` is set in the Dockerfiles). `LOG_LEVEL=info` is also set explicitly on the Render services in [`render.yaml`](../../render.yaml). To change it live, edit the env var in the Render dashboard — **no code redeploy needed** (Render restarts the service on an env change):
 
 ```bash
 LOG_LEVEL=debug   # trace a request path in prod (verbose — set back to info after)

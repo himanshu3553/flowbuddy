@@ -2,7 +2,7 @@
 
 > **What this folder is.** A low-level, engineering-first tour of the running system: what each
 > module does, **how it works inside**, what data flows in and out of it, and how the modules are
-> wired together. It is the counterpart to the product docs in [`../`](../) — those explain *what
+> wired together. It is the counterpart to the product docs in [`../`](..) — those explain *what
 > FlowBuddy is and why* (copilot-first, the 3-module model, the roadmap); **these explain *how it runs*.**
 >
 > No code walkthroughs — these describe **mechanics and data flow** so you can reason about the
@@ -107,7 +107,7 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
   env-driven level, JSON in prod / pretty in dev, secret redaction); Fastify is wired to it via
   `loggerInstance`. Browser surfaces (widget/extension/web-client) use tiny local console loggers.
   It's infrastructure, not a module, so it has no doc of its own — canonical reference:
-  [`../dev-setup.md`](../dev-setup.md) §7.
+  [`../dev-setup.md`](../ops/dev-setup.md) §7.
 
 ---
 

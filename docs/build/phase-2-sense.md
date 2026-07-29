@@ -3,7 +3,7 @@
 > **Phase 2 makes the copilot aware of the user's live situation.** **Sense** answers *where the user is* — which approved workflow and which step — and answers **positionally** ("you're on step 3 of X; here's how to get unstuck, then the path to done"). **Reason** (module P2-M5) answers *why they're stuck* — it reads the live page state, compares it against the founder's own recording of that step working, and diagnoses the blocker. Both are built and live in production.
 
 - **Status:** ✅ Built, user-verified end-to-end, in production.
-- **Companion docs:** Phase 1 substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · roadmap → [`roadmap.md`](roadmap.md) · technical model → [`architecture.md`](architecture.md) · Phase 4 (consumes Sense localization + inherits Reason's agent loop) → [`agent.md`](agent.md) · why copilot-first → [`product.md`](product.md) §5
+- **Companion docs:** Phase 1 substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · roadmap → [`roadmap.md`](../roadmap.md) · technical model → [`architecture.md`](../product/architecture.md) · Phase 4 (consumes Sense localization + inherits Reason's agent loop) → [`agent.md`](agent.md) · why copilot-first → [`product.md`](../product/product.md) §5
 
 ## The trust ladder (the load-bearing distinction)
 
@@ -129,7 +129,7 @@ The alternative architecture — capture the page's HTML element fingerprints (r
 - **Founder controls:** per-workspace Sense toggle; no end-user-facing disclosure.
 - **Multi-turn:** re-probe on every follow-up; acknowledge progress. **Position is re-measured from the live page every message and beats the conversation** — never advance from chat flow alone; a same-step follow-up re-anchors gently; refer to steps by *instruction*, not number. (Hypotheses carry the current step's instruction, resolved server-side from the KB, so the model can't drift "at step k" into "done with step k".)
 - **Unrelated questions:** three-tier relevance (bias, never override); log used/ignored/none.
-- **Defaults:** Sense **ON** (read-only, harmless); show-me — see [`roadmap.md`](roadmap.md) for the current per-workspace defaults (it was flipped ON for new workspaces with mode 2, 2026-07-27). An **empty shard sends no sense context at all** (no workflows near the route ≠ drift — `senseUsed='none'` is reserved for "candidates existed, nothing matched"). Preview mode (`data-flowbuddy-preview`) skips Sense entirely.
+- **Defaults:** Sense **ON** (read-only, harmless); show-me — see [`roadmap.md`](../roadmap.md) for the current per-workspace defaults (it was flipped ON for new workspaces with mode 2, 2026-07-27). An **empty shard sends no sense context at all** (no workflows near the route ≠ drift — `senseUsed='none'` is reserved for "candidates existed, nothing matched"). Preview mode (`data-flowbuddy-preview`) skips Sense entirely.
 
 ## A5. Risks & mitigations
 

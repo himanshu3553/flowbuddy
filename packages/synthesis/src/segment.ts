@@ -15,7 +15,7 @@ export function eventLabel(ev: CapturedEvent): string {
 
 // Single-stage, event-aware segmenter. Boundaries are driven primarily by goal-completion /
 // terminal states (redirects, route resets, dashboards, sign-outs, confirmations) — visible in the
-// event routes — with narration + markers as supporting signals. See docs/kb-step-distillation.md.
+// event routes — with narration + markers as supporting signals. See docs/build/kb-step-distillation.md.
 const SEGMENT_SYSTEM = `You segment ONE screen-recording session into the distinct workflows it documents.
 A WORKFLOW is one complete task a user would look up in a help center and follow
 start-to-finish to reach a goal (e.g. "Create an account", "Log in", "Create a
@@ -90,7 +90,7 @@ const SEGMENT_SCHEMA = {
 /**
  * Split one recording's events into workflows in a single event-aware LLM pass (terminal-state
  * driven; narration + markers supporting). A carry-forward guard then guarantees EVERY event lands
- * in a workflow, so nothing is ever silently dropped. See docs/kb-step-distillation.md.
+ * in a workflow, so nothing is ever silently dropped. See docs/build/kb-step-distillation.md.
  */
 export async function segment(
   openai: OpenAI,

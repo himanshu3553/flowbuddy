@@ -2,7 +2,7 @@
 
 **Status:** ✅ **Built, verified end-to-end & committed (2026-06-27)** — Phases 1–6 done (distillation pipeline built 2026-06-26; segmenter finalized + E2E-verified + committed `e5f81d8` on 2026-06-27) · **Owner:** copilot KB pipeline
 
-Turn the noisy, raw, 1:1 event dump that the KB currently stores into a clean, deduplicated, user-facing **step list** per workflow — so the copilot is grounded on real steps, not DOM telemetry. *(How many workflows* a recording splits into is the **segmenter's** job, separate from this doc. The segmenter ([`segment.ts`](../packages/synthesis/src/segment.ts)) is a single **event-aware** LLM pass driven primarily by **goal-completion / terminal states** (redirects, route resets, dashboards, sign-outs, success toasts), with narration + user markers as supporting signals; it emits a per-boundary `confidence` to flag splits an editor should review, and a carry-forward guard ensures no event is ever silently dropped. It went through a few iterations on 2026-06-27 — an initial single-task bias over-merged a 4-task recording, a narration-only two-stage attempt over-anchored, and the terminal-state pass landed it.)* This doc is the next layer down: the steps *inside* a workflow.
+Turn the noisy, raw, 1:1 event dump that the KB currently stores into a clean, deduplicated, user-facing **step list** per workflow — so the copilot is grounded on real steps, not DOM telemetry. *(How many workflows* a recording splits into is the **segmenter's** job, separate from this doc. The segmenter ([`segment.ts`](../../packages/synthesis/src/segment.ts)) is a single **event-aware** LLM pass driven primarily by **goal-completion / terminal states** (redirects, route resets, dashboards, sign-outs, success toasts), with narration + user markers as supporting signals; it emits a per-boundary `confidence` to flag splits an editor should review, and a carry-forward guard ensures no event is ever silently dropped. It went through a few iterations on 2026-06-27 — an initial single-task bias over-merged a 4-task recording, a narration-only two-stage attempt over-anchored, and the terminal-state pass landed it.)* This doc is the next layer down: the steps *inside* a workflow.
 
 ---
 
@@ -34,9 +34,9 @@ A simple chatful.co sign-in recording produced **13 raw "knowledge items"** for 
 
 ## 2. Root cause (three layers)
 
-1. **Capture is permissive (extension).** [`content.ts`](../packages/extension/src/content.ts) records every `click`/`change`/`submit`/`Enter`/`nav`. `resolveTarget` ([content.ts:164-168](../packages/extension/src/content.ts#L164-L168)) falls back to the raw element when there's no interactive ancestor (`return interactive || el`), so clicks on non-interactive page chrome (#1, #2, #13) still emit. There's no "workflow starts here" concept, and no dedup.
-2. **KB build is a 1:1 passthrough (the real gap).** [`buildKB`](../packages/synthesis/src/index.ts#L57-L78) maps **every event to one KnowledgeItem, verbatim**. Nothing merges, dedupes, or judges relevance. The only LLM pass at build time is the *segmenter*, which groups items into a workflow but never cleans them.
-3. **Narration alignment smears (time-window).** [`align.ts`](../packages/synthesis/src/align.ts) attaches narration by a 4s-lead/1.5s-trail window. Because the user narrates continuously, the same sentence lands on multiple events (#8/#9/#10 all say "put the password also like this") and the wrong events (#5/#6 inherit "we need to click on that," which belongs to #4).
+1. **Capture is permissive (extension).** [`content.ts`](../../packages/extension/src/content.ts) records every `click`/`change`/`submit`/`Enter`/`nav`. `resolveTarget` ([content.ts:164-168](../../packages/extension/src/content.ts#L164-L168)) falls back to the raw element when there's no interactive ancestor (`return interactive || el`), so clicks on non-interactive page chrome (#1, #2, #13) still emit. There's no "workflow starts here" concept, and no dedup.
+2. **KB build is a 1:1 passthrough (the real gap).** [`buildKB`](../../packages/synthesis/src/index.ts#L57-L78) maps **every event to one KnowledgeItem, verbatim**. Nothing merges, dedupes, or judges relevance. The only LLM pass at build time is the *segmenter*, which groups items into a workflow but never cleans them.
+3. **Narration alignment smears (time-window).** [`align.ts`](../../packages/synthesis/src/align.ts) attaches narration by a 4s-lead/1.5s-trail window. Because the user narrates continuously, the same sentence lands on multiple events (#8/#9/#10 all say "put the password also like this") and the wrong events (#5/#6 inherit "we need to click on that," which belongs to #4).
 
 > Note: at design time a step-distillation engine already existed in-tree — `synthesize.ts` turned events into clean prose steps; it was never wired into the copilot path, and the copilot-focused distiller built here reused its patterns.
 
@@ -71,7 +71,7 @@ A simple chatful.co sign-in recording produced **13 raw "knowledge items"** for 
 ## 5. Target design
 
 The pipeline as it runs — stages, prompts, guards, fallbacks and every tuning constant — is
-[`internals/knowledge-base.md`](internals/knowledge-base.md). What belongs here is the *shape* the
+[`internals/knowledge-base.md`](../internals/knowledge-base.md). What belongs here is the *shape* the
 design settled on: raw events are **cleaned deterministically first** (cheap, no LLM, no semantic
 judgment), then **segmented into workflows** and **distilled into steps** by the model, which needs
 narration context the cleanup stage deliberately doesn't have. That ordering — cheap filter before
@@ -101,7 +101,7 @@ Built in six phases over 2026-06-26/27 (deterministic cleanup → LLM distillati
 
 ## 8. Out of scope (future hardening)
 
-- **bbox highlight rendering** — ✅ **shipped 2026-07-03** on Studio's KB detail page ([`web/.../step-screenshot.tsx`](../packages/web/components/dashboard/step-screenshot.tsx)): the step screenshot opens in a **same-page lightbox** and the `bbox` is drawn as a CSS overlay expressed in **viewport fractions** (`bbox / manifest.app.viewport`) — DPR-independent, no coordinate calibration needed. Pure render-layer add (no pipeline change, no reprocess). *(The KB page's self-contained fraction-math implementation is the only one in the tree.)*
+- **bbox highlight rendering** — ✅ **shipped 2026-07-03** on Studio's KB detail page ([`web/.../step-screenshot.tsx`](../../packages/web/components/dashboard/step-screenshot.tsx)): the step screenshot opens in a **same-page lightbox** and the `bbox` is drawn as a CSS overlay expressed in **viewport fractions** (`bbox / manifest.app.viewport`) — DPR-independent, no coordinate calibration needed. Pure render-layer add (no pipeline change, no reprocess). *(The KB page's self-contained fraction-math implementation is the only one in the tree.)*
 - **Prune unreferenced screenshots**: only ~1 screenshot per step is referenced; the dropped/stray events' shots sit unused in MinIO.
 - **C — capture-source filtering**: stop emitting non-interactive clicks / dedupe in the extension.
 - **D — workflow-start marker**: let the recorder mark where the task begins (kills pre-workflow noise at the source); workflow-level narration instead of per-event smear.

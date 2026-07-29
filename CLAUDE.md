@@ -16,15 +16,15 @@
 |---|---|
 | Module/phase status, dates, backlog | [`docs/roadmap.md`](docs/roadmap.md) — the ONLY status surface |
 | Which doc holds what | [`docs/README.md`](docs/README.md) — blurbs ≤25 words |
-| Chrome store version + live/pending | [`docs/extension-releases.md`](docs/extension-releases.md) |
+| Chrome store version + live/pending | [`docs/ops/extension-releases.md`](docs/ops/extension-releases.md) |
 | Env var names & defaults | `.env.example` |
 | Deploy spec | `render.yaml` / `render.dev.yaml` |
 | npm scripts | `package.json` |
 | Schema, column defaults, legal values | `packages/db/prisma/schema.prisma` |
 | Mode vocabulary, defaults, fail-closed rule | `packages/shared/src/copilot-mode.ts` (test-enforced) |
 | Tuning constants (weights, caps, timeouts, TTLs) | the source file's header comment |
-| How to test anything | [`docs/e2e-testing.md`](docs/e2e-testing.md) |
-| Logging | [`docs/dev-setup.md`](docs/dev-setup.md) §7 |
+| How to test anything | [`docs/ops/e2e-testing.md`](docs/ops/e2e-testing.md) |
+| Logging | [`docs/ops/dev-setup.md`](docs/ops/dev-setup.md) §7 |
 
 **Banned in docs:**
 - **As-built file maps** ("Where it lives", route tables, component paths, `foo.ts` name-drops in prose). This file + the source own these.
@@ -33,10 +33,11 @@
 - **Status tables outside `roadmap.md`.** Phase docs carry `Status: roadmap.md §N.`
 - **Second copies of a decision** ("as also noted in…"). Link instead.
 - **`Last updated` / `Branch:` stamps.** Git knows.
+- **Status or version in a folder name.** `docs/` groups by *who's asking*, never by what's shipped — a doc must not move when it ships. (The portal already migrated V1 → V2 once.)
 - **Version numbers** outside `extension-releases.md` (exception: a compatibility floor, e.g. "requires recorder ≥ v0.7.0").
 
 **Altitude scope — three layers, and two of them may not carry anything volatile:**
-- `docs/*.md` = **decisions**. Why we chose this, what we rejected, what's locked. No paths, no routes, no statuses, no constants.
+- `docs/product/` · `docs/build/` · `docs/ops/` = **decisions**. Why we chose this, what we rejected, what's locked. No paths, no routes, no statuses, no constants.
 - [`internals/`](docs/internals/README.md) = **what the code can't tell you**: seams, contracts, invariants, failure modes, and the WHY behind a constant. If the source states it plainly, don't restate it — the source wins on conflict, so a restatement is drift waiting.
 - [`plain-english/`](docs/plain-english/README.md) = the **stable core** in ordinary words. Never commands, never status, never a source path. (It has never named a `.ts` file — keep it that way.)
 
@@ -70,7 +71,7 @@ pnpm + Turborepo. Packages under `packages/`:
 
 **Version 1 is a pure copilot arc:** Phase 1 **Copilot** ✅ → Phase 2 **Sense + Reason** ✅ → Phase 3 **Self-validation** (the moat, unplanned) → Phase 4 **Autopilot** (opened ahead of Phase 3; the guided walkthrough is built, the acting modules are not). **Phase 5 Converse** is draft with its first slices shipped. **Phase 6 Interop** and **Version 3** are captured directions. Per-module status: [`docs/roadmap.md`](docs/roadmap.md).
 
-**The copilot has three operating modes**, founder-selected per workspace and switchable both ways: `AI Chatbot` (the safety floor) · `Copilot` (the read-only agent — **what every new workspace gets**) · `AI Agent` (acting; not built, never a default). The direction and the nine decisions behind it: [`docs/agent.md`](docs/agent.md).
+**The copilot has three operating modes**, founder-selected per workspace and switchable both ways: `AI Chatbot` (the safety floor) · `Copilot` (the read-only agent — **what every new workspace gets**) · `AI Agent` (acting; not built, never a default). The direction and the nine decisions behind it: [`docs/build/agent.md`](docs/build/agent.md).
 
 ---
 

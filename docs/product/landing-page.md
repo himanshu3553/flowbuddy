@@ -2,8 +2,8 @@
 
 > The working doc for the **flowbuddyai.com** marketing landing page: the story to tell, the page structure, and the open decisions. **Current state:** a minimal "coming soon + sign in" card is live; the full marketing page is to build.
 
-- **Where it lives:** `packages/landing` (static site → `flowbuddy-landing` Render service, apex `flowbuddyai.com` + `www`). Build = copy `public/` → `dist/`. It ships on a `main` push like the rest of prod; there is no separate staging URL for it. Deploy mechanics: [`deploy.md`](deploy.md) §4. Brand tokens/components: [`design_system/`](design_system/README.md).
-- **Companion docs:** product narrative → [`product.md`](product.md) · the phases the page describes → [`roadmap.md`](roadmap.md) · competitive framing → [`competitive-claude-chrome.md`](competitive-claude-chrome.md).
+- **Where it lives:** `packages/landing` (static site → `flowbuddy-landing` Render service, apex `flowbuddyai.com` + `www`). Build = copy `public/` → `dist/`. It ships on a `main` push like the rest of prod; there is no separate staging URL for it. Deploy mechanics: [`deploy.md`](../ops/deploy.md) §4. Brand tokens/components: [`design_system/`](../design_system/README.md).
+- **Companion docs:** product narrative → [`product.md`](product.md) · the phases the page describes → [`roadmap.md`](../roadmap.md) · competitive framing → [`competitive-claude-chrome.md`](competitive-claude-chrome.md).
 
 ---
 
@@ -11,7 +11,7 @@
 
 The story is **one knowledge base, four consumers** — the copilot (built), the help portal (Version
 2), third-party AI agents (Phase 6), and documents/SOPs. The product framing behind it is
-[`product.md`](product.md); the consumer roadmap is [`roadmap.md`](roadmap.md). Not repeated here,
+[`product.md`](product.md); the consumer roadmap is [`roadmap.md`](../roadmap.md). Not repeated here,
 because this doc is about the *page*, not the product.
 
 **The positioning question is still open:** "make your product AI-agent-ready" is the direction being
@@ -51,7 +51,7 @@ Deliberately out (for now): fake logos/testimonials, a pricing table (no billing
 
 ## 5. Current state & constraints
 
-- The live page is the minimal **coming-soon + sign-in card** ([`packages/landing/public/index.html`](../packages/landing/public/index.html)) on the design-system tokens — a placeholder built to launch first and market later.
+- The live page is the minimal **coming-soon + sign-in card** ([`packages/landing/public/index.html`](../../packages/landing/public/index.html)) on the design-system tokens — a placeholder built to launch first and market later.
 - Static host, so any build that outputs to `packages/landing/dist` works — plain HTML today, or a real build step if the stack decision (§4.6) calls for one.
 - It only exists in the **prod** blueprint (no dev/staging landing service), so preview is local and it goes live on the next `main` deploy.
-- Self-contained brand assets should follow [`design_system/`](design_system/README.md) (indigo, Plus Jakarta Sans + JetBrains Mono, the "F" mark).
+- Self-contained brand assets should follow [`design_system/`](../design_system/README.md) (indigo, Plus Jakarta Sans + JetBrains Mono, the "F" mark).

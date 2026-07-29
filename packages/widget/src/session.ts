@@ -4,7 +4,7 @@
 // WHY THIS IS GENERIC (2026-07-26, P5-M0 cut 1). The guided walkthrough (P4-M0) proved the pattern
 // for itself: a full-page navigation unloads the widget, so any process that spans pages has to
 // leave its state behind and pick it back up on the next one. That is not a walkthrough problem —
-// it is THE transport problem for every mode of the product (docs/agent.md §7 Q1):
+// it is THE transport problem for every mode of the product (docs/build/agent.md §7 Q1):
 //
 //   'walkthrough'  P4-M0 guided-run state ..................... modes 1 + 2   (built)
 //   'chat'         P5-M0 the conversation thread .............. modes 1 + 2   (built — this cut)

@@ -39,13 +39,13 @@ export type { RetrievalDb, RetrievableKBItem, ShortlistOpts, RetrieveOpts } from
 export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
 export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
-export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/kb-step-distillation.md
+export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/build/kb-step-distillation.md
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
 export type { DistilledStep, DistilledStepLLM } from './distill';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
 // ---------- Module 2 (LIVE copilot path): capture → distilled workflow KB ----------
-// docs/kb-step-distillation.md. This is what the worker runs: transcribe → align → clean (B) →
+// docs/build/kb-step-distillation.md. This is what the worker runs: transcribe → align → clean (B) →
 // segment → distill (A). (The legacy raw 1:1 `buildKB`/`segmentItems` path it superseded was
 // removed 2026-07-07 with the Phase-2 article-engine sweep — docs/phase-2-portal.md §7.)
 

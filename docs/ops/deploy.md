@@ -4,7 +4,7 @@ One deploy guide for both live environments — **dev/staging** (free tier, `$0`
 (FlowBuddyAI.com, ~`$30`/mo) — over one code base and **two blueprint files**. The dev sections are
 the free-tier walkthrough with every first-deploy gotcha; the production sections are the as-run
 runbook for the live product. The **shared foundations** (§2) apply to every environment. For local
-dev see [`dev-setup.md`](dev-setup.md); for what the modules are see [`phase-1-copilot.md`](phase-1-copilot.md).
+dev see [`dev-setup.md`](dev-setup.md); for what the modules are see [`phase-1-copilot.md`](../build/phase-1-copilot.md).
 
 > **Status:** production **deployed 2026-07-17 · Version 1 launched + user-verified E2E on prod
 > 2026-07-23**. §4 is the as-run production runbook; §3 tracks the dev/staging stack.
@@ -33,8 +33,8 @@ paths make this possible), so FF releases stay clean and each environment stays 
 
 | File | Environment | Blueprint instance reads it from |
 |---|---|---|
-| [`render.yaml`](../render.yaml) (repo root, default path) | **Production** — the §4 topology | branch `main` |
-| [`render.dev.yaml`](../render.dev.yaml) (custom path) | **Dev/staging** — the §3 free-tier config | branch `dev` |
+| [`render.yaml`](../../render.yaml) (repo root, default path) | **Production** — the §4 topology | branch `main` |
+| [`render.dev.yaml`](../../render.dev.yaml) (custom path) | **Dev/staging** — the §3 free-tier config | branch `dev` |
 
 **Standing ordering rule:** any change to *dev* infra goes in `render.dev.yaml`; any change to *prod*
 infra goes in `render.yaml` and reaches Render only via the `main` FF. Never point a blueprint
@@ -62,7 +62,7 @@ Three consequences for a deploy:
   objects under a session prefix; the **Object Read & Write** token in §3.3 already covers it, but a
   read-only or write-only token would leave storage growing silently.
 - **The presigner runs with `requestChecksumCalculation: 'WHEN_REQUIRED'`**
-  ([`packages/api/src/storage.ts`](../packages/api/src/storage.ts)). With the SDK default the signer
+  ([`packages/api/src/storage.ts`](../../packages/api/src/storage.ts)). With the SDK default the signer
   bakes an empty-body CRC32 into the signed URL; **MinIO ignores it and R2 rejects it** — i.e. the
   failure passes local dev and appears only in the cloud. Never "simplify" that back onto the shared
   client.
@@ -70,7 +70,7 @@ Three consequences for a deploy:
 ### 2.3 The worker is folded into the API (both environments)
 
 The synthesis worker runs *inside* the api web service via the `start:all` entrypoint
-([`packages/api/src/all.ts`](../packages/api/src/all.ts) imports both the server and the worker into
+([`packages/api/src/all.ts`](../../packages/api/src/all.ts) imports both the server and the worker into
 one process). In **dev** this is forced by Render (background workers are paid-only); in **prod** it's
 a deliberate choice — synthesis is almost entirely I/O-bound (Whisper/GPT-4o/embedding network calls),
 so it barely contends with answer traffic. Trade-off: a deploy restart kills an in-flight synthesis
@@ -80,7 +80,7 @@ job (`attempts=1`, no auto-retry — fix is re-recording). Migrations run in the
 **What sharing one instance costs, and how it's paid for (2026-07-28).** The api and the worker share
 one 512 MB container, and the api half serves *customers' end-users* — so an out-of-memory kill in the
 worker takes the public copilot down with it. Two guards, both in the blueprints:
-- **Worker concurrency is `1`, not `2`** ([`worker.ts`](../packages/api/src/worker.ts)) — a synthesis
+- **Worker concurrency is `1`, not `2`** ([`worker.ts`](../../packages/api/src/worker.ts)) — a synthesis
   job holds whole screenshots in memory for the vision calls, so two at once is the realistic OOM
   path. Throughput isn't the constraint: recordings arrive one at a time, from a human pressing Stop.
 - **`NODE_OPTIONS=--max-old-space-size=400`** on the api service — caps the V8 heap *below* the
@@ -131,7 +131,7 @@ zero-downtime deploys: traffic only moves to the new instance once the path answ
 
 | Service | Path | Why that path |
 |---|---|---|
-| `flowbuddy-api` / `flowbuddy-dev-api` | `/healthz` | the existing health route in [`server.ts`](../packages/api/src/server.ts) — answers `{"ok":true}` |
+| `flowbuddy-api` / `flowbuddy-dev-api` | `/healthz` | the existing health route in [`server.ts`](../../packages/api/src/server.ts) — answers `{"ok":true}` |
 | `flowbuddy-web` (prod only) | `/login` | Studio has no dedicated health endpoint; `/login` needs the Next server to actually be rendering. Note it is a **sign-in page**, not an unauthenticated endpoint — it answers for a logged-out visitor, which is all the probe needs |
 
 Static sites (`flowbuddy-widget`, `flowbuddy-landing`) have no health check — there is no process.
@@ -312,7 +312,7 @@ later without breaking a single embed.
 
 ### 4.3 The production blueprint (`render.yaml`) — written 2026-07-17
 
-The root [`render.yaml`](../render.yaml) is authoritative for the prod spec — plans, env wiring, and
+The root [`render.yaml`](../../render.yaml) is authoritative for the prod spec — plans, env wiring, and
 per-service notes live there as comments (see the two-blueprint model, §2.1). Highlights: paid
 api/web/db per §4.1, `maxmemoryPolicy: noeviction` on the queue, migrations in the api start command,
 a `healthCheckPath` on each web service (§2.6), `NODE_OPTIONS` capping the api's heap (§2.3),
@@ -341,7 +341,7 @@ never for env vars or snippets.
 
 The production stack was first deployed 2026-07-17 and the step-by-step as-run log is spent — the
 repeatable parts are already the rules above: §2.1 (the blueprint-file ordering rule, the one that
-bites), §4.2 (domains & DNS), §4.3 (the prod blueprint). `git log docs/deploy.md` has the original
+bites), §4.2 (domains & DNS), §4.3 (the prod blueprint). `git log --follow docs/ops/deploy.md` has the original
 account. What survives from it as standing gotchas is in **Troubleshooting** below.
 
 ---
@@ -350,7 +350,7 @@ account. What survives from it as standing gotchas is in **Troubleshooting** bel
 
 The Chrome extension is **not** deployed to Render — you build it locally pointed at the Studio(s) you
 want it to connect to. A single env var (`STUDIO_URL`) bakes both the popup links (`__STUDIO_URL__`)
-and the connect-bridge content-script `matches` (in [`packages/extension/build.mjs`](../packages/extension/build.mjs)).
+and the connect-bridge content-script `matches` (in [`packages/extension/build.mjs`](../../packages/extension/build.mjs)).
 **It accepts a comma-separated list** — the FIRST entry is the primary (what the popup opens); ALL
 entries get the connect bridge, so one artifact connects against several origins:
 
@@ -515,7 +515,7 @@ should always have had.
    server-side sweep riding fire-and-forget on finalize (no cron service to pay for or monitor).
    **The R2 token must permit delete, not just write** — a write-only token leaves storage growing
    silently. Route semantics, the sweep, and why the threshold is what it is:
-   [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.
+   [`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6.
 3. **Health checks + memory limits + worker concurrency** — see **§2.6** and **§2.3**. All three are
    blueprint changes only, so they land with the normal deploy; nothing to click.
 4. **The api's BullMQ producer got its own connection** with `connectTimeout` /
@@ -525,7 +525,7 @@ should always have had.
    into a failed upload that sends the user back to Retry. Recovery for a dropped enqueue is Studio →
    **Stalled → Re-process**.
    **⚠️ Subtlety worth keeping:** the *shared* `connection` object in
-   [`queue.ts`](../packages/api/src/queue.ts) must stay **bare** — the worker needs BullMQ to own
+   [`queue.ts`](../../packages/api/src/queue.ts) must stay **bare** — the worker needs BullMQ to own
    `maxRetriesPerRequest: null`, and a blocking consumer that gives up on a request instead of
    blocking stops consuming jobs. Studio's producer gets away with fail-fast options only because it
    is never a consumer. Do not "unify" the two connection objects.
@@ -535,7 +535,7 @@ should always have had.
    line reporting the audio as `uploaded` rather than `in bundle`; **6c** covers discard (start a
    capture, throw it away, confirm the row *and* its objects are gone).
 7. **Still open by decision:** the presigned URLs carry **no size ceiling** — deferred deliberately,
-   with the full reasoning and the eventual fix recorded in [`roadmap.md`](roadmap.md) §9.
+   with the full reasoning and the eventual fix recorded in [`roadmap.md`](../roadmap.md) §9.
 
 ---
 
@@ -600,7 +600,7 @@ embed attrs `data-sync-*` → `data-flowbuddy-*`, key header `x-sync-key` → `x
 ## Open items
 
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the store listing URL) so the Home checklist CTA reads "Add to Chrome".
-- **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` and the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9.
-- **`packages/landing` is still the minimal "coming soon + sign in" card.** The full marketing page remains to build ([`landing-page.md`](landing-page.md)).
+- **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` and the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](../roadmap.md) §9.
+- **`packages/landing` is still the minimal "coming soon + sign in" card.** The full marketing page remains to build ([`landing-page.md`](../product/landing-page.md)).
 
 > **Standing ordering rule** (learned the hard way, §7.6): a recorder build that a new API *requires* must be **live on the Chrome Web Store before that API reaches prod**. It was overridden once, on 2026-07-28, and only survived because nobody was using the product.

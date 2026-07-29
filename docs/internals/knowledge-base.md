@@ -1,11 +1,11 @@
 # Knowledge Base build — internals
 
 > **Module:** the BullMQ **worker** ([`packages/api/src/worker.ts`](../../packages/api/src/worker.ts))
-> driving the **synthesis** pipeline ([`packages/synthesis/`](../../packages/synthesis/)).
+> driving the **synthesis** pipeline ([`packages/synthesis/`](../../packages/synthesis)).
 > **Role:** Module 2 of the 3-module model — turn a raw capture bundle into **clean, queryable,
 > per-workflow knowledge**. This is the deepest, most AI-heavy module, and the heart of the product.
 >
-> Companion design doc: [`../kb-step-distillation.md`](../kb-step-distillation.md) (the *why* behind
+> Companion design doc: [`../kb-step-distillation.md`](../build/kb-step-distillation.md) (the *why* behind
 > the cleanup/segment/distill design). This doc is the *how it runs*.
 
 ---
@@ -277,7 +277,7 @@ The synthesis package used to carry an **older, raw-event path** for the retired
 (`buildKB` — 1:1 raw items with `data = { event, narration }` —, `segmentItems`,
 `generateArticleForSegment`). It was **removed 2026-07-07** with the workflows-as-articles decision;
 the worker's `buildWorkflowKB` (distilled) is now the **only** KB build path. The Version-2 portal
-track renders approved workflows instead: [`../v2-portal.md`](../v2-portal.md).
+track renders approved workflows instead: [`../v2-portal.md`](../build/v2-portal.md).
 
 ---
 

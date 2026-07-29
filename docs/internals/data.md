@@ -108,7 +108,7 @@ erDiagram
 The `Article` + `Step` tables (the retired article model) were **dropped** with the
 workflows-as-articles decision: the **Version-2 portal track** renders **approved
 distilled workflows** as help articles instead of maintaining a parallel article store. The
-track's feature list: [`../v2-portal.md`](../v2-portal.md).
+track's feature list: [`../v2-portal.md`](../build/v2-portal.md).
 
 ---
 
@@ -206,7 +206,7 @@ All three converge on a `workspaceId`, which scopes every query. This is the who
 
 ## 7. Migrations (the schema's history)
 
-Prisma migrations in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations/) — the
+Prisma migrations in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations) — the
 early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the `KnowledgeSource`/`KnowledgeItem` split) →
 `kb_item_segment` (segmentation tags) → `article_segment_link` → `coverage_gap` →
 `copilot_approval` (the trust gate) → `copilot_embed_key` (public key + allowlist) →
@@ -217,7 +217,7 @@ early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the 
 `manifest` made nullable) — **see the migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
-`pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../dev-setup.md).
+`pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../ops/dev-setup.md).
 
 ---
 

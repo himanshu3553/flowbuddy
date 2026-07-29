@@ -1,4 +1,4 @@
-// P4-M0 Guided walkthrough (docs/agent.md §A8) — the zero-acting stepping stone to
+// P4-M0 Guided walkthrough (docs/build/agent.md §A8) — the zero-acting stepping stone to
 // Autopilot. After a positional answer the widget offers "Walk me through it"; on consent it
 // highlights each remaining step of the APPROVED workflow and watches the user complete it —
 // detection only ACKNOWLEDGES ("Detected ✓ — hit Next"); the pointer moves FORWARD exclusively on

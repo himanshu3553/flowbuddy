@@ -361,7 +361,7 @@ export function CopilotWorkspace({
 
   // P2-M5 Reason — the ready-made disclosure paragraph for the founder's privacy policy. Silent
   // capture makes this load-bearing for THEIR legal posture, so it ships with the toggles, not as
-  // a follow-up (docs/phase-2-sense.md §B6).
+  // a follow-up (docs/build/phase-2-sense.md §B6).
   const disclosureSnippet =
     'When you ask our in-app assistant a question, it may take a one-time reading of the page you are on — ' +
     'the state of buttons and form fields (and, where enabled, a masked image of the page) — solely to ' +

@@ -21,7 +21,7 @@ Most help tools make you write articles, then hope customers find them. FlowBudd
 
 **The trust model — grounded authorship + no-leak:** the Knowledge Base is the *substrate* the copilot reasons over; a lightweight per-workflow **"approve for copilot"** flag is the *trust gate*. The copilot answers **only** from approved knowledge — never raw/un-approved items, never general model knowledge — and declines + flags a coverage gap ("record this next") when something isn't covered.
 
-*(Bonus: the same recordings can also produce step-by-step help **articles** and a public **help portal** — a decoupled Version-2 by-product: [`docs/v2-portal.md`](docs/v2-portal.md).)*
+*(Bonus: the same recordings can also produce step-by-step help **articles** and a public **help portal** — a decoupled Version-2 by-product: [`docs/build/v2-portal.md`](docs/build/v2-portal.md).)*
 
 ---
 
@@ -83,7 +83,7 @@ packages/
   landing/    # static marketing page for flowbuddyai.com (v1 = coming-soon + sign-in card)
 ```
 
-*(`portal` — the public help site — is built in Version 2 ([`docs/v2-portal.md`](docs/v2-portal.md)); it's not in the current workspace.)*
+*(`portal` — the public help site — is built in Version 2 ([`docs/build/v2-portal.md`](docs/build/v2-portal.md)); it's not in the current workspace.)*
 
 ---
 
@@ -200,7 +200,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 
 **Version 1 is launched.** The full loop — record → KB → approve → embed → grounded answers — runs in **production at [flowbuddyai.com](https://flowbuddyai.com)** (Studio `app.` · api `api.` · widget `widget.`; launched 2026-07-23), with **FlowBuddy Recorder v0.7.0 live on the Chrome Web Store** (the upload-identity release production requires). **Phase 1 (Copilot, P1-M0…M12)** ✅ shipped — incl. hybrid keyword+pgvector retrieval, live-served widget appearance, and a Studio preview that **is** the real widget; only P1-M12 Cut 2 (screenshot-pixel PII) remains, deferred to the Version-2 portal track as a publish prerequisite. **Phase 2 (Sense + Reason)** ✅ built + user-verified — the copilot localizes the end-user to **workflow + step**, answers positionally, and diagnoses "why can't I proceed?". **Phase 4:** the **P4-M0 guided walkthrough** ✅ built (zero-acting); the acting modules are to plan and consume **Phase 3** (self-validation — the moat, to be planned) when its replay core lands.
 
-**Version 2** holds the by-products + depth: the **Help Portal & Articles track** (approved workflows rendered as articles — [`docs/v2-portal.md`](docs/v2-portal.md)), narration/video capture modalities, and the deferred backlogs. Captured directions beyond it: **Phase 5 Converse** (the goal agent: Tell → Guide → Do), **Phase 6 Interop** (expose the approved KB to third-party AI agents), and **Version 3** (buyer-side: the company agent). The authoritative map: [`docs/roadmap.md`](docs/roadmap.md).
+**Version 2** holds the by-products + depth: the **Help Portal & Articles track** (approved workflows rendered as articles — [`docs/build/v2-portal.md`](docs/build/v2-portal.md)), narration/video capture modalities, and the deferred backlogs. Captured directions beyond it: **Phase 5 Converse** (the goal agent: Tell → Guide → Do), **Phase 6 Interop** (expose the approved KB to third-party AI agents), and **Version 3** (buyer-side: the company agent). The authoritative map: [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -212,7 +212,7 @@ The gentlest way in is [`docs/plain-english/`](docs/plain-english/README.md).
 
 ## Deployment
 
-The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + static widget/landing hosts) + **Cloudflare R2** for blobs, driven by two blueprints: [`render.yaml`](render.yaml) (**production**, read from `main`) and [`render.dev.yaml`](render.dev.yaml) (**dev/staging** free tier, read from `dev` via a custom blueprint path; spin-down + non-persistent Redis caveats documented in the file). Step-by-step deploy guide for both environments (every first-deploy gotcha + the production runbook): [`docs/deploy.md`](docs/deploy.md). Cloud E2E test + data reset: [`docs/e2e-testing.md`](docs/e2e-testing.md) **Level 2**.
+The stack is **deployed on Render** (Dockerized: api + embedded worker + Studio + static widget/landing hosts) + **Cloudflare R2** for blobs, driven by two blueprints: [`render.yaml`](render.yaml) (**production**, read from `main`) and [`render.dev.yaml`](render.dev.yaml) (**dev/staging** free tier, read from `dev` via a custom blueprint path; spin-down + non-persistent Redis caveats documented in the file). Step-by-step deploy guide for both environments (every first-deploy gotcha + the production runbook): [`docs/ops/deploy.md`](docs/ops/deploy.md). Cloud E2E test + data reset: [`docs/ops/e2e-testing.md`](docs/ops/e2e-testing.md) **Level 2**.
 
 ---
 

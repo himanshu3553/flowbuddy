@@ -35,7 +35,7 @@ const worker = new Worker(
 
       // ── Module 2 (LIVE copilot path): capture → distilled workflow KB ──
       // transcribe → align → clean (B) → segment → distill (A). Persists clean steps grouped by
-      // workflow (segmentIndex/segmentTitle); raw events are NOT stored. See docs/kb-step-distillation.md.
+      // workflow (segmentIndex/segmentTitle); raw events are NOT stored. See docs/build/kb-step-distillation.md.
       const { transcript, workflows, warning } = await buildWorkflowKB({
         manifest,
         getArtifact,

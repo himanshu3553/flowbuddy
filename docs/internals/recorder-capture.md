@@ -1,6 +1,6 @@
 # Recorder (capture) — internals
 
-> **Module:** the Chrome MV3 extension in [`packages/extension/`](../../packages/extension/).
+> **Module:** the Chrome MV3 extension in [`packages/extension/`](../../packages/extension).
 > **Role:** Module 1 of the 3-module model — get raw, un-interpreted signal in. It turns a narrated
 > screen session into a **capture bundle** and uploads it. It makes *no* judgments about meaning; that
 > is the [Knowledge Base](knowledge-base.md)'s job.
@@ -391,7 +391,7 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 > ⚠️ **Deploy ordering.** The API rejects a finalize without `X-FlowBuddy-Upload-Id` and the previously
 > live store build (v0.6.0) does not send one, so **the newer recorder has to reach users before this
 > API reaches an environment they use** — a standing rule for every future build, not just this one.
-> Current store status: [`../extension-releases.md`](../extension-releases.md).
+> Current store status: [`../extension-releases.md`](../ops/extension-releases.md).
 
 ---
 

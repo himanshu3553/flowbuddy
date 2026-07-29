@@ -9,7 +9,7 @@
 
 - **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1) **— and the DEFAULT for new workspaces since 2026-07-27**, with its on-page abilities permitted and the mode-1 runtime fallback finally built beneath it. D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
 - **This doc is the reconciliation.** The Phase-4 / Phase-5 "hands vs. brain" split still holds as a *concept*; it no longer holds as a document boundary.
-- **Companion docs:** the substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](roadmap.md) · outward-facing tools → [`phase-6-interop.md`](phase-6-interop.md)
+- **Companion docs:** the substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](../roadmap.md) · outward-facing tools → [`phase-6-interop.md`](phase-6-interop.md)
 
 ---
 
@@ -57,7 +57,7 @@ The secondary argument is architectural: if the copilot is itself an agent over 
 
 **Unify the deliberation layer.** Deciding-what-to-do is today scattered across four places: the fast-path answer prompt's `covered`/decline verdict, Reason's selective trigger, the walkthrough-offer heuristic, and the Sense tie-break. Merging those into one loop is a clean win and removes real glue code.
 
-**Do not unify the actuation layer.** Locator resolution, acting, and `expected_outcome` verification stay deterministic, typed, and *not* model-authored. The moment an LLM free-forms DOM actions, the grounding guarantee — *only executes workflows the founder recorded and approved* — is gone, and FlowBuddy is a [Claude-for-Chrome-class](competitive-claude-chrome.md) improviser with worse distribution. That guarantee is the entire differentiation.
+**Do not unify the actuation layer.** Locator resolution, acting, and `expected_outcome` verification stay deterministic, typed, and *not* model-authored. The moment an LLM free-forms DOM actions, the grounding guarantee — *only executes workflows the founder recorded and approved* — is gone, and FlowBuddy is a [Claude-for-Chrome-class](../product/competitive-claude-chrome.md) improviser with worse distribution. That guarantee is the entire differentiation.
 
 > **The invariant: the agent's action space is the KB, not the DOM.**
 > It chooses *which grounded primitive to invoke*, never *what to do on the page*. `execute_step(workflowId, k, inputs)` — never `click(selector)`.
@@ -135,7 +135,7 @@ Today's `walkOffer` wire shape likely survives (the widget still needs something
 
 ### D4/D5 are not new — they are P4-M0, generalized
 
-The shipped walkthrough already implements exactly this posture. In [`widget/src/walkthrough.ts`](../packages/widget/src/walkthrough.ts), grep for:
+The shipped walkthrough already implements exactly this posture. In [`widget/src/walkthrough.ts`](../../packages/widget/src/walkthrough.ts), grep for:
 
 > *"Detection = acknowledgment, never motion (manual-only advancement, user decision 2026-07-15)."*
 
@@ -372,7 +372,7 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 
 ## A5. Design questions to answer (carry into phase planning)
 
-> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt FlowBuddy analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](competitive-claude-chrome.md) §3, §5.
+> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt FlowBuddy analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §3, §5.
 
 1. **Consent & visibility UX** — confirm once at the start, or before each step? Default posture: **visible guided execution** (highlight → act, the user watches each step) over invisible automation — slower, but it *builds* trust instead of asking for it. Where does "show me" end and "do it" begin in the UI?
 2. **Destructive steps** — submits / deletes / payments: always require a per-step confirmation? Founder-configurable per workflow? Are some step types (payment fields) excluded from autopilot outright?
@@ -508,7 +508,7 @@ reach — expected-vs-actual over the founder's TRUE step evidence.
    - Keys come from the **last `assistant.answer`**, so an intervening decline is transparent rather than resetting the thread. Capped at 4, deduped, and omitted from the payload entirely when empty (a first question is byte-identical to before).
    - The approval re-check runs **concurrently with the sense resolution** (`Promise.all`), so it adds no serial round-trip to the path every question rides.
    - **Fixed a cut-1 gap it exposed:** the restore path was dropping citation keys, which would have broken continuity precisely after a navigation — the case cut 1 exists for.
-   - **Also decoupled `copilotShowCitations`** — it was making the engines return `citations: []`, which would have silently disabled continuity for those workspaces *and* had already been emptying their Analytics "top workflows by citations" card. It is now a presentation gate at the API response boundary (titles nulled; keys and logging intact). See [`internals/copilot.md`](internals/copilot.md).
+   - **Also decoupled `copilotShowCitations`** — it was making the engines return `citations: []`, which would have silently disabled continuity for those workspaces *and* had already been emptying their Analytics "top workflows by citations" card. It is now a presentation gate at the API response boundary (titles nulled; keys and logging intact). See [`internals/copilot.md`](../internals/copilot.md).
 2. ~~**Query condensation (LLM, gated)**~~ — **DROPPED 2026-07-26 (revisit only on evidence).** The plan was a cheap-model hop condensing history + question into a standalone retrieval query. Cut 2 took the common case (*"and then what?"* about the SAME workflow) deterministically, for free, with no latency. What remains is the narrower case of a follow-up that *shifts* to a different workflow — and that is exactly what a mode-2 agent calling `search_kb` with its own formulated query does natively (this doc. Paying a permanent per-question latency tax and a fast-path prompt-regression risk for a slice the next milestone likely absorbs is the wrong trade.
 3. **Chat persistence — ✅ BUILT 2026-07-26 (cut 1; typecheck + build green, not yet user-verified E2E).** As built, and deliberately more than a chat feature:
    - **The store was extracted, not copied.** `widget/src/session.ts` is now a **slot-based cross-page store** owning versioning, workspace-key scoping, created/updated stamps, TTL and silent discard of foreign/expired/corrupt records; consumers bring only their domain shape. Three consumers, present and planned: `walkthrough` (P4-M0, refactored onto it — `WalkSession` shed `v`/`k`/`startedAt`/`updatedAt`, key bumped to `flowbuddy.walkthrough.v2`), `chat` (`flowbuddy.chat.v1`, this cut), and the unified agent's resumable run state (this doc.

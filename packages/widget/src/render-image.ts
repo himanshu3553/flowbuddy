@@ -1,4 +1,4 @@
-// P2-M5 REASON — the image tier's LAZY renderer bundle (docs/phase-2-sense.md §B3). Built as a
+// P2-M5 REASON — the image tier's LAZY renderer bundle (docs/build/phase-2-sense.md §B3). Built as a
 // SEPARATE file (flowbuddy-copilot-render.js) that the widget injects on the first diagnostic question
 // when the founder enabled "Include page image" — html2canvas never rides in the base bundle.
 //

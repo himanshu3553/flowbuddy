@@ -8,7 +8,7 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 | **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **flowbuddyai.com, live since 2026-07-23** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
+> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](../build/v2-portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 
@@ -194,7 +194,7 @@ processing session                  (fields: sessionId, jobId)
 embedded items for hybrid retrieval (fields: sessionId, count = M)
 ready                               (fields: sessionId, workflows = 1, steps = M, segments = N)
 ```
-*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](kb-step-distillation.md). `steps` is the **distilled step** count, not the raw event count. The `embedded …` line is P1-M3 hybrid retrieval — if it's missing and a "Semantic search is unavailable" notice appears on the recording instead, embedding failed and answers fall back to keyword matching until re-processed.)*
+*(The worker cleans + distills raw events into clean per-workflow steps — see [`kb-step-distillation.md`](../build/kb-step-distillation.md). `steps` is the **distilled step** count, not the raw event count. The `embedded …` line is P1-M3 hybrid retrieval — if it's missing and a "Semantic search is unavailable" notice appears on the recording instead, embedding failed and answers fall back to keyword matching until re-processed.)*
 
 ✅ **PASS criteria:**
 - Upload returns a `sessionId` (extension shows success; no 401 and no `400 missing or malformed X-FlowBuddy-Upload-Id`).
@@ -202,7 +202,7 @@ ready                               (fields: sessionId, workflows = 1, steps = M
 - Worker reaches `status → ready`.
 - **The recording produces exactly ONE workflow** (the `ready` log shows `workflows: 1`), titled by its goal (e.g. *"Sign in"*), not split into *Navigating…/Filling…/Setting Remember Me…/Submitting…*.
 
-❌ **FAIL:** ≥2 workflows, or any workflow titled by a phase. **If it still over-splits,** the lever is the segmenter prompt + inputs in [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts): strengthen the "default to ONE workflow" framing, confirm the full transcript reaches it as `overallNarration` (needs captured audio narration), and check no markers were placed unintentionally.
+❌ **FAIL:** ≥2 workflows, or any workflow titled by a phase. **If it still over-splits,** the lever is the segmenter prompt + inputs in [`packages/synthesis/src/segment.ts`](../../packages/synthesis/src/segment.ts): strengthen the "default to ONE workflow" framing, confirm the full transcript reaches it as `overallNarration` (needs captured audio narration), and check no markers were placed unintentionally.
 
 **Multi-task split check (positive control):** record a second session doing **two genuinely different tasks** (e.g. *sign in*, then *change your password*), optionally pressing the **marker** button between them. PASS = it returns **two** workflows. This proves the segmenter still splits when it should.
 
@@ -249,7 +249,7 @@ objects are gone from MinIO. ⚠️ Only `recording` rows are eligible — a **f
 swept, and asking the API to discard one answers `409` ("delete it in Studio"). Verify that guard once
 if you're changing this path: a finalized recording must survive both a discard call and a sweep.
 
-*(Why the threshold is 12 hours and not minutes — and why a false positive self-heals — is in [`internals/ingestion-api.md`](internals/ingestion-api.md) §4.6.)*
+*(Why the threshold is 12 hours and not minutes — and why a false positive self-heals — is in [`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6.)*
 
 ---
 
@@ -447,7 +447,7 @@ because a second copy is how this list drifted out of date before (it used to om
 | Stop still takes minutes; the log says artifacts are `riding the bundle` (or `audio=in bundle`) | Direct upload failed (offline, `/v1/uploads/sign` 4xx/5xx, storage rejected the PUT) and fell back to the all-in-one bundle — still a valid upload, just not the path you meant to test. Check the api log for `/v1/uploads/sign`; locally confirm MinIO is up on `:9000` and that `R2_ENDPOINT` is an address the **browser** can reach, not a docker-internal hostname |
 | Popup shows a **percentage** or **"Finishing…"** during upload | An extension build from before the upload rework — there is no byte-progress bar any more (`Finishing up…`, then `Sending the rest of your recording…` + an elapsed timer after 8s). Rebuild + reload the unpacked extension |
 | Upload succeeded but the recording never processes; api log says `could not enqueue synthesis — recording is stored` | Redis was down/slow at finalize; the enqueue is a bounded 5s race so the upload still succeeded. Start Redis (`docker compose up -d`), then **Re-process** the recording from Studio — do **not** re-record |
-| Workflow over-split into phases | Segmenter tuning — see [`packages/synthesis/src/segment.ts`](../packages/synthesis/src/segment.ts) (prompt · `overallNarration` · markers) |
+| Workflow over-split into phases | Segmenter tuning — see [`packages/synthesis/src/segment.ts`](../../packages/synthesis/src/segment.ts) (prompt · `overallNarration` · markers) |
 | Widget shows no launcher | Serve `demo/` over **HTTP** (not `file://`); refresh stale `data-flowbuddy-key` |
 | Copilot: "no approved help content" | Approve a workflow in **Part 8** |
 | Answer rejected by origin | Add the demo origin in **Part 9** allowed origins |

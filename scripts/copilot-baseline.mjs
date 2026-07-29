@@ -25,7 +25,7 @@
 //
 // LIMITATION: this is the TEXT path only. It sends `--path` when given but never live page STATE,
 // so questions that depend on it ("why can't I create the account?") exercise the fast path here,
-// not the diagnostic one. Those still need a real browser — see docs/e2e-testing.md.
+// not the diagnostic one. Those still need a real browser — see docs/ops/e2e-testing.md.
 //
 // Usage:
 //   node scripts/copilot-baseline.mjs --key pk_xxx [--api http://localhost:8787]

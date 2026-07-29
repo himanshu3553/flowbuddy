@@ -1,7 +1,7 @@
 # Ingestion API — internals
 
 > **Module:** the upload boundary of the Fastify service in
-> [`packages/api/`](../../packages/api/). **Role:** the gate between [capture](recorder-capture.md)
+> [`packages/api/`](../../packages/api). **Role:** the gate between [capture](recorder-capture.md)
 > and the [Knowledge Base](knowledge-base.md). It hands the recorder short-lived signed URLs so
 > artifacts land in object storage **directly, while recording** — narration included — then accepts a
 > finalize request that on a healthy connection carries **the manifest and nothing else**, persists the
@@ -335,7 +335,7 @@ the row directly.
 > extension build previously live on the Chrome Web Store (v0.6.0) does not send one. **The newer
 > recorder has to reach users before this API reaches an environment they use** — a standing rule for
 > every future build, not just this one. Current store status:
-> [`../extension-releases.md`](../extension-releases.md).
+> [`../extension-releases.md`](../ops/extension-releases.md).
 
 ---
 

@@ -1,6 +1,6 @@
 # Widget (embeddable copilot) — internals
 
-> **Module:** the embeddable script in [`packages/widget/`](../../packages/widget/), built to
+> **Module:** the embeddable script in [`packages/widget/`](../../packages/widget), built to
 > `flowbuddy-copilot.js` **plus the lazy P2-M5 sibling `flowbuddy-copilot-render.js`** (loaded on
 > demand for Reason's image tier; deployed side by side). **Role:** the customer-facing surface of the copilot — the one `<script>` a SaaS
 > drops into its app to give end-users an in-app help chat.
@@ -164,7 +164,7 @@ on the way *in* and on the way *out*, so an older bundle or the host page cannot
 that has since been excluded. `assistant.error` is deliberately absent: a transport failure is about
 a moment, not the conversation. This is the mechanism that lets D3's chat-supplied sensitive values
 be excluded later by *declining to add a string* rather than migrating storage
-([`agent.md`](../agent.md) §6).
+([`agent.md`](../build/agent.md) §6).
 
 Writes map fields one by one, so `walkOffer` (a full founder-derived plan copy) structurally cannot
 reach storage; stale plans re-derive on re-ask. Reads cap message count (20), content length, and

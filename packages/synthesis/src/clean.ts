@@ -1,7 +1,7 @@
 import type { CapturedEvent, EventTarget } from '@flowbuddy/shared';
 
 // KB step distillation — Phase 1 (deterministic cleanup "B").
-// See docs/kb-step-distillation.md §5.2. Mechanical-only: collapse the duplicate /
+// See docs/build/kb-step-distillation.md §5.2. Mechanical-only: collapse the duplicate /
 // redundant low-level DOM events the recorder emits, WITHOUT making semantic judgments.
 // Deciding whether a surviving click is a real step vs. stray page-chrome noise (e.g. a
 // landing-page CTA clicked while narrating) is the LLM distiller's job (Phase 2 "A"), because

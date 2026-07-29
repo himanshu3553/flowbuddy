@@ -4,7 +4,7 @@ import { eventLabel } from './segment';
 import { redactText } from './redact';
 
 // KB step distillation — Phase 2 (LLM distillation "A").
-// See docs/kb-step-distillation.md §5.3. Turns ONE workflow's (cleaned) events + narration into a
+// See docs/build/kb-step-distillation.md §5.3. Turns ONE workflow's (cleaned) events + narration into a
 // short, clean, user-facing step list for the copilot: drops stray/orienting actions, merges
 // low-level interactions, attributes narration, and keeps ONE curated screenshot + bbox per step.
 // Text-based (no images): event labels + per-event narration + the full transcript are enough to
