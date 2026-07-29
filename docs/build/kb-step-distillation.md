@@ -91,7 +91,7 @@ Built in six phases over 2026-06-26/27 (deterministic cleanup → LLM distillati
 |---|---|
 | LLM invents steps not in the recording | Require every step to cite real event ids; validate + drop unknowns (segmenter-style) |
 | Over-aggressive cleanup drops a real step | B is mechanical-only; semantic drops are A's job with narration context; 0-step fallback to cleaned events |
-| Cost/latency: +1 call per workflow | Build-time only (not per query); `temperature: 0`; one call per workflow, not per event |
+| Cost/latency: +1 call per workflow | Build-time only (not per query); one call per workflow, not per event |
 | Route-boost (P1-M8) regresses | Carry `route` onto every distilled step |
 | Wrong/empty step screenshot | Frame rule C is deterministic; fallback chain (keyEventId → last sourceEventId → null); result-frame falls back to action-frame if no post-shot |
 | Future citations need a source | Citations (if ever) reference the **published/approved workflow**, not raw events — no raw log to preserve |

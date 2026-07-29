@@ -170,7 +170,7 @@ export async function answerFromKB(input: {
     })
     .join('\n');
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [{ role: 'system', content: SYSTEM }];
+  const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: SYSTEM }];
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }
@@ -215,7 +215,11 @@ export async function answerFromKB(input: {
     openai,
     model: input.model,
     messages,
-    maxOutputTokens: 700,
+    // On /v1/responses with a REASONING model this budget covers reasoning tokens as well as the
+    // answer, so the old short cap would have been spent thinking and returned empty text — which
+    // parses as a decline and is invisible in coverage analytics. Raised to leave room for both;
+    // `incomplete` on the result says when even this was not enough.
+    maxOutputTokens: 4000,
     maxRounds: 1,
   });
   input.onLoop?.(loop);

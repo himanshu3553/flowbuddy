@@ -166,22 +166,21 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
       name: 'search_knowledge',
       spec: {
         type: 'function',
-        function: {
-          name: 'search_knowledge',
-          description:
-            "Search this product's approved help knowledge using your own wording. Use when the items you were given don't cover the question but the product plausibly does — especially on follow-ups whose literal words make a poor search query.",
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'What to search for, in your own words (not the user\'s literal message).',
-              },
+        name: 'search_knowledge',
+        description:
+          "Search this product's approved help knowledge using your own wording. Use when the items you were given don't cover the question but the product plausibly does — especially on follow-ups whose literal words make a poor search query.",
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'What to search for, in your own words (not the user\'s literal message).',
             },
-            required: ['query'],
-            additionalProperties: false,
           },
+          required: ['query'],
+          additionalProperties: false,
         },
+        strict: false,
       },
       run: async (rawArgs) => {
         const query = readStringArg(rawArgs, 'query');
@@ -199,19 +198,18 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
       name: 'get_workflow',
       spec: {
         type: 'function',
-        function: {
-          name: 'get_workflow',
-          description:
-            'The full ordered steps of one workflow, by its key — the "key=" value shown on every knowledge item and in POSITION CONTEXT. Use when you need the whole procedure rather than the loose fragments retrieval returned, INCLUDING for a workflow that happens elsewhere in the product: any item you can see the key of can be opened in full.',
-          parameters: {
-            type: 'object',
-            properties: {
-              key: { type: 'string', description: 'The workflow key, formatted sourceId:segmentIndex.' },
-            },
-            required: ['key'],
-            additionalProperties: false,
+        name: 'get_workflow',
+        description:
+          'The full ordered steps of one workflow, by its key — the "key=" value shown on every knowledge item and in POSITION CONTEXT. Use when you need the whole procedure rather than the loose fragments retrieval returned, INCLUDING for a workflow that happens elsewhere in the product: any item you can see the key of can be opened in full.',
+        parameters: {
+          type: 'object',
+          properties: {
+            key: { type: 'string', description: 'The workflow key, formatted sourceId:segmentIndex.' },
           },
+          required: ['key'],
+          additionalProperties: false,
         },
+        strict: false,
       },
       run: async (rawArgs) => {
         const key = readStringArg(rawArgs, 'key');
@@ -237,7 +235,7 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
     },
   ];
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [{ role: 'system', content: AGENT_SYSTEM }];
+  const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: AGENT_SYSTEM }];
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }
@@ -262,7 +260,11 @@ export async function answerAsAgent(input: AgentInput): Promise<CopilotAnswer> {
     tools,
     // Round one is the fast path; the remaining rounds are the escalation. Same caps the diagnostic
     // loop has run in production since July.
-    maxOutputTokens: 700,
+    // On /v1/responses with a REASONING model this budget covers reasoning tokens as well as the
+    // answer, so the old short cap would have been spent thinking and returned empty text — which
+    // parses as a decline and is invisible in coverage analytics. Raised to leave room for both;
+    // `incomplete` on the result says when even this was not enough.
+    maxOutputTokens: 4000,
     schema: AGENT_ANSWER_SCHEMA,
   });
   input.onLoop?.(loop);

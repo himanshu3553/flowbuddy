@@ -147,6 +147,51 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
 
 ## Decisions
 
+### Provider API — LOCKED: everything speaks `/v1/responses` (2026-07-30)
+
+**Decision.** Every model call in `@flowbuddy/synthesis` goes through OpenAI's **Responses API**. No
+call uses `/v1/chat/completions`. *(Whisper and embeddings are separate APIs and unaffected.)*
+
+**Why.** We moved to a reasoning model, and reasoning models refuse two things chat-completions
+callers took for granted: an **explicit `temperature`**, and **function tools alongside reasoning**.
+Both arrive as hard 400s, not degradations. The second is the load-bearing one — it is impossible to
+satisfy on chat-completions, and it broke exactly the two paths that bind tools (the agent loop and
+the diagnostic path) while leaving AI Chatbot working, which made it look like a feature bug rather
+than an API-level constraint. Rather than carry a growing list of per-model workarounds, the whole
+package moved.
+
+**What it bought.** Reasoning *and* tools together, on the paths where deliberation is the point.
+Segmentation and distillation can now reason too — they were on the endpoint that could not.
+
+**What it cost — three things, all real:**
+
+1. **Determinism is gone.** Segmentation and distillation used to pin `temperature: 0`, so
+   re-processing a recording produced identical workflow boundaries and step wording. That guarantee
+   cannot be expressed on a reasoning model. **Boundaries and titles now drift between runs** —
+   measured, not theorised: three runs over one recording produced two different titles for the same
+   workflow. Judge segmentation quality across several runs, never one. `pnpm kb:drift` measures it.
+2. **The output budget now covers reasoning tokens.** A cap sized for a short answer can be spent
+   entirely on thinking, returning empty text that reads downstream as an ordinary decline — and
+   gets filed as a coverage gap the founder could never fix by recording anything. Caps were raised
+   accordingly, and a truncated response is now reported as `incomplete` rather than swallowed.
+3. **Cost per answer is up**, and AI Chatbot gained nothing for it — it binds no tools, so reasoning
+   was never blocked for it, yet it now runs on a reasoning model with a much larger ceiling. It is
+   also the fallback every agent failure lands on.
+
+**Still unmeasured.** Whether answers are actually *better*. `scripts/copilot-baseline.mjs` compares
+answer decisions over a fixed question set and is the tool for it — but the KB is only about two
+workflows deep, so a comparison run today measures the model on ground too thin to show its
+advantage. Record more first.
+
+**A trap this created.** Approval is keyed on `(sourceId, segmentIndex)` so it deliberately survives
+the worker's item delete-and-recreate. That was safe while boundaries were stable. It is not now: a
+reprocess that splits differently makes `segmentIndex 0` a *different* workflow, and the founder's
+approval silently follows the index onto content nobody reviewed. Approval is the product's trust
+boundary. **Not yet fixed** — the options are re-keying approval to something stable or forcing
+re-approval when the workflow count changes, and that is a design decision.
+
+---
+
 ### Segmentation placement — Option C (B → C, finalized in M6.1, 2026-06-21)
 **Segmentation** (splitting one recording into distinct workflows) runs at **KB build** (the worker, after extracting items) and its **output is persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`). These persisted titles are the per-workflow units the **KB browser lists** and the **copilot approval gate** keys on `(sourceId, segmentIndex)`. *(They also fed the removed "Auto Generate Articles" picker — now historical; see the §Decisions note below.)*
 

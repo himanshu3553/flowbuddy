@@ -131,7 +131,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 
 **Answer-quality baselines** — `node scripts/copilot-baseline.mjs --key pk_… [--runs 3] [--only h2]`
 asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited, position,
-agent intents) rather than the prose, because the model runs at `temperature 0.2` and its wording
+agent intents) rather than the prose, because the model's wording
 always differs. `scripts/copilot-baseline-diff.mjs before.json after.json` reports only
 decision-level changes. Runs in `preview` mode, so a capture writes no analytics. Saved reference
 captures for both modes live in `scripts/`.

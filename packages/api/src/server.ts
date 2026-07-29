@@ -908,21 +908,52 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       },
       'reason path engaged',
     );
-    result = await diagnoseFromKB({
-      question,
-      history: sanitizeHistory(body.history),
-      items,
-      sense: sense ?? undefined,
-      snapshot: reasonPayload.snapshot,
-      pageImage: reasonPayload.image,
-      workflow,
-      expected,
-      onLoop: (stats) => {
-        loop.stats = stats;
-      },
-      apiKey: config.openaiApiKey,
-      model: config.reasonModel,
-    });
+    try {
+      result = await diagnoseFromKB({
+        question,
+        history: sanitizeHistory(body.history),
+        items,
+        sense: sense ?? undefined,
+        snapshot: reasonPayload.snapshot,
+        pageImage: reasonPayload.image,
+        workflow,
+        expected,
+        onLoop: (stats) => {
+          loop.stats = stats;
+        },
+        apiKey: config.openaiApiKey,
+        model: config.reasonModel,
+      });
+    } catch (err) {
+      // THE SAME FLOOR THE AGENT PATH HAS. This branch had no catch at all, so any failure here —
+      // a `REASON_MODEL` that rejects a parameter, a model that isn't vision-capable being handed a
+      // page image, a timeout mid-loop — escaped as an unhandled throw. Fastify then answered with
+      // its DEFAULT error shape, whose `error` field is the literal string "Bad Request", and the
+      // widget rendered exactly that. The end-user saw "Bad Request" where they had asked why they
+      // were stuck, and the one useful part (Fastify's `message`, carrying the provider's actual
+      // complaint) was never shown to anyone.
+      //
+      // This path is reached from the walkthrough's "Explain what's blocking me", i.e. from a user
+      // who is ALREADY stuck — the worst possible moment to hand back a raw HTTP error. Retrieval
+      // has already run, so degrade to the same knowledge one rung down, exactly as mode 2 does.
+      req.log.error(
+        { err, workspaceId, model: config.reasonModel, hadImage: Boolean(reasonPayload.image) },
+        'reason path failed — falling back to AI Chatbot',
+      );
+      engineUsed = 'chatbot'; // the floor answered; downstream must not treat this as the reason path
+      result = await answerAsChatbot();
+    }
+    // A provider failure returned IN THE BODY (200 + status:'failed') never throws, so the catch
+    // above cannot see it — it would sail through as an empty answer and be filed as a coverage
+    // gap the founder could never fix. Route it into the same floor.
+    if (loop.stats?.failed) {
+      req.log.error(
+        { workspaceId, model: config.reasonModel, failed: loop.stats.failed },
+        'reason path returned a failed response — falling back to AI Chatbot',
+      );
+      engineUsed = 'chatbot';
+      result = await answerAsChatbot();
+    }
   } else if (modeUsesAgentLoop(gate.mode)) {
     // Copilot mode — the assistant decides how to help. Round one sees exactly what AI Chatbot
     // sees (retrieval has already run), so a simple lookup costs the same and answers just as
@@ -965,6 +996,16 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       engineUsed = 'chatbot'; // the floor answered; downstream must not treat this as the agent
       result = await answerAsChatbot();
     }
+    // As on the reason path: a body-level provider failure does not throw, so the catch above
+    // cannot see it. Same floor, same reasoning.
+    if (loop.stats?.failed) {
+      req.log.error(
+        { workspaceId, mode: gate.mode, failed: loop.stats.failed },
+        'agent path returned a failed response — falling back to AI Chatbot',
+      );
+      engineUsed = 'chatbot';
+      result = await answerAsChatbot();
+    }
   } else {
     result = await answerAsChatbot();
   }
@@ -996,6 +1037,14 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       ...(loop.stats
         ? {
             rounds: loop.stats.rounds,
+            // Present only when the model ran out of output budget. On a reasoning model that
+            // budget covers thinking too, so a truncation returns empty text and reads downstream
+            // as an ordinary decline — which would then be filed as a coverage gap the founder
+            // could never fix by recording anything. If this field appears, the decline is OURS.
+            ...(loop.stats.incomplete ? { incomplete: loop.stats.incomplete } : {}),
+            // Mode 1 has no floor beneath it, so a provider failure there still declines — but it
+            // must be readable as OURS, not as the KB failing to cover the question.
+            ...(loop.stats.failed ? { failed: loop.stats.failed } : {}),
             // Every call the model asked for, whether or not it ran — a stream of `duplicate` or
             // `budget` skips is the loop telling you it wanted to keep looking and could not.
             tools: loop.stats.toolCalls.map((t) => ({ name: t.name, args: t.args, round: t.round, skipped: t.skipped })),

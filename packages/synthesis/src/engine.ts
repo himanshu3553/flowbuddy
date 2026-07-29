@@ -96,14 +96,17 @@ interface AnswerDraft {
  *  pixels follow in ONE user message after all the results in that round. */
 export interface ToolResult {
   reply: string;
-  images?: OpenAI.Chat.ChatCompletionContentPart[];
+  /** Attached as a follow-up user message — a tool result item is text-only on the wire. */
+  images?: OpenAI.Responses.ResponseInputContent[];
 }
 
 /** A grounded primitive the model may invoke. Bundling the spec with its runner is what keeps
  *  "what the model may do" a property of the CALLER, never of the loop. */
 export interface EngineTool {
   name: string;
-  spec: OpenAI.Chat.ChatCompletionTool;
+  /** Responses-API function tool: FLAT (`{type,name,description,parameters,strict}`), not nested
+   *  under `function` the way chat-completions tools were. */
+  spec: OpenAI.Responses.FunctionTool;
   run: (rawArgs: string) => Promise<ToolResult>;
 }
 
@@ -137,6 +140,26 @@ export interface AnswerLoopResult {
   rounds: number;
   /** Every tool invocation the model asked for, in order — including the ones that did not run. */
   toolCalls: ToolCallRecord[];
+  /**
+   * Set when the model ran out of output budget rather than finishing.
+   *
+   * On a REASONING model `max_output_tokens` covers reasoning tokens too, so a budget that used to
+   * be generous for a short answer can now be spent entirely on thinking — and the result is empty
+   * text, which `shapeAnswer` parses as a perfectly ordinary decline. That is the worst shape a bug
+   * can take here: indistinguishable from "the KB doesn't cover it", and therefore invisible in the
+   * coverage-gap analytics a founder uses to decide what to record next. Surfaced so the caller can
+   * log it as what it is.
+   */
+  incomplete?: 'max_output_tokens' | 'content_filter';
+  /**
+   * Set when the provider returned a TERMINAL FAILURE in the response body rather than as an HTTP
+   * error. `/v1/responses` can answer 200 with `{status:'failed', error:{…}}`, which the SDK does
+   * not throw on — so unlike every chat-completions failure, this one arrives looking like a
+   * perfectly ordinary empty answer. Left as data rather than thrown: the caller decides, and the
+   * mode-1 path has no safety floor beneath it (nor a Fastify error handler), so throwing here
+   * would turn a graceful decline into a raw error at the widget.
+   */
+  failed?: { code?: string; message?: string };
 }
 
 /** Canonical form of a tool's arguments, for de-duplication ONLY — never what the tool receives.
@@ -172,8 +195,10 @@ const DEFAULT_MAX_TOOL_CALLS = 4;
 export interface AnswerLoopOpts {
   openai: OpenAI;
   model: string;
-  /** Mutated in place as the conversation grows — callers pass a fresh array. */
-  messages: OpenAI.Chat.ChatCompletionMessageParam[];
+  /** Mutated in place as the conversation grows — callers pass a fresh array.
+   *  Responses-API input items: `{role, content}` messages, plus the loop's own `function_call`,
+   *  `function_call_output` and `reasoning` items as the conversation accumulates. */
+  messages: OpenAI.Responses.ResponseInput;
   /** Empty (the default) = the single-shot path: exactly one model call, no tool surface at all. */
   tools?: EngineTool[];
   maxOutputTokens: number;
@@ -183,6 +208,10 @@ export interface AnswerLoopOpts {
   /** Response schema. Defaults to ANSWER_SCHEMA; Copilot mode passes a SUPERSET so it can also
    *  declare on-page intents. Mode 1's schema is never widened — its wire shape is frozen. */
   schema?: unknown;
+  /** Reasoning effort. Omitted entirely when unset, so the model applies its own default — which
+   *  is the point of the Responses API: reasoning and function tools together, which
+   *  /v1/chat/completions refuses. Set it to trade depth against latency and cost. */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -203,31 +232,50 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
   let executed = 0;
   let rounds = 0;
   let content: string | null = null;
+  let incomplete: AnswerLoopResult['incomplete'];
+  let failed: AnswerLoopResult['failed'];
 
   for (let round = 0; round < maxRounds; round++) {
     const finalRound = round === maxRounds - 1 || executed >= maxToolCalls || tools.length === 0;
-    const res = await opts.openai.chat.completions.create({
+    const res = await opts.openai.responses.create({
       model: opts.model,
-      messages,
+      input: messages,
       ...(tools.length > 0
         ? {
             tools: tools.map((t) => t.spec),
             tool_choice: finalRound ? ('none' as const) : ('auto' as const),
           }
         : {}),
-      response_format: { type: 'json_schema', json_schema: (opts.schema ?? ANSWER_SCHEMA) as never },
+      text: {
+        format: {
+          type: 'json_schema',
+          ...(opts.schema ?? ANSWER_SCHEMA),
+        } as OpenAI.Responses.ResponseTextConfig['format'],
+      },
       // Cost ceiling: the answer endpoint is public (rate-limited but key-in-page-source), so cap
-      // output tokens — a truncated JSON parses as a decline, which is the graceful failure mode.
-      // Low temperature for consistent answers (segment/distill pin 0; a touch of warmth is fine).
-      max_completion_tokens: opts.maxOutputTokens,
-      temperature: 0.2,
+      // output — a truncated JSON parses as a decline, which is the graceful failure mode.
+      // NOTE this budget is shared with reasoning tokens on a reasoning model, so it is not a pure
+      // answer-length cap any more; see the header note on why it was raised alongside this change.
+      max_output_tokens: opts.maxOutputTokens,
+      // Reasoning AND function tools together — the whole reason this path is /v1/responses.
+      ...(opts.reasoningEffort ? { reasoning: { effort: opts.reasoningEffort } } : {}),
+      store: false, // stateless: we replay the transcript ourselves, nothing is retained server-side
     });
     rounds++;
+    if (res.status === 'incomplete') incomplete = res.incomplete_details?.reason ?? 'max_output_tokens';
+    if (res.status === 'failed') {
+      failed = { code: res.error?.code ?? undefined, message: res.error?.message ?? undefined };
+      break; // nothing usable in the body; stop rather than spend another round on it
+    }
 
-    const msg = res.choices[0]?.message;
-    if (!msg) break;
-    if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      content = msg.content ?? null;
+    const output = res.output ?? [];
+    const calls = output.filter(
+      (o): o is OpenAI.Responses.ResponseFunctionToolCall => o.type === 'function_call',
+    );
+
+    // No tool calls — this is the answer. `output_text` concatenates the message parts for us.
+    if (calls.length === 0) {
+      content = res.output_text ?? null;
       break;
     }
     // A FINAL round never serves tools. `tool_choice: 'none'` already asks the model not to call
@@ -235,15 +283,21 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
     // result, so the call would be pure cost — and in an acting mode, an action taken after the
     // loop has decided to stop, which nobody observes or verifies. Structural, not advisory.
     if (finalRound) {
-      content = msg.content ?? null;
+      content = res.output_text ?? null;
       break;
     }
 
-    messages.push(msg);
-    const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [];
-    for (const tc of msg.tool_calls) {
-      const name = tc.type === 'function' ? tc.function.name : '';
-      const rawArgs = tc.type === 'function' ? tc.function.arguments : '';
+    // Echo the model's own output back verbatim before answering it. This carries the
+    // `function_call` items the outputs must pair with — and, on a reasoning model, the `reasoning`
+    // items. Dropping those would make every tool round start the model's thinking from scratch,
+    // which is the failure the Responses migration exists to avoid; it would not error, it would
+    // just quietly reason worse.
+    messages.push(...(output as OpenAI.Responses.ResponseInputItem[]));
+
+    const imageParts: OpenAI.Responses.ResponseInputContent[] = [];
+    for (const tc of calls) {
+      const name = tc.name;
+      const rawArgs = tc.arguments ?? '';
       const args = canonicalArgs(rawArgs);
       const record: ToolCallRecord = { name, args, round };
       ledger.push(record);
@@ -275,12 +329,15 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
           if (result.images?.length) imageParts.push(...result.images);
         }
       }
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: reply });
+      // Paired by `call_id` — NOT the item `id`. Getting these confused pairs an output with
+      // nothing, and the model is told a call it made went unanswered.
+      messages.push({ type: 'function_call_output', call_id: tc.call_id, output: reply });
     }
+    // Tool outputs are text-only on the wire, so anything visual rides in a following user message.
     if (imageParts.length > 0) messages.push({ role: 'user', content: imageParts });
   }
 
-  return { content, rounds, toolCalls: ledger };
+  return { content, rounds, toolCalls: ledger, ...(incomplete ? { incomplete } : {}), ...(failed ? { failed } : {}) };
 }
 
 /**

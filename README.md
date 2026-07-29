@@ -62,7 +62,7 @@ Module 2 — KNOWLEDGE BASE   worker → transcript + normalized, indexed Knowle
 - **Database:** Postgres (Prisma)
 - **Queue / cache:** Redis
 - **Object storage:** S3-compatible — MinIO locally, Cloudflare R2 in production
-- **AI:** OpenAI (`whisper-1` transcription · `gpt-4o` segmentation, distillation, and the copilot answer engine · `text-embedding-3-small` for P1-M3 hybrid retrieval)
+- **AI:** OpenAI — Whisper for transcription, a chat model for segmentation, distillation and the copilot answer engine, and `text-embedding-3-small` for hybrid retrieval. Exact model ids: `.env.example`.
 - **Widget / extension:** esbuild bundles (both on the indigo design system; the widget's appearance — accent/title/greeting/launcher — is **live-served from Studio** via `GET /v1/copilot/config`, with `data-flowbuddy-*` attrs as per-page overrides)
 - **Deploy target:** Render (Dockerized) + Cloudflare R2
 
@@ -191,7 +191,7 @@ Full list + defaults in [`.env.example`](.env.example). The essentials:
 | `REDIS_URL` | api, worker | BullMQ queue |
 | `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | api, worker, web | S3-compatible storage; defaults to local MinIO |
 | `OPENAI_API_KEY` | **api** only | transcription, segmentation, copilot answers (the Studio makes no OpenAI calls) |
-| `TRANSCRIBE_MODEL` / `SYNTH_MODEL` | api, worker | default `whisper-1` / `gpt-4o` |
+| `TRANSCRIBE_MODEL` / `SYNTH_MODEL` / `REASON_MODEL` | api, worker | model ids; defaults in `.env.example` |
 | `AUTH_SECRET` / `AUTH_URL` | web | Studio auth (Auth.js v5) |
 
 ---

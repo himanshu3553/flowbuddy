@@ -71,14 +71,15 @@ services:
       - { key: REDIS_URL, fromService: { name: flowbuddy-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
       - { key: TRANSCRIBE_MODEL, value: whisper-1 }
-      - { key: SYNTH_MODEL, value: gpt-4o }
+      - { key: SYNTH_MODEL, value: gpt-5.6-sol }
       # P1-M3 hybrid retrieval — must match the vector(1536) column dims (see @flowbuddy/synthesis embeddings.ts).
       - { key: EMBED_MODEL, value: text-embedding-3-small }
       # https://app.flowbuddyai.com — the Studio origin is exempt from workspace origin allowlists
       # so the Copilot page's real-widget tester keeps working after a customer restricts origins.
       - { key: FLOWBUDDY_STUDIO_URL, sync: false }
-      # Optional stronger vision model for the P2-M5 diagnostic path (unset = SYNTH_MODEL):
-      # - { key: REASON_MODEL, sync: false }
+      # The P2-M5 diagnostic path (vision). Set explicitly so changing SYNTH_MODEL
+      # never silently moves diagnosis with it. Unset would fall back to SYNTH_MODEL.
+      - { key: REASON_MODEL, value: gpt-5.6-sol }
 
   # --- Studio (Next.js) — paid so customer dashboards never cold-start ---
   - type: web

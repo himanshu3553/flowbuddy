@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import type { Bbox, CapturedEvent } from '@flowbuddy/shared';
 import { eventLabel } from './segment';
 import { redactText } from './redact';
+import { structuredJsonCall } from './responses';
 
 // KB step distillation — Phase 2 (LLM distillation "A").
 // See docs/build/kb-step-distillation.md §5.3. Turns ONE workflow's (cleaned) events + narration into a
@@ -138,7 +139,7 @@ export function distilledStepText(step: DistilledStep): string {
 
 /**
  * Distill one workflow's events into clean, ordered, user-facing steps with a curated screenshot each.
- * Pure aside from the single LLM call; `temperature: 0` for stability. Validates the model's grounding
+ * Pure aside from the single LLM call. Validates the model's grounding
  * (every step must cite known event ids) and falls back to the cleaned events if it returns nothing.
  */
 export async function distillSteps(
@@ -171,17 +172,16 @@ export async function distillSteps(
   const overallBlock = overall ? `Full narration:\n"""${overall}"""\n\n` : '';
   const user = `Workflow: "${workflowTitle}"\n\n${overallBlock}Events (in order):\n${timeline}\n\nReturn the distilled steps.`;
 
-  const res = await openai.chat.completions.create({
+  const raw = await structuredJsonCall({
+    openai,
     model,
-    temperature: 0,
-    messages: [
-      { role: 'system', content: SYSTEM },
-      { role: 'user', content: user },
-    ],
-    response_format: { type: 'json_schema', json_schema: schema as any },
+    system: SYSTEM,
+    user,
+    schema,
+    stage: 'distillation',
   });
 
-  const content = res.choices[0]?.message?.content ?? '{"steps":[]}';
+  const content = raw || '{"steps":[]}';
   let parsed: { steps?: DistilledStepLLM[] };
   try {
     parsed = JSON.parse(content);

@@ -2,7 +2,9 @@
   "name": "flowbuddy",
   "private": true,
   "packageManager": "pnpm@9.15.9",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -11,7 +13,8 @@
     "lint": "turbo run lint",
     "db:generate": "pnpm --filter @flowbuddy/db generate",
     "db:validate": "pnpm --filter @flowbuddy/db validate",
-    "db:migrate": "pnpm --filter @flowbuddy/db migrate"
+    "db:migrate": "pnpm --filter @flowbuddy/db migrate",
+    "kb:drift": "pnpm --filter @flowbuddy/api exec tsx ../../scripts/segmentation-drift.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

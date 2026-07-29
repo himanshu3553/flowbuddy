@@ -218,12 +218,11 @@ function buildTools(input: ReasonInput): EngineTool[] {
       name: 'get_expected_screenshot',
       spec: {
         type: 'function',
-        function: {
-          name: 'get_expected_screenshot',
-          description:
-            "The founder's TRUE screenshot of the user's current step at the moment it WORKED (from the approved recording). Request it to compare the working state against the user's page state.",
-          parameters: NO_ARGS,
-        },
+        name: 'get_expected_screenshot',
+        description:
+          "The founder's TRUE screenshot of the user's current step at the moment it WORKED (from the approved recording). Request it to compare the working state against the user's page state.",
+        parameters: NO_ARGS,
+        strict: false,
       },
       run: async () => {
         const url = await input.expected?.screenshot();
@@ -231,8 +230,8 @@ function buildTools(input: ReasonInput): EngineTool[] {
         return {
           reply: 'The screenshot is attached in the next message.',
           images: [
-            { type: 'text', text: "The founder's expected-state screenshot for the current step (a TRUE screenshot of the step working — compare CONTENT/STATE against the user's page state, never pixel styling):" },
-            { type: 'image_url', image_url: { url, detail: 'auto' } },
+            { type: 'input_text', text: "The founder's expected-state screenshot for the current step (a TRUE screenshot of the step working — compare CONTENT/STATE against the user's page state, never pixel styling):" },
+            { type: 'input_image', image_url: url, detail: 'auto' },
           ],
         };
       },
@@ -241,12 +240,11 @@ function buildTools(input: ReasonInput): EngineTool[] {
       name: 'get_expected_dom',
       spec: {
         type: 'function',
-        function: {
-          name: 'get_expected_dom',
-          description:
-            "The founder's captured DOM snapshot (sanitized HTML) of the current step when it worked — the data half of expected-vs-actual. Diff its STATE/CONTENT against the measured page state.",
-          parameters: NO_ARGS,
-        },
+        name: 'get_expected_dom',
+        description:
+          "The founder's captured DOM snapshot (sanitized HTML) of the current step when it worked — the data half of expected-vs-actual. Diff its STATE/CONTENT against the measured page state.",
+        parameters: NO_ARGS,
+        strict: false,
       },
       run: async () => {
         const html = await input.expected?.dom();
@@ -263,18 +261,17 @@ function buildTools(input: ReasonInput): EngineTool[] {
       name: 'get_page_image',
       spec: {
         type: 'function',
-        function: {
-          name: 'get_page_image',
-          description:
-            "A rendered image of the USER'S page right now (a DOM reconstruction — not a photo; canvas/cross-origin content may be blank). Request it when the structured page state cannot explain the blocker — e.g. requirement checklists / status indicators whose met state is only visual (color, icons), an action DISABLED while nothing reads invalid — and for layout or occlusion questions.",
-          parameters: NO_ARGS,
-        },
+        name: 'get_page_image',
+        description:
+          "A rendered image of the USER'S page right now (a DOM reconstruction — not a photo; canvas/cross-origin content may be blank). Request it when the structured page state cannot explain the blocker — e.g. requirement checklists / status indicators whose met state is only visual (color, icons), an action DISABLED while nothing reads invalid — and for layout or occlusion questions.",
+        parameters: NO_ARGS,
+        strict: false,
       },
       run: async () => ({
         reply: 'The page image is attached in the next message.',
         images: [
-          { type: 'text', text: "A rendered image of the user's page right now (a DOM reconstruction — compare CONTENT/STATE only; canvas/cross-origin areas may be blank):" },
-          { type: 'image_url', image_url: { url: input.pageImage!, detail: 'auto' } },
+          { type: 'input_text', text: "A rendered image of the user's page right now (a DOM reconstruction — compare CONTENT/STATE only; canvas/cross-origin areas may be blank):" },
+          { type: 'input_image', image_url: input.pageImage!, detail: 'auto' },
         ],
       }),
     });
@@ -301,7 +298,7 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
           .join('\n')
       : '- (none retrieved)';
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [{ role: 'system', content: REASON_SYSTEM }];
+  const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: REASON_SYSTEM }];
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }
@@ -330,7 +327,11 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
     model: input.model,
     messages,
     tools: buildTools(input),
-    maxOutputTokens: 900,
+    // On /v1/responses with a REASONING model this budget covers reasoning tokens as well as the
+    // answer, so the old short cap would have been spent thinking and returned empty text — which
+    // parses as a decline and is invisible in coverage analytics. Raised to leave room for both;
+    // `incomplete` on the result says when even this was not enough.
+    maxOutputTokens: 6000,
   });
   input.onLoop?.(loop);
   const { content } = loop;

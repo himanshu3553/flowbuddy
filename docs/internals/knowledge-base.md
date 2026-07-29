@@ -125,7 +125,9 @@ clicks — but `cleanEvents` deliberately does **not** drop on it (too aggressiv
 
 One recording often documents several tasks ("create an account", "log in", "create a project"). The
 segmenter splits the cleaned events into those distinct **workflows** in a **single event-aware LLM
-pass** (temperature 0, JSON-schema output). The model is told that boundaries come primarily from
+pass** (JSON-schema output; sampling is the model's default — see `architecture.md` §Provider API
+for why an explicit temperature is no longer possible, and what that costs). The model is told that
+boundaries come primarily from
 **goal completion / terminal states** visible in the event stream:
 
 - a success confirmation/toast, landing on a newly created resource, a redirect/return to a
@@ -148,7 +150,7 @@ dropped.**
 
 ### Stage 5 — Distill ([`distill.ts`](../../packages/synthesis/src/distill.ts)) — LLM, per workflow
 
-Each workflow's cleaned events + narration go to a second LLM call (temperature 0, JSON-schema) that
+Each workflow's cleaned events + narration go to a second LLM call (JSON-schema) that
 produces the **minimal sequence of user-facing steps**. The model is instructed to:
 
 - **DROP** orienting/stray actions that don't advance the goal (clicking the logo, a chat widget,

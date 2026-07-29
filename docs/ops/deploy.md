@@ -160,7 +160,7 @@ Plus an **environment group** `flowbuddy-dev-r2` holding the shared Cloudflare R
 
 - A **Render** account.
 - A **Cloudflare** account with **R2** enabled.
-- An **OpenAI API key** (`sk-…`) with billing/credit — `whisper-1` (transcription) + `gpt-4o` (synthesis).
+- An **OpenAI API key** (`sk-…`) with billing/credit — transcription + synthesis. Model ids: [`.env.example`](../../.env.example).
 - The repo on **GitHub** (Render deploys from GitHub) and permission to authorize Render to read it.
 
 ### 3.3 Cloudflare R2 setup
@@ -206,7 +206,7 @@ the [suffix gotcha](#24-the-service-url-suffix-gotcha) — set your best guess n
 | `OPENAI_API_KEY` | **`flowbuddy-dev-api`** only | your `sk-…` (synthesis + the copilot answer engine; the Studio makes no OpenAI calls — its tester embeds the real widget → flowbuddy-dev-api) |
 | `EMBED_MODEL` | `flowbuddy-dev-api` (blueprint sets it) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy. |
 | `FLOWBUDDY_STUDIO_URL` | **`flowbuddy-dev-api`** | the real `flowbuddy-dev-web` URL (§3.8) — the Studio origin is exempt from workspace origin allowlists so the Copilot page's real-widget tester keeps working after a customer restricts origins. ⚠️ Unset = the tester 403s for allowlisted workspaces. |
-| `REASON_MODEL` | `flowbuddy-dev-api` (optional) | the P2-M5 diagnostic path's stronger (vision-capable) model; unset = falls back to `SYNTH_MODEL` (default `gpt-4o`) |
+| `REASON_MODEL` | `flowbuddy-dev-api` (optional) | the P2-M5 diagnostic path's model (must be vision-capable); unset = falls back to `SYNTH_MODEL` |
 | `AUTH_SECRET` | `flowbuddy-dev-web` | output of §3.4 |
 | `AUTH_URL` | `flowbuddy-dev-web` | the real `flowbuddy-dev-web` URL (§3.8) |
 | `FLOWBUDDY_API_URL` | `flowbuddy-dev-web` | the real `flowbuddy-dev-api` URL (§3.8) |
@@ -422,7 +422,7 @@ Taking a running deploy from Phase 1 to the Phase-2 code (Sense `8187af5` + Reas
 2. **Migrations run automatically** on api boot (`prisma migrate deploy`): `20260708121649_sense_in_context_help` + `20260713090000_reason_diagnostic`. Both additive (new `Workspace` / `CopilotQuery` columns, defaults included) — no backfill, no downtime concern.
 3. **Set `FLOWBUDDY_STUDIO_URL`** on the api (the real Studio URL) if not set — without it the real-widget tester 403s once a workspace restricts origins (§3.7).
 4. **Publish BOTH widget bundles** from one `pnpm --filter @flowbuddy/widget build`: `flowbuddy-copilot.js` **and** `flowbuddy-copilot-render.js`, side by side. A missing renderer never breaks answers — diagnostics silently degrade to structure-only.
-5. *(Optional)* set `REASON_MODEL` for a stronger vision model on the diagnostic path (unset = `SYNTH_MODEL`, default `gpt-4o`).
+5. `REASON_MODEL` sets the diagnostic path's model (must be vision-capable). Both blueprints now set it explicitly, so changing `SYNTH_MODEL` never silently moves diagnosis with it.
 6. **No other new env vars.** Behavior toggles are per-workspace in Studio → Copilot → Settings, with safe defaults: Sense **ON** · show-me OFF · Reason **ON** (masked, structure-only) · page image **ON** (new workspaces, since 2026-07-16) · typed values OFF. *(Defaults as of this drop — show-me and walkthrough later flipped ON for new workspaces; see §8.3.)*
 7. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 11 — a positional "what do I do next?" and a "why is this button disabled?" diagnosis; verify `CopilotQuery.reasonTrigger` is populated on the diagnostic row.
 

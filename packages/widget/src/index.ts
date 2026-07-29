@@ -351,6 +351,9 @@ interface AnswerIntents { highlight?: boolean; offerWalkthrough?: boolean }
 
 interface AnswerResponse {
   covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
+  // Fastify's DEFAULT error shape is { statusCode, error: 'Bad Request', message }. `error` is only
+  // the HTTP status NAME — the useful half is `message`. Typed so it can be logged, never rendered.
+  message?: string;
   position?: AnswerPosition | null; escalate?: boolean; intents?: AnswerIntents;
 }
 
@@ -460,7 +463,20 @@ async function ask(question: string): Promise<void> {
       reasonPayload = await buildReasonPayload('escalation');
       if (reasonPayload) ({ ok, status, data } = await postAnswer(question, history, reasonPayload));
     }
-    if (!ok) { log.warn('answer request failed', status, data.error); messages.push({ role: 'assistant', kind: 'assistant.error', content: data.error || `Request failed (${status})` }); }
+    if (!ok) {
+      // Log BOTH halves: on an unhandled server throw `error` is the bare status name ("Bad
+      // Request") and `message` carries what actually went wrong. Losing `message` here once cost
+      // a real debugging session.
+      log.warn('answer request failed', status, data.error, data.message);
+      // Never show the end-user a raw HTTP status name — it reads as gibberish mid-task. A handled
+      // error carries a written-for-humans `error`; anything else gets a plain sentence.
+      const humane = data.error && data.error !== 'Bad Request' && data.error !== 'Internal Server Error';
+      messages.push({
+        role: 'assistant',
+        kind: 'assistant.error',
+        content: humane ? data.error! : "Something went wrong on my side — try asking again.",
+      });
+    }
     else if (data.covered) {
       const answered: Msg = { role: 'assistant', kind: 'assistant.answer', content: data.answer ?? '', citations: data.citations ?? [], queryId: data.queryId };
       messages.push(answered);

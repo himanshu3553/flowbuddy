@@ -40,6 +40,11 @@ export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from
 export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/build/kb-step-distillation.md
+// The two pure stages either side of segmentation. Exported so a harness can replay the pipeline
+// in memory over a stored recording without re-transcribing or writing anything —
+// `scripts/segmentation-drift.ts` is the reason these are public.
+export { alignNarration } from './align';
+export { segment } from './segment';
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
 export type { DistilledStep, DistilledStepLLM } from './distill';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).

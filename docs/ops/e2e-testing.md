@@ -53,7 +53,7 @@ pnpm install
 ```
 
 **Environment files** (git-ignored, already present locally — confirm contents):
-- `packages/api/.env` — must contain a valid **`OPENAI_API_KEY`** (the worker calls Whisper to transcribe + the chat model to segment; the copilot endpoint calls the chat model to answer). Also `DATABASE_URL`, `REDIS_URL`, the `R2_*` MinIO vars. Defaults: `TRANSCRIBE_MODEL=whisper-1`, `SYNTH_MODEL=gpt-4o`.
+- `packages/api/.env` — must contain a valid **`OPENAI_API_KEY`** (the worker calls Whisper to transcribe + the chat model to segment; the copilot endpoint calls the chat model to answer). Also `DATABASE_URL`, `REDIS_URL`, the `R2_*` MinIO vars. Model ids and their defaults: [`.env.example`](../../.env.example).
 - `packages/web/.env` — `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL=http://localhost:3000`, and `FLOWBUDDY_API_URL=http://localhost:8787`.
 - `packages/db/.env` — `DATABASE_URL`.
 - `.env.example` (root) documents every variable.

@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { CapturedEvent, Marker } from '@flowbuddy/shared';
 import { createLogger } from '@flowbuddy/logger';
+import { structuredJsonCall } from './responses';
 
 const log = createLogger('segment');
 
@@ -122,21 +123,20 @@ export async function segment(
 
   const user = `${overallBlock}Events (in order):\n${timeline}\n\nUser markers:\n${markerLines}\n\nReturn the workflows.`;
 
-  const res = await openai.chat.completions.create({
+  const content = await structuredJsonCall({
+    openai,
     model,
-    temperature: 0, // deterministic segmentation
-    messages: [
-      { role: 'system', content: SEGMENT_SYSTEM },
-      { role: 'user', content: user },
-    ],
-    response_format: { type: 'json_schema', json_schema: SEGMENT_SCHEMA as any },
+    system: SEGMENT_SYSTEM,
+    user,
+    schema: SEGMENT_SCHEMA,
+    stage: 'segmentation',
   });
 
   let parsed: {
     workflows?: { title?: string; event_ids?: string[]; boundary_evidence?: string; confidence?: string }[];
   };
   try {
-    parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}');
+    parsed = JSON.parse(content || '{}');
   } catch {
     parsed = {};
   }
