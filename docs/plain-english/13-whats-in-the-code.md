@@ -15,9 +15,9 @@ something works *inside*, `internals/` is the engineering deep-dive — start at
         │        ← the EXTENSION is watching
         ▼
   Uploaded
-        │        ← screenshots and page snapshots go STRAIGHT to storage as you record;
-        │          the API only hands out one-file permission slips, then takes the
-        │          index and audio when you stop
+        │        ← screenshots and page snapshots go STRAIGHT to storage as you record,
+        │          and so does the audio when you stop; the API only hands out one-file
+        │          permission slips, then takes the index — nothing else passes through it
         ▼
   Processed in the background
         │        ← the WORKER + SYNTHESIS turn it into steps

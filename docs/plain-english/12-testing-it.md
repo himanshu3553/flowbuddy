@@ -6,8 +6,9 @@
 
 ## What this is for
 
-There's no automated test suite that proves FlowBuddy works. There are a handful of small tests over
-the trickiest logic, and beyond that: **you click through it.**
+Nothing automated proves FlowBuddy works end to end. There are small tests over the trickiest logic,
+and a script that measures whether the assistant's answers got better or worse — but nothing that
+opens a browser. Beyond those: **you click through it.**
 
 That sounds primitive. It's actually correct for this product — most of what can break involves a
 real browser, a real recording, a real AI call and a real page. The value here is doing it in the
@@ -115,7 +116,7 @@ and anything it couldn't answer should show up as a gap.
 ## Testing Copilot mode specifically
 
 Since it's now the default, a **fresh account tests this path automatically** — no setup needed.
-Accounts made before July 2026 keep whatever they had.
+Accounts made before the default changed, in late July 2026, keep whatever they had.
 
 What to look for:
 
@@ -133,6 +134,13 @@ assistant judges they help, rather than on every positional answer. Then turn th
 confirm neither *ever* appears no matter what the assistant wants. **The switches must always win.**
 
 **Declines must still be honest.** The whole point survives or dies here.
+
+**Change the subject and make sure it keeps up.** Ask about one thing, let it answer, then ask about
+something completely different. It must answer the *new* question. This is worth doing every single
+time, because it is exactly what went wrong for months without anyone noticing: the assistant would
+quietly answer the *earlier* question instead — sometimes repeating the previous answer's steps,
+sometimes claiming it knew nothing about a workflow it was holding in full. Every single-question
+check passed the entire time it was broken.
 
 **Switch back to AI Chatbot** and confirm the old rule-driven behaviour returns exactly.
 
@@ -155,7 +163,18 @@ the AI runs with a bit of randomness so the words always differ, and a diff on p
 A second script compares two runs and reports only what actually changed. If a question flipped from
 answered to declined, that's flagged. If it just phrased things differently, you never hear about it.
 
-It runs in preview mode, so a comparison run doesn't pollute your analytics.
+**A question in that set can now carry the questions that come before it**, so it gets asked as a
+follow-up in a real conversation rather than from a standing start. That matters more than it
+sounds: a whole class of problem only shows up on the *second* question, and a list that only ever
+asks one question at a time is blind to it — which is how the assistant shipped for months answering
+the wrong question. The earlier questions are asked for real rather than faked, so they can't go
+stale when you re-record your product, and the report says so plainly if one of them failed, because
+then the case is measuring a broken conversation rather than the thing you meant to test.
+
+It runs in preview mode, so a comparison run doesn't pollute your analytics. Two things it still
+can't see: anything that depends on the *state of the page* someone is looking at, and the retry
+that happens when the assistant can't answer and goes looking at the screen. Both need a real
+browser — that's what the click-through above is for.
 
 ---
 

@@ -124,7 +124,7 @@ Full model + local usage: [`dev-setup.md` §7](dev-setup.md#7-logging-dev-vs-pro
 
 ### 2.6 Health checks (added 2026-07-28)
 
-Both blueprints now declare a `healthCheckPath` per web service. **Without one, Render only checks
+Both blueprints declare a `healthCheckPath` on their **api** service; the prod blueprint adds one for Studio too. (Dev's Studio has none — it is a free-tier service that cold-starts anyway, so a liveness probe buys little there.) **Without one, Render only checks
 that the port is open** — which a wedged, deadlocked or CPU-pinned process passes trivially, so a
 service in exactly the state you'd want restarted would never be restarted. The same check also gates
 zero-downtime deploys: traffic only moves to the new instance once the path answers.
@@ -132,7 +132,7 @@ zero-downtime deploys: traffic only moves to the new instance once the path answ
 | Service | Path | Why that path |
 |---|---|---|
 | `flowbuddy-api` / `flowbuddy-dev-api` | `/healthz` | the existing health route in [`server.ts`](../packages/api/src/server.ts) — answers `{"ok":true}` |
-| `flowbuddy-web` | `/login` | Studio has no dedicated health endpoint; `/login` is a public route that needs the Next server to actually be rendering |
+| `flowbuddy-web` (prod only) | `/login` | Studio has no dedicated health endpoint; `/login` needs the Next server to actually be rendering. Note it is a **sign-in page**, not an unauthenticated endpoint — it answers for a logged-out visitor, which is all the probe needs |
 
 Static sites (`flowbuddy-widget`, `flowbuddy-landing`) have no health check — there is no process.
 Note the check is a **liveness** signal only: `/healthz` doesn't touch Postgres or Redis, so a
@@ -411,7 +411,7 @@ localhost — the committed `src/manifest.json` stays localhost so local dev is 
 **Chrome Web Store** (full per-version history + the cut-a-release checklist:
 [`extension-releases.md`](extension-releases.md)). **v0.7.0 is cut with the upload rework and is the
 build the current API requires** — it sends `X-FlowBuddy-Upload-Id`, uploads narration directly, and
-discards abandoned recordings; it must be live before the API reaches prod (§7.6). It bakes the same
+discards abandoned recordings. §7.6 says it must be live *before* that API reaches prod; **on 2026-07-28 that ordering was deliberately overridden** (no customers on prod), so the API is already live while v0.7.0 is still unpublished — a store-installed v0.6.0 currently cannot upload at all. It bakes the same
 three origins as v0.6.0 and adds **no new permissions**. Until it is published, the live listing is
 still **v0.6.0** (submitted
 2026-07-17, confirmed live by 2026-07-23) — the production release: bakes `https://app.flowbuddyai.com`
@@ -663,7 +663,7 @@ first boot; user-verified E2E). What this means for anything pre-rename:
 - **Branding — RESOLVED 2026-07-17:** the product is **FlowBuddy** (domain FlowBuddyAI.com). (The widget title stays per-workspace configurable.)
 - **`packages/landing` v1 BUILT 2026-07-17** as the minimal "coming soon + sign in" card. The full marketing page (hero · how-it-works · features · CTA; optionally dogfood the live widget as the demo) remains to build on top.
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the v0.6.0 store listing URL) so the Home checklist CTA reads "Add to Chrome".
-- **Gates the prod deploy: recorder v0.7.0 must be LIVE on the store first.** The API requires `X-FlowBuddy-Upload-Id`; v0.6.0 doesn't send it. v0.7.0 is cut with this change — confirm it is published, *then* FF `main` (§7.6, §8.4).
+- **⚠️ The prod API is already running ahead of any published recorder.** The §7.6 ordering rule was deliberately overridden on 2026-07-28 (no customers on prod): the upload-identity API shipped while the store listing still serves v0.6.0, which does not send `X-FlowBuddy-Upload-Id` and therefore **cannot upload at all**. Publishing v0.7.0 is the open remediation, not a gate on a future deploy (§7.6, §8.4).
 - **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` / the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](roadmap.md) §9 — not repeated here.
 - **RESOLVED 2026-07-28 — the presigned-PUT path is proven against real R2** on the dev deploy, with no bucket CORS rule needed (§2.2).
 - **RESOLVED 2026-07-28 — abandoned recordings are cleaned up:** explicit discard from the recorder plus a 12-hour server-side sweep (§8.5).

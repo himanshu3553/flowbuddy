@@ -25,7 +25,7 @@ or general model knowledge) and **honest coverage** (a decline is a feature, not
 | File | Layer |
 |---|---|
 | [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts) | **Who** — resolve the public embed key → workspace, origin allowlist, rate limit. |
-| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The single enforcement seam** — only the API routes call it, and since the Studio preview became the real widget (2026-07-08) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
+| [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts) | **What** — retrieve approved KB items + **hybrid keyword∪vector ranking (RRF)** with the route signal; sanitize history. **The ranking seam** — only the API routes call it (approval is enforced on every read, and since Copilot mode the agent's `searchKb`/`loadWorkflow` are two more approval-checked readers, constrained at the injection site), and since the Studio preview became the real widget (2026-07-08) every surface reaches it through the same public `/answer` route (Prisma client injected, so `@flowbuddy/synthesis` stays DB-free). |
 | [`synthesis/embeddings.ts`](../../packages/synthesis/src/embeddings.ts) | **P1-M3** — the shared embedding half: `embedTexts` (batched `text-embedding-3-small`) + `toVectorLiteral`, used by the worker (KB-build writes) and retrieval (query-time). Model/dims change here + the `vector(1536)` column together. |
 | [`synthesis/engine.ts`](../../packages/synthesis/src/engine.ts) | **The shared answer loop (2026-07-26)** — ONE loop + ONE answer shaper, used by all three paths. Owns the model call, the tool rounds (caps: 4 rounds / 4 tool calls), the response schema, and `shapeAnswer` (citations resolved only against items WE supplied; position step taken from the PROBE, never the model). |
 | [`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts) | **Answer — AI Chatbot (mode 1)**: the shared loop with **no tools bound and `maxRounds: 1`** (`temperature 0.2`, `max_completion_tokens 700` — a truncated response degrades to a decline). Not a separate pipeline: with zero tools the loop makes exactly one call and breaks. |
@@ -84,8 +84,10 @@ flowchart TD
     RL -- ok --> RET["retrieveApprovedKBItems(ws, question, contextPath)"]
     RET --> Z{"0 items?"}
     Z -- "yes (no approved content)" --> NP["log CopilotQuery(answered=false)<br/>return covered:false<br/>reason: 'no approved content yet'"]
-    Z -- no --> ANS["answerFromKB (LLM, json_schema)"]
+    Z -- no --> ANS["pick the engine by mode + Reason trigger:<br/>answerFromKB · answerAsAgent · diagnoseFromKB"]
     ANS --> LOG["log CopilotQuery(answered = covered)"]
+    ANS --> TEL["record mode · engine · rounds · toolCalls<br/>+ one copilot answer log line"]
+    TEL --> LOG
     LOG --> C{"covered?"}
     C -- yes --> OK["return answer + citations + queryId"]
     C -- no --> GAP["dedupe + log CoverageGap(source=copilot)<br/>return reason + queryId"]
@@ -298,8 +300,21 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
   the copilot just isn't provisioned).
 - **Every answered/declined question** logs a `CopilotQuery(answered = covered)` and returns its
   `queryId` (the handle the widget uses for thumbs feedback).
+  **Since 2026-07-29 the row also records HOW the answer was produced** — `mode` (the workspace
+  setting) · `engine` (what actually ran: `chatbot` | `agent` | `reason`) · `rounds` · `toolCalls`.
+  All three engines hand the loop's result back through the same `onLoop` hook, so AI Chatbot's
+  `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim and one query compares all three.
 - **A decline** additionally logs a `CoverageGap(source: 'copilot')` — **deduped**: at most one *open*
   gap per distinct question per workspace. This is the "record this next" feed Studio surfaces.
+- **A decline from the AGENT is no longer swapped for a diagnostic one (2026-07-29).** The P2-M5
+  escalation returns `escalate: true` and logs *nothing*, letting the widget retry once with page
+  state — but the retry takes the diagnostic branch, which has no mode guard, so in Copilot mode
+  the agent never ran the second time and its `search_knowledge`/`get_workflow` were dropped. The
+  guard is keyed on `engineUsed !== 'agent'`, **not** on the workspace mode: when the loop throws,
+  the floor answers as AI Chatbot while `gate.mode` still reads `copilot`, and *that* decline should
+  still escalate. A consequence worth knowing: the agent's decline now reaches the `CopilotQuery`
+  write, so the coverage gap records what the AGENT said rather than the diagnostic engine's
+  page-shaped text.
 - **The stored question is PII-scrubbed (2026-07-27).** `CopilotQuery.question` and
   `CoverageGap.prompt` go through the same `redactText` as KB text and narration — it was the one
   stored text path that didn't, and the founder reads it back verbatim in Studio. **Storage only:**

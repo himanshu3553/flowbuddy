@@ -155,24 +155,27 @@ verdict after end-to-end testing was *"much more accurate than the AI Chatbot."*
 
 ## What's still missing in Copilot mode
 
-Three things, recorded in priority order:
+Two things left, plus one that's now fixed — in priority order:
 
 **1 · It knows your recipes, not your product.** Every orienting question — "what does this do?",
 "can it handle X?" — gets declined, because no single recorded workflow answers it. The fix is a
 place for you to describe your product in your own words, which then joins the knowledge base.
 **This is the biggest one.**
 
-**2 · You can't see how it's behaving.** Nothing records which mode answered a question, how many
-rounds it took, or which options it used. So you have no evidence it's working differently, and the
-"is the smarter mode worth its cost?" question **cannot be answered** — the data doesn't exist. This
-got more urgent the day Copilot became the default, because now every logged question looks alike and
-you can't reconstruct it later.
+**2 · ✅ Fixed — you can see how it's behaving.** Every question now records the workspace's setting,
+**which engine actually answered it**, how many times it went back to the AI and how many times it
+looked something up — plus one line per question in the server's own log holding the exact wording it
+searched for, and its own words when it refuses. The setting and the answering engine are stored
+separately because they disagree more often than you'd think, and recording only the setting would
+have blamed the wrong one. So *"is the smarter mode worth its cost?"* is now a lookup rather than an
+argument. Still missing: a screen showing it — the numbers are being collected, nothing displays them
+yet.
 
 **3 · The diagnostic reasoning isn't folded in.** Working out *why* someone is stuck still runs as
 its own separate path rather than being one of the things the assistant can choose. Merging them is
 deliberately deferred until there are proper test fixtures for page state — **do not merge it blind.**
 
-One more thing worth knowing: **the knowledge base it's been tested against is one workflow deep.**
+One more thing worth knowing: **the knowledge base it's been tested against is barely two workflows deep.** A second was recorded on 2026-07-29 — which is what finally made a long-standing answering bug reproducible at all.
 So the searching and disambiguating abilities — the whole reason Copilot mode is better — have never
 actually had a chance to fire in anger.
 

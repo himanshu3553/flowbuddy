@@ -273,13 +273,22 @@ came from (`sourceId`) and which workflow within that source (`segmentIndex`, a 
 assigned at distill time). Those coordinates survive a rebuild; the item rows under them are
 disposable.
 
-This is enforced at exactly **one seam** — and since 2026-07-06, one *implementation* with one
-*caller*: [`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
-filters items through the approved-key set, called only by the public answer route (the old Studio
-mirror `listApprovedItems` was retired in the consolidation, and two days later — 2026-07-08 — the Studio preview
-became the **real widget** — `copilot-preview-actions.ts` deleted — so the tester reaches retrieval
-through the same public `/answer` route end-users hit). If you ever add a second path that reads the
-KB for the copilot, it **must** go through this function or the no-leak guarantee breaks.
+This is enforced **on the server, on every read** — never by the model, never by the client. The
+RANKING path still has one implementation with one caller:
+[`synthesis/retrieval.ts → retrieveApprovedKBItems`](../../packages/synthesis/src/retrieval.ts)
+filters items through the approved-key set, called by the public answer route (the old Studio
+mirror `listApprovedItems` was retired 2026-07-06, and two days later the Studio preview became the
+**real widget** — `copilot-preview-actions.ts` deleted — so the tester reaches retrieval through the
+same public `/answer` route end-users hit).
+
+**It is no longer the only reader, and that is the thing to get right when adding one.** Copilot mode
+gave the agent two more ways into approved knowledge, and both are constrained *at the injection
+site* rather than by asking the model nicely: `searchKb` is `retrieveApprovedKBItems` again with the
+model's own query, and `loadWorkflow` re-checks the requested key against `CopilotApproval` before
+returning a single step — an unapproved or unknown key reads back as *"no such workflow"*, never as
+*"exists but you may not see it"*. So the rule is not "one function" but **every path that reads the
+KB for the copilot resolves approval server-side, and a caller that cannot prove approval returns
+absence.** Break that and the no-leak guarantee breaks with it.
 
 ```mermaid
 flowchart LR

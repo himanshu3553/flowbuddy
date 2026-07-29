@@ -186,7 +186,7 @@ reach — expected-vs-actual over the founder's TRUE step evidence.
 | Probe keeps EVERY step's element · exported primitives · sticky spotlight · `isFilled` = `checked` for checkbox/radio | `packages/widget/src/sense.ts` |
 | `readElementState` — the shared element-state vocabulary (Reason ships it; the walkthrough gates on it) | `packages/widget/src/reason.ts` |
 | Offer pill on positional answers · config flag · boot resume · show-me suppressed mid-run | `packages/widget/src/index.ts` |
-| Card + offer styles (design tokens, shadow-root, overlay-only) | `packages/widget/src/styles.ts` (`.sc-walk-*`) |
+| Card + offer styles (design tokens, shadow-root, overlay-only) | `packages/widget/src/styles.ts` (`.fb-walk-*`) |
 | Config field + `walkthrough` gate bucket + the run endpoint | `packages/api/src/server.ts` |
 | `Workspace.copilotWalkthrough` + `CopilotWalkthrough` (migration `20260715155642_walkthrough_guided`; default → ON for new workspaces in `20260727013457_copilot_abilities_default_on`) | `packages/db/prisma/schema.prisma` |
 | Studio toggle (under "Show me", disabled without Sense, toasts) | `packages/web/components/dashboard/copilot-workspace.tsx` + `lib/copilot-settings{,-actions}.ts` |

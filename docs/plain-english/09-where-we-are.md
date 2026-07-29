@@ -3,7 +3,7 @@
 *(The plain-English version of `roadmap.md`, plus the leftovers from `archive/phase-1-review.md`
 and `landing-page.md`.)*
 
-**As of 2026-07-28.**
+**As of 2026-07-29.**
 
 ---
 
@@ -19,7 +19,7 @@ depth, not breadth.**
 
 | | Status |
 |---|---|
-| Recording your product (Chrome extension) | ✅ live on the Chrome Web Store |
+| Recording your product (Chrome extension) | ⚠️ on the store, but the published version **can no longer upload** — see below |
 | Turning recordings into clean steps | ✅ built and verified |
 | Splitting one recording into separate workflows | ✅ built |
 | Approving workflows | ✅ built |
@@ -53,7 +53,7 @@ depth, not breadth.**
 
 ---
 
-## The three gaps in the assistant, in priority order
+## The gaps in the assistant, in priority order
 
 These are specific and small enough to actually do.
 
@@ -66,16 +66,25 @@ that. It knows how to *do* things without knowing what your product *is*.
 **The fix:** somewhere for you to write, in your own words, what your product is and who it's for.
 That gets folded into the knowledge base alongside your recordings.
 
-### 2 · You can't see how it's behaving
+### 2 · ✅ Fixed — you can now see how it's behaving
 
-Nothing records which mode answered a question, how many rounds it took, or what it looked up.
+Every question now records which setting the workspace was on, **which engine actually answered it**,
+how many times the assistant went back to the AI, and how many times it looked something up. The
+server also writes one line per question with the exact wording it searched for and, when it refuses,
+its own words for why.
 
-Two consequences: you switch to Copilot mode and have **no evidence** it's doing anything different.
-And the question "is the smarter mode worth what it costs?" **cannot be answered**, because the data
-was never collected.
+Those two things — the setting and the engine that answered — are kept apart on purpose, because they
+disagree more often than you'd expect. A workspace set to the smarter mode can still have a question
+answered by the screen-reading engine, or by the simple fallback when something goes wrong. Recording
+only the setting would have quietly blamed the wrong one.
 
-This got more urgent the day Copilot became the default — now every logged question looks identical
-and you can't reconstruct it after the fact. **Small, additive, and it should probably be next.**
+So *"is the smarter mode worth what it costs?"* is now something you can look up rather than argue
+about. **What's still missing is a screen for it** — nothing in the dashboard shows these yet. The
+data starts piling up from now, which means the answer gets better the longer you leave it before
+asking.
+
+It became urgent the day Copilot became the default, because until then every logged question looked
+identical and couldn't be reconstructed afterwards. That's what forced it.
 
 ### 3 · The diagnostic reasoning isn't folded in
 
@@ -87,9 +96,15 @@ test fixtures for page state. **Do not merge it blind.**
 
 ## Two things worth knowing about the current state
 
-**The knowledge base is one workflow deep.** So Copilot mode's searching and disambiguating — the
-whole reason it's better — has **never actually had a chance to fire.** More recordings would test
-the thing that's supposed to be the improvement.
+**The knowledge base is barely two workflows deep.** A second was recorded on 2026-07-29 — which is
+what finally made a long-standing answering bug reproducible — but Copilot mode's searching and
+disambiguating, the whole reason it's better, has still had almost no chance to fire. More
+recordings would test the thing that's supposed to be the improvement.
+
+**The recorder on the store can't upload right now.** The server was updated to require something the
+published version doesn't send, and the newer version is built but hasn't been submitted. Anyone
+building it themselves is fine; anyone installing from the store is not. Submitting it is the open
+job.
 
 **There's no spending limit.** Copilot mode can go back and forth with the AI model several times on
 a hard question. That was a deliberate decision to skip for now, and it was fine when the smarter
@@ -101,10 +116,11 @@ mode was opt-in and only one person used it. **It's now what every new account g
 
 1. **Record more workflows.** Cheap, and it's the only way to find out whether the smarter mode
    actually earns its keep.
-2. **Log how the assistant answered.** Small, additive, and everything else is easier to judge once
-   you can see it.
-3. **Let the founder describe their product.** The biggest quality improvement available.
-4. **Fold in the diagnostic reasoning** — but only after there are test fixtures for it.
+2. **Let the founder describe their product.** The biggest quality improvement available.
+3. **Fold in the diagnostic reasoning** — but only after there are test fixtures for it.
+
+   *(Recording how the assistant answered used to sit at the top of this list. It's done — see
+   above. What's left of it is a screen to show the numbers on.)*
 
 Then the bigger forks: knowledge that checks itself (hardest, best moat), the assistant doing things
 (highest risk, highest value), the help portal, or opening up to other AI agents (assessed as

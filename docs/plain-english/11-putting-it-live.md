@@ -139,10 +139,11 @@ Two standing rules:
   permissions changed, and which addresses were baked in. Update it every time.
 
 **v0.7.0** is the recording-upload rewrite: uploading while you record, narration going the same way,
-and abandoned recordings cleaning themselves up. It's packaged and submitted with this change. Until
-it clears review and is live, **v0.6.0 — the version most people have installed — cannot upload**,
-because it doesn't send the identity the newer server requires. That's the ordering trap above, live
-and real.
+and abandoned recordings cleaning themselves up. **It is packaged but has NOT been submitted yet —
+and the server half is already live in production.** So the ordering trap described above didn't stay
+hypothetical: **v0.6.0, the version the store still hands out, cannot upload a recording at all**,
+because it doesn't send the identity the newer server now requires. Anyone building the extension
+themselves is fine; anyone installing it from the store is not. Submitting v0.7.0 is the open job.
 
 ---
 

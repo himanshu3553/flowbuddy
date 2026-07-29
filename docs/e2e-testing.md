@@ -8,7 +8,7 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 | **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **flowbuddyai.com, live since 2026-07-23** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). There is no automated test harness — verification is `pnpm typecheck` + `pnpm build` + this manual walkthrough.
+> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](v2-portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 
@@ -68,6 +68,7 @@ pnpm install
 
 ```bash
 pnpm typecheck     # type-check every package
+pnpm test          # vitest over the pure seams in @flowbuddy/synthesis (no CI — run it here)
 pnpm build         # build every package in dependency order (Turbo)
 pnpm lint          # lint
 ```
@@ -320,8 +321,9 @@ The widget must be served over **HTTP**, not `file://` (or no launcher icon appe
 | 10c | Thumbs **up/down** on an answer | Accepted (`/v1/copilot/feedback`). |
 | 10d | Origin not allowlisted | Serve demo from a different port not in the allowlist → answer request rejected (origin/`x-flowbuddy-key` check). |
 | 10e | Rapid-fire questions | Eventually `429` rate-limit. |
+| 10f | **Change the subject mid-conversation.** Ask 10a, let it answer, then ask about a **different** recorded workflow in the same chat. | It answers the **new** question, citing the new workflow. **This is the one that shipped broken for months:** it used to answer the *previous* question instead — sometimes repeating the earlier answer's steps, sometimes claiming it had nothing on a workflow it was holding in full. Needs ≥2 approved workflows. |
 
-✅ **PASS:** 10a answers and cites; 10b declines honestly; feedback + origin + rate-limit behave as above.
+✅ **PASS:** 10a answers and cites; 10b declines honestly; **10f answers the new question, not the old one**; feedback + origin + rate-limit behave as above.
 
 > If you wiped data (Part 2), the demo's old `data-flowbuddy-key` is stale — refresh it from the Copilot page.
 
@@ -411,6 +413,7 @@ DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WH
 1. Studio → **Copilot** page → **Copilot activity**: shows total questions, % answered, 👍/👎 counts, and the recent Q&A list (each tagged answered/declined). Confirm your Part-10 questions appear with correct tags + feedback.
 2. Studio → **Home** (`/dashboard`) → **Coverage gaps — record these next**: the *declined* question from 10b appears as an open gap (source `copilot`).
 3. Click **Dismiss** on the gap → it resolves and disappears.
+4. Studio → **Analytics** → **Questions** (`/dashboard/analytics/questions`): the searchable question log (shipped 2026-07-27). Search for part of a Part-10 question, and by host route; each row shows its answered/declined outcome.
 
 ✅ **PASS:** answered/declined counts + feedback reflect Part 10; the declined question shows as a coverage gap; dismiss works.
 

@@ -27,7 +27,7 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 | Every message feels one-shot | Retrieval runs on the bare question text (`retrieval.ts` — question terms + route boost); history rides the prompt but never retrieval, so *"and then what?"* searches the KB for "and then what" |
 | ~~The conversation dies on navigation~~ — **✅ fixed 2026-07-26 (P5-M0 cut 1)** | `messages` was in-memory per page view (`widget/src/index.ts`) — following the copilot's own advice wiped the thread, including navigations a walkthrough itself caused, so its own "Explain what's blocking me" escalation landed in an empty panel. The walkthrough had solved this for itself; the chat never got it. Now both use the shared `widget/src/session.ts` store |
 | No notion of the user's goal | Nothing tracks "what is this user trying to accomplish"; each answer is a verdict, not a step toward finishing a task |
-| Answers-or-declines, never asks | The only clarifying question allowed is the Sense tie; ambiguous intent → guess or decline |
+| Answers-or-declines, never asks | **Closed in Copilot mode (2026-07-27), still true beneath it.** The single-call engine's only legal question is the Sense tie, so ambiguous intent → guess or decline. The agent may now ask ONE short clarifying question when the approved knowledge genuinely supports more than one reading — and a clarifying question counts as an *answer*, not a decline. |
 | Knows recipes, not the product | The KB = workflow steps (+ narration topics); no product description, concepts, plans/roles, FAQs — the copilot can navigate but cannot orient, compare, or redirect |
 | Help intensity is bolted on | The walkthrough offer hangs off positional answers only; there is no goal → tier dispatch |
 
@@ -104,7 +104,7 @@ The ladder is offered, not imposed: when a goal is understood, the copilot prese
 
 ## 5. Design questions to lock
 
-1. **Condensation gating** — heuristic-gated LLM hop (recommended) vs. always-condense when history exists?
+1. ~~**Condensation gating**~~ — **CLOSED 2026-07-26 by dropping the hop** (P5-M0 cut 3). Continuity bias took the common case deterministically and for free, and a topic-shifting follow-up is what the agent's own search covers. Reopen only if a measured case survives both.
 2. ~~**Panel reopen after navigation**~~ — **✅ RESOLVED 2026-07-26 (built):** the thread always restores; the panel re-opens itself only on a thread touched within the last 2 minutes, and never when a walkthrough is resuming. Continuity where it was clearly intentional; a half-hour-old session must not pop the copilot open on a page the user navigated to for their own reasons — on someone else's product.
 3. **Destructive steps under hands-off Tier 3** — always pause-and-confirm mid-run (recommended: the one exception to no-intervention) vs. founder-flagged fully-automatable workflows?
 4. **Tier recommendation** — copilot recommends one tier, user picks (recommended) vs. user always chooses unprompted?

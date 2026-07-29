@@ -340,7 +340,7 @@ rate-limit buckets are in-memory too.
 
 | Column | Holds |
 |---|---|
-| `question` | The end-user's raw question |
+| `question` | The end-user's question, **PII-scrubbed before it is written** (§19) |
 | `answered` | `true` = grounded answer given, `false` = declined |
 | `contextPath` | The page they were on |
 | `feedback` | `null` for now — filled in by step 13 |
@@ -348,12 +348,16 @@ rate-limit buckets are in-memory too.
 | `senseUsed` | `used` (the answer was about that position) \| `ignored` (we located them, answered about something else) \| `none` (we looked, found nothing) \| `null` (never looked) |
 | `reasonTrigger` | Why diagnosis fired: `intent` (they used diagnostic words) \| `blocked` (the step's button was disabled) \| `escalation` (the fast path declined, the widget retried with evidence) |
 | `reasonImage` | Whether a page image rode along |
+| `mode` | The workspace's setting when they asked — `chatbot` \| `copilot` \| `agent` |
+| `engine` | **Which engine actually answered** — `chatbot` \| `agent` \| `reason`. Not always what `mode` predicts |
+| `rounds` | Model calls made (1 = answered straight from retrieval) |
+| `toolCalls` | Tool invocations the model asked for, including ones the loop refused |
 
 **Three behaviours that trip people up:**
 
 1. **The Studio preview writes nothing.** A founder testing their own copilot sends `preview: true` —
    same engine, same answer, but **zero** analytics writes and no `queryId` (so no thumbs).
-2. **An escalation writes nothing on the first pass.** When the fast path declines and the widget is
+2. **An escalation writes nothing on the first pass — and only a SINGLE-CALL answer escalates now.** When the fast path declines and the widget is
    about to retry with page evidence, we return `escalate: true` and log *nothing* — the retry logs
    the real outcome, so one question never becomes two rows or a phantom coverage gap.
 3. **"No approved content at all" is logged as a decline but not as a gap.** An un-provisioned copilot
@@ -535,10 +539,7 @@ Three, in the order they'd bite:
    **Residual limit:** the phone pattern needs a 3-digit area group, so international formats like
    `+91 98765-43210` are *not* caught — deliberate (false-negatives over false-positives), but real.
 
-2. **`CopilotQuery` records nothing about *how* the answer was produced.** No mode, no round count, no
-   tool calls. So the founder can't see which mode is actually serving their users, and the question
-   "is the simple chatbot mode still worth keeping?" **cannot be measured** with the data we have.
-
+2. ~~**`CopilotQuery` records nothing about *how* the answer was produced.**~~ **Fixed 2026-07-29.** A question that reaches an answer engine now also stores the workspace's `mode`, **which `engine` actually answered** (`chatbot` | `agent` | `reason`), the `rounds` of model calls it took, and `toolCalls`. Engine and mode are stored separately because they disagree in both directions — the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers as AI Chatbot while the mode still reads `copilot`. All four are `null` on rows written earlier; nothing was back-filled. What is still missing is a Studio surface — nothing reads them yet.
 3. **Screenshots and DOM snapshots in object storage are unredacted.** The masking ladder covers typed
    values and text, not pixels or raw HTML. A recording made against real customer data stores that
    data as-is.

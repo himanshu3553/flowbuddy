@@ -97,6 +97,10 @@ the user was. Not the wording, because the wording always differs. Then a second
 runs and reports only what actually changed. That's how you tell whether a change to the assistant
 made things better or worse.
 
+A question in that list can also carry the questions that come **before** it, so it gets asked as a
+follow-up rather than from a standing start. Some problems only appear on the second question, and a
+list that always starts fresh can't see them.
+
 ---
 
 ## The database

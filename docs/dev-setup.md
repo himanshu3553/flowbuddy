@@ -112,7 +112,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 ### Root scripts that exist (`package.json`)
 `build` · `dev` · `typecheck` · **`test`** · `lint` · `db:generate` · `db:validate` · `db:migrate`
 
-> **Tests (added 2026-07-26 — the repo's first; 38 as of 2026-07-27).** `vitest` in
+> **Tests (added 2026-07-26 — the repo's first; 49 as of 2026-07-29).** `vitest` in
 > `@flowbuddy/synthesis` only, over the *pure* seams:
 > - `retrieval.test.ts` — signal-ordering invariants (route/sense outrank continuity; a real keyword
 >   match still beats all of them — the rule that lets a user change subject).
