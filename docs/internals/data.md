@@ -108,7 +108,7 @@ erDiagram
 The `Article` + `Step` tables (the retired article model) were **dropped** with the
 workflows-as-articles decision: the **Version-2 portal track** renders **approved
 distilled workflows** as help articles instead of maintaining a parallel article store. The
-track's feature list: [`../v2-portal.md`](../build/v2-portal.md).
+track's feature list: [`portal.md`](../build/portal.md).
 
 ---
 
@@ -217,7 +217,7 @@ early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the 
 `manifest` made nullable) — **see the migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
-`pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`../dev-setup.md`](../ops/dev-setup.md).
+`pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`dev-setup.md`](../ops/dev-setup.md).
 
 ---
 

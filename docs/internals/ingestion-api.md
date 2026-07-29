@@ -134,7 +134,7 @@ Key mechanics worth understanding:
   and cannot be re-sent, so the prefix must survive a bad manifest. Idempotency (same `uploadId` →
   same row, same keys) is what makes the retry safe instead. Note that these caps now bound only the
   leftovers — **the signed-URL path has no size ceiling, deferred by decision** (the reasoning and the
-  eventual fix are in [`../roadmap.md`](../roadmap.md) §9, not repeated here).
+  eventual fix are in [`roadmap.md`](../roadmap.md) §9, not repeated here).
 - **The finalize request is small now — but the code still assumes it might not be.** Narration was
   the last thing that always rode this request; it goes over a signed URL too, so a healthy recording
   finalizes with a manifest field and zero files. The streaming parse, the caps, and the recorder's
@@ -321,7 +321,7 @@ the row directly.
   recording still returns `uploaded`. It sits without a job until Studio's **"Stalled → Re-process"**.
 - **Signed URLs have no size ceiling** — `MAX_BUNDLE_BYTES` bounds only the finalize request, not the
   direct-upload path. **Deferred by decision**, with the reasoning and the eventual fix in
-  [`../roadmap.md`](../roadmap.md) §9.
+  [`roadmap.md`](../roadmap.md) §9.
 - **An old recorder build** (store v0.6.0) sends no identity header and gets a flat `400` — see the
   deploy-ordering warning at the end of this section.
 - **OpenAI / processing problems** are **not** this module's concern — it returns success the moment
@@ -335,7 +335,7 @@ the row directly.
 > extension build previously live on the Chrome Web Store (v0.6.0) does not send one. **The newer
 > recorder has to reach users before this API reaches an environment they use** — a standing rule for
 > every future build, not just this one. Current store status:
-> [`../extension-releases.md`](../ops/extension-releases.md).
+> [`extension-releases.md`](../ops/extension-releases.md).
 
 ---
 

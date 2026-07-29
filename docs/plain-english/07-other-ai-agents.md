@@ -1,6 +1,6 @@
 # 7 · Opening up to other AI agents
 
-*(The plain-English version of `phase-6-interop.md`.)*
+*(The plain-English version of `interop.md`.)*
 
 **Status: a direction, not a plan.** The idea is captured and the feasibility has been checked. It
 hasn't been designed and it isn't scheduled.

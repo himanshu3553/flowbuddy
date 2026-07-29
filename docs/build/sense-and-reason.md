@@ -3,7 +3,7 @@
 > **Phase 2 makes the copilot aware of the user's live situation.** **Sense** answers *where the user is* — which approved workflow and which step — and answers **positionally** ("you're on step 3 of X; here's how to get unstuck, then the path to done"). **Reason** (module P2-M5) answers *why they're stuck* — it reads the live page state, compares it against the founder's own recording of that step working, and diagnoses the blocker. Both are built and live in production.
 
 - **Status:** ✅ Built, user-verified end-to-end, in production.
-- **Companion docs:** Phase 1 substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · roadmap → [`roadmap.md`](../roadmap.md) · technical model → [`architecture.md`](../product/architecture.md) · Phase 4 (consumes Sense localization + inherits Reason's agent loop) → [`agent.md`](agent.md) · why copilot-first → [`product.md`](../product/product.md) §5
+- **Companion docs:** Phase 1 substrate → [`copilot.md`](copilot.md) · roadmap → [`roadmap.md`](../roadmap.md) · technical model → [`architecture.md`](../product/architecture.md) · Phase 4 (consumes Sense localization + inherits Reason's agent loop) → [`agent.md`](agent.md) · why copilot-first → [`product.md`](../product/product.md) §5
 
 ## The trust ladder (the load-bearing distinction)
 

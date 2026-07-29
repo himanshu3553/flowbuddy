@@ -1,4 +1,4 @@
-// P2-M5 REASON (diagnostic reasoning) — the widget half (docs/build/phase-2-sense.md §B4). When a question
+// P2-M5 REASON (diagnostic reasoning) — the widget half (docs/build/sense-and-reason.md §B4). When a question
 // is diagnostic ("why is this button disabled?") or the page state is blocked, capture a
 // STRUCTURED reading of the live page — every interactive control as explicit machine state
 // (validity API / ARIA / DOM properties) plus visible labels/hints/errors — and, where the founder

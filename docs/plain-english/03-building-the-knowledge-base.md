@@ -1,7 +1,7 @@
 # 3 · Building the knowledge base
 
 *(The plain-English version of `kb-step-distillation.md` and the recording half of
-`phase-1-copilot.md`.)*
+`copilot.md`.)*
 
 **This is Part 1 of the product — everything else reads what this produces.**
 

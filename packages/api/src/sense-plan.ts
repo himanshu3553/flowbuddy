@@ -5,7 +5,7 @@ import type { CapturedEvent, Locator, SessionManifest } from '@flowbuddy/shared'
  * P2-M0 — the SENSE PLAN: the compiled, probe-ready map of a workspace's APPROVED workflows the
  * widget uses to localize an end-user ("you're on step 3 of Create an invoice"). Per approved
  * workflow: ordered steps × ranked R13 locators + routes + step kind — founder-derived data only,
- * shipped DOWN to the widget (the locked hybrid architecture: docs/build/phase-2-sense.md §2.1).
+ * shipped DOWN to the widget (the locked hybrid architecture: docs/build/sense-and-reason.md §2.1).
  *
  * Serving is ROUTE-SHARDED and WORKFLOW-ATOMIC: `getSenseShard` returns only the workflows with a
  * step on/near the requested route — but each matched workflow comes WHOLE (all steps, including

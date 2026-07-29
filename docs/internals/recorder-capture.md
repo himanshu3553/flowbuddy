@@ -391,7 +391,7 @@ stores `apiToken` + `backendUrl` in `chrome.storage.local`. Full sequence in
 > ⚠️ **Deploy ordering.** The API rejects a finalize without `X-FlowBuddy-Upload-Id` and the previously
 > live store build (v0.6.0) does not send one, so **the newer recorder has to reach users before this
 > API reaches an environment they use** — a standing rule for every future build, not just this one.
-> Current store status: [`../extension-releases.md`](../ops/extension-releases.md).
+> Current store status: [`extension-releases.md`](../ops/extension-releases.md).
 
 ---
 

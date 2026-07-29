@@ -890,7 +890,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     });
 
   if (reasonPayload) {
-    // The reasoning path (docs/build/phase-2-sense.md §B4): full workflow recipe + expected-state
+    // The reasoning path (docs/build/sense-and-reason.md §B4): full workflow recipe + expected-state
     // artifacts for the localized current step, then the stronger model's agentic read-tool loop.
     engineUsed = 'reason';
     const { workflow, expected } = await buildReasonEvidence(workspaceId, sense);
@@ -1104,7 +1104,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
 });
 
 /**
- * P2-M0 — the ROUTE-SHARDED sense plan (docs/build/phase-2-sense.md §2). The widget fetches this on
+ * P2-M0 — the ROUTE-SHARDED sense plan (docs/build/sense-and-reason.md §2). The widget fetches this on
  * panel open for the page the end-user is on; each matched workflow is served WHOLE (all steps,
  * incl. other-route steps) so mid-workflow progression never refetches. Gated by the per-workspace
  * Sense toggle (off → `enabled:false` and the widget never probes). Auth = the public key +

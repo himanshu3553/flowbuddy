@@ -1,6 +1,6 @@
 # 6 · The help portal
 
-*(The plain-English version of `v2-portal.md`.)*
+*(The plain-English version of `portal.md`.)*
 
 **Status: not built. Nothing here exists. No work has started.**
 

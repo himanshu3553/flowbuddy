@@ -11,7 +11,7 @@ import {
 import { runAnswerLoop, shapeAnswer, type AnswerLoopResult, type EngineTool } from './engine';
 
 /**
- * P2-M5 — REASON, the diagnostic answer engine (docs/build/phase-2-sense.md §B4). Sense locates the user;
+ * P2-M5 — REASON, the diagnostic answer engine (docs/build/sense-and-reason.md §B4). Sense locates the user;
  * Reason figures out WHY they're stuck: it reads a structured snapshot of their live page state
  * (captured by the widget at ask time, values masked), pairs it with the founder's recording of
  * the same step succeeding (true screenshot + captured DOM), and lets a stronger model reason over

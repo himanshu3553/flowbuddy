@@ -49,13 +49,13 @@ A doc does not move when it ships, and `roadmap.md` is the only thing that track
 
 | Doc | Holds |
 |---|---|
-| [`phase-1-copilot.md`](build/phase-1-copilot.md) | Phase 1 scope, locked decisions, the capture contract, non-functional requirements. |
-| [`phase-2-sense.md`](build/phase-2-sense.md) | Sense (in-context help) and Reason (diagnostics) — decision records and the diagnosis-quality rules. |
+| [`copilot.md`](build/copilot.md) | Phase 1 scope, locked decisions, the capture contract, non-functional requirements. |
+| [`sense-and-reason.md`](build/sense-and-reason.md) | Sense (in-context help) and Reason (diagnostics) — decision records and the diagnosis-quality rules. |
 | [`kb-step-distillation.md`](build/kb-step-distillation.md) | Why raw capture events become clean steps, and the options weighed. |
 | [`agent.md`](build/agent.md) | The unified agent — decisions D1–D9, the three modes, the acting layer and the goal layer. |
-| [`phase-6-interop.md`](build/phase-6-interop.md) | Opening the approved KB to third-party AI agents. |
-| [`v2-portal.md`](build/v2-portal.md) | The help portal and article authoring track. |
-| [`v3-company-agent.md`](build/v3-company-agent.md) | The buyer-side track: record the tools you use, run them with a grounded browser agent. |
+| [`interop.md`](build/interop.md) | Opening the approved KB to third-party AI agents. |
+| [`portal.md`](build/portal.md) | The help portal and article authoring track. |
+| [`company-agent.md`](build/company-agent.md) | The buyer-side track: record the tools you use, run them with a grounded browser agent. |
 
 ## `ops/` — run it, ship it, test it
 
@@ -72,4 +72,4 @@ A doc does not move when it ships, and `roadmap.md` is the only thing that track
 |---|---|
 | [`internals/`](internals/README.md) | How it runs — seams, contracts, invariants, failure modes. Start at `connections.md`. |
 | [`design_system/`](design_system/README.md) | Tokens, components, and the UI kit. The source of truth for all UI. |
-| [`archive/`](archive/) | Dated records kept for their findings. Everything else is in `git log`. |
+| [`archive/`](archive) | Dated records kept for their findings. Everything else is in `git log`. |

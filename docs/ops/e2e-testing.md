@@ -8,7 +8,7 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 | **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **flowbuddyai.com, live since 2026-07-23** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`v2-portal.md`](../build/v2-portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
+> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`portal.md`](../build/portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 

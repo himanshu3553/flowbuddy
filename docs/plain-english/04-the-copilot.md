@@ -1,6 +1,6 @@
 # 4 · The copilot
 
-*(The plain-English version of `phase-2-sense.md` and the widget half of `phase-1-copilot.md`.)*
+*(The plain-English version of `sense-and-reason.md` and the widget half of `copilot.md`.)*
 
 **This is the first of the three things that use your knowledge base — and the only one that's
 built.** It's live in production and real people have used it.

@@ -9,7 +9,7 @@
 
 - **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1) **— and the DEFAULT for new workspaces since 2026-07-27**, with its on-page abilities permitted and the mode-1 runtime fallback finally built beneath it. D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
 - **This doc is the reconciliation.** The Phase-4 / Phase-5 "hands vs. brain" split still holds as a *concept*; it no longer holds as a document boundary.
-- **Companion docs:** the substrate → [`phase-1-copilot.md`](phase-1-copilot.md) · position + diagnosis → [`phase-2-sense.md`](phase-2-sense.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](../roadmap.md) · outward-facing tools → [`phase-6-interop.md`](phase-6-interop.md)
+- **Companion docs:** the substrate → [`copilot.md`](copilot.md) · position + diagnosis → [`sense-and-reason.md`](sense-and-reason.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](../roadmap.md) · outward-facing tools → [`interop.md`](interop.md)
 
 ---
 
@@ -51,7 +51,7 @@ Today the copilot decides *once*, at answer time, by heuristic, which kind of he
 
 Real help doesn't work that way. A colleague helping you explains, points, takes the keyboard, hands it back, and explains again — fluidly, within one conversation. **That fluidity is unreachable with bolted-on tiers and natural with one agent.** That is the product argument, and it is the primary one.
 
-The secondary argument is architectural: if the copilot is itself an agent over a grounded tool surface, **that tool surface is [Phase 6](phase-6-interop.md).** Expose the same tools over MCP and a third-party agent gets exactly what FlowBuddy's own agent has. P6-M0's export compiler and the internal tool layer converge into one artifact — and [Version 3](v3-company-agent.md)'s company agent becomes a third caller of it rather than a third implementation.
+The secondary argument is architectural: if the copilot is itself an agent over a grounded tool surface, **that tool surface is [Phase 6](interop.md).** Expose the same tools over MCP and a third-party agent gets exactly what FlowBuddy's own agent has. P6-M0's export compiler and the internal tool layer converge into one artifact — and [Version 3](company-agent.md)'s company agent becomes a third caller of it rather than a third implementation.
 
 ## 2. The line — unify deliberation, never actuation
 
@@ -270,7 +270,7 @@ Two consequences, and the second is the important one:
 - A question currently cannot be BOTH: *"why can't I invite someone — and what's the whole process?"* goes down one path or the other. Merged, one turn could read the page **and** pull the workflow.
 - It is the last place the product decides FOR the user which kind of help they receive, which is precisely what D1 set out to remove.
 
-**Why it was NOT done in stage 3, and must not be done casually.** `REASON_SYSTEM` is the most heavily tuned prompt in the product — [`phase-2-sense.md`](phase-2-sense.md) §B7.1 records **ten** diagnosis-quality rules, each learned from a real session it got wrong (read the on-page error first · never claim a control is disabled when the state says otherwise · never conclude "looks fine" from structure alone · look at the image before hedging · no speculative declines · …). That is scar tissue, not styling.
+**Why it was NOT done in stage 3, and must not be done casually.** `REASON_SYSTEM` is the most heavily tuned prompt in the product — [`sense-and-reason.md`](sense-and-reason.md) §B7.1 records **ten** diagnosis-quality rules, each learned from a real session it got wrong (read the on-page error first · never claim a control is disabled when the state says otherwise · never conclude "looks fine" from structure alone · look at the image before hedging · no speculative declines · …). That is scar tissue, not styling.
 
 And it is **still barely testable**: `scripts/copilot-baseline.mjs` gained page paths and multi-turn cases (2026-07-29), but it never sends live page STATE and runs in `preview`, which suppresses the decline→diagnostic escalation — so diagnosis still has *zero* automated coverage. Rewriting rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
 
@@ -326,7 +326,7 @@ for each step:  resolve locator (ranked list, first that resolves wins)
 ```
 
 - **Human-in-the-loop by construction.** Captured input values are **masked** at capture (P1-M12), so Autopilot can never blindly replay values — it **prompts the end-user for every input** (prefilled from their question where safe, always confirmable). Sensitive by design, not by policy.
-- **A second audience on the approval model** (`portal` joins with the V2 portal track, `agents` with Phase 6 — [`phase-6-interop.md`](phase-6-interop.md)): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag on the same `(sourceId, segmentIndex)` key. Founder opt-in per workflow, one click, reversible. Absence = never executable.
+- **A second audience on the approval model** (`portal` joins with the V2 portal track, `agents` with Phase 6 — [`interop.md`](interop.md)): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag on the same `(sourceId, segmentIndex)` key. Founder opt-in per workflow, one click, reversible. Absence = never executable.
 - **The guided walkthrough is the stepping stone.** Before acting *for* the user, the same machinery can **guide** them — Sense (Phase 2, P2-M3) already highlights the *current* step on demand; P4-M0 extends that into a sequential, progression-aware walkthrough of the whole remaining workflow. Zero side effects, same locator resolution; it ships first and is independently valuable.
 - **The user stays in charge:** consent to start, visible step-by-step execution, pause/abort at any moment, confirmation on destructive steps.
 
@@ -351,9 +351,9 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 2. **Validation is Autopilot's certification layer.** Eligibility = **approved for autopilot AND recently validated green**. A workflow Phase 3 can't replay cleanly is never offered for execution. This rail exists only once Phase 3 lands — until then, M1's eligibility gate takes pluggable interim signals (the 2026-07-15 sequencing decision).
 3. **The loop closes both ways.** An Autopilot safe-stop in production ("element not found at step 3") is a **live drift signal** feeding Phase 3's freshness dashboards — production telemetry complementing sandbox validation.
 
-**Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with three drivers — Phase 3's sandbox runner, Phase 4's widget driver, and (when that track is built) V3's company-agent extension ([`v3-company-agent.md`](v3-company-agent.md)). The `retrieval.ts` single-seam pattern, applied to execution.
+**Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with three drivers — Phase 3's sandbox runner, Phase 4's widget driver, and (when that track is built) V3's company-agent extension ([`company-agent.md`](company-agent.md)). The `retrieval.ts` single-seam pattern, applied to execution.
 
-**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`phase-2-sense.md`](phase-2-sense.md) Part B) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
+**Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`sense-and-reason.md`](sense-and-reason.md) Part B) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
 
 ---
 

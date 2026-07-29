@@ -7,7 +7,7 @@
 - **Status:** v0.3 — **copilot-first** · **Version 1 LIVE IN PRODUCTION since 2026-07-23** at [flowbuddyai.com](https://flowbuddyai.com) (`app.` Studio · `api.` · `widget.` + the landing card; user-verified E2E — [`deploy.md`](../ops/deploy.md))
 - **Name:** **FlowBuddy** (domain `flowbuddyai.com`) — decided 2026-07-17; built under the working name "Sync" until then (the full rename runs through code, contract, and infra).
 - **Last updated:** 2026-07-25 · **Branch:** `dev`
-- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](../roadmap.md) · Phase 1 build/spec/as-built → [`phase-1-copilot.md`](../build/phase-1-copilot.md) · Phase 1 visual → [`phase-1-copilot.md §1.1`](../build/phase-1-copilot.md#11-system-map-the-visual) · V2 portal by-products → [`v2-portal.md`](../build/v2-portal.md) · KB step distillation → [`kb-step-distillation.md`](../build/kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md)
+- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](../roadmap.md) · Phase 1 build/spec/as-built → [`copilot.md`](../build/copilot.md) · Phase 1 visual → [`copilot.md §1.1`](../build/copilot.md#11-system-map-the-visual) · V2 portal by-products → [`portal.md`](../build/portal.md) · KB step distillation → [`kb-step-distillation.md`](../build/kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md)
 
 ---
 
@@ -76,10 +76,10 @@ FlowBuddy captures that session in **multiple synchronized layers** (screen, voi
 That knowledge base powers, in priority order:
 
 1. **An embedded in-app copilot (primary)** — answers from **approved-KB** in context, cites the workflow it used, declines honestly on gaps.
-2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`phase-2-sense.md`](../build/phase-2-sense.md))
+2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`sense-and-reason.md`](../build/sense-and-reason.md))
 3. **Self-validation (moat, later)** — periodically re-checks that documented steps still work and flags drift.
 4. **Autopilot (agentic execution — opened ahead of self-validation; the zero-acting P4-M0 guided walkthrough is ✅ built)** — the copilot offers to **execute the approved workflow in the end-user's live session** on consent: grounded actions (only recorded + approved workflows, never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty; the acting modules consume self-validation's certification when it lands. ([`agent.md`](../build/agent.md); the goal-based agent on top — Tell → Guide → Do — is drafted in [`agent.md`](../build/agent.md).)
-5. **A published help portal + articles (Version 2 by-product)** — human-readable, searchable articles rendered from the same approved workflows. A *decoupled* publish target, moved to Version 2. ([`v2-portal.md`](../build/v2-portal.md))
+5. **A published help portal + articles (Version 2 by-product)** — human-readable, searchable articles rendered from the same approved workflows. A *decoupled* publish target, moved to Version 2. ([`portal.md`](../build/portal.md))
 
 > The technical model (capture → KB → consumers, the data model, decisions) lives in [`architecture.md`](architecture.md). The phase/module plan and status live in [`roadmap.md`](../roadmap.md).
 
@@ -104,7 +104,7 @@ That knowledge base powers, in priority order:
 - **Decoupled, always** — the copilot path must never *require* article authoring or portal publish; approving a workflow and publishing an article are independent actions over the same KB.
 - **No-leak preserved** — the copilot answers **only** from approved-KB; never raw/un-approved items, never draft articles.
 - **Don't build grounding Stage B** until explicitly revisited.
-- **By-products live in Version 2** (moved out of V1 on 2026-07-08) — Version 1 is the pure copilot arc. When the V2 portal track is scheduled, a help article **is an approved workflow, rendered**: the copilot's own distilled workflows already carry everything an article needs, so the portal **renders approved workflows** (per-audience approval + a render-time presentation overlay) over the same KB. Feature list: [`v2-portal.md`](../build/v2-portal.md).
+- **By-products live in Version 2** (moved out of V1 on 2026-07-08) — Version 1 is the pure copilot arc. When the V2 portal track is scheduled, a help article **is an approved workflow, rendered**: the copilot's own distilled workflows already carry everything an article needs, so the portal **renders approved workflows** (per-audience approval + a render-time presentation overlay) over the same KB. Feature list: [`portal.md`](../build/portal.md).
 
 ---
 
@@ -126,7 +126,7 @@ That knowledge base powers, in priority order:
 ## 7. The four surfaces
 
 Recorder · KB build · copilot · Studio. What each one is and the decisions behind them:
-[`phase-1-copilot.md`](../build/phase-1-copilot.md) §4.
+[`copilot.md`](../build/copilot.md) §4.
 
 ---
 

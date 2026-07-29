@@ -107,7 +107,7 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
   env-driven level, JSON in prod / pretty in dev, secret redaction); Fastify is wired to it via
   `loggerInstance`. Browser surfaces (widget/extension/web-client) use tiny local console loggers.
   It's infrastructure, not a module, so it has no doc of its own — canonical reference:
-  [`../dev-setup.md`](../ops/dev-setup.md) §7.
+  [`dev-setup.md`](../ops/dev-setup.md) §7.
 
 ---
 

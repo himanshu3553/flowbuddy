@@ -75,7 +75,7 @@ Paths are in `CLAUDE.md` and the source; what matters here is the contract each 
   rate bucket); read-only — writes nothing.
 - **`GET /v1/copilot/sense-plan?route=…`** (P2-M0) — the ROUTE-SHARDED compiled sense
   plan (approved workflows → steps × ranked locators + routes), gated by `Workspace.senseEnabled`;
-  the widget caches per route. Mechanics: [`phase-2-sense.md`](../build/phase-2-sense.md) Part A.
+  the widget caches per route. Mechanics: [`sense-and-reason.md`](../build/sense-and-reason.md) Part A.
 - **`POST /v1/copilot/walkthrough`** (P4-M0) — guided-walkthrough run analytics:
   `started` (key re-verified against `CopilotApproval` — no-leak; returns `runId`) then
   `step_advanced`/`completed`/`aborted`/`stalled` update the one `CopilotWalkthrough` row per run

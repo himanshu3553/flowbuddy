@@ -1,6 +1,6 @@
 # 8 · The company agent
 
-*(The plain-English version of `v3-company-agent.md`.)*
+*(The plain-English version of `company-agent.md`.)*
 
 **Status: an idea, captured. Not designed, not scheduled, nothing built.**
 

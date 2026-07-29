@@ -4,7 +4,7 @@ One deploy guide for both live environments — **dev/staging** (free tier, `$0`
 (FlowBuddyAI.com, ~`$30`/mo) — over one code base and **two blueprint files**. The dev sections are
 the free-tier walkthrough with every first-deploy gotcha; the production sections are the as-run
 runbook for the live product. The **shared foundations** (§2) apply to every environment. For local
-dev see [`dev-setup.md`](dev-setup.md); for what the modules are see [`phase-1-copilot.md`](../build/phase-1-copilot.md).
+dev see [`dev-setup.md`](dev-setup.md); for what the modules are see [`copilot.md`](../build/copilot.md).
 
 > **Status:** production **deployed 2026-07-17 · Version 1 launched + user-verified E2E on prod
 > 2026-07-23**. §4 is the as-run production runbook; §3 tracks the dev/staging stack.

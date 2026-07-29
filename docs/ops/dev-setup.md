@@ -29,7 +29,7 @@ flowbuddy/
   docs/       # the full doc set — start at the map: roadmap.md §10 / the CLAUDE.md doc table
 ```
 
-> **Note:** the `portal/` package (the public help site) is not in the current workspace — it's **built in Version 2** ([`v2-portal.md`](../build/v2-portal.md)).
+> **Note:** the `portal/` package (the public help site) is not in the current workspace — it's **built in Version 2** ([`portal.md`](../build/portal.md)).
 
 Why a monorepo: the extension, api, web, and widget must agree on the same data shapes. Those shapes live once in `shared`/`db`; everyone imports them. Change a type in one place → everything else sees it (and fails to compile if it's now wrong — our main safety net).
 

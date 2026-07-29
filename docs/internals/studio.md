@@ -198,7 +198,7 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
 - **No approved workflows yet** → the embed works but the copilot returns "no approved content"
   (see [copilot.md](copilot.md)); Home nudges the operator to approve.
 - **Article UI/engine** → removed 2026-07-07 (workflows-as-articles): an article is an approved
-  workflow, rendered — built in the V2 portal track ([`../v2-portal.md`](../build/v2-portal.md)); nothing
+  workflow, rendered — built in the V2 portal track ([`portal.md`](../build/portal.md)); nothing
   article-shaped remains in `packages/web`.
 
 ---
