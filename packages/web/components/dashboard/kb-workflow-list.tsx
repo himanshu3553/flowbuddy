@@ -7,6 +7,9 @@ import { Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { setCopilotApproval, setCopilotApprovalsBulk } from '@/lib/copilot-actions';
+import { undoSupersede } from '@/lib/overlap-actions';
+import { toast } from '@/components/ui/toast';
+import { DuplicateChip, type OverlapView } from '@/components/dashboard/duplicate-workflows';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -19,9 +22,15 @@ export interface WorkflowRow {
   itemCount: number;
   sourceTitle: string;
   copilotApproved: boolean;
+  /** P3-M0 — retired by a re-recording. NOT the same as "never approved": it was approved, and the
+   *  founder replaced it. Showing it as Pending would look like their approval had been lost. */
+  isSuperseded?: boolean;
+  supersededByTitle?: string | null;
+  /** P3-M0 — the suspected-duplicate pairs this workflow belongs to. */
+  duplicates?: OverlapView[];
 }
 
-type Filter = 'all' | 'approved' | 'pending';
+type Filter = 'all' | 'approved' | 'pending' | 'replaced';
 
 export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
   const [filter, setFilter] = useState<Filter>('all');
@@ -35,14 +44,18 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     () => ({
       all: workflows.length,
       approved: workflows.filter((w) => w.copilotApproved).length,
-      pending: workflows.filter((w) => !w.copilotApproved).length,
+      // A replaced workflow is RESOLVED, not outstanding — it must never inflate the "awaiting
+      // approval" nag, or the founder is chased to re-approve something they deliberately retired.
+      pending: workflows.filter((w) => !w.copilotApproved && !w.isSuperseded).length,
+      replaced: workflows.filter((w) => w.isSuperseded).length,
     }),
     [workflows],
   );
 
   const visible = workflows.filter((w) => {
     if (filter === 'approved' && !w.copilotApproved) return false;
-    if (filter === 'pending' && w.copilotApproved) return false;
+    if (filter === 'pending' && (w.copilotApproved || w.isSuperseded)) return false;
+    if (filter === 'replaced' && !w.isSuperseded) return false;
     if (
       q &&
       !`${w.segmentTitle} ${w.sourceTitle}`.toLowerCase().includes(q.toLowerCase())
@@ -66,9 +79,31 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
           segmentTitle: w.segmentTitle,
           approved: next,
         });
+        toast.success(next ? `“${w.segmentTitle}” is live in the copilot` : `“${w.segmentTitle}” removed from the copilot`);
         router.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to update approval');
+        const msg = e instanceof Error ? e.message : 'Failed to update approval';
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setBusyKey(null);
+      }
+    });
+  }
+
+  /** P3-M0 — restore a workflow the founder retired. Nothing was deleted, so this always works. */
+  function restore(w: WorkflowRow) {
+    setError(null);
+    setBusyKey(keyOf(w));
+    start(async () => {
+      try {
+        await undoSupersede({ sourceId: w.sourceId, segmentIndex: w.segmentIndex });
+        toast.success(`“${w.segmentTitle}” restored`);
+        router.refresh();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to restore';
+        setError(msg);
+        toast.error(msg);
       } finally {
         setBusyKey(null);
       }
@@ -76,7 +111,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
   }
 
   function approveAll() {
-    const pendingRows = workflows.filter((w) => !w.copilotApproved);
+    const pendingRows = workflows.filter((w) => !w.copilotApproved && !w.isSuperseded);
     if (pendingRows.length === 0) return;
     setError(null);
     setBusyKey('all');
@@ -102,6 +137,9 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     { key: 'all', label: 'All', n: counts.all },
     { key: 'approved', label: 'Approved', n: counts.approved },
     { key: 'pending', label: 'Pending', n: counts.pending },
+    ...(counts.replaced > 0
+      ? [{ key: 'replaced' as Filter, label: 'Replaced', n: counts.replaced }]
+      : []),
   ];
 
   return (
@@ -165,15 +203,18 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
         <ul className="space-y-2.5">
           {visible.map((w) => {
             const busy = busyKey === keyOf(w) || busyKey === 'all';
-            const tile = w.copilotApproved
-              ? 'bg-brand-50 border-brand-100 text-primary'
-              : 'bg-warning-bg border-warning-border text-warning-dot';
+            const tile = w.isSuperseded
+              ? 'bg-muted border-border text-muted-foreground'
+              : w.copilotApproved
+                ? 'bg-brand-50 border-brand-100 text-primary'
+                : 'bg-warning-bg border-warning-border text-warning-dot';
             return (
               <li
                 key={keyOf(w)}
                 className={cn(
                   'flex items-center gap-3.5 rounded-list border bg-card px-[15px] py-[13px]',
-                  !w.copilotApproved && 'border-brand-200 shadow-step',
+                  !w.copilotApproved && !w.isSuperseded && 'border-brand-200 shadow-step',
+                  w.isSuperseded && 'opacity-70',
                 )}
               >
                 <span
@@ -193,22 +234,55 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
                   </Link>
                   <span className="mt-0.5 block truncate font-mono text-[10px] text-faint">
                     {w.itemCount} steps · from “{w.sourceTitle}”
+                    {w.isSuperseded && w.supersededByTitle
+                      ? ` · replaced by “${w.supersededByTitle}”`
+                      : ''}
                   </span>
+                  {/* A duplicate is shown on BOTH sides of the pair, approved or not — approving an
+                      unapproved duplicate is the action that creates the problem, so the warning has
+                      to be visible before the switch is touched. One chip per pair: each opens the
+                      comparison for THAT pair, so a workflow duplicated twice stays resolvable. */}
+                  {!w.isSuperseded &&
+                    w.duplicates?.map((o) => (
+                      <DuplicateChip
+                        key={`${o.incumbent.sourceId}:${o.incumbent.segmentIndex}|${o.challenger.sourceId}:${o.challenger.segmentIndex}`}
+                        overlap={o}
+                        selfSourceId={w.sourceId}
+                        selfSegmentIndex={w.segmentIndex}
+                      />
+                    ))}
                 </span>
-                <StatusBadge tone={w.copilotApproved ? 'live' : 'pending'}>
-                  {w.copilotApproved ? 'Approved · Live' : 'Pending'}
-                </StatusBadge>
-                <span className="flex shrink-0 items-center gap-2.5">
-                  <span className="hidden text-[11px] text-muted-foreground md:inline">
-                    In copilot
-                  </span>
-                  <Switch
-                    checked={w.copilotApproved}
-                    disabled={busy}
-                    onCheckedChange={(v) => toggle(w, v)}
-                    aria-label={`Approve ${w.segmentTitle} for the copilot`}
-                  />
-                </span>
+                {w.isSuperseded ? (
+                  <>
+                    <StatusBadge tone="neutral">Replaced</StatusBadge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => restore(w)}
+                      className="shrink-0"
+                    >
+                      Restore
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <StatusBadge tone={w.copilotApproved ? 'live' : 'pending'}>
+                      {w.copilotApproved ? 'Approved · Live' : 'Pending'}
+                    </StatusBadge>
+                    <span className="flex shrink-0 items-center gap-2.5">
+                      <span className="hidden text-[11px] text-muted-foreground md:inline">
+                        In copilot
+                      </span>
+                      <Switch
+                        checked={w.copilotApproved}
+                        disabled={busy}
+                        onCheckedChange={(v) => toggle(w, v)}
+                        aria-label={`Approve ${w.segmentTitle} for the copilot`}
+                      />
+                    </span>
+                  </>
+                )}
               </li>
             );
           })}

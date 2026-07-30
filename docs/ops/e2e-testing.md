@@ -276,6 +276,35 @@ if you're changing this path: a finalized recording must survive both a discard 
 
 ---
 
+## 8b. Duplicate workflows (P3-M0)
+
+Needs **two recordings that cover one task** — record the sign-in flow, then record it again. Both
+must finish processing and be embedded (§6b); detection reads the same vectors retrieval uses, so a
+recording whose embeddings failed simply produces no warnings.
+
+1. On the KB page, a **duplicate warning** appears above the list, and a **"Possible duplicate of …"**
+   chip appears on the tile of **both** workflows — including one that is still unapproved.
+2. Click the chip (or **Compare** on the warning card) → a modal shows both step lists side by side,
+   labelled *Already approved* and *Newer recording*.
+3. **Replace the old one** → toast; the retired workflow greys out, reads *Replaced by "…"*, moves
+   under the **Replaced** tab, and stops counting toward "awaiting approval".
+4. Ask the copilot (§10) something the retired workflow answered → the answer now cites the
+   replacement, never the retired one.
+5. **Restore** on the retired tile → it returns to Approved · Live, and the duplicate warning
+   reappears (the pair is unresolved again).
+6. **Both are real** instead → the warning disappears and **does not return** on reload.
+
+✅ **PASS:** both sides show the warning · the modal compares them · replacing retires without
+deleting · the copilot stops citing the retired workflow · restore and keep-both both stick.
+
+> **Negative check that matters more than the positive one.** Two workflows that *share their opening
+> steps but end somewhere different* (e.g. "View billing" and "View analytics", which both start
+> "Click Home") must **NOT** be flagged. That was a real false positive: a single averaged score let
+> the shared navigation outvote the goal. If it comes back, the last-step gate has been weakened —
+> see the header of `packages/synthesis/src/overlap.ts`.
+
+---
+
 ## 9. Copilot embed key + origin allowlist
 
 1. Studio → **Copilot** page:

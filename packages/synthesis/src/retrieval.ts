@@ -22,7 +22,10 @@ const log = createLogger('retrieval');
  *
  * A workflow is approved when a `CopilotApproval` row exists for its `(sourceId, segmentIndex)` —
  * keyed by workflow, NOT item rows, because the worker delete+recreates items on every
- * (re)process. Absence of a row = not approved. NO-LEAK: the pgvector scan itself is constrained
+ * (re)process. Absence of a row = not approved. P3-M0: a row whose `supersededById` is set was
+ * REPLACED by a later re-recording and is no longer current — it is excluded here, which is the
+ * whole enforcement surface for supersession. Superseded content is never deleted, so this filter
+ * is the only thing standing between a retired workflow and an end-user. NO-LEAK: the pgvector scan itself is constrained
  * to the approved `(sourceId, segmentIndex)` keys (review hardening 2026-07-07 — this also stops
  * unapproved rows starving the top-K candidate budget), and its ranking is only ever FUSED onto
  * the approved item list — returned items always come from the approved set alone.
@@ -45,7 +48,7 @@ export interface RetrievableKBItem {
 export interface RetrievalDb {
   copilotApproval: {
     findMany(args: {
-      where: { workspaceId: string };
+      where: { workspaceId: string; supersededById: null };
       select: { sourceId: true; segmentIndex: true };
     }): Promise<Array<{ sourceId: string; segmentIndex: number }>>;
   };
@@ -270,7 +273,7 @@ export async function retrieveApprovedKBItems(
   const queryVectorPromise = opts.embedding ? embedQuestion(question, opts.embedding) : Promise.resolve(null);
 
   const approvals = await db.copilotApproval.findMany({
-    where: { workspaceId },
+    where: { workspaceId, supersededById: null },
     select: { sourceId: true, segmentIndex: true },
   });
   if (approvals.length === 0) return [];

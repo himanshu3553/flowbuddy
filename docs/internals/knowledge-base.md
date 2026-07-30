@@ -245,6 +245,35 @@ its approval (and the copilot's access to it) survives. This is the seam between
 [approval gate](studio.md), and the [copilot](copilot.md). Detailed in [connections.md](connections.md)
 §5.
 
+### Supersession — approval has three states, not two
+
+A row may also be **superseded**: the founder re-recorded a task and said the new telling replaces the
+old one. Nothing is deleted, so the recording, the steps and the analytics history all survive and the
+decision is reversible. `supersededById IS NULL` is the single test for "current".
+
+**The enforcement is a filter, and it is repeated in SIX independent readers.** Approvals are not read
+through one function — retrieval, the sense plan, sense-hypothesis validation, continuity (topic
+memory) keys, the agent's by-key `get_workflow`, and walkthrough-start each query `CopilotApproval`
+directly. **A reader that forgets the filter silently serves retired content**, and the by-key fetch is
+the worst of them: it bypasses ranking entirely, so a retired workflow could be pulled whole. Any new
+reader of `CopilotApproval` must decide, explicitly, whether it wants current-only (almost always yes)
+or every approval ever granted (Studio's "Replaced" view).
+
+### Overlap detection — how a duplicate is noticed
+
+Two signals, both from vectors the KB already wrote, so detection costs no model call:
+
+1. the **mean** of a workflow's step embeddings — "broadly the same material";
+2. the **last step's** embedding — "ends in the same place".
+
+Both must clear their gate. The second is what makes it work: a workflow's identity is its
+*destination*, and averaging lets shared navigation ("Click Home") outvote the goal in a short
+workflow — measured, that produced a real false positive between two unrelated tasks. It runs **on
+demand, never cached**, because what counts as a duplicate depends on what is approved *right now*.
+It is advisory: every failure path yields no warnings rather than blocking approval. Thresholds, their
+calibration and the measured margins live in the detector's header comment; the product decisions live
+in [`build/workflow-identity.md`](../build/workflow-identity.md).
+
 ---
 
 ## 7. Data it reads / writes

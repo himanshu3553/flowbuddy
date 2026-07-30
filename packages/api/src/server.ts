@@ -438,7 +438,11 @@ async function resolveSenseContext(
   if (parsed.length === 0) return { sense: null, probed };
 
   const approvals = await prisma.copilotApproval.findMany({
-    where: { workspaceId, OR: parsed.map((h) => ({ sourceId: h.sourceId, segmentIndex: h.segmentIndex })) },
+    where: {
+      workspaceId,
+      supersededById: null, // P3-M0 — a retired workflow is not a valid position hypothesis
+      OR: parsed.map((h) => ({ sourceId: h.sourceId, segmentIndex: h.segmentIndex })),
+    },
     select: { sourceId: true, segmentIndex: true, segmentTitle: true },
   });
   const titleByKey = new Map(approvals.map((a) => [`${a.sourceId}:${a.segmentIndex}`, a.segmentTitle]));
@@ -567,7 +571,11 @@ async function resolveContinuityKeys(workspaceId: string, raw: unknown): Promise
   if (parsed.length === 0) return [];
 
   const approvals = await prisma.copilotApproval.findMany({
-    where: { workspaceId, OR: parsed.map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex })) },
+    where: {
+      workspaceId,
+      supersededById: null, // P3-M0 — topic memory must not resurrect a superseded workflow
+      OR: parsed.map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex })),
+    },
     select: { sourceId: true, segmentIndex: true },
   });
   const approved = new Set(approvals.map((a) => `${a.sourceId}:${a.segmentIndex}`));
@@ -678,7 +686,10 @@ async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<A
   if (!Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999) return null;
 
   const approval = await prisma.copilotApproval.findFirst({
-    where: { workspaceId, sourceId, segmentIndex },
+    // P3-M0: `supersededById: null` matters MORE here than anywhere else — this is the agent's
+    // by-key fetch, so without it the loop could pull a retired workflow whole, bypassing the
+    // ranked path entirely.
+    where: { workspaceId, sourceId, segmentIndex, supersededById: null },
     select: { segmentTitle: true },
   });
   if (!approval) return null; // absent, not forbidden
@@ -1230,7 +1241,8 @@ app.post('/v1/copilot/walkthrough', async (req, reply) => {
   if (event === 'started') {
     // The trust gate, applied to run logging: only approved workflows are ever recorded.
     const approval = await prisma.copilotApproval.findFirst({
-      where: { workspaceId: gate.workspaceId, sourceId, segmentIndex },
+      // P3-M0 — never start a guided walkthrough on a workflow the founder has retired.
+      where: { workspaceId: gate.workspaceId, sourceId, segmentIndex, supersededById: null },
       select: { segmentTitle: true },
     });
     if (!approval) {

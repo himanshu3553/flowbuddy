@@ -7,7 +7,12 @@ import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
 import { relativeTime } from '@/lib/recordings';
 import { getWorkflowCopilotStats } from '@/lib/analytics';
+import { listWorkflowOverlaps, overlapsInvolving } from '@/lib/overlaps';
 import { PageHeader } from '@/components/dashboard/page-header';
+import {
+  WorkflowDuplicates,
+  type OverlapView,
+} from '@/components/dashboard/duplicate-workflows';
 import {
   Card,
   CardContent,
@@ -112,6 +117,18 @@ export default async function KbWorkflowPage({
     })) != null;
   const shotCount = items.filter((it) => it.screenshotUrl).length;
 
+  // P3-M0 — duplicates involving THIS workflow. A founder who navigates straight here (from a
+  // citation, a search, a link) must be able to see and settle the duplicate without first knowing
+  // to go back to the list.
+  const myOverlaps: OverlapView[] =
+    selected == null
+      ? []
+      : overlapsInvolving(await listWorkflowOverlaps(ctx.workspace.id), source.id, selected).map((o) => ({
+          similarity: o.similarity,
+          incumbent: { ...o.incumbent, approvedAt: o.incumbent.approvedAt?.toISOString() ?? null },
+          challenger: { ...o.challenger, approvedAt: o.challenger.approvedAt?.toISOString() ?? null },
+        }));
+
   const feedbackValue: ReactNode =
     stats && stats.helpfulUp + stats.helpfulDown > 0 ? (
       <span className="inline-flex items-center gap-2">
@@ -155,6 +172,8 @@ export default async function KbWorkflowPage({
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-5">
+            <WorkflowDuplicates overlaps={myOverlaps} />
+
             <div>
               <h2 className="text-base font-semibold tracking-tight">
                 Workflow steps

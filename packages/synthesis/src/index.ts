@@ -36,6 +36,14 @@ export type {
 // preview both call it; the P1-M3 hybrid keyword+vector upgrade lives here). See retrieval.ts.
 export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retrieval';
 export type { RetrievalDb, RetrievableKBItem, ShortlistOpts, RetrieveOpts } from './retrieval';
+export {
+  findWorkflowOverlaps,
+  canonicalPair,
+  workflowKey,
+  SIMILARITY_THRESHOLD,
+  LAST_STEP_THRESHOLD,
+} from './overlap'; // P3-M0
+export type { OverlapDb, OverlapPair, WorkflowRef, FindOverlapsOpts } from './overlap';
 export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
 export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text

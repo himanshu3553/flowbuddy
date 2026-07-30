@@ -120,7 +120,9 @@ interface StepData {
 /** Compile the FULL plan (every approved workflow) for a workspace. */
 async function compilePlan(workspaceId: string): Promise<CachedPlan> {
   const approvals = await prisma.copilotApproval.findMany({
-    where: { workspaceId },
+    // P3-M0: superseded workflows are excluded — probing a retired telling would localize users
+    // onto steps the founder has already replaced.
+    where: { workspaceId, supersededById: null },
     select: { sourceId: true, segmentIndex: true, segmentTitle: true },
   });
   if (approvals.length === 0) return { at: Date.now(), version: fnv1a('empty'), workflows: [] };

@@ -118,9 +118,11 @@ A throwaway spike answered one question before any product was built — **does 
 
 | Module | What it is | Status |
 |:---|:---|:---|
-| **P3-M0+** | Drift detection · replay validation · supersession · coverage signals | 📝 **Draft** — to be planned |
+| **P3-M0** | **Overlap detection & supersession** (Cut 1) — a re-recording of a task the workspace already covers is surfaced on the KB page, on **both** workflows' tiles (approved or not) and on a workflow's own page; a modal compares the two step lists side by side; the founder supersedes the older telling (never deleted, always reversible via Restore) or knowingly keeps both. Detection is two-signal — overall similarity **and** where each workflow ends — and runs off the embeddings the KB already writes, so it costs no model call. Decisions: [`workflow-identity.md`](build/workflow-identity.md) | 🔄 **In Progress** — built 2026-07-30 and partly user-verified; supersession excluded in all six approval readers, 8 unit tests. **Outstanding:** the modal + per-tile chips are not yet user-verified E2E ([`e2e-testing.md`](ops/e2e-testing.md) §8b), and the gates are calibrated on two true duplicates and one false positive from a single product — a genuine *variant* pair (one goal, two routes) has never been measured |
+| **P3-M1** | **Workflow identity & variant selection** (Cut 2 of the same spec) — variants attach to a durable workflow; at answer time the copilot picks **one** per workflow (screen match, else the generic one) **before** ranking, instead of weighting both into the prompt | 📝 **Draft** — specified; wants a replacement pair + a variant pair recorded before the matching threshold is set |
+| **P3-M2+** | Drift detection · replay validation · coverage signals | 📝 **Draft** — to be planned |
 
-**Depends on:** the selector-bearing KB (P1-M2) and ranked locators (recorder backlog R13, captured in Phase 1 but consumed here). The riskiest engineering bet — prototype sandbox replay + auth/MFA + selector-robustness early.
+**Depends on:** the selector-bearing KB (P1-M2) and ranked locators (recorder backlog R13, captured in Phase 1 but consumed here). The riskiest engineering bet — prototype sandbox replay + auth/MFA + selector-robustness early. **P3-M0 and P3-M1 are the exception:** supersession-by-re-recording is founder-decided, not replay-derived, so neither needs a sandbox and both can ship well ahead of the rest of the phase.
 
 **Feeds Phase 4 (Autopilot):** the replay core (locator walk + healing, step semantics, outcome verification) and the **"validated-current"** signal are consumed by Phase 4 as its execution engine + eligibility certification (§5) — one shared replay core, two drivers (sandbox runner here, widget driver there).
 

@@ -4,6 +4,8 @@ import { BookOpen } from 'lucide-react';
 
 import { getCurrentWorkspace } from '@/lib/session';
 import { listCandidates } from '@/lib/candidates';
+import { listWorkflowOverlaps, duplicatesByWorkflow } from '@/lib/overlaps';
+import { DuplicateWorkflows, type OverlapView } from '@/components/dashboard/duplicate-workflows';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Button } from '@/components/ui/button';
 import { HowToRecordDialog, HowItWorksDialog } from '@/components/dashboard/home-help-dialogs';
@@ -18,7 +20,18 @@ export default async function KnowledgeBasePage() {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
-  const candidates = await listCandidates(ctx.workspace.id);
+  const [candidates, overlaps] = await Promise.all([
+    listCandidates(ctx.workspace.id),
+    listWorkflowOverlaps(ctx.workspace.id),
+  ]);
+  // Dates cross the server→client boundary as strings; the view only ever renders them.
+  const toView = (o: (typeof overlaps)[number]): OverlapView => ({
+    similarity: o.similarity,
+    incumbent: { ...o.incumbent, approvedAt: o.incumbent.approvedAt?.toISOString() ?? null },
+    challenger: { ...o.challenger, approvedAt: o.challenger.approvedAt?.toISOString() ?? null },
+  });
+
+  const byWorkflow = duplicatesByWorkflow(overlaps);
   const workflows: WorkflowRow[] = candidates.map((c) => ({
     sourceId: c.sourceId,
     segmentIndex: c.segmentIndex,
@@ -26,7 +39,12 @@ export default async function KnowledgeBasePage() {
     itemCount: c.itemCount,
     sourceTitle: c.appBaseUrl || 'recording',
     copilotApproved: c.copilotApproved,
+    isSuperseded: c.isSuperseded,
+    supersededByTitle: c.supersededByTitle ?? null,
+    duplicates: (byWorkflow.get(`${c.sourceId}:${c.segmentIndex}`) ?? []).map(toView),
   }));
+
+  const overlapViews: OverlapView[] = overlaps.map(toView);
 
   return (
     <>
@@ -77,7 +95,10 @@ export default async function KnowledgeBasePage() {
             </div>
           </div>
         ) : (
-          <KbWorkflowList workflows={workflows} />
+          <div className="space-y-3.5">
+            <DuplicateWorkflows overlaps={overlapViews} />
+            <KbWorkflowList workflows={workflows} />
+          </div>
         )}
       </div>
     </>

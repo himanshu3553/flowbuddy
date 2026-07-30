@@ -52,6 +52,7 @@ A doc does not move when it ships, and `roadmap.md` is the only thing that track
 | [`copilot.md`](build/copilot.md) | Phase 1 scope, locked decisions, the capture contract, non-functional requirements. |
 | [`sense-and-reason.md`](build/sense-and-reason.md) | Sense (in-context help) and Reason (diagnostics) — decision records and the diagnosis-quality rules. |
 | [`kb-step-distillation.md`](build/kb-step-distillation.md) | Why raw capture events become clean steps, and the options weighed. |
+| [`workflow-identity.md`](build/workflow-identity.md) | Recording the same task twice: when the founder is asked, and how the copilot picks between two true answers. |
 | [`agent.md`](build/agent.md) | The unified agent — decisions D1–D9, the three modes, the acting layer and the goal layer. |
 | [`interop.md`](build/interop.md) | Opening the approved KB to third-party AI agents. |
 | [`portal.md`](build/portal.md) | The help portal and article authoring track. |

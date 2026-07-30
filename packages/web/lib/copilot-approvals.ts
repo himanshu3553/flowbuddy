@@ -16,13 +16,30 @@ import { prisma } from '@flowbuddy/db';
 
 const keyOf = (sourceId: string, segmentIndex: number) => `${sourceId}:${segmentIndex}`;
 
-/** Set of approved `"sourceId:segmentIndex"` keys for a workspace. */
+/**
+ * Set of `"sourceId:segmentIndex"` keys the copilot may answer from — approved AND still current.
+ * P3-M0: a superseded workflow was approved and then replaced by a re-recording; it is NOT live, so
+ * it must not read as approved anywhere. `supersededWorkflows` below is what tells the two apart.
+ */
 export async function approvedSegmentKeys(workspaceId: string): Promise<Set<string>> {
   const rows = await prisma.copilotApproval.findMany({
-    where: { workspaceId },
+    where: { workspaceId, supersededById: null },
     select: { sourceId: true, segmentIndex: true },
   });
   return new Set(rows.map((r) => keyOf(r.sourceId, r.segmentIndex)));
+}
+
+/**
+ * P3-M0 — retired workflows mapped to the title of whatever replaced them, so Studio can say
+ * "replaced by X" rather than silently showing them as unapproved (which would look like the
+ * founder's approval had been lost).
+ */
+export async function supersededWorkflows(workspaceId: string): Promise<Map<string, string | null>> {
+  const rows = await prisma.copilotApproval.findMany({
+    where: { workspaceId, NOT: { supersededById: null } },
+    select: { sourceId: true, segmentIndex: true, supersededBy: { select: { segmentTitle: true } } },
+  });
+  return new Map(rows.map((r) => [keyOf(r.sourceId, r.segmentIndex), r.supersededBy?.segmentTitle ?? null]));
 }
 
 export interface ApprovedWorkflow {

@@ -152,6 +152,7 @@ model Workspace {
   copilotApprovals CopilotApproval[]
   copilotQueries   CopilotQuery[]
   walkthroughs     CopilotWalkthrough[]
+  overlapDecisions WorkflowOverlapDecision[]
 }
 
 model ApiToken {
@@ -246,11 +247,46 @@ model CopilotApproval {
   segmentTitle String? // snapshot of the title at approval time (display/audit)
   approvedById String? // who approved (audit)
   createdAt    DateTime @default(now())
+  // P3-M0 supersession — the founder re-recorded a task this workspace already covered and chose
+  // "this replaces the old one". The replaced approval is NOT deleted (the recording, the analytics
+  // history and the undo all depend on it surviving); it is pointed at the approval that replaced it.
+  // **`supersededById IS NULL` is the one test for "current"** — retrieval filters on it, and nothing
+  // else may be used to mean the same thing. `supersededAt` is audit only.
+  // `onDelete: SetNull` is deliberate: un-approving the replacement makes the older workflow current
+  // again rather than leaving the workspace with neither approved (a silent coverage hole).
+  supersededById String?
+  supersededAt   DateTime?
 
-  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source       KnowledgeSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  supersededBy CopilotApproval?  @relation("Supersedes", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   CopilotApproval[] @relation("Supersedes")
 
   @@unique([sourceId, segmentIndex])
+  @@index([workspaceId])
+  @@index([supersededById])
+}
+
+model WorkflowOverlapDecision {
+  // P3-M0 — a "keep both" memo. Overlap detection compares a workflow against everything already
+  // approved and flags near-duplicates; when the founder decides two tellings are BOTH real, that
+  // decision has to be remembered or the same pair is raised at every visit.
+  // Only "keep both" is stored here. The other outcome (supersede) lives on CopilotApproval, because
+  // that is the row retrieval already reads — one less join on the answer path.
+  // The pair is stored in CANONICAL order (the lexicographically smaller "sourceId:segmentIndex"
+  // first) so a pair can never be recorded twice under two orderings.
+  id            String   @id @default(cuid())
+  workspaceId   String
+  aSourceId     String
+  aSegmentIndex Int
+  bSourceId     String
+  bSegmentIndex Int
+  decidedById   String?
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([aSourceId, aSegmentIndex, bSourceId, bSegmentIndex])
   @@index([workspaceId])
 }
 
