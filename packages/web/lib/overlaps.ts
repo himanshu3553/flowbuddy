@@ -113,16 +113,23 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
 
   const liveKeys: string[] = [];
   const approvedAt = new Map<string, Date>();
+  // A RETIRED workflow is a resolved duplicate, not a candidate for another one. It has to leave
+  // BOTH sides of the comparison: dropping it only from the live side (the obvious half) leaves it
+  // on the candidate side, where it pairs with the very workflow that replaced it and the warning
+  // the founder just resolved comes straight back.
+  const retiredKeys = new Set<string>();
   for (const a of approvals) {
     if (a.workflow.segmentIndex == null) continue; // detached: no position to key a signal on
     const k = workflowKey(a.workflow.sourceId, a.workflow.segmentIndex);
     approvedAt.set(k, a.createdAt);
     if (a.inactiveReason == null) liveKeys.push(k);
+    else retiredKeys.add(k);
   }
-  if (allKeys.length === 0 || liveKeys.length === 0) return [];
+  const candidateKeys = allKeys.filter((k) => !retiredKeys.has(k));
+  if (candidateKeys.length === 0 || liveKeys.length === 0) return [];
 
   const pairs = await findWorkflowOverlaps(prisma, workspaceId, {
-    leftKeys: allKeys,
+    leftKeys: candidateKeys,
     rightKeys: liveKeys,
   });
   if (pairs.length === 0) return [];

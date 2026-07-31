@@ -308,7 +308,11 @@ Two signals, both from vectors the KB already wrote, so detection costs no model
 Both must clear their gate. The second is what makes it work: a workflow's identity is its
 *destination*, and averaging lets shared navigation ("Click Home") outvote the goal in a short
 workflow — measured, that produced a real false positive between two unrelated tasks. It runs **on
-demand, never cached**, because what counts as a duplicate depends on what is approved *right now*.
+demand, never cached**, because what counts as a duplicate depends on what is approved *right now* —
+and a RETIRED workflow leaves both sides of the comparison, not just the live side, or it pairs with
+the workflow that replaced it and the warning the founder just resolved returns. Workflows from the
+SAME recording are compared too: doing a task twice while recording is an ordinary way to create a
+duplicate.
 It is advisory: every failure path yields no warnings rather than blocking approval. Thresholds, their
 calibration and the measured margins live in the detector's header comment; the product decisions live
 in [`build/workflow-identity.md`](../build/workflow-identity.md).

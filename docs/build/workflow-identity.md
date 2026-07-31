@@ -278,6 +278,14 @@ Note what "keep both" means in Cut 1: **nothing happens** — which is the statu
 keeping both becomes an *informed* choice rather than an accident nobody was told about. Cut 2 splits
 that one button in two, for the reason in §4a.
 
+**A duplicate does not have to come from a second recording.** Detection originally compared across
+recordings only, reasoning that two similar workflows inside ONE recording could only mean the
+segmenter over-split a task — which supersession cannot fix. That missed the commonest way a
+duplicate is made at all: **doing the task twice while recording**, after fumbling it or wanting a
+cleaner take. Those are duplicates in exactly this sense, and every resolution already worked on them
+— the exclusion only hid the button. The over-split case is left to the gates instead of a blanket
+rule: two fragments of one workflow end in different places, so the destination gate rejects them.
+
 **Detection must not hang off the moment of approval.** Checking only as a workflow is approved
 catches overlaps arriving from now on; a workspace whose duplicates are **already both approved** is
 never prompted, because that moment has passed. The first real pair (§5) was in exactly that state,

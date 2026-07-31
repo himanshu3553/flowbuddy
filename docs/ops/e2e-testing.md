@@ -292,7 +292,11 @@ recording whose embeddings failed simply produces no warnings.
 2. Click the chip (or **Compare** on the warning card) → a modal shows both step lists side by side,
    labelled *Already approved* and *Newer recording*.
 3. **Replace the old one** → toast; the retired workflow greys out, reads *Replaced by "…"*, moves
-   under the **Replaced** tab, and stops counting toward "awaiting approval".
+   under **Not answering**, and stops counting toward "awaiting approval".
+   **The duplicate warning and BOTH tiles' chips must disappear** — on the spot and after a reload.
+   A resolved duplicate that keeps warning is the regression this leg exists for: a retired workflow
+   has to leave both sides of the comparison, and dropping it only from the live side leaves it
+   pairing with the very workflow that replaced it.
 4. Ask the copilot (§10) something the retired workflow answered → the answer now cites the
    replacement, never the retired one.
 5. **Restore** on the retired tile → it returns to Approved · Live, and the duplicate warning

@@ -48,9 +48,18 @@ const log = createLogger('overlap');
  * ADVISORY, NEVER BLOCKING: every failure path returns `[]`. Detection informs a founder's choice —
  * it must never be able to stop a workflow being approved.
  *
- * Cross-recording ONLY. Two near-identical workflows inside ONE recording are a segmentation
- * problem, not a duplicate-recording problem, and pairing them here would send the founder to a
- * screen whose choices ("this replaces the old one") cannot fix it.
+ * SAME-RECORDING PAIRS COUNT TOO. This originally compared across recordings only, on the reasoning
+ * that two near-identical workflows inside ONE recording could only mean the segmenter over-split a
+ * task, which supersession cannot fix. That reasoning missed the commonest way a duplicate is made
+ * at all: **doing the task twice while recording** — fumbling it and starting over, or re-running it
+ * for a cleaner take. The segmenter correctly emits two workflows, and they are duplicates in
+ * exactly the sense this exists for. Excluding them hid the button that already fixed them, since
+ * supersession works on any two workflows regardless of where they came from.
+ *
+ * The over-split case is left to the gates rather than to a blanket exclusion: two FRAGMENTS of one
+ * workflow end in different places, so they fail the destination gate — the same signal that
+ * rejected two unrelated tasks sharing their opening navigation. Anything that still slips through
+ * is a false positive, and there is now a consequence-free "not duplicates" for exactly that.
  */
 
 export const SIMILARITY_THRESHOLD = 0.72;
@@ -155,8 +164,10 @@ export async function findWorkflowOverlaps(
                1 - (la.goal <=> lb.goal) AS goal_similarity
         FROM wf a
         JOIN wf b
-          ON a.sid <> b.sid
-         AND (a.sid || ':' || a.seg::text) < (b.sid || ':' || b.seg::text)
+          -- Canonical ordering alone: it stops a workflow pairing with itself and stops a pair
+          -- appearing twice. There is deliberately NO same-recording exclusion here -- two
+          -- workflows from ONE recording can be genuine duplicates (see the header).
+          ON (a.sid || ':' || a.seg::text) < (b.sid || ':' || b.seg::text)
         JOIN last_step la ON la.sid = a.sid AND la.seg = a.seg
         JOIN last_step lb ON lb.sid = b.sid AND lb.seg = b.seg
         WHERE (
