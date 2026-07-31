@@ -193,7 +193,6 @@ model KnowledgeSource {
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy        User              @relation(fields: [createdById], references: [id])
   items            KnowledgeItem[]
-  copilotApprovals CopilotApproval[]
   workflows        Workflow[]
 
   @@unique([workspaceId, uploadId])
@@ -292,10 +291,13 @@ model CopilotApproval {
   // P1-M5: the copilot trust gate. One row = one workflow approved for the copilot to answer from.
   // Keyed by (sourceId, segmentIndex) so approval SURVIVES KnowledgeItem delete+recreate on reprocess
   // (the worker deletes+recreates items, which would wipe a per-item flag). Absence = not approved.
+  // P3-M1: an approval names a WORKFLOW and nothing else. It used to carry `(sourceId,
+  // segmentIndex)` as its key — a position — which is exactly how a re-split walked an approval onto
+  // content nobody had reviewed. The recording and position now live on the `Workflow` row, where
+  // they are mutable facts about it; keeping a second copy here would be an invitation to key on
+  // them again.
   id           String   @id @default(cuid())
   workspaceId  String
-  sourceId     String // KnowledgeSource the workflow belongs to
-  segmentIndex Int // the workflow within that source (KnowledgeItem.segmentIndex)
   segmentTitle String? // snapshot of the title at approval time (display/audit)
   approvedById String? // who approved (audit)
   createdAt    DateTime @default(now())
@@ -323,12 +325,10 @@ model CopilotApproval {
   workflowId     String    @unique
 
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  source       KnowledgeSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   workflow     Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   supersededBy CopilotApproval?  @relation("Supersedes", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes   CopilotApproval[] @relation("Supersedes")
 
-  @@unique([sourceId, segmentIndex])
   @@index([workspaceId])
   @@index([supersededById])
   @@index([inactiveReason])

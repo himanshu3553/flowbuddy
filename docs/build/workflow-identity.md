@@ -266,11 +266,23 @@ unapproved content could reach an end-user, and durable identity is what closes 
 stands on its own even in a workspace that never sees two routes to one goal — which, so far, is
 every workspace.
 
-This cut is not small in blast radius, whatever its conceptual size: **every consumer today keys on
-the recording coordinate** — retrieval, the sense plan, the walkthrough, the on-page probe, the
-widget's citation payload and analytics. Introducing a durable identity is a migration across all of
-them, and it changes retrieval's shape from weighting to selection, which existing signal-ordering
-guarantees must be re-established against.
+This cut is not small in blast radius, whatever its conceptual size: **every consumer keyed on the
+recording coordinate** — retrieval, the sense plan, the walkthrough, the on-page probe, the widget's
+citation payload and analytics. Introducing a durable identity is a migration across all of them, and
+it changes retrieval's shape from weighting to selection, which existing signal-ordering guarantees
+must be re-established against.
+
+**What "drop the old key" turned out to mean.** Two things looked alike and are not:
+
+- On an **approval**, the position was a second key — the very thing that let a re-split walk it onto
+  unreviewed content. Those columns are gone, and Studio's mutations key on identity too, so nothing
+  can approve "whatever is at index 2".
+- On a **step**, the position is a denormalized cache of its workflow's, written in the same pass
+  from the same value, exactly like the `workspaceId` the schema already carries for the same reason.
+  It cannot drift, ~200 readers use it, and removing it would buy joins where a column already sits.
+  **It stays**, and that is a decision rather than an omission.
+
+The distinction worth keeping: a duplicated *key* is a hazard, a duplicated *fact* is a cache.
 
 **Why this order.** The only overlap observed in a live KB was redundancy, which Cut 2's rules cannot
 resolve at all (§5) — so Cut 1 is not merely the safer first step, it is the one that addresses the

@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 
 export interface WorkflowRow {
+  /** P3-M1 — the durable identity every mutation keys on. */
+  workflowId: string;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string;
@@ -76,8 +78,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     start(async () => {
       try {
         await setCopilotApproval({
-          sourceId: w.sourceId,
-          segmentIndex: w.segmentIndex,
+          workflowId: w.workflowId,
           segmentTitle: w.segmentTitle,
           approved: next,
         });
@@ -100,7 +101,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     setBusyKey(keyOf(w));
     start(async () => {
       try {
-        await undoSupersede({ sourceId: w.sourceId, segmentIndex: w.segmentIndex });
+        await undoSupersede({ workflowId: w.workflowId });
         toast.success(`“${w.segmentTitle}” restored`);
         router.refresh();
       } catch (e) {
@@ -121,11 +122,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     start(async () => {
       try {
         await setCopilotApprovalsBulk(
-          pendingRows.map((w) => ({
-            sourceId: w.sourceId,
-            segmentIndex: w.segmentIndex,
-            segmentTitle: w.segmentTitle,
-          })),
+          pendingRows.map((w) => ({ workflowId: w.workflowId, segmentTitle: w.segmentTitle })),
         );
         router.refresh();
       } catch (e) {

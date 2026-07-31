@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import { canonicalPair } from '@flowbuddy/synthesis/overlap';
 import { getCurrentWorkspace } from '@/lib/session';
-import { workflowIdsAt } from '@/lib/copilot-approvals';
 
 /**
  * P3-M0 — resolving a duplicate-workflow warning. Two outcomes, both founder-chosen:
@@ -15,23 +14,22 @@ import { workflowIdsAt } from '@/lib/copilot-approvals';
  * reversibility is the reason the founder can be asked to decide quickly.
  */
 
-interface WorkflowCoord {
-  sourceId: string;
-  segmentIndex: number;
-}
-
-/** Every coordinate must belong to the caller's workspace before anything is written. */
-async function assertOwned(workspaceId: string, coords: WorkflowCoord[]): Promise<void> {
-  const ids = [...new Set(coords.map((c) => c.sourceId))];
-  const owned = await prisma.knowledgeSource.findMany({
+/**
+ * Every workflow must belong to the caller's workspace before anything is written. Returns the
+ * recordings involved, which is all the revalidation below needs.
+ */
+async function assertOwned(workspaceId: string, workflowIds: string[]): Promise<string[]> {
+  const ids = [...new Set(workflowIds)];
+  const owned = await prisma.workflow.findMany({
     where: { id: { in: ids }, workspaceId },
-    select: { id: true },
+    select: { sourceId: true },
   });
-  if (owned.length !== ids.length) throw new Error('Recording not found');
+  if (owned.length !== ids.length) throw new Error('Workflow not found');
+  return [...new Set(owned.map((w) => w.sourceId))];
 }
 
-function revalidate(coords: WorkflowCoord[]): void {
-  for (const id of new Set(coords.map((c) => c.sourceId))) {
+function revalidate(sourceIds: string[]): void {
+  for (const id of sourceIds) {
     revalidatePath(`/dashboard/kb/${id}`);
     revalidatePath(`/dashboard/recordings/${id}`);
   }
@@ -45,58 +43,42 @@ function revalidate(coords: WorkflowCoord[]): void {
  * retired and the new one unapproved — that is a silent coverage hole.
  */
 export async function supersedeWorkflow(input: {
-  retired: WorkflowCoord;
-  replacement: WorkflowCoord & { segmentTitle?: string | null };
+  retiredWorkflowId: string;
+  replacementWorkflowId: string;
+  replacementTitle?: string | null;
 }): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
 
-  const { retired, replacement } = input;
-  if (retired.sourceId === replacement.sourceId && retired.segmentIndex === replacement.segmentIndex) {
+  const { retiredWorkflowId, replacementWorkflowId, replacementTitle } = input;
+  if (retiredWorkflowId === replacementWorkflowId) {
     throw new Error('A workflow cannot replace itself');
   }
-  await assertOwned(workspaceId, [retired, replacement]);
-
-  // P3-M1 — a replacement that is being approved here for the first time must carry its identity.
-  const ids = await workflowIdsAt([replacement]);
-  const replacementWorkflowId = ids.get(`${replacement.sourceId}:${replacement.segmentIndex}`);
-  if (!replacementWorkflowId) throw new Error('Workflow not found — re-process this recording and try again');
+  const sourceIds = await assertOwned(workspaceId, [retiredWorkflowId, replacementWorkflowId]);
 
   await prisma.$transaction(async (tx) => {
     const current = await tx.copilotApproval.upsert({
-      where: {
-        sourceId_segmentIndex: {
-          sourceId: replacement.sourceId,
-          segmentIndex: replacement.segmentIndex,
-        },
-      },
+      where: { workflowId: replacementWorkflowId },
       create: {
         workspaceId,
-        sourceId: replacement.sourceId,
-        segmentIndex: replacement.segmentIndex,
-        segmentTitle: replacement.segmentTitle ?? null,
-        approvedById: ctx.userId,
         workflowId: replacementWorkflowId,
+        segmentTitle: replacementTitle ?? null,
+        approvedById: ctx.userId,
       },
       // The replacement becomes live even if it had previously been retired for any reason.
-      update: {
-        inactiveReason: null,
-        inactiveAt: null,
-        supersededById: null,
-        workflowId: replacementWorkflowId,
-      },
+      update: { inactiveReason: null, inactiveAt: null, supersededById: null },
       select: { id: true },
     });
 
     // Only an APPROVED workflow can be superseded — an unapproved one answers nothing already.
     await tx.copilotApproval.updateMany({
-      where: { workspaceId, sourceId: retired.sourceId, segmentIndex: retired.segmentIndex },
+      where: { workspaceId, workflowId: retiredWorkflowId },
       data: { inactiveReason: 'superseded', inactiveAt: new Date(), supersededById: current.id },
     });
   });
 
-  revalidate([retired, replacement]);
+  revalidate(sourceIds);
 }
 
 /**
@@ -104,18 +86,18 @@ export async function supersedeWorkflow(input: {
  * not confirm its content. One action for both: from the founder's side the decision is identical
  * ("I've looked, this should answer again"), and the reason it stopped is already on screen.
  */
-export async function undoSupersede(input: WorkflowCoord): Promise<void> {
+export async function undoSupersede(input: { workflowId: string }): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
-  await assertOwned(workspaceId, [input]);
+  const sourceIds = await assertOwned(workspaceId, [input.workflowId]);
 
   await prisma.copilotApproval.updateMany({
-    where: { workspaceId, sourceId: input.sourceId, segmentIndex: input.segmentIndex },
+    where: { workspaceId, workflowId: input.workflowId },
     data: { inactiveReason: null, inactiveAt: null, supersededById: null },
   });
 
-  revalidate([input]);
+  revalidate(sourceIds);
 }
 
 /**
@@ -125,11 +107,14 @@ export async function undoSupersede(input: WorkflowCoord): Promise<void> {
  * value is that keeping both becomes a decision the founder made, rather than a duplicate nobody
  * was told about. Teaching the copilot to CHOOSE between two live routes is the next cut.
  */
-export async function keepBothWorkflows(input: { x: WorkflowCoord; y: WorkflowCoord }): Promise<void> {
+export async function keepBothWorkflows(input: {
+  x: { workflowId: string; sourceId: string; segmentIndex: number };
+  y: { workflowId: string; sourceId: string; segmentIndex: number };
+}): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
-  await assertOwned(workspaceId, [input.x, input.y]);
+  const sourceIds = await assertOwned(workspaceId, [input.x.workflowId, input.y.workflowId]);
 
   const { a, b } = canonicalPair(input.x, input.y);
   await prisma.workflowOverlapDecision.upsert({
@@ -152,5 +137,5 @@ export async function keepBothWorkflows(input: { x: WorkflowCoord; y: WorkflowCo
     update: {},
   });
 
-  revalidate([input.x, input.y]);
+  revalidate(sourceIds);
 }

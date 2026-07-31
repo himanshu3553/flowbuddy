@@ -3,10 +3,11 @@ import { prisma } from '@flowbuddy/db';
 /**
  * P1-M5 — copilot trust gate (server-only): approval bookkeeping for Studio dashboards.
  *
- * A workflow is "approved for the copilot" when a `CopilotApproval` row exists for its
- * `(sourceId, segmentIndex)`. Approval is keyed by the workflow, NOT the KnowledgeItem rows,
- * because the worker deletes+recreates items on every (re)process — a per-item flag would be
- * silently wiped. Absence of a row = not approved.
+ * A workflow is "approved for the copilot" when a `CopilotApproval` row names its `workflowId` and
+ * that row is LIVE (`inactiveReason` null). Keyed by the workflow's IDENTITY, not by KnowledgeItem
+ * rows (the worker deletes+recreates those on every reprocess, so a per-item flag would be wiped)
+ * and no longer by its POSITION (a re-split moved positions, which walked approvals onto unreviewed
+ * content — P3-M1). Absence of a row = never approved; a non-null `inactiveReason` = retired since.
  *
  * NOTE: the RETRIEVAL enforcement seam ("the copilot grounds only on approved-KB") no longer
  * lives here — it's the shared `retrieveApprovedKBItems` in `@flowbuddy/synthesis` (retrieval.ts),
@@ -24,9 +25,14 @@ const keyOf = (sourceId: string, segmentIndex: number) => `${sourceId}:${segment
 export async function approvedSegmentKeys(workspaceId: string): Promise<Set<string>> {
   const rows = await prisma.copilotApproval.findMany({
     where: { workspaceId, inactiveReason: null },
-    select: { sourceId: true, segmentIndex: true },
+    // The position lives on the workflow now; an approval only names the workflow.
+    select: { workflow: { select: { sourceId: true, segmentIndex: true } } },
   });
-  return new Set(rows.map((r) => keyOf(r.sourceId, r.segmentIndex)));
+  return new Set(
+    rows
+      .filter((r) => r.workflow.segmentIndex !== null)
+      .map((r) => keyOf(r.workflow.sourceId, r.workflow.segmentIndex as number)),
+  );
 }
 
 /** Why a workflow stopped answering, and what replaced it (when anything did). */
@@ -45,17 +51,18 @@ export async function inactiveWorkflows(
   const rows = await prisma.copilotApproval.findMany({
     where: { workspaceId, NOT: { inactiveReason: null } },
     select: {
-      sourceId: true,
-      segmentIndex: true,
       inactiveReason: true,
       supersededBy: { select: { segmentTitle: true } },
+      workflow: { select: { sourceId: true, segmentIndex: true } },
     },
   });
   return new Map(
-    rows.map((r) => [
-      keyOf(r.sourceId, r.segmentIndex),
-      { reason: r.inactiveReason as string, replacedByTitle: r.supersededBy?.segmentTitle ?? null },
-    ]),
+    rows
+      .filter((r) => r.workflow.segmentIndex !== null)
+      .map((r) => [
+        keyOf(r.workflow.sourceId, r.workflow.segmentIndex as number),
+        { reason: r.inactiveReason as string, replacedByTitle: r.supersededBy?.segmentTitle ?? null },
+      ]),
   );
 }
 
@@ -91,12 +98,19 @@ export interface ApprovedWorkflow {
   segmentTitle: string | null;
 }
 
-/** Approved workflows for a workspace (for counts / dashboards). */
+/** Approved workflows for a workspace (for counts / dashboards). Live ones only. */
 export async function listApprovedWorkflows(workspaceId: string): Promise<ApprovedWorkflow[]> {
-  return prisma.copilotApproval.findMany({
-    where: { workspaceId },
-    select: { sourceId: true, segmentIndex: true, segmentTitle: true },
-    orderBy: [{ sourceId: 'asc' }, { segmentIndex: 'asc' }],
+  const rows = await prisma.copilotApproval.findMany({
+    where: { workspaceId, inactiveReason: null },
+    select: { segmentTitle: true, workflow: { select: { sourceId: true, segmentIndex: true } } },
+    orderBy: [{ workflow: { sourceId: 'asc' } }, { workflow: { segmentIndex: 'asc' } }],
   });
+  return rows
+    .filter((r) => r.workflow.segmentIndex !== null)
+    .map((r) => ({
+      sourceId: r.workflow.sourceId,
+      segmentIndex: r.workflow.segmentIndex as number,
+      segmentTitle: r.segmentTitle,
+    }));
 }
 

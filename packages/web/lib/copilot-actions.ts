@@ -3,16 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
-import { workflowIdsAt } from '@/lib/copilot-approvals';
 
 /**
- * P1-M5 — approve or un-approve a workflow `(sourceId, segmentIndex)` for the copilot.
- * Auth-checked: the recording must belong to the signed-in user's workspace.
+ * P1-M5 — approve or un-approve a workflow for the copilot.
+ * Auth-checked: the workflow must belong to the signed-in user's workspace.
  * Approve = upsert a `CopilotApproval` row; un-approve = delete it (absence = not approved).
+ *
+ * P3-M1: keyed on the workflow's IDENTITY, never its position. Studio must not be able to approve
+ * "whatever is at index 2" any more than the copilot may answer from it.
  */
 export async function setCopilotApproval(input: {
-  sourceId: string;
-  segmentIndex: number;
+  workflowId: string;
   segmentTitle?: string | null;
   approved: boolean;
 }): Promise<void> {
@@ -20,37 +21,37 @@ export async function setCopilotApproval(input: {
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
 
-  // Ownership check: the workflow's recording must belong to this workspace.
-  const source = await prisma.knowledgeSource.findFirst({
-    where: { id: input.sourceId, workspaceId },
-    select: { id: true },
+  // Ownership + identity in one read: a workflow row IS the thing being approved, and it carries
+  // the workspace, so there is nothing left to resolve from a position.
+  const workflow = await prisma.workflow.findFirst({
+    where: { id: input.workflowId, workspaceId },
+    select: { id: true, sourceId: true },
   });
-  if (!source) throw new Error('Recording not found');
+  if (!workflow) throw new Error('Workflow not found');
 
   if (input.approved) {
-    // P3-M1 — an approval names the workflow's durable identity, never just its position.
-    const ids = await workflowIdsAt([{ sourceId: input.sourceId, segmentIndex: input.segmentIndex }]);
-    const workflowId = ids.get(`${input.sourceId}:${input.segmentIndex}`);
-    if (!workflowId) throw new Error('Workflow not found — re-process this recording and try again');
     await prisma.copilotApproval.upsert({
-      where: { sourceId_segmentIndex: { sourceId: input.sourceId, segmentIndex: input.segmentIndex } },
+      where: { workflowId: input.workflowId },
       create: {
         workspaceId,
-        sourceId: input.sourceId,
-        segmentIndex: input.segmentIndex,
+        workflowId: input.workflowId,
         segmentTitle: input.segmentTitle ?? null,
         approvedById: ctx.userId,
-        workflowId,
       },
-      update: { segmentTitle: input.segmentTitle ?? null, approvedById: ctx.userId, workflowId },
+      // Re-approving clears any retirement: this IS the founder saying it should answer again.
+      update: {
+        segmentTitle: input.segmentTitle ?? null,
+        approvedById: ctx.userId,
+        inactiveReason: null,
+        inactiveAt: null,
+        supersededById: null,
+      },
     });
   } else {
-    await prisma.copilotApproval.deleteMany({
-      where: { workspaceId, sourceId: input.sourceId, segmentIndex: input.segmentIndex },
-    });
+    await prisma.copilotApproval.deleteMany({ where: { workspaceId, workflowId: input.workflowId } });
   }
 
-  revalidatePath(`/dashboard/kb/${input.sourceId}`);
+  revalidatePath(`/dashboard/kb/${workflow.sourceId}`);
   revalidatePath('/dashboard');
 }
 
@@ -60,48 +61,45 @@ export async function setCopilotApproval(input: {
  * transition (and exhausted free-tier DB connections) leaving the button stuck disabled.
  */
 export async function setCopilotApprovalsBulk(
-  workflows: { sourceId: string; segmentIndex: number; segmentTitle?: string | null }[],
+  workflows: { workflowId: string; segmentTitle?: string | null }[],
 ): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
   if (workflows.length === 0) return;
 
-  // Ownership: keep only workflows whose recording belongs to this workspace.
-  const sourceIds = [...new Set(workflows.map((w) => w.sourceId))];
-  const owned = await prisma.knowledgeSource.findMany({
-    where: { id: { in: sourceIds }, workspaceId },
-    select: { id: true },
+  // Ownership: keep only workflows in this workspace. One id from elsewhere is dropped rather than
+  // failing the batch — "Approve all" is a bulk convenience, and a visible partial beats an error.
+  const owned = await prisma.workflow.findMany({
+    where: { id: { in: workflows.map((w) => w.workflowId) }, workspaceId },
+    select: { id: true, sourceId: true },
   });
-  const ownedSet = new Set(owned.map((s) => s.id));
-  const valid = workflows.filter((w) => ownedSet.has(w.sourceId));
+  const ownedIds = new Set(owned.map((w) => w.id));
+  const valid = workflows.filter((w) => ownedIds.has(w.workflowId));
   if (valid.length === 0) return;
 
-  const ids = await workflowIdsAt(valid);
-  // Approve every workflow we can name. One unidentified workflow must not sink the whole batch —
-  // "Approve all" is a bulk convenience, and a partial success the founder can see beats an error.
-  const identified = valid.filter((w) => ids.has(`${w.sourceId}:${w.segmentIndex}`));
-  if (identified.length === 0) return;
-
   await prisma.$transaction(
-    identified.map((w) => {
-      const workflowId = ids.get(`${w.sourceId}:${w.segmentIndex}`)!;
-      return prisma.copilotApproval.upsert({
-        where: { sourceId_segmentIndex: { sourceId: w.sourceId, segmentIndex: w.segmentIndex } },
+    valid.map((w) =>
+      prisma.copilotApproval.upsert({
+        where: { workflowId: w.workflowId },
         create: {
           workspaceId,
-          sourceId: w.sourceId,
-          segmentIndex: w.segmentIndex,
+          workflowId: w.workflowId,
           segmentTitle: w.segmentTitle ?? null,
           approvedById: ctx.userId,
-          workflowId,
         },
-        update: { segmentTitle: w.segmentTitle ?? null, approvedById: ctx.userId, workflowId },
-      });
-    }),
+        update: {
+          segmentTitle: w.segmentTitle ?? null,
+          approvedById: ctx.userId,
+          inactiveReason: null,
+          inactiveAt: null,
+          supersededById: null,
+        },
+      }),
+    ),
   );
 
-  for (const id of ownedSet) revalidatePath(`/dashboard/kb/${id}`);
+  for (const id of new Set(owned.map((w) => w.sourceId))) revalidatePath(`/dashboard/kb/${id}`);
   revalidatePath('/dashboard/kb');
   revalidatePath('/dashboard');
 }

@@ -28,6 +28,7 @@ import { supersedeWorkflow, keepBothWorkflows } from '@/lib/overlap-actions';
  */
 
 export interface OverlapSideView {
+  workflowId: string;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string | null;
@@ -43,7 +44,11 @@ export interface OverlapView {
 }
 
 const titleOf = (s: OverlapSideView) => s.segmentTitle ?? `Workflow ${s.segmentIndex + 1}`;
-const coord = (s: OverlapSideView) => ({ sourceId: s.sourceId, segmentIndex: s.segmentIndex });
+const coord = (s: OverlapSideView) => ({
+  workflowId: s.workflowId,
+  sourceId: s.sourceId,
+  segmentIndex: s.segmentIndex,
+});
 const keyOf = (o: OverlapView) =>
   `${o.incumbent.sourceId}:${o.incumbent.segmentIndex}|${o.challenger.sourceId}:${o.challenger.segmentIndex}`;
 
@@ -125,8 +130,9 @@ function useResolveOverlap(overlap: OverlapView, onDone: () => void) {
           run(
             () =>
               supersedeWorkflow({
-                retired: coord(incumbent),
-                replacement: { ...coord(challenger), segmentTitle: challenger.segmentTitle },
+                retiredWorkflowId: incumbent.workflowId,
+                replacementWorkflowId: challenger.workflowId,
+                replacementTitle: challenger.segmentTitle,
               }),
             `“${titleOf(challenger)}” replaced “${titleOf(incumbent)}”`,
           )

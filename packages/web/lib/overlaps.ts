@@ -18,6 +18,8 @@ import { findWorkflowOverlaps, workflowKey, canonicalPair } from '@flowbuddy/syn
  */
 
 export interface OverlapSide {
+  /** P3-M1 — the durable identity every mutation keys on. */
+  workflowId: string;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string | null;
@@ -82,11 +84,15 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
   const [items, approvals, dismissals] = await Promise.all([
     prisma.knowledgeItem.findMany({
       where: { workspaceId, segmentIndex: { not: null } },
-      select: { sourceId: true, segmentIndex: true, segmentTitle: true },
+      select: { workflowId: true, sourceId: true, segmentIndex: true, segmentTitle: true },
     }),
     prisma.copilotApproval.findMany({
       where: { workspaceId },
-      select: { sourceId: true, segmentIndex: true, createdAt: true, inactiveReason: true },
+      select: {
+        createdAt: true,
+        inactiveReason: true,
+        workflow: { select: { sourceId: true, segmentIndex: true } },
+      },
     }),
     prisma.workflowOverlapDecision.findMany({
       where: { workspaceId },
@@ -96,18 +102,21 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
 
   const stepCount = new Map<string, number>();
   const titles = new Map<string, string | null>();
+  const workflowIdByKey = new Map<string, string>();
   for (const it of items) {
     if (it.segmentIndex == null) continue;
     const k = workflowKey(it.sourceId, it.segmentIndex);
     stepCount.set(k, (stepCount.get(k) ?? 0) + 1);
     if (!titles.has(k)) titles.set(k, it.segmentTitle);
+    workflowIdByKey.set(k, it.workflowId);
   }
   const allKeys = [...stepCount.keys()];
 
   const liveKeys: string[] = [];
   const approvedAt = new Map<string, Date>();
   for (const a of approvals) {
-    const k = workflowKey(a.sourceId, a.segmentIndex);
+    if (a.workflow.segmentIndex == null) continue; // detached: no position to key a signal on
+    const k = workflowKey(a.workflow.sourceId, a.workflow.segmentIndex);
     approvedAt.set(k, a.createdAt);
     if (a.inactiveReason == null) liveKeys.push(k);
   }
@@ -152,6 +161,7 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
   const side = (w: { sourceId: string; segmentIndex: number; segmentTitle: string | null }): OverlapSide => {
     const k = workflowKey(w.sourceId, w.segmentIndex);
     return {
+      workflowId: workflowIdByKey.get(k) ?? '',
       sourceId: w.sourceId,
       segmentIndex: w.segmentIndex,
       segmentTitle: w.segmentTitle ?? titles.get(k) ?? null,

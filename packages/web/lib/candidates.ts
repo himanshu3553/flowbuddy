@@ -6,6 +6,8 @@ import { approvedSegmentKeys, inactiveWorkflows } from './copilot-approvals';
  *  Phase 2 note: this same unit becomes a portal help article when approved for that audience
  *  (workflows-as-articles, 2026-07-07). See docs/phase-2-portal.md §7. */
 export interface Candidate {
+  /** P3-M1 — the workflow's durable identity. What every mutation keys on. */
+  workflowId: string;
   sourceId: string;
   appBaseUrl: string | null;
   segmentIndex: number;
@@ -25,10 +27,13 @@ export interface Candidate {
 export async function listCandidates(workspaceId: string, sourceId?: string): Promise<Candidate[]> {
   const items = await prisma.knowledgeItem.findMany({
     where: { workspaceId, segmentIndex: { not: null }, ...(sourceId ? { sourceId } : {}) },
-    select: { sourceId: true, segmentIndex: true, segmentTitle: true },
+    select: { workflowId: true, sourceId: true, segmentIndex: true, segmentTitle: true },
   });
 
-  const grouped = new Map<string, { sourceId: string; segmentIndex: number; segmentTitle: string; itemCount: number }>();
+  const grouped = new Map<
+    string,
+    { workflowId: string; sourceId: string; segmentIndex: number; segmentTitle: string; itemCount: number }
+  >();
   for (const it of items) {
     if (it.segmentIndex == null) continue;
     const key = `${it.sourceId}:${it.segmentIndex}`;
@@ -36,6 +41,7 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
     if (g) g.itemCount++;
     else
       grouped.set(key, {
+        workflowId: it.workflowId,
         sourceId: it.sourceId,
         segmentIndex: it.segmentIndex,
         segmentTitle: it.segmentTitle ?? `Workflow ${it.segmentIndex + 1}`,

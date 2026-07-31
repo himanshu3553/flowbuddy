@@ -247,8 +247,14 @@ and the recording slot it currently occupies. This is the seam between this modu
 **It used to be keyed on `(sourceId, segmentIndex)` — a POSITION — and that was the bug.** The
 position worked as an identity only while re-segmentation was deterministic. Once it wasn't, a
 re-split could put a different workflow at index 2 and the approval followed the index onto content
-nobody had reviewed. A workflow's `sourceId`/`segmentIndex` are now mutable facts *about* it, updated
-by the matcher below; they are never again the thing that identifies it.
+nobody had reviewed. **An approval no longer carries a position at all** — the columns are dropped,
+so there is nothing left to key on by accident, and Studio's mutations name a workflow too. A
+workflow's `sourceId`/`segmentIndex` live on the `Workflow` row as mutable facts *about* it, updated
+by the matcher below.
+
+A step still carries `segmentIndex`/`segmentTitle`, and that is deliberate: it is a denormalized copy
+of its workflow's, written in the same pass from the same value (like the `workspaceId` beside it),
+so it cannot drift. A duplicated **key** is a hazard; a duplicated **fact** is a cache.
 
 ### Identity across a reprocess — matched on content, never on position
 

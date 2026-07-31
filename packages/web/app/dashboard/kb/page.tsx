@@ -33,6 +33,7 @@ export default async function KnowledgeBasePage() {
 
   const byWorkflow = duplicatesByWorkflow(overlaps);
   const workflows: WorkflowRow[] = candidates.map((c) => ({
+    workflowId: c.workflowId,
     sourceId: c.sourceId,
     segmentIndex: c.segmentIndex,
     segmentTitle: c.segmentTitle,

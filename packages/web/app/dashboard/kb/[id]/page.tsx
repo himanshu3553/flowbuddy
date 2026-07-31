@@ -112,7 +112,11 @@ export default async function KbWorkflowPage({
   const approved =
     selected != null &&
     (await prisma.copilotApproval.findFirst({
-      where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
+      where: {
+        workspaceId: ctx.workspace.id,
+        inactiveReason: null,
+        workflow: { sourceId: source.id, segmentIndex: selected },
+      },
       select: { id: true },
     })) != null;
   const shotCount = items.filter((it) => it.screenshotUrl).length;

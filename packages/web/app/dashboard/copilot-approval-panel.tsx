@@ -6,6 +6,7 @@ import { setCopilotApproval } from '@/lib/copilot-actions';
 import { Switch } from '@/components/ui/switch';
 
 export interface ApprovalCandidate {
+  workflowId: string;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string;
@@ -33,8 +34,7 @@ export function CopilotApprovalPanel({
     start(async () => {
       try {
         await setCopilotApproval({
-          sourceId: c.sourceId,
-          segmentIndex: c.segmentIndex,
+          workflowId: c.workflowId,
           segmentTitle: c.segmentTitle,
           approved: next,
         });
