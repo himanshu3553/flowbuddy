@@ -60,13 +60,13 @@ strong argument for fixing the concept rather than patching each symptom.
 |---|---|---|
 | Does the system auto-resolve overlaps? | **No — it surfaces, the founder decides** | Similarity proves overlap. It cannot prove *which kind* (§4). |
 | Where is an overlap raised? | **At approval time** | A decision point that already exists; it only has to stop being recording-blind. |
-| What can the founder choose? | **Both: "replaces" and "both are real"** | Replacement and variance are both ordinary; neither may be the only path. |
+| What can the founder choose? | **Three outcomes: "replaces" · "two routes, same goal" · "not duplicates"** | Replacement and variance are both ordinary. The third exists because detection can be WRONG, and that must be cheap to say (§4a). |
 | What does "replaces" do? | **Supersedes — never deletes** | The recording, the history and the analytics survive, and the call is reversible. |
 | Is approval still binary? | **No — a third state is required** | "Was true, is no longer current" is currently inexpressible. |
 | Which variant answers a question? | **The one matching the screen the user is on** | Reuses the route and on-page signals already feeding retrieval. |
 | Tiebreak when no screen matches? | **The more generic variant** | Its prerequisites are satisfied by definition (§6). |
 | How is the choice applied? | **A pick made *before* ranking, not a ranking weight** | A weight leaves both variants in the prompt — the original problem. |
-| Where does generic/specific come from? | **Inferred once at KB build; founder can override** | Cheap, and a wrong inference is one click to correct. |
+| Where does generic/specific come from? | **Inferred at ANSWER time from where a workflow begins** | The routes are already in memory, it only fires inside a grouped task, and a stored column is one more thing that can go stale (§6). |
 | Which layer owns identity? | **The KB, not the copilot** | The portal and third-party agents need it too — neither should publish one how-to twice. |
 | What resolves *redundancy*? | **Supersession — selection cannot reach it** | Two tellings of one route give the answer-time rules nothing to choose between (§5, §6). |
 | How is overlap measured? | **Two signals — and the DESTINATION decides** | A workflow's identity is where it ends, not the path it took. Averaging a workflow into one score lets shared navigation outvote the goal (§5). |
@@ -101,6 +101,23 @@ teaching a screen that no longer exists, and nothing in the system can detect th
 
 So the product's job is to **present the overlap with enough evidence for a five-second human call**,
 not to resolve it.
+
+### 4a. "Both are real" was two decisions wearing one button
+
+The first draft offered one non-destructive outcome. Building selection exposed that it hides two
+answers with opposite consequences:
+
+- **"Two routes to the same goal."** An assertion that the workflows are interchangeable. It GROUPS
+  them, and the copilot then answers from **one**.
+- **"Not duplicates."** A statement that the DETECTOR was wrong. It must change nothing at all.
+
+They cannot share a button. Detection has already produced a real false positive between two
+unrelated tasks that happened to share their opening navigation (§5); recording that as a grouping
+would make the copilot answer half of those questions from the wrong workflow, silently, forever.
+
+The asymmetry decides the default everywhere this is touched: **dismissal is safe, grouping is a
+claim.** Where an old decision has to be re-interpreted — a migration, an import — it is read as a
+dismissal.
 
 ---
 
@@ -160,8 +177,10 @@ frequency of §1's failure accordingly.
 
 ## 6. Choosing between variants at answer time
 
-These rules resolve **variance** — two real routes to one goal. They do not resolve redundancy;
-§5 is why, and supersession is that path.
+These rules resolve **variance** — two real routes to one goal, and ONLY when the founder has said so
+by grouping them (§4a). They do not resolve redundancy; §5 is why, and supersession is that path.
+A workflow the founder never grouped is its own task and is never dropped — selection can only ever
+choose between routes someone explicitly called interchangeable.
 
 Two rules, in order.
 
@@ -181,10 +200,23 @@ is longer. The rule picks the option that degrades gracefully, which is why it s
 nobody has enumerated.
 
 That also defines *generic* operationally — **can this be started cold, or does it presuppose
-context?** — which is answerable from what the KB already holds, at build time, once.
+context?** — and it is answerable from where a workflow BEGINS. A route with an opaque id in it
+(`/projects/6a6a49ca…`) is somewhere you can only be if you were already somewhere specific; a
+shallow stable route (`/settings`) is somewhere anyone can get to. That is exactly what separated the
+first real pair — one signup route started inside a project, the other at the dashboard.
 
-**3 — Floor.** If nothing matches the screen and neither variant is the generic one, fall back to the
-most-asked-about variant. Rare, but the rules need a terminating case.
+*(Computed at answer time, not stored at build time as first drafted. The routes are already in
+memory when selection runs, it only ever fires inside a grouped task, and a stored column is one more
+thing that can go stale against the KB it describes.)*
+
+**3 — Floor.** If nothing matches the screen and the routes tie on cold-start, prefer the one with
+**more steps** — "we know more about this route" beats a coin toss.
+
+*(Also revised from the first draft, which said most-asked. Usage data would need a query on the
+ANSWER's critical path, and this rule only fires when two grouped routes both miss the user's screen
+AND tie on cold-start — rare inside rare. Step count is already in hand. Deliberately **not**
+recency: newer is not better, and it would make a founder's answers shift under them every time they
+re-recorded anything.)*
 
 ### Picking, not weighting
 
@@ -243,7 +275,8 @@ that replaced it. This resolves both **replacement** and **redundancy**, and it 
 failure: a copilot confidently teaching a screen that no longer exists.
 
 Note what "keep both" means in Cut 1: **nothing happens** — which is the status quo. The gain is that
-keeping both becomes an *informed* choice rather than an accident nobody was told about.
+keeping both becomes an *informed* choice rather than an accident nobody was told about. Cut 2 splits
+that one button in two, for the reason in §4a.
 
 **Detection must not hang off the moment of approval.** Checking only as a workflow is approved
 catches overlaps arriving from now on; a workspace whose duplicates are **already both approved** is
@@ -257,8 +290,8 @@ against unapproved is deliberately not compared: neither is answering anyone, so
 resolve yet.
 
 **Cut 2 — identity and selection.** Workflows gain a durable identity; siblings that share a task get
-one selected before ranking. Only *keep-both* genuinely needs the selection half, because only
-keep-both must know that two tellings are siblings.
+one selected before ranking. Only *grouping* needs the selection half, because only grouping asserts
+that two tellings are interchangeable.
 
 Cut 2 was originally justified by that selection. **The stronger reason turned out to be the
 reprocess hazard**: an approval following a position onto content nobody reviewed was the last way

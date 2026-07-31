@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeHistory, shortlistItems, type RetrievableKBItem } from './retrieval';
+import {
+  coldStartScore,
+  sanitizeHistory,
+  selectOnePerTask,
+  shortlistItems,
+  type RetrievableKBItem,
+} from './retrieval';
 
 /**
  * The repo's first tests (2026-07-26), added ahead of the mode-2 restructure.
@@ -152,5 +158,70 @@ describe('sanitizeHistory', () => {
     expect(sanitizeHistory(undefined)).toEqual([]);
     expect(sanitizeHistory('nope')).toEqual([]);
     expect(sanitizeHistory({ role: 'user' })).toEqual([]);
+  });
+});
+
+
+describe('selectOnePerTask — two routes to one goal', () => {
+  // P3-M1. This is the only place retrieval DROPS approved content, so each rule is pinned: a
+  // regression here does not error, it quietly answers from the wrong route.
+  const step = (workflowId: string, route: string): RetrievableKBItem => ({
+    id: `${workflowId}-${route}`,
+    workflowId,
+    sourceId: 'src',
+    segmentIndex: 0,
+    segmentTitle: null,
+    text: 'step',
+    data: { route },
+  });
+  const ids = (out: RetrievableKBItem[]) => [...new Set(out.map((i) => i.workflowId))].sort();
+
+  it('leaves everything alone when nothing is grouped', () => {
+    const items = [step('wf-a', '/settings'), step('wf-b', '/team')];
+    expect(selectOnePerTask(items, new Map(), '')).toHaveLength(2);
+  });
+
+  it('keeps the route the user is actually standing on', () => {
+    const items = [step('wf-a', '/settings/team'), step('wf-b', '/projects/9')];
+    const tasks = new Map([['wf-a', 't1'], ['wf-b', 't1']]);
+    expect(ids(selectOnePerTask(items, tasks, '/projects/9'))).toEqual(['wf-b']);
+  });
+
+  it('falls back to the route that can be started cold', () => {
+    // No screen match, so the tiebreak decides: `/settings` can be reached by anyone;
+    // `/projects/6a6a49ca1a22045b0b32b353` presupposes you are already inside that project.
+    const items = [step('wf-a', '/settings'), step('wf-b', '/projects/6a6a49ca1a22045b0b32b353')];
+    const tasks = new Map([['wf-a', 't1'], ['wf-b', 't1']]);
+    expect(ids(selectOnePerTask(items, tasks, '/somewhere-else'))).toEqual(['wf-a']);
+  });
+
+  it('never drops a workflow that shares a task with nothing', () => {
+    const items = [step('wf-a', '/a'), step('wf-b', '/b')];
+    const tasks = new Map([['wf-a', 't1']]); // grouped, but alone in its group
+    expect(ids(selectOnePerTask(items, tasks, ''))).toEqual(['wf-a', 'wf-b']);
+  });
+
+  it('separate tasks each keep a winner', () => {
+    const items = [step('wf-a', '/a'), step('wf-b', '/b'), step('wf-c', '/c'), step('wf-d', '/d')];
+    const tasks = new Map([
+      ['wf-a', 't1'], ['wf-b', 't1'],
+      ['wf-c', 't2'], ['wf-d', 't2'],
+    ]);
+    expect(selectOnePerTask(items, tasks, '')).toHaveLength(2);
+  });
+});
+
+describe('coldStartScore — can a user begin here?', () => {
+  it('ranks a shallow stable route above a deep one', () => {
+    expect(coldStartScore('/settings')).toBeGreaterThan(coldStartScore('/settings/team/invite'));
+  });
+
+  it('treats an opaque id as the strongest sign of "you were already somewhere"', () => {
+    expect(coldStartScore('/projects/6a6a49ca1a22045b0b32b353')).toBe(0);
+    expect(coldStartScore('/invoices/12345')).toBe(0);
+  });
+
+  it('rates the root most startable of all', () => {
+    expect(coldStartScore('/')).toBeGreaterThanOrEqual(coldStartScore('/dashboard'));
   });
 });

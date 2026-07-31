@@ -59,8 +59,8 @@ export interface RetrievalDb {
   copilotApproval: {
     findMany(args: {
       where: { workspaceId: string; inactiveReason: null };
-      select: { workflowId: true };
-    }): Promise<Array<{ workflowId: string }>>;
+      select: { workflowId: true; workflow: { select: { taskId: true } } };
+    }): Promise<Array<{ workflowId: string; workflow: { taskId: string | null } }>>;
   };
   knowledgeItem: {
     findMany(args: {
@@ -149,6 +149,31 @@ function termOverlap(text: string, terms: string[]): number {
   return score;
 }
 
+/**
+ * P3-M1 — how "cold-start-able" a workflow is, from the route its FIRST step happens on.
+ *
+ * The tiebreak between two routes to one goal is "which can a user actually start from here?", and
+ * the answer is in the entry route. A workflow that begins at `/dashboard` can be started by anyone;
+ * one that begins at `/dashboard/projects/6a6a49ca1a22045b0b32b353` presupposes you already have that
+ * project open. Deeper is more specific, and an opaque id segment is the strongest signal of all —
+ * it is a thing you must already be inside.
+ *
+ * Computed at answer time rather than stored: the routes are already in memory, it only ever fires
+ * inside a grouped task, and a stored column would be one more thing that can go stale.
+ *
+ * Higher = more generic.
+ */
+export function coldStartScore(route: string): number {
+  const r = normalizePath(route);
+  if (!r || r === '/') return 3; // the root: nothing more startable than this
+  const segments = r.split('/').filter(Boolean);
+  const hasOpaqueId = segments.some(
+    (s) => /^[0-9a-f]{16,}$/i.test(s) || /^\d+$/.test(s) || /^[0-9a-f-]{32,}$/i.test(s),
+  );
+  if (hasOpaqueId) return 0; // you can only be here if you were already somewhere specific
+  return Math.max(0, 3 - segments.length);
+}
+
 /** Trim trailing slashes; '' → '/'. */
 function normalizePath(p: string): string {
   const s = p.trim().replace(/\/+$/, '');
@@ -170,6 +195,63 @@ function routeMatches(item: RetrievableKBItem, contextPath: string): boolean {
   const route = normalizePath(raw);
   if (route === '/') return false;
   return route === ctx || route.startsWith(ctx + '/') || ctx.startsWith(route + '/');
+}
+
+/**
+ * P3-M1 — when the founder has said two workflows are two ROUTES TO ONE GOAL, answer from one of
+ * them, chosen before ranking.
+ *
+ * WHY A PICK AND NOT A WEIGHT. Leaving both in and ranking them is what the whole duplicate problem
+ * looked like: two tellings of one task splitting the candidate budget and interleaving in the
+ * prompt. A bias would only reorder that; the point is that one of them should not be there.
+ *
+ * The order, and why:
+ *  1. **The route the user is on.** If they are standing on a screen one route covers, that is the
+ *     route they can actually follow.
+ *  2. **The one that can be started cold.** Failure is asymmetric — hand someone a route that starts
+ *     mid-flow and step one is impossible for them; hand them the general one and it merely takes
+ *     longer. The tiebreak that degrades gracefully wins.
+ *  3. **More steps.** A pure last resort, and only because "we know more about this one" beats a
+ *     coin toss. Deliberately NOT recency: newer is not better, and it would make the copilot's
+ *     answer change under the founder every time they re-recorded anything.
+ *
+ * Ungrouped workflows (`taskId` null) are their own task and are never dropped — this can only ever
+ * choose between routes the founder explicitly said were interchangeable.
+ */
+export function selectOnePerTask(
+  items: RetrievableKBItem[],
+  taskByWorkflow: Map<string, string>,
+  contextPath: string,
+): RetrievableKBItem[] {
+  const byWorkflow = new Map<string, RetrievableKBItem[]>();
+  for (const i of items) byWorkflow.set(i.workflowId, [...(byWorkflow.get(i.workflowId) ?? []), i]);
+
+  // Only workflows that actually share a task with another one are in play.
+  const contenders = new Map<string, string[]>();
+  for (const workflowId of byWorkflow.keys()) {
+    const taskId = taskByWorkflow.get(workflowId);
+    if (!taskId) continue;
+    contenders.set(taskId, [...(contenders.get(taskId) ?? []), workflowId]);
+  }
+
+  const dropped = new Set<string>();
+  for (const [, workflowIds] of contenders) {
+    if (workflowIds.length < 2) continue;
+    const scored = workflowIds.map((id) => {
+      const steps = byWorkflow.get(id) ?? [];
+      const onRoute = contextPath ? steps.some((s) => routeMatches(s, contextPath)) : false;
+      const entry = steps[0];
+      const entryRoute = ((entry?.data as { route?: string } | null) ?? {}).route ?? '';
+      return { id, onRoute, generic: coldStartScore(entryRoute), size: steps.length };
+    });
+    scored.sort(
+      (a, b) =>
+        Number(b.onRoute) - Number(a.onRoute) || b.generic - a.generic || b.size - a.size,
+    );
+    for (const s of scored.slice(1)) dropped.add(s.id);
+  }
+
+  return dropped.size === 0 ? items : items.filter((i) => !dropped.has(i.workflowId));
 }
 
 function toCopilotItem(i: RetrievableKBItem): CopilotKBItem {
@@ -284,10 +366,13 @@ export async function retrieveApprovedKBItems(
 
   const approvals = await db.copilotApproval.findMany({
     where: { workspaceId, inactiveReason: null },
-    select: { workflowId: true },
+    select: { workflowId: true, workflow: { select: { taskId: true } } },
   });
   if (approvals.length === 0) return [];
   const liveWorkflowIds = new Set(approvals.map((a) => a.workflowId));
+  // P3-M1 — which live workflows the founder grouped as routes to one goal.
+  const taskByWorkflow = new Map<string, string>();
+  for (const a of approvals) if (a.workflow.taskId) taskByWorkflow.set(a.workflowId, a.workflow.taskId);
 
   const [all, vecIds] = await Promise.all([
     db.knowledgeItem.findMany({
@@ -305,7 +390,11 @@ export async function retrieveApprovedKBItems(
     }),
     queryVectorPromise.then((qv) => (qv ? vectorTopK(db, workspaceId, qv, [...liveWorkflowIds]) : null)),
   ]);
-  const approved = all.filter((i) => liveWorkflowIds.has(i.workflowId));
+  const live = all.filter((i) => liveWorkflowIds.has(i.workflowId));
+  if (live.length === 0) return [];
+  // One route per goal, decided BEFORE ranking — see `selectOnePerTask`. A no-op in the usual case
+  // where nothing is grouped.
+  const approved = selectOnePerTask(live, taskByWorkflow, (opts.contextPath ?? '').trim());
   if (approved.length === 0) return [];
 
   if (!vecIds || vecIds.length === 0) return shortlistItems(approved, question, opts);

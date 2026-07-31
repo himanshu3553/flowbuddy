@@ -269,10 +269,15 @@ if you're changing this path: a finalized recording must survive both a discard 
 
 1. On the KB page, toggle the sign-in workflow **approved** (`Switch`). Counter updates ("1 of 1 approved").
 2. (Persistence) Reload the page → the toggle stays on.
+3. Toggle it **off** and back **on**. It returns to Approved · Live — re-approving also clears any
+   earlier retirement, which is what flipping the switch back on means.
 
-✅ **PASS:** approval persists (a `CopilotApproval` row keyed by `sourceId + segmentIndex`). Dashboard step 3 ("Approve a workflow") flips to done.
+✅ **PASS:** approval persists (a `CopilotApproval` row naming the workflow). Dashboard step 3
+("Approve a workflow") flips to done.
 
-> Approval survives reprocess: it's keyed by `(sourceId, segmentIndex)`, not by the KnowledgeItem id.
+> Approval names a `Workflow` — an identity that outlives both the KnowledgeItems (deleted and
+> recreated on every re-process) and the position in its recording. What happens to it across a
+> re-process is §13, and that is the leg that actually guards the trust boundary.
 
 ---
 
@@ -437,12 +442,48 @@ DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WH
 
 ---
 
-## 13. Reprocess / idempotency
+## 13. Reprocess — identity, and the trust boundary (P3-M1)
 
-1. Re-record (or re-trigger) the same workflow. The worker deletes + recreates KnowledgeItems and resets segment tags each run.
-2. Confirm the previously-approved workflow's approval still holds (keyed by `sourceId + segmentIndex`).
+**The most important leg in this document.** An approval is the founder's signature on a piece of
+content. This checks that a re-process can only carry it onto content that is still the same thing —
+the failure it replaced was silent, invisible in Studio, and put unreviewed steps in front of
+end-users.
 
-✅ **PASS:** reprocessing doesn't duplicate items, and approval survives.
+Use a recording with **at least two approved workflows**, one of them cited by the copilot.
+
+1. Studio → the recording → **Re-process**. Wait for `ready`.
+2. **Approvals survive where the content didn't change.** The workflows are still Approved · Live,
+   and the copilot still answers and cites them. Nothing appears under **Not answering**.
+3. **Identity survived, not just the row.** The workflow's citation history is intact — its detail
+   page still shows its *Cited by copilot* count and 👍/👎 tally, rather than resetting to `—`.
+   (Analytics group on the identity, so a reset means a new identity was minted for old content.)
+4. **Worker log:** no `workflows no longer present after reprocess` warning.
+
+### The half that must fail closed
+
+Force a mismatch — record the same task again but **materially differently** (add or remove a couple
+of steps, or change where it ends), then re-process the ORIGINAL recording so re-segmentation moves
+things.
+
+5. A workflow whose content no longer matches is **detached**: it appears under **Not answering** as
+   **Needs re-review**, with the plain-English line about the recording having changed.
+6. **The copilot stops citing it** — ask a question it used to answer and confirm it is no longer the
+   source. This is the actual guarantee; the badge is only how you see it.
+7. Click **Looks right** on it → live again, and the copilot cites it once more.
+
+✅ **PASS:** items aren't duplicated · approvals follow CONTENT, not position · anything unverifiable
+stops answering until a human confirms it · citation history survives.
+
+> **What "keyed by `sourceId + segmentIndex`" used to mean, and why it is gone.** Approval used to
+> name a POSITION so it would survive the worker's item delete-and-recreate. That was safe only while
+> re-segmentation was deterministic; once it wasn't, a re-split could put a different workflow at
+> index 2 and the approval followed the index. Those columns no longer exist — an approval names a
+> `Workflow`, and the worker re-matches by content. If a future change makes step 5 stop happening,
+> the fail-closed path has been lost, not fixed.
+
+> **Do not test this by killing the embeddings API.** On a re-process an embedding failure is FATAL
+> by design (identity can't be verified without vectors), so the job fails and the KB is left exactly
+> as it was — correct behaviour, but it tests the abort path, not the matcher.
 
 ---
 

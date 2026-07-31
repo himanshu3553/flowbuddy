@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
-import { canonicalPair } from '@flowbuddy/synthesis/overlap';
 import { getCurrentWorkspace } from '@/lib/session';
 
 /**
@@ -101,40 +100,89 @@ export async function undoSupersede(input: { workflowId: string }): Promise<void
 }
 
 /**
- * "Both are real." Records the decision so the pair is never raised again.
+ * "These are NOT duplicates" — the detector was wrong. Remembers the pair so it stops being raised,
+ * and changes NOTHING else: both workflows stay approved and both keep answering.
  *
- * In this cut that memo is ALL it does — both workflows stay approved exactly as they were. The
- * value is that keeping both becomes a decision the founder made, rather than a duplicate nobody
- * was told about. Teaching the copilot to CHOOSE between two live routes is the next cut.
+ * ⚠️ Deliberately separate from `groupAsOneTask` below. The old single "Both are real" button
+ * conflated them, and the two outcomes are not interchangeable: grouping makes the copilot answer
+ * from only ONE of the pair, so recording a false positive as a grouping would silence half of what
+ * a workspace knows. Detection has already produced a real false positive between two unrelated
+ * tasks that shared their opening navigation — this is the button for that, and it must stay cheap
+ * and consequence-free.
  */
-export async function keepBothWorkflows(input: {
-  x: { workflowId: string; sourceId: string; segmentIndex: number };
-  y: { workflowId: string; sourceId: string; segmentIndex: number };
+export async function dismissOverlap(input: {
+  aWorkflowId: string;
+  bWorkflowId: string;
 }): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
-  const sourceIds = await assertOwned(workspaceId, [input.x.workflowId, input.y.workflowId]);
+  const sourceIds = await assertOwned(workspaceId, [input.aWorkflowId, input.bWorkflowId]);
 
-  const { a, b } = canonicalPair(input.x, input.y);
-  await prisma.workflowOverlapDecision.upsert({
-    where: {
-      aSourceId_aSegmentIndex_bSourceId_bSegmentIndex: {
-        aSourceId: a.sourceId,
-        aSegmentIndex: a.segmentIndex,
-        bSourceId: b.sourceId,
-        bSegmentIndex: b.segmentIndex,
-      },
-    },
-    create: {
-      workspaceId,
-      aSourceId: a.sourceId,
-      aSegmentIndex: a.segmentIndex,
-      bSourceId: b.sourceId,
-      bSegmentIndex: b.segmentIndex,
-      decidedById: ctx.userId,
-    },
+  const [a, b] = [input.aWorkflowId, input.bWorkflowId].sort();
+  await prisma.workflowOverlapDismissal.upsert({
+    where: { aWorkflowId_bWorkflowId: { aWorkflowId: a as string, bWorkflowId: b as string } },
+    create: { workspaceId, aWorkflowId: a as string, bWorkflowId: b as string, decidedById: ctx.userId },
     update: {},
+  });
+
+  revalidate(sourceIds);
+}
+
+/**
+ * "Two routes to the same thing." Groups both workflows under one task, which is what lets the
+ * copilot answer from ONE of them instead of splitting its attention across both.
+ *
+ * Grouping is TRANSITIVE and merges: if either side already belongs to a task, the other joins it,
+ * and if both already belong to different tasks the two tasks become one. Otherwise a founder could
+ * group A with B, then B with C, and end up with a copilot that thinks A and C are unrelated.
+ */
+export async function groupAsOneTask(input: {
+  aWorkflowId: string;
+  bWorkflowId: string;
+}): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const workspaceId = ctx.workspace.id;
+  const sourceIds = await assertOwned(workspaceId, [input.aWorkflowId, input.bWorkflowId]);
+
+  const pair = await prisma.workflow.findMany({
+    where: { id: { in: [input.aWorkflowId, input.bWorkflowId] } },
+    select: { id: true, taskId: true },
+  });
+  const existing = pair.map((w) => w.taskId).filter((t): t is string => t != null);
+  // Reuse an existing task where there is one, so joining a group never renames it.
+  const taskId = existing[0] ?? `task_${input.aWorkflowId}`;
+
+  await prisma.$transaction([
+    // Absorb any other task the pair already belonged to.
+    ...(existing.length > 1
+      ? [
+          prisma.workflow.updateMany({
+            where: { workspaceId, taskId: { in: existing.filter((t) => t !== taskId) } },
+            data: { taskId },
+          }),
+        ]
+      : []),
+    prisma.workflow.updateMany({
+      where: { id: { in: [input.aWorkflowId, input.bWorkflowId] } },
+      data: { taskId },
+    }),
+  ]);
+
+  revalidate(sourceIds);
+}
+
+/** Ungroup a workflow — it becomes its own task again and answers on its own merits. */
+export async function ungroupWorkflow(input: { workflowId: string }): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const workspaceId = ctx.workspace.id;
+  const sourceIds = await assertOwned(workspaceId, [input.workflowId]);
+
+  await prisma.workflow.updateMany({
+    where: { workspaceId, id: input.workflowId },
+    data: { taskId: null },
   });
 
   revalidate(sourceIds);

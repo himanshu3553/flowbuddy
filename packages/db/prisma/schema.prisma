@@ -152,7 +152,7 @@ model Workspace {
   copilotApprovals CopilotApproval[]
   copilotQueries   CopilotQuery[]
   walkthroughs     CopilotWalkthrough[]
-  overlapDecisions WorkflowOverlapDecision[]
+  overlapDismissals WorkflowOverlapDismissal[]
   workflows        Workflow[]
 }
 
@@ -334,26 +334,29 @@ model CopilotApproval {
   @@index([inactiveReason])
 }
 
-model WorkflowOverlapDecision {
-  // P3-M0 — a "keep both" memo. Overlap detection compares a workflow against everything already
-  // approved and flags near-duplicates; when the founder decides two tellings are BOTH real, that
-  // decision has to be remembered or the same pair is raised at every visit.
-  // Only "keep both" is stored here. The other outcome (supersede) lives on CopilotApproval, because
-  // that is the row retrieval already reads — one less join on the answer path.
-  // The pair is stored in CANONICAL order (the lexicographically smaller "sourceId:segmentIndex"
-  // first) so a pair can never be recorded twice under two orderings.
-  id            String   @id @default(cuid())
-  workspaceId   String
-  aSourceId     String
-  aSegmentIndex Int
-  bSourceId     String
-  bSegmentIndex Int
-  decidedById   String?
-  createdAt     DateTime @default(now())
+model WorkflowOverlapDismissal {
+  // P3-M1 — "these are NOT duplicates." Detection compares workflows by content and can be wrong:
+  // two unrelated tasks that share their opening navigation once scored 0.757 against each other.
+  // When the founder says the detector is wrong, that has to be remembered or the pair is raised at
+  // every visit.
+  //
+  // ⚠️ This is NOT the same decision as "two routes to one goal" — that one groups the workflows
+  // under a shared `Workflow.taskId` and makes the copilot ANSWER FROM ONLY ONE of them. Recording a
+  // false positive as a grouping would silence half a workspace's knowledge. The two outcomes look
+  // alike in the UI and must never be collapsed into one action.
+  //
+  // The pair is stored in CANONICAL order (lexicographically smaller workflow id first) so it can
+  // never be recorded twice under two orderings.
+  id           String   @id @default(cuid())
+  workspaceId  String
+  aWorkflowId  String
+  bWorkflowId  String
+  decidedById  String?
+  createdAt    DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([aSourceId, aSegmentIndex, bSourceId, bSegmentIndex])
+  @@unique([aWorkflowId, bWorkflowId])
   @@index([workspaceId])
 }
 

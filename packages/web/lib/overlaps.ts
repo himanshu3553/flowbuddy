@@ -1,5 +1,5 @@
 import { prisma } from '@flowbuddy/db';
-import { findWorkflowOverlaps, workflowKey, canonicalPair } from '@flowbuddy/synthesis/overlap';
+import { findWorkflowOverlaps, workflowKey } from '@flowbuddy/synthesis/overlap';
 
 /**
  * P3-M0 — server-only reads for duplicate-workflow warnings in Studio.
@@ -66,13 +66,6 @@ export function overlapsInvolving(
   );
 }
 
-const memoKey = (
-  x: { sourceId: string; segmentIndex: number },
-  y: { sourceId: string; segmentIndex: number },
-) => {
-  const { a, b } = canonicalPair(x, y);
-  return `${workflowKey(a.sourceId, a.segmentIndex)}|${workflowKey(b.sourceId, b.segmentIndex)}`;
-};
 
 /**
  * Suspected duplicate workflows in a workspace, strongest first.
@@ -81,10 +74,14 @@ const memoKey = (
  * rendering or a workflow being approved.
  */
 export async function listWorkflowOverlaps(workspaceId: string): Promise<WorkflowOverlap[]> {
-  const [items, approvals, dismissals] = await Promise.all([
+  const [items, grouped, approvals, dismissals] = await Promise.all([
     prisma.knowledgeItem.findMany({
       where: { workspaceId, segmentIndex: { not: null } },
       select: { workflowId: true, sourceId: true, segmentIndex: true, segmentTitle: true },
+    }),
+    prisma.workflow.findMany({
+      where: { workspaceId, NOT: { taskId: null } },
+      select: { id: true, taskId: true },
     }),
     prisma.copilotApproval.findMany({
       where: { workspaceId },
@@ -94,11 +91,13 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
         workflow: { select: { sourceId: true, segmentIndex: true } },
       },
     }),
-    prisma.workflowOverlapDecision.findMany({
+    prisma.workflowOverlapDismissal.findMany({
       where: { workspaceId },
-      select: { aSourceId: true, aSegmentIndex: true, bSourceId: true, bSegmentIndex: true },
+      select: { aWorkflowId: true, bWorkflowId: true },
     }),
   ]);
+
+  const taskByWorkflowId = new Map(grouped.map((w) => [w.id, w.taskId as string]));
 
   const stepCount = new Map<string, number>();
   const titles = new Map<string, string | null>();
@@ -128,11 +127,16 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
   });
   if (pairs.length === 0) return [];
 
-  const dismissed = new Set(
-    dismissals.map(
-      (d) => `${workflowKey(d.aSourceId, d.aSegmentIndex)}|${workflowKey(d.bSourceId, d.bSegmentIndex)}`,
-    ),
-  );
+  // Pairs the founder has settled, by workflow identity. Two ways to be settled:
+  //  · dismissed  — "not duplicates", the detector was wrong
+  //  · grouped    — already two routes to one task, so there is nothing left to ask about
+  const settled = new Set(dismissals.map((d) => `${d.aWorkflowId}|${d.bWorkflowId}`));
+  const isSettled = (aId: string, bId: string) => {
+    const [x, y] = [aId, bId].sort();
+    if (settled.has(`${x}|${y}`)) return true;
+    const ta = taskByWorkflowId.get(aId);
+    return ta != null && ta === taskByWorkflowId.get(bId);
+  };
 
   // Steps are fetched ONLY for workflows that actually turned out to be in a pair — the founder
   // cannot judge "replace or keep both" without reading both step lists, but loading every step in
@@ -177,7 +181,11 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
     approvedAt.get(workflowKey(w.sourceId, w.segmentIndex))?.getTime() ?? Number.MAX_SAFE_INTEGER;
 
   return pairs
-    .filter((p) => !dismissed.has(memoKey(p.a, p.b)))
+    .filter((p) => {
+      const aId = workflowIdByKey.get(workflowKey(p.a.sourceId, p.a.segmentIndex));
+      const bId = workflowIdByKey.get(workflowKey(p.b.sourceId, p.b.segmentIndex));
+      return !aId || !bId ? true : !isSettled(aId, bId);
+    })
     .map((p) => {
       const aFirst = rank(p.a) <= rank(p.b);
       return {

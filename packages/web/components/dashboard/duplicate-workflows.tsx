@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
-import { supersedeWorkflow, keepBothWorkflows } from '@/lib/overlap-actions';
+import { supersedeWorkflow, dismissOverlap, groupAsOneTask } from '@/lib/overlap-actions';
 
 /**
  * P3-M0 — "you already have a workflow for this."
@@ -44,11 +44,6 @@ export interface OverlapView {
 }
 
 const titleOf = (s: OverlapSideView) => s.segmentTitle ?? `Workflow ${s.segmentIndex + 1}`;
-const coord = (s: OverlapSideView) => ({
-  workflowId: s.workflowId,
-  sourceId: s.sourceId,
-  segmentIndex: s.segmentIndex,
-});
 const keyOf = (o: OverlapView) =>
   `${o.incumbent.sourceId}:${o.incumbent.segmentIndex}|${o.challenger.sourceId}:${o.challenger.segmentIndex}`;
 
@@ -146,12 +141,33 @@ function useResolveOverlap(overlap: OverlapView, onDone: () => void) {
         disabled={pending}
         onClick={() =>
           run(
-            () => keepBothWorkflows({ x: coord(incumbent), y: coord(challenger) }),
-            'Both kept — this pair won’t be raised again',
+            () =>
+              groupAsOneTask({
+                aWorkflowId: incumbent.workflowId,
+                bWorkflowId: challenger.workflowId,
+              }),
+            'Grouped — the copilot will answer with whichever route fits',
           )
         }
       >
-        Both are real
+        Two routes, same goal
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={pending}
+        onClick={() =>
+          run(
+            () =>
+              dismissOverlap({
+                aWorkflowId: incumbent.workflowId,
+                bWorkflowId: challenger.workflowId,
+              }),
+            'Dismissed — this pair won’t be raised again',
+          )
+        }
+      >
+        Not duplicates
       </Button>
     </>
   );
@@ -190,7 +206,9 @@ export function CompareDialog({
 
         <DialogFooter className="items-center gap-2 sm:justify-between">
           <span className="text-[11px] leading-relaxed text-muted-foreground">
-            Replacing never deletes anything — it can be restored.
+            Replacing never deletes anything. <b className="font-semibold">Two routes</b> makes the
+            copilot answer from one of them; <b className="font-semibold">Not duplicates</b> changes
+            nothing.
           </span>
           <span className="flex shrink-0 flex-wrap gap-2">{actions}</span>
         </DialogFooter>
@@ -268,7 +286,9 @@ export function DuplicateCard({ overlap }: { overlap: OverlapView }) {
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
         {actions}
         <span className="text-[11px] text-muted-foreground">
-          Replacing never deletes anything — the old workflow keeps its recording and can be restored.
+          Replacing never deletes anything. <b className="font-semibold">Two routes</b> makes the
+          copilot answer from one of them; <b className="font-semibold">Not duplicates</b> changes
+          nothing and just stops the warning.
         </span>
       </div>
 
