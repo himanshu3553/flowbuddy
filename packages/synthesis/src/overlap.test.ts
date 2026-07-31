@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   canonicalPair,
   findWorkflowOverlaps,
+  matchWorkflowIdentities,
+  meanVector,
   workflowKey,
   SIMILARITY_THRESHOLD,
   LAST_STEP_THRESHOLD,
@@ -16,9 +18,11 @@ import { retrieveApprovedKBItems, type RetrievalDb } from './retrieval';
  *  1. Detection throwing instead of degrading — it runs on the approval screen, so an exception
  *     would block the founder from approving anything at all. It is advisory; it must always
  *     return a list, never raise.
- *  2. Retrieval forgetting `supersededById: null` — a retired workflow would keep answering
- *     end-users with content the founder deliberately replaced, and NOTHING would look broken.
- *     That filter is the entire enforcement surface for supersession, so it is pinned here.
+ *  2. Retrieval forgetting `inactiveReason: null` — a retired workflow would keep answering
+ *     end-users with content the founder replaced, or that a reprocess could not verify, and
+ *     NOTHING would look broken. That filter is the entire enforcement surface, so it is pinned.
+ *  3. Identity matching accepting a workflow that ends somewhere else — that is how an approval
+ *     walks onto content nobody reviewed, which is the failure this whole module exists to stop.
  */
 
 const row = (
@@ -125,7 +129,67 @@ describe('canonicalPair', () => {
   });
 });
 
-describe('supersession — the retrieval enforcement surface', () => {
+describe('matchWorkflowIdentities — surviving a reprocess', () => {
+  // Vectors chosen so cosine is obvious: [1,0,0] vs [1,0,0] = 1, vs [0,1,0] = 0.
+  const HERE = [1, 0, 0];
+  const ELSEWHERE = [0, 1, 0];
+
+  it('keeps an identity when the content still matches', () => {
+    const out = matchWorkflowIdentities(
+      [{ key: 0, centroid: HERE, goal: HERE }],
+      [{ key: 'wf-1', centroid: HERE, goal: HERE }],
+    );
+    expect(out.get(0)).toBe('wf-1');
+  });
+
+  it('REFUSES a match whose destination differs, even when the material is identical', () => {
+    // The case the whole design turns on. Two workflows can share almost every step and still be
+    // different tasks; handing one the other's identity would hand it the founder's approval.
+    const out = matchWorkflowIdentities(
+      [{ key: 0, centroid: HERE, goal: HERE }],
+      [{ key: 'wf-1', centroid: HERE, goal: ELSEWHERE }],
+    );
+    expect(out.size).toBe(0);
+  });
+
+  it('leaves a genuinely new workflow unmatched — it must be born unapproved', () => {
+    const out = matchWorkflowIdentities(
+      [{ key: 0, centroid: ELSEWHERE, goal: ELSEWHERE }],
+      [{ key: 'wf-1', centroid: HERE, goal: HERE }],
+    );
+    expect(out.has(0)).toBe(false);
+  });
+
+  it('never gives one identity to two workflows', () => {
+    // Both incoming clear the gates against the same existing workflow. Only one may take it —
+    // otherwise a single approval would end up covering two different sets of steps.
+    const out = matchWorkflowIdentities(
+      [
+        { key: 0, centroid: HERE, goal: HERE },
+        { key: 1, centroid: HERE, goal: HERE },
+      ],
+      [{ key: 'wf-1', centroid: HERE, goal: HERE }],
+    );
+    expect(out.size).toBe(1);
+    expect([...out.values()]).toEqual(['wf-1']);
+  });
+
+  it('matches nothing when there is nothing to match against', () => {
+    expect(matchWorkflowIdentities([{ key: 0, centroid: HERE, goal: HERE }], []).size).toBe(0);
+  });
+});
+
+describe('meanVector', () => {
+  it('averages component-wise', () => {
+    expect(meanVector([[0, 2], [2, 0]])).toEqual([1, 1]);
+  });
+
+  it('returns null with nothing to average — a workflow with no vectors has no fingerprint', () => {
+    expect(meanVector([])).toBeNull();
+  });
+});
+
+describe('the liveness test — retrieval enforcement surface', () => {
   /** Captures the `where` retrieval sends, and returns no approvals (the rest of the path is inert). */
   function spyDb(): { db: RetrievalDb; seen: Array<Record<string, unknown>> } {
     const seen: Array<Record<string, unknown>> = [];
@@ -141,12 +205,14 @@ describe('supersession — the retrieval enforcement surface', () => {
     return { db, seen };
   }
 
-  it('asks only for approvals that have NOT been superseded', async () => {
+  it('asks only for approvals that are LIVE', async () => {
     const { db, seen } = spyDb();
     await retrieveApprovedKBItems(db, 'ws-1', 'how do I sign up?');
     expect(seen).toHaveLength(1);
-    // The invariant: retired workflows are excluded IN THE QUERY, not filtered afterwards — a
-    // post-filter is one refactor away from being dropped.
-    expect(seen[0]).toMatchObject({ workspaceId: 'ws-1', supersededById: null });
+    // Two invariants in one line. Retired workflows are excluded IN THE QUERY, not filtered
+    // afterwards — a post-filter is one refactor away from being dropped. And there is exactly ONE
+    // way to be retired (`inactiveReason`), because six readers each checking two flags is how one
+    // of them ends up checking only the first.
+    expect(seen[0]).toMatchObject({ workspaceId: 'ws-1', inactiveReason: null });
   });
 });

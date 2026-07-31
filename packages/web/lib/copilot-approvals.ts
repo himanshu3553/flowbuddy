@@ -17,29 +17,72 @@ import { prisma } from '@flowbuddy/db';
 const keyOf = (sourceId: string, segmentIndex: number) => `${sourceId}:${segmentIndex}`;
 
 /**
- * Set of `"sourceId:segmentIndex"` keys the copilot may answer from — approved AND still current.
- * P3-M0: a superseded workflow was approved and then replaced by a re-recording; it is NOT live, so
- * it must not read as approved anywhere. `supersededWorkflows` below is what tells the two apart.
+ * Set of `"sourceId:segmentIndex"` keys the copilot may answer from — approved AND live.
+ * An approval that was later retired (replaced, or unverifiable after a reprocess) is NOT live and
+ * must not read as approved anywhere. `inactiveWorkflows` below is what tells them apart.
  */
 export async function approvedSegmentKeys(workspaceId: string): Promise<Set<string>> {
   const rows = await prisma.copilotApproval.findMany({
-    where: { workspaceId, supersededById: null },
+    where: { workspaceId, inactiveReason: null },
     select: { sourceId: true, segmentIndex: true },
   });
   return new Set(rows.map((r) => keyOf(r.sourceId, r.segmentIndex)));
 }
 
+/** Why a workflow stopped answering, and what replaced it (when anything did). */
+export interface InactiveWorkflow {
+  reason: string;
+  replacedByTitle: string | null;
+}
+
 /**
- * P3-M0 — retired workflows mapped to the title of whatever replaced them, so Studio can say
- * "replaced by X" rather than silently showing them as unapproved (which would look like the
- * founder's approval had been lost).
+ * Retired workflows and WHY, so Studio can say "replaced by X" or "needs re-review" rather than
+ * showing them as unapproved — which would look like the founder's approval had been lost.
  */
-export async function supersededWorkflows(workspaceId: string): Promise<Map<string, string | null>> {
+export async function inactiveWorkflows(
+  workspaceId: string,
+): Promise<Map<string, InactiveWorkflow>> {
   const rows = await prisma.copilotApproval.findMany({
-    where: { workspaceId, NOT: { supersededById: null } },
-    select: { sourceId: true, segmentIndex: true, supersededBy: { select: { segmentTitle: true } } },
+    where: { workspaceId, NOT: { inactiveReason: null } },
+    select: {
+      sourceId: true,
+      segmentIndex: true,
+      inactiveReason: true,
+      supersededBy: { select: { segmentTitle: true } },
+    },
   });
-  return new Map(rows.map((r) => [keyOf(r.sourceId, r.segmentIndex), r.supersededBy?.segmentTitle ?? null]));
+  return new Map(
+    rows.map((r) => [
+      keyOf(r.sourceId, r.segmentIndex),
+      { reason: r.inactiveReason as string, replacedByTitle: r.supersededBy?.segmentTitle ?? null },
+    ]),
+  );
+}
+
+/**
+ * P3-M1 — the durable workflow identities at the given positions, keyed `"sourceId:segmentIndex"`.
+ *
+ * Every approval carries its `workflowId` — the column is required, so an approval cannot be written
+ * without one. A position with no identity is absent from the map, and callers must FAIL rather than
+ * invent a fallback: the worker mints an identity for every workflow it distils, so a missing one
+ * means the KB and the approval screen disagree about what exists, which is not something to paper
+ * over by approving something we cannot name.
+ */
+export async function workflowIdsAt(
+  positions: { sourceId: string; segmentIndex: number }[],
+): Promise<Map<string, string>> {
+  if (positions.length === 0) return new Map();
+  const rows = await prisma.workflow.findMany({
+    // `segmentIndex: null` means DETACHED — a reprocess left this workflow with no position in its
+    // recording. It is deliberately unreachable here: nothing at a position can resolve to it.
+    where: { OR: positions.map((p) => ({ sourceId: p.sourceId, segmentIndex: p.segmentIndex })) },
+    select: { id: true, sourceId: true, segmentIndex: true },
+  });
+  return new Map(
+    rows
+      .filter((r): r is typeof r & { segmentIndex: number } => r.segmentIndex !== null)
+      .map((r) => [keyOf(r.sourceId, r.segmentIndex), r.id]),
+  );
 }
 
 export interface ApprovedWorkflow {

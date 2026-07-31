@@ -2,13 +2,74 @@ import { Worker } from 'bullmq';
 import { SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
-import { buildWorkflowKB, distilledStepText, embedTexts, toVectorLiteral } from '@flowbuddy/synthesis';
+import {
+  buildWorkflowKB,
+  distilledStepText,
+  embedTexts,
+  matchWorkflowIdentities,
+  meanVector,
+  toVectorLiteral,
+  type WorkflowFingerprint,
+} from '@flowbuddy/synthesis';
 import { createLogger } from '@flowbuddy/logger';
 import { config } from './config';
 import { connection } from './queue';
 import { sessionArtifactReader } from './storage';
 
 const log = createLogger('worker');
+
+/**
+ * P3-M1 — fingerprint every workflow currently stored for a recording, from the vectors already on
+ * its steps. Must be read BEFORE the worker deletes those steps; afterwards the evidence is gone.
+ *
+ * A workflow whose steps were never embedded has no fingerprint and so cannot be matched. That is
+ * the fail-closed direction on purpose: an unverifiable identity must not silently keep an approval.
+ */
+async function readWorkflowFingerprints(sourceId: string): Promise<WorkflowFingerprint<string>[]> {
+  const rows = await prisma.$queryRaw<Array<{ workflowId: string; vec: string }>>`
+    SELECT "workflowId", embedding::text AS vec
+    FROM "KnowledgeItem"
+    WHERE "sourceId" = ${sourceId} AND embedding IS NOT NULL
+    ORDER BY "workflowId", "orderIndex"`;
+
+  const byWorkflow = new Map<string, number[][]>();
+  for (const r of rows) {
+    let parsed: number[];
+    try {
+      parsed = JSON.parse(r.vec) as number[];
+    } catch {
+      continue;
+    }
+    byWorkflow.set(r.workflowId, [...(byWorkflow.get(r.workflowId) ?? []), parsed]);
+  }
+
+  const out: WorkflowFingerprint<string>[] = [];
+  for (const [workflowId, vecs] of byWorkflow) {
+    const centroid = meanVector(vecs);
+    const goal = vecs[vecs.length - 1];
+    if (centroid && goal) out.push({ key: workflowId, centroid, goal });
+  }
+  return out;
+}
+
+/** The same fingerprint shape for freshly distilled workflows, keyed by their new segment index. */
+function fingerprintsFrom(
+  workflows: Array<{ segmentIndex: number; steps: unknown[] }>,
+  stepTexts: string[][],
+  vectors: number[][],
+): WorkflowFingerprint<number>[] {
+  const out: WorkflowFingerprint<number>[] = [];
+  let cursor = 0;
+  workflows.forEach((wf, i) => {
+    const count = stepTexts[i]?.length ?? 0;
+    const slice = vectors.slice(cursor, cursor + count);
+    cursor += count;
+    const centroid = meanVector(slice);
+    const goal = slice[slice.length - 1];
+    if (centroid && goal) out.push({ key: wf.segmentIndex, centroid, goal });
+  });
+  return out;
+}
 
 const worker = new Worker(
   SYNTHESIS_QUEUE,
@@ -49,12 +110,102 @@ const worker = new Worker(
         data: { transcript: transcript as object },
       });
 
+      // ── P3-M1: which of these workflows ARE the ones already here? ──────────────────────────────
+      // Fingerprint what is stored RIGHT NOW, before the delete below destroys it. Identity is then
+      // decided by comparing content — never by position, which is what used to walk a founder's
+      // approval onto a workflow nobody had reviewed.
+      const existingFingerprints = await readWorkflowFingerprints(sessionId);
+      const existingWorkflowIds = (
+        await prisma.workflow.findMany({ where: { sourceId: sessionId }, select: { id: true } })
+      ).map((w) => w.id);
+
+      // Embed the incoming steps BEFORE writing them: the same vectors decide identity and serve
+      // hybrid retrieval, so one call does both jobs instead of two.
+      const stepTexts = workflows.map((wf) => wf.steps.map((step) => distilledStepText(step)));
+      const flatTexts = stepTexts.flat();
+      let embedWarning: string | null = null;
+      let vectors: number[][] | null = null;
+      if (flatTexts.length > 0) {
+        try {
+          vectors = await embedTexts(flatTexts, {
+            apiKey: config.openaiApiKey,
+            model: config.embedModel || undefined,
+            timeoutMs: 60_000, // batch path: generous but bounded (the SDK default is 600s)
+            maxRetries: 2,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // On a REPROCESS this is fatal, deliberately. Without vectors we cannot tell which
+          // workflow is which, and both alternatives are worse: guessing by position is the bug
+          // this stage exists to kill, and detaching everything would unapprove a whole KB over a
+          // transient API blip. Throwing here leaves the existing KB and every approval untouched —
+          // nothing has been deleted yet.
+          if (existingWorkflowIds.length > 0) {
+            throw new Error(`cannot verify workflow identity — embedding failed: ${msg}`);
+          }
+          // A FIRST process has no identity to protect, so it degrades to keyword-only as before.
+          embedWarning = `Semantic search is unavailable for this recording (embedding failed: ${msg}) — answers use keyword matching until it is re-processed.`;
+          log.warn({ sessionId, err: msg }, 'embedding failed — items stay keyword-only');
+        }
+      }
+
+      const matched = vectors
+        ? matchWorkflowIdentities(fingerprintsFrom(workflows, stepTexts, vectors), existingFingerprints)
+        : new Map<number, string>();
+
+      // Detach every existing workflow first so positions are free: a re-split can swap two
+      // workflows' indices, and updating them one at a time would collide on the unique key.
+      await prisma.workflow.updateMany({
+        where: { sourceId: sessionId },
+        data: { segmentIndex: null },
+      });
+
+      const identified: Array<{ workflowId: string; wf: (typeof workflows)[number] }> = [];
+      for (const wf of workflows) {
+        const existingId = matched.get(wf.segmentIndex);
+        if (existingId) {
+          await prisma.workflow.update({
+            where: { id: existingId },
+            data: { segmentIndex: wf.segmentIndex, title: wf.title },
+          });
+          identified.push({ workflowId: existingId, wf });
+        } else {
+          // Nothing here matched it, so it is genuinely new — and born unapproved.
+          const created = await prisma.workflow.create({
+            data: {
+              workspaceId: rec.workspaceId,
+              sourceId: sessionId,
+              segmentIndex: wf.segmentIndex,
+              title: wf.title,
+            },
+            select: { id: true },
+          });
+          identified.push({ workflowId: created.id, wf });
+        }
+      }
+
+      // A workflow that nothing matched has lost its content. Its approval was granted for
+      // something that is no longer there, so it stops answering until a human looks at it.
+      const keptIds = new Set(identified.map((x) => x.workflowId));
+      const detachedIds = existingWorkflowIds.filter((id) => !keptIds.has(id));
+      if (detachedIds.length > 0) {
+        const { count } = await prisma.copilotApproval.updateMany({
+          where: { workflowId: { in: detachedIds }, inactiveReason: null },
+          data: { inactiveReason: 'needs_review', inactiveAt: new Date() },
+        });
+        log.warn(
+          { sessionId, detached: detachedIds.length, approvalsSuspended: count },
+          'workflows no longer present after reprocess — their approvals need re-review',
+        );
+      }
+
       // Replace the recording's KB items idempotently with the freshly distilled steps.
       await prisma.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
-      const rows = workflows.flatMap((wf) =>
+      const rows = identified.flatMap(({ workflowId, wf }) =>
         wf.steps.map((step, i) => ({
           sourceId: sessionId,
           workspaceId: rec.workspaceId,
+          workflowId,
           kind: 'step',
           orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
           text: distilledStepText(step), // searchable: instruction + detail + narration
@@ -65,36 +216,29 @@ const worker = new Worker(
       );
       if (rows.length > 0) await prisma.knowledgeItem.createMany({ data: rows });
 
-      // P1-M3 — embed the fresh items for hybrid retrieval (delete+recreate above means a
-      // re-process re-embeds automatically). STRICTLY best-effort: an embedding failure never
-      // fails the KB build — the items simply stay keyword-only until the next (re)process — but
-      // it must not be invisible either (review hardening 2026-07-07): the failure surfaces as a
-      // degraded-build notice on the recording (the §3.3 mechanism), not just a log line.
-      let embedWarning: string | null = null;
-      if (rows.length > 0) {
-        try {
-          const created = await prisma.knowledgeItem.findMany({
-            where: { sourceId: sessionId },
-            select: { id: true, text: true },
-          });
-          const vectors = await embedTexts(created.map((r) => r.text), {
-            apiKey: config.openaiApiKey,
-            model: config.embedModel || undefined,
-            timeoutMs: 60_000, // batch path: generous but bounded (the SDK default is 600s)
-            maxRetries: 2,
-          });
-          // Raw SQL — Prisma can't write Unsupported("vector"); a handful of rows, so per-row is fine.
-          for (const [i, row] of created.entries()) {
-            const vector = vectors[i];
-            if (!vector) continue; // unreachable (embedTexts enforces 1:1 + dims) — never write a wrong row
-            await prisma.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
-          }
-          log.info({ sessionId, count: created.length }, 'embedded items for hybrid retrieval');
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          embedWarning = `Semantic search is unavailable for this recording (embedding failed: ${msg}) — answers use keyword matching until it is re-processed.`;
-          log.warn({ sessionId, err: msg }, 'embedding failed — items stay keyword-only');
+      // P1-M3 — persist the vectors computed above. Raw SQL: Prisma cannot write
+      // Unsupported("vector"), and a handful of rows makes per-row updates fine.
+      if (vectors && rows.length > 0) {
+        const created = await prisma.knowledgeItem.findMany({
+          where: { sourceId: sessionId },
+          select: { id: true, text: true },
+        });
+        // Matched on TEXT rather than on read-back order. The order rows come back in need not
+        // mirror the order the texts were embedded in, and writing a vector onto the wrong step
+        // corrupts retrieval invisibly — the failure would look like bad answers, not a bug.
+        const vectorByText = new Map<string, number[]>();
+        flatTexts.forEach((t, i) => {
+          const v = vectors?.[i];
+          if (v && !vectorByText.has(t)) vectorByText.set(t, v);
+        });
+        let written = 0;
+        for (const row of created) {
+          const vector = vectorByText.get(row.text);
+          if (!vector) continue;
+          await prisma.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
+          written += 1;
         }
+        log.info({ sessionId, count: written }, 'embedded items for hybrid retrieval');
       }
 
       // A degraded-but-successful build (e.g. narration too long to transcribe, or an embedding

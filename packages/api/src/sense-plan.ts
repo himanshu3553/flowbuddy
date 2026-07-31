@@ -120,20 +120,27 @@ interface StepData {
 /** Compile the FULL plan (every approved workflow) for a workspace. */
 async function compilePlan(workspaceId: string): Promise<CachedPlan> {
   const approvals = await prisma.copilotApproval.findMany({
-    // P3-M0: superseded workflows are excluded — probing a retired telling would localize users
-    // onto steps the founder has already replaced.
-    where: { workspaceId, supersededById: null },
-    select: { sourceId: true, segmentIndex: true, segmentTitle: true },
+    // P3-M0/M1: only LIVE workflows are compiled — probing one the founder replaced, or one a
+    // reprocess could not verify, would localize users onto steps nobody has signed off.
+    where: { workspaceId, inactiveReason: null },
+    select: { workflowId: true },
   });
   if (approvals.length === 0) return { at: Date.now(), version: fnv1a('empty'), workflows: [] };
-  const approvedKeys = new Set(approvals.map((a) => `${a.sourceId}:${a.segmentIndex}`));
+  const liveWorkflowIds = new Set(approvals.map((a) => a.workflowId));
 
   const items = await prisma.knowledgeItem.findMany({
     where: { workspaceId, segmentIndex: { not: null }, kind: 'step' },
-    select: { sourceId: true, segmentIndex: true, segmentTitle: true, orderIndex: true, data: true },
+    select: {
+      workflowId: true,
+      sourceId: true,
+      segmentIndex: true,
+      segmentTitle: true,
+      orderIndex: true,
+      data: true,
+    },
     orderBy: [{ sourceId: 'asc' }, { segmentIndex: 'asc' }, { orderIndex: 'asc' }],
   });
-  const approvedItems = items.filter((i) => approvedKeys.has(`${i.sourceId}:${i.segmentIndex}`));
+  const approvedItems = items.filter((i) => liveWorkflowIds.has(i.workflowId));
   if (approvedItems.length === 0) return { at: Date.now(), version: fnv1a('empty'), workflows: [] };
 
   // Load each involved source's manifest ONCE and index its events by id AND by screenshot file
@@ -165,10 +172,7 @@ async function compilePlan(workspaceId: string): Promise<CachedPlan> {
       wf = {
         sourceId: item.sourceId,
         segmentIndex: item.segmentIndex as number,
-        title:
-          item.segmentTitle ||
-          approvals.find((a) => `${a.sourceId}:${a.segmentIndex}` === key)?.segmentTitle ||
-          'Untitled workflow',
+        title: item.segmentTitle || 'Untitled workflow',
         steps: [],
       };
       byWorkflow.set(key, wf);

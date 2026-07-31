@@ -1,5 +1,5 @@
 import { prisma } from '@flowbuddy/db';
-import { approvedSegmentKeys, supersededWorkflows } from './copilot-approvals';
+import { approvedSegmentKeys, inactiveWorkflows } from './copilot-approvals';
 
 /** A workflow candidate = one persisted segment (Option C) — the unit the founder approves for
  *  the copilot (P1-M5). Server-only.
@@ -12,10 +12,12 @@ export interface Candidate {
   segmentTitle: string;
   itemCount: number;
   copilotApproved: boolean;
-  /** P3-M0 — set when this workflow was retired by a re-recording; the value is the replacement's
-   *  title. Distinct from "never approved": it WAS approved, and the founder replaced it. */
+  /** P3-M0/M1 — why this workflow stopped answering, if it did. Distinct from "never approved": it
+   *  WAS approved. `"superseded"` = the founder replaced it; `"needs_review"` = a reprocess could
+   *  not confirm the content is still what they approved. */
+  inactiveReason: string | null;
+  /** The replacement's title — only meaningful when `inactiveReason === "superseded"`. */
   supersededByTitle?: string | null;
-  isSuperseded: boolean;
 }
 
 /** List workflow candidates for a workspace, optionally scoped to one recording (KB page).
@@ -48,21 +50,22 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
     select: { id: true, appBaseUrl: true },
   });
   const appById = new Map(sources.map((s) => [s.id, s.appBaseUrl]));
-  const [approved, superseded] = await Promise.all([
+  const [approved, inactive] = await Promise.all([
     approvedSegmentKeys(workspaceId),
-    supersededWorkflows(workspaceId),
+    inactiveWorkflows(workspaceId),
   ]);
 
   return [...grouped.values()]
     .sort((a, b) => a.sourceId.localeCompare(b.sourceId) || a.segmentIndex - b.segmentIndex)
     .map((c) => {
       const key = `${c.sourceId}:${c.segmentIndex}`;
+      const retired = inactive.get(key);
       return {
         ...c,
         appBaseUrl: appById.get(c.sourceId) ?? null,
         copilotApproved: approved.has(key),
-        isSuperseded: superseded.has(key),
-        supersededByTitle: superseded.get(key) ?? null,
+        inactiveReason: retired?.reason ?? null,
+        supersededByTitle: retired?.replacedByTitle ?? null,
       };
     });
 }

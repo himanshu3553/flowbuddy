@@ -39,7 +39,7 @@ export default async function KnowledgeBasePage() {
     itemCount: c.itemCount,
     sourceTitle: c.appBaseUrl || 'recording',
     copilotApproved: c.copilotApproved,
-    isSuperseded: c.isSuperseded,
+    inactiveReason: c.inactiveReason,
     supersededByTitle: c.supersededByTitle ?? null,
     duplicates: (byWorkflow.get(`${c.sourceId}:${c.segmentIndex}`) ?? []).map(toView),
   }));

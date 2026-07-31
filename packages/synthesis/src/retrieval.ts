@@ -20,15 +20,23 @@ const log = createLogger('retrieval');
  * copilot never errors OR stalls because of the vector path. The question embed starts before the
  * DB reads and overlaps them, so its round-trip stays off the answer's critical path.
  *
- * A workflow is approved when a `CopilotApproval` row exists for its `(sourceId, segmentIndex)` —
- * keyed by workflow, NOT item rows, because the worker delete+recreates items on every
- * (re)process. Absence of a row = not approved. P3-M0: a row whose `supersededById` is set was
- * REPLACED by a later re-recording and is no longer current — it is excluded here, which is the
- * whole enforcement surface for supersession. Superseded content is never deleted, so this filter
- * is the only thing standing between a retired workflow and an end-user. NO-LEAK: the pgvector scan itself is constrained
- * to the approved `(sourceId, segmentIndex)` keys (review hardening 2026-07-07 — this also stops
- * unapproved rows starving the top-K candidate budget), and its ranking is only ever FUSED onto
- * the approved item list — returned items always come from the approved set alone.
+ * THE GATE (P3-M1): a workflow may answer when a `CopilotApproval` row names its durable
+ * `workflowId` AND that row's `inactiveReason` is null. Keyed by the workflow's IDENTITY, not by
+ * item rows (the worker delete+recreates those on every reprocess) and no longer by its POSITION in
+ * a recording (a re-split moves positions, which used to walk an approval onto content nobody had
+ * reviewed). Absence of a row = not approved; a non-null `inactiveReason` = approved once, retired
+ * since — replaced, or unverifiable after a reprocess. Nothing is ever deleted, so this filter is
+ * the only thing standing between a retired workflow and an end-user.
+ *
+ * NO-LEAK: the pgvector scan is itself constrained to live `workflowId`s (review hardening
+ * 2026-07-07 — this also stops unapproved rows starving the top-K candidate budget), and its
+ * ranking is only ever FUSED onto the approved item list, so returned items always come from the
+ * approved set alone.
+ *
+ * Note the deliberate asymmetry: the GATE is identity-based, while the ranking SIGNALS (route,
+ * sense, continuity) still match on `sourceId:segmentIndex`, because that is what the widget
+ * reports about where the user is standing. Getting a signal wrong costs one mediocre answer;
+ * getting the gate wrong leaks unapproved content. They are not the same kind of thing.
  *
  * `@flowbuddy/synthesis` stays DB-free: callers inject their Prisma client, typed structurally as the
  * tiny `RetrievalDb` subset below (`$queryRaw` included — PrismaClient satisfies it as-is).
@@ -37,6 +45,8 @@ const log = createLogger('retrieval');
 /** The KnowledgeItem fields retrieval reads (a structural subset of the Prisma row). */
 export interface RetrievableKBItem {
   id: string;
+  /** P3-M1 — the workflow's durable identity. What the approval gate is decided on. */
+  workflowId: string;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;
@@ -48,24 +58,23 @@ export interface RetrievableKBItem {
 export interface RetrievalDb {
   copilotApproval: {
     findMany(args: {
-      where: { workspaceId: string; supersededById: null };
-      select: { sourceId: true; segmentIndex: true };
-    }): Promise<Array<{ sourceId: string; segmentIndex: number }>>;
+      where: { workspaceId: string; inactiveReason: null };
+      select: { workflowId: true };
+    }): Promise<Array<{ workflowId: string }>>;
   };
   knowledgeItem: {
     findMany(args: {
-      where: { workspaceId: string; segmentIndex: { not: null } };
+      where: { workspaceId: string };
       select: {
         id: true;
+        workflowId: true;
         sourceId: true;
         segmentIndex: true;
         segmentTitle: true;
         text: true;
         data: true;
       };
-      orderBy: Array<
-        { sourceId: 'asc' } | { segmentIndex: 'asc' } | { orderIndex: 'asc' }
-      >;
+      orderBy: Array<{ workflowId: 'asc' } | { orderIndex: 'asc' }>;
     }): Promise<RetrievableKBItem[]>;
   };
   /**
@@ -166,6 +175,7 @@ function routeMatches(item: RetrievableKBItem, contextPath: string): boolean {
 function toCopilotItem(i: RetrievableKBItem): CopilotKBItem {
   return {
     id: i.id,
+    workflowId: i.workflowId,
     sourceId: i.sourceId,
     segmentIndex: i.segmentIndex,
     segmentTitle: i.segmentTitle,
@@ -238,15 +248,15 @@ async function vectorTopK(
   db: RetrievalDb,
   workspaceId: string,
   queryVector: number[],
-  approvedKeys: string[],
+  liveWorkflowIds: string[],
 ): Promise<string[] | null> {
   if (!db.$queryRaw) return null;
   try {
     const vec = toVectorLiteral(queryVector);
     const rows = await db.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "KnowledgeItem"
-      WHERE "workspaceId" = ${workspaceId} AND embedding IS NOT NULL AND "segmentIndex" IS NOT NULL
-        AND "sourceId" || ':' || "segmentIndex"::text = ANY(${approvedKeys}::text[])
+      WHERE "workspaceId" = ${workspaceId} AND embedding IS NOT NULL
+        AND "workflowId" = ANY(${liveWorkflowIds}::text[])
       ORDER BY embedding <=> ${vec}::vector
       LIMIT ${VECTOR_CANDIDATES}`;
     return rows.map((r) => r.id);
@@ -273,21 +283,29 @@ export async function retrieveApprovedKBItems(
   const queryVectorPromise = opts.embedding ? embedQuestion(question, opts.embedding) : Promise.resolve(null);
 
   const approvals = await db.copilotApproval.findMany({
-    where: { workspaceId, supersededById: null },
-    select: { sourceId: true, segmentIndex: true },
+    where: { workspaceId, inactiveReason: null },
+    select: { workflowId: true },
   });
   if (approvals.length === 0) return [];
-  const keys = new Set(approvals.map((a) => `${a.sourceId}:${a.segmentIndex}`));
+  const liveWorkflowIds = new Set(approvals.map((a) => a.workflowId));
 
   const [all, vecIds] = await Promise.all([
     db.knowledgeItem.findMany({
-      where: { workspaceId, segmentIndex: { not: null } },
-      select: { id: true, sourceId: true, segmentIndex: true, segmentTitle: true, text: true, data: true },
-      orderBy: [{ sourceId: 'asc' }, { segmentIndex: 'asc' }, { orderIndex: 'asc' }],
+      where: { workspaceId },
+      select: {
+        id: true,
+        workflowId: true,
+        sourceId: true,
+        segmentIndex: true,
+        segmentTitle: true,
+        text: true,
+        data: true,
+      },
+      orderBy: [{ workflowId: 'asc' }, { orderIndex: 'asc' }],
     }),
-    queryVectorPromise.then((qv) => (qv ? vectorTopK(db, workspaceId, qv, [...keys]) : null)),
+    queryVectorPromise.then((qv) => (qv ? vectorTopK(db, workspaceId, qv, [...liveWorkflowIds]) : null)),
   ]);
-  const approved = all.filter((i) => i.segmentIndex != null && keys.has(`${i.sourceId}:${i.segmentIndex}`));
+  const approved = all.filter((i) => liveWorkflowIds.has(i.workflowId));
   if (approved.length === 0) return [];
 
   if (!vecIds || vecIds.length === 0) return shortlistItems(approved, question, opts);

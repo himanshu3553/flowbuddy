@@ -15,6 +15,8 @@ import { runAnswerLoop, shapeAnswer, type AnswerLoopResult } from './engine';
 /** A KB item the copilot may ground on. `id` is the KnowledgeItem id (used for citations). */
 export interface CopilotKBItem {
   id: string;
+  /** P3-M1 — the workflow's durable identity; what analytics and the approval gate key on. */
+  workflowId: string;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;
@@ -29,6 +31,8 @@ export interface CopilotTurn {
 
 export interface CopilotCitation {
   itemId: string;
+  /** P3-M1 — logged so a workflow's citation history survives a reprocess moving it. */
+  workflowId: string;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;

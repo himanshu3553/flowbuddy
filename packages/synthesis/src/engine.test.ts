@@ -437,6 +437,7 @@ describe('runAnswerLoop — a parameterized tool is a DIFFERENT request per argu
 describe('formatItems — what the agent can aim a tool at', () => {
   const item = (over: Partial<CopilotKBItem> = {}): CopilotKBItem => ({
     id: 'itm1',
+    workflowId: 'wf9',
     sourceId: 'src9',
     segmentIndex: 2,
     segmentTitle: 'Create a project',
@@ -471,7 +472,7 @@ describe('formatItems — what the agent can aim a tool at', () => {
 
 describe('shapeAnswer', () => {
   const items: CopilotKBItem[] = [
-    { id: 'a', sourceId: 'src', segmentIndex: 0, segmentTitle: 'Create an account', text: 'step' },
+    { id: 'a', workflowId: 'wf-a', sourceId: 'src', segmentIndex: 0, segmentTitle: 'Create an account', text: 'step' },
   ];
   const hyps: SenseHypothesisContext[] = [
     { sourceId: 'src', segmentIndex: 0, title: 'Create an account', step: 2, totalSteps: 6, confidence: 0.9, stepsDone: [1] },

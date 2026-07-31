@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import { canonicalPair } from '@flowbuddy/synthesis/overlap';
 import { getCurrentWorkspace } from '@/lib/session';
+import { workflowIdsAt } from '@/lib/copilot-approvals';
 
 /**
  * P3-M0 — resolving a duplicate-workflow warning. Two outcomes, both founder-chosen:
@@ -57,6 +58,11 @@ export async function supersedeWorkflow(input: {
   }
   await assertOwned(workspaceId, [retired, replacement]);
 
+  // P3-M1 — a replacement that is being approved here for the first time must carry its identity.
+  const ids = await workflowIdsAt([replacement]);
+  const replacementWorkflowId = ids.get(`${replacement.sourceId}:${replacement.segmentIndex}`);
+  if (!replacementWorkflowId) throw new Error('Workflow not found — re-process this recording and try again');
+
   await prisma.$transaction(async (tx) => {
     const current = await tx.copilotApproval.upsert({
       where: {
@@ -71,23 +77,33 @@ export async function supersedeWorkflow(input: {
         segmentIndex: replacement.segmentIndex,
         segmentTitle: replacement.segmentTitle ?? null,
         approvedById: ctx.userId,
+        workflowId: replacementWorkflowId,
       },
-      // The replacement becomes current even if it had been superseded by something earlier.
-      update: { supersededById: null, supersededAt: null },
+      // The replacement becomes live even if it had previously been retired for any reason.
+      update: {
+        inactiveReason: null,
+        inactiveAt: null,
+        supersededById: null,
+        workflowId: replacementWorkflowId,
+      },
       select: { id: true },
     });
 
     // Only an APPROVED workflow can be superseded — an unapproved one answers nothing already.
     await tx.copilotApproval.updateMany({
       where: { workspaceId, sourceId: retired.sourceId, segmentIndex: retired.segmentIndex },
-      data: { supersededById: current.id, supersededAt: new Date() },
+      data: { inactiveReason: 'superseded', inactiveAt: new Date(), supersededById: current.id },
     });
   });
 
   revalidate([retired, replacement]);
 }
 
-/** Undo a supersession — the retired workflow becomes current again. */
+/**
+ * Bring a retired workflow back — whether it was replaced, or suspended because a reprocess could
+ * not confirm its content. One action for both: from the founder's side the decision is identical
+ * ("I've looked, this should answer again"), and the reason it stopped is already on screen.
+ */
 export async function undoSupersede(input: WorkflowCoord): Promise<void> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
@@ -96,7 +112,7 @@ export async function undoSupersede(input: WorkflowCoord): Promise<void> {
 
   await prisma.copilotApproval.updateMany({
     where: { workspaceId, sourceId: input.sourceId, segmentIndex: input.segmentIndex },
-    data: { supersededById: null, supersededAt: null },
+    data: { inactiveReason: null, inactiveAt: null, supersededById: null },
   });
 
   revalidate([input]);

@@ -38,12 +38,20 @@ export { retrieveApprovedKBItems, shortlistItems, sanitizeHistory } from './retr
 export type { RetrievalDb, RetrievableKBItem, ShortlistOpts, RetrieveOpts } from './retrieval';
 export {
   findWorkflowOverlaps,
+  matchWorkflowIdentities,
+  meanVector,
   canonicalPair,
   workflowKey,
   SIMILARITY_THRESHOLD,
   LAST_STEP_THRESHOLD,
-} from './overlap'; // P3-M0
-export type { OverlapDb, OverlapPair, WorkflowRef, FindOverlapsOpts } from './overlap';
+} from './overlap'; // P3-M0 / P3-M1
+export type {
+  OverlapDb,
+  OverlapPair,
+  WorkflowRef,
+  FindOverlapsOpts,
+  WorkflowFingerprint,
+} from './overlap';
 export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
 export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text

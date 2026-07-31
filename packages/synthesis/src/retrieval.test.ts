@@ -21,6 +21,8 @@ function item(text: string, opts: { route?: string; sourceId?: string; segmentIn
   n += 1;
   return {
     id: `item-${n}`,
+    // P3-M1 — identity is per (source, segment) here so the double mirrors real grouping.
+    workflowId: `wf-${opts.sourceId ?? 'src-default'}-${opts.segmentIndex ?? 0}`,
     sourceId: opts.sourceId ?? 'src-default',
     segmentIndex: opts.segmentIndex ?? 0,
     segmentTitle: 'A workflow',

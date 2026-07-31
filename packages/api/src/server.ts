@@ -440,12 +440,16 @@ async function resolveSenseContext(
   const approvals = await prisma.copilotApproval.findMany({
     where: {
       workspaceId,
-      supersededById: null, // P3-M0 — a retired workflow is not a valid position hypothesis
-      OR: parsed.map((h) => ({ sourceId: h.sourceId, segmentIndex: h.segmentIndex })),
+      inactiveReason: null, // P3-M0/M1 — a workflow that is not live is not a valid position hypothesis
+      // The widget reports a POSITION (it has no idea identities exist), so resolve through the
+      // workflow rather than off the approval's own columns — the approval is keyed on identity now.
+      workflow: { OR: parsed.map((h) => ({ sourceId: h.sourceId, segmentIndex: h.segmentIndex })) },
     },
-    select: { sourceId: true, segmentIndex: true, segmentTitle: true },
+    select: { segmentTitle: true, workflow: { select: { sourceId: true, segmentIndex: true } } },
   });
-  const titleByKey = new Map(approvals.map((a) => [`${a.sourceId}:${a.segmentIndex}`, a.segmentTitle]));
+  const titleByKey = new Map(
+    approvals.map((a) => [`${a.workflow.sourceId}:${a.workflow.segmentIndex}`, a.segmentTitle]),
+  );
   const approved = parsed.filter((h) => titleByKey.has(`${h.sourceId}:${h.segmentIndex}`));
   if (approved.length === 0) return { sense: null, probed };
 
@@ -502,15 +506,23 @@ async function resolveSenseContext(
 function citationRows(
   workspaceId: string,
   cites: CopilotCitation[],
-): { workspaceId: string; sourceId: string; segmentIndex: number | null; segmentTitle: string | null }[] {
+): {
+  workspaceId: string;
+  workflowId: string;
+  sourceId: string;
+  segmentIndex: number | null;
+  segmentTitle: string | null;
+}[] {
   const rows = [];
   const seen = new Set<string>();
   for (const c of cites) {
-    const key = `${c.sourceId}:${c.segmentIndex ?? '-'}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    // P3-M1 — dedupe on the workflow's IDENTITY. The position is still logged for display, but two
+    // citations of one workflow are one row however its position may have moved.
+    if (seen.has(c.workflowId)) continue;
+    seen.add(c.workflowId);
     rows.push({
       workspaceId,
+      workflowId: c.workflowId,
       sourceId: c.sourceId,
       segmentIndex: c.segmentIndex,
       segmentTitle: c.segmentTitle,
@@ -573,12 +585,14 @@ async function resolveContinuityKeys(workspaceId: string, raw: unknown): Promise
   const approvals = await prisma.copilotApproval.findMany({
     where: {
       workspaceId,
-      supersededById: null, // P3-M0 — topic memory must not resurrect a superseded workflow
-      OR: parsed.map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex })),
+      inactiveReason: null, // P3-M0/M1 — topic memory must not resurrect a workflow that stopped answering
+      workflow: { OR: parsed.map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex })) },
     },
-    select: { sourceId: true, segmentIndex: true },
+    select: { workflow: { select: { sourceId: true, segmentIndex: true } } },
   });
-  const approved = new Set(approvals.map((a) => `${a.sourceId}:${a.segmentIndex}`));
+  const approved = new Set(
+    approvals.map((a) => `${a.workflow.sourceId}:${a.workflow.segmentIndex}`),
+  );
   return parsed.map((c) => `${c.sourceId}:${c.segmentIndex}`).filter((k) => approved.has(k));
 }
 
@@ -686,10 +700,10 @@ async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<A
   if (!Number.isInteger(segmentIndex) || segmentIndex < 0 || segmentIndex > 999) return null;
 
   const approval = await prisma.copilotApproval.findFirst({
-    // P3-M0: `supersededById: null` matters MORE here than anywhere else — this is the agent's
-    // by-key fetch, so without it the loop could pull a retired workflow whole, bypassing the
-    // ranked path entirely.
-    where: { workspaceId, sourceId, segmentIndex, supersededById: null },
+    // P3-M0/M1: the liveness test matters MORE here than anywhere else — this is the agent's
+    // by-key fetch, so without it the loop could pull a retired workflow WHOLE, bypassing the
+    // ranked path and its no-leak constraint entirely.
+    where: { workspaceId, inactiveReason: null, workflow: { sourceId, segmentIndex } },
     select: { segmentTitle: true },
   });
   if (!approval) return null; // absent, not forbidden
@@ -697,7 +711,7 @@ async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<A
   const rows = await prisma.knowledgeItem.findMany({
     where: { workspaceId, kind: 'step', sourceId, segmentIndex },
     orderBy: { orderIndex: 'asc' },
-    select: { id: true, sourceId: true, segmentIndex: true, text: true },
+    select: { id: true, workflowId: true, sourceId: true, segmentIndex: true, text: true },
   });
   if (rows.length === 0) return null;
 
@@ -705,6 +719,7 @@ async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<A
     title: approval.segmentTitle ?? 'this workflow',
     items: rows.map((r) => ({
       id: r.id,
+      workflowId: r.workflowId,
       sourceId: r.sourceId,
       segmentIndex: r.segmentIndex,
       segmentTitle: approval.segmentTitle,
@@ -1241,8 +1256,12 @@ app.post('/v1/copilot/walkthrough', async (req, reply) => {
   if (event === 'started') {
     // The trust gate, applied to run logging: only approved workflows are ever recorded.
     const approval = await prisma.copilotApproval.findFirst({
-      // P3-M0 — never start a guided walkthrough on a workflow the founder has retired.
-      where: { workspaceId: gate.workspaceId, sourceId, segmentIndex, supersededById: null },
+      // P3-M0/M1 — never start a guided walkthrough on a workflow that is no longer answering.
+      where: {
+        workspaceId: gate.workspaceId,
+        inactiveReason: null,
+        workflow: { sourceId, segmentIndex },
+      },
       select: { segmentTitle: true },
     });
     if (!approval) {

@@ -379,6 +379,7 @@ export function shapeAnswer(opts: {
       seen.add(id);
       citations.push({
         itemId: it.id,
+        workflowId: it.workflowId,
         sourceId: it.sourceId,
         segmentIndex: it.segmentIndex,
         segmentTitle: it.segmentTitle,

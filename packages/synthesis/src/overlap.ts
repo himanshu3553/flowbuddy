@@ -191,6 +191,97 @@ export async function findWorkflowOverlaps(
   }
 }
 
+// ── Identity matching across a reprocess ───────────────────────────────────────────────────────────
+
+/** A workflow reduced to the two vectors identity is decided on. */
+export interface WorkflowFingerprint<K> {
+  key: K;
+  /** Mean of the workflow's step embeddings. */
+  centroid: number[];
+  /** The LAST step's embedding — where the workflow ends, and what actually distinguishes it. */
+  goal: number[];
+}
+
+function cosine(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] as number;
+    const y = b[i] as number;
+    dot += x * y;
+    na += x * x;
+    nb += y * y;
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+/** Mean of a set of vectors — a workflow's centroid. Returns `null` for an empty set. */
+export function meanVector(vectors: number[][]): number[] | null {
+  const usable = vectors.filter((v) => v.length > 0);
+  const first = usable[0];
+  if (!first) return null;
+  const out = new Array<number>(first.length).fill(0);
+  for (const v of usable) {
+    if (v.length !== out.length) continue;
+    for (let i = 0; i < out.length; i++) out[i] = (out[i] as number) + (v[i] as number);
+  }
+  return out.map((x) => x / usable.length);
+}
+
+/**
+ * Decide which freshly-distilled workflows ARE which existing ones — the operation that lets an
+ * approval survive a reprocess without following a position.
+ *
+ * **This is the whole point of durable identity.** A re-segmentation can split a recording
+ * differently, so the workflow at position 2 afterwards need not be the workflow that was at
+ * position 2 before. Reusing an identity by position hands the founder's approval — the product's
+ * trust boundary — to content nobody reviewed. Matching on content means the identity, and the
+ * approval with it, follows EVIDENCE.
+ *
+ * Same two gates as duplicate detection, for the same reason: broad similarity alone lets shared
+ * navigation outvote the goal.
+ *
+ * **Unmatched in either direction is meaningful, and both directions fail closed.** An incoming
+ * workflow with no match is genuinely new (born unapproved). An existing identity with no match has
+ * lost its content, so its approval can no longer be trusted and must stop answering.
+ *
+ * Greedy best-first, one-to-one: with a handful of workflows per recording an optimal assignment
+ * would cost more to explain than it could ever buy.
+ */
+export function matchWorkflowIdentities<I, E>(
+  incoming: WorkflowFingerprint<I>[],
+  existing: WorkflowFingerprint<E>[],
+  opts: { threshold?: number; lastStepThreshold?: number } = {},
+): Map<I, E> {
+  const threshold = opts.threshold ?? SIMILARITY_THRESHOLD;
+  const goalThreshold = opts.lastStepThreshold ?? LAST_STEP_THRESHOLD;
+
+  const scored: Array<{ i: I; e: E; score: number }> = [];
+  for (const a of incoming) {
+    for (const b of existing) {
+      const sim = cosine(a.centroid, b.centroid);
+      const goal = cosine(a.goal, b.goal);
+      if (sim < threshold || goal < goalThreshold) continue;
+      // Rank on the goal first: it is the discriminating signal, so when two candidates both clear
+      // the gates the one that ends in the same place is the better identity claim.
+      scored.push({ i: a.key, e: b.key, score: goal * 2 + sim });
+    }
+  }
+  scored.sort((x, y) => y.score - x.score);
+
+  const out = new Map<I, E>();
+  const takenExisting = new Set<E>();
+  for (const { i, e, score: _score } of scored) {
+    if (out.has(i) || takenExisting.has(e)) continue;
+    out.set(i, e);
+    takenExisting.add(e);
+  }
+  return out;
+}
+
 /**
  * Canonical pair ordering for the "keep both" memo, so one pair can never be stored twice under two
  * orderings. Mirrors the SQL's `a < b` on the composite key.

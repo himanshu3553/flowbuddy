@@ -239,25 +239,58 @@ on the final attempt** (`attemptsMade + 1 < opts.attempts` = a retry is coming; 
 ### The approval-key contract (the most important downstream detail)
 
 Because items are wiped and rebuilt, **approval cannot live on them.** It lives in a separate
-`CopilotApproval` row keyed by **`(sourceId, segmentIndex)`** — the stable coordinate of a *workflow*.
-As long as the segmenter assigns the same dense `segmentIndex` to "the login workflow" across rebuilds,
-its approval (and the copilot's access to it) survives. This is the seam between this module, the
+`CopilotApproval` row that names a **`Workflow`** — a durable identity that outlives both the items
+and the recording slot it currently occupies. This is the seam between this module, the
 [approval gate](studio.md), and the [copilot](copilot.md). Detailed in [connections.md](connections.md)
 §5.
 
-### Supersession — approval has three states, not two
+**It used to be keyed on `(sourceId, segmentIndex)` — a POSITION — and that was the bug.** The
+position worked as an identity only while re-segmentation was deterministic. Once it wasn't, a
+re-split could put a different workflow at index 2 and the approval followed the index onto content
+nobody had reviewed. A workflow's `sourceId`/`segmentIndex` are now mutable facts *about* it, updated
+by the matcher below; they are never again the thing that identifies it.
 
-A row may also be **superseded**: the founder re-recorded a task and said the new telling replaces the
-old one. Nothing is deleted, so the recording, the steps and the analytics history all survive and the
-decision is reversible. `supersededById IS NULL` is the single test for "current".
+### Identity across a reprocess — matched on content, never on position
+
+The worker fingerprints every stored workflow **before** deleting its steps (afterwards the evidence
+is gone), embeds the freshly distilled workflows, and matches the two sets on the same two signals
+duplicate detection uses — overall similarity *and* where each workflow ends.
+
+Both kinds of no-match are meaningful, and both fail closed:
+
+| Outcome | What it means | What happens |
+|---|---|---|
+| incoming matched | still the same workflow | keeps its identity, position and title updated; **approval survives** |
+| incoming unmatched | genuinely new | new identity, **born unapproved** |
+| existing unmatched | its content is gone | **detached** (`segmentIndex` → NULL), approval → `needs_review` |
+
+**An embedding failure during a reprocess is fatal, on purpose.** Without vectors identity cannot be
+verified, and both alternatives are worse: guessing by position is the bug this replaced, and
+detaching everything would unapprove an entire KB over a transient API blip. Throwing leaves the
+existing KB and every approval untouched, because nothing has been deleted at that point. A *first*
+process has no identity to protect and still degrades to keyword-only.
+
+### Liveness — approval is not a boolean
+
+An approval row can be **retired** without being deleted: `inactiveReason` is `"superseded"` (the
+founder replaced this telling with a re-recording) or `"needs_review"` (a reprocess could not confirm
+the content is still what they approved). Nothing is deleted, so the recording, the steps and the
+analytics history all survive and every decision is reversible.
+
+**`inactiveReason IS NULL` is the single test for "may this answer?"** — everywhere, without
+exception. Anything new that takes a workflow out of service becomes another *value*, never another
+column.
 
 **The enforcement is a filter, and it is repeated in SIX independent readers.** Approvals are not read
 through one function — retrieval, the sense plan, sense-hypothesis validation, continuity (topic
 memory) keys, the agent's by-key `get_workflow`, and walkthrough-start each query `CopilotApproval`
 directly. **A reader that forgets the filter silently serves retired content**, and the by-key fetch is
 the worst of them: it bypasses ranking entirely, so a retired workflow could be pulled whole. Any new
-reader of `CopilotApproval` must decide, explicitly, whether it wants current-only (almost always yes)
-or every approval ever granted (Studio's "Replaced" view).
+reader of `CopilotApproval` must decide, explicitly, whether it wants live-only (almost always yes)
+or every approval ever granted (Studio's "Not answering" view).
+
+That repetition is exactly why liveness is **one column**. Two flags to check would be two chances
+for one of six readers to check only the first.
 
 ### Overlap detection — how a duplicate is noticed
 

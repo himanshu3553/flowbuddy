@@ -153,6 +153,7 @@ model Workspace {
   copilotQueries   CopilotQuery[]
   walkthroughs     CopilotWalkthrough[]
   overlapDecisions WorkflowOverlapDecision[]
+  workflows        Workflow[]
 }
 
 model ApiToken {
@@ -193,9 +194,53 @@ model KnowledgeSource {
   createdBy        User              @relation(fields: [createdById], references: [id])
   items            KnowledgeItem[]
   copilotApprovals CopilotApproval[]
+  workflows        Workflow[]
 
   @@unique([workspaceId, uploadId])
   @@map("RecSession")
+}
+
+model Workflow {
+  // P3-M1 — a workflow's DURABLE identity, independent of the recording slot that currently carries it.
+  //
+  // Before this, "a workflow" WAS `(sourceId, segmentIndex)` — a position. That was safe only while
+  // re-segmentation was deterministic: the same recording always split the same way, so position 2
+  // was always the same workflow. It no longer is (reasoning models cannot express temperature 0),
+  // so a position is no longer an identity, and an approval that follows a position can land on
+  // content nobody reviewed. This row is the identity; the position is a mutable fact ABOUT it.
+  //
+  // `sourceId`/`segmentIndex` are therefore DELIBERATELY MUTABLE: a reprocess re-matches distilled
+  // workflows to these rows BY CONTENT and updates the position on the winner. Never treat them as
+  // the identity again — that is the bug this table exists to end.
+  //
+  // `segmentIndex` is NULL when the workflow is DETACHED: a reprocess re-split the recording and
+  // nothing in it matched this workflow any more, so it has no position because it is no longer
+  // there. The row survives regardless — its approval, its analytics history and the founder's
+  // ability to understand what happened all depend on it — and that approval is moved to
+  // `needs_review` rather than deleted. (Postgres allows many NULLs under a unique index, so any
+  // number of workflows can sit detached from one recording.)
+  id           String   @id @default(cuid())
+  workspaceId  String
+  sourceId     String
+  segmentIndex Int?
+  // The workflow's name, kept here so it survives the worker's delete-and-recreate of its items.
+  // (`KnowledgeItem.segmentTitle` still carries a per-item copy for now; this is the future home.)
+  title        String?
+  // P3-M1 variant grouping — workflows the founder confirmed are two ROUTES to one goal share a
+  // `taskId`. `null` = its own task, which is the overwhelmingly common case. A plain shared string
+  // rather than a table: grouping is a set, needs no attributes of its own, and stays transitive
+  // (group C with B and C simply takes B's taskId).
+  taskId       String?
+  createdAt    DateTime @default(now())
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  items     KnowledgeItem[]
+  approval  CopilotApproval?
+
+  @@unique([sourceId, segmentIndex])
+  @@index([workspaceId])
+  @@index([taskId])
 }
 
 model KnowledgeItem {
@@ -203,6 +248,11 @@ model KnowledgeItem {
   id          String   @id @default(cuid())
   sourceId    String
   workspaceId String
+  // P3-M1 — the durable workflow this step belongs to. REQUIRED: a step that belongs to no workflow
+  // is not a thing that can exist, and the worker mints the identity before writing the step.
+  // (`segmentIndex`/`segmentTitle` below are the OLD position-based key, still read by retrieval and
+  // five other consumers — they are dropped in stage 3 when those move over. They are not kept.)
+  workflowId  String
   kind         String // step | topic
   orderIndex   Int
   text         String // searchable content — keyword scoring AND the embedding input (already folds in narration via distilledStepText)
@@ -215,10 +265,12 @@ model KnowledgeItem {
   embedding    Unsupported("vector(1536)")?
   createdAt    DateTime @default(now())
 
-  source KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  source   KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  workflow Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([sourceId])
+  @@index([workflowId])
 }
 
 model CoverageGap {
@@ -247,24 +299,39 @@ model CopilotApproval {
   segmentTitle String? // snapshot of the title at approval time (display/audit)
   approvedById String? // who approved (audit)
   createdAt    DateTime @default(now())
-  // P3-M0 supersession — the founder re-recorded a task this workspace already covered and chose
-  // "this replaces the old one". The replaced approval is NOT deleted (the recording, the analytics
-  // history and the undo all depend on it surviving); it is pointed at the approval that replaced it.
-  // **`supersededById IS NULL` is the one test for "current"** — retrieval filters on it, and nothing
-  // else may be used to mean the same thing. `supersededAt` is audit only.
-  // `onDelete: SetNull` is deliberate: un-approving the replacement makes the older workflow current
-  // again rather than leaving the workspace with neither approved (a silent coverage hole).
+  // ── Is this approval LIVE? ───────────────────────────────────────────────────────────────────
+  // **`inactiveReason IS NULL` is THE one test, everywhere.** An approval is never deleted — the
+  // recording, the analytics history and the undo all depend on the row surviving — so "not
+  // answering" is a state, and this is the only column that expresses it. Six independent readers
+  // filter on it; a SECOND way to be inactive would mean six places to forget, so anything new that
+  // takes a workflow out of service becomes another value here, never another column.
+  //   "superseded"   — P3-M0: the founder re-recorded the task and said the new telling replaces
+  //                    this one. `supersededById` names the approval that replaced it.
+  //   "needs_review" — P3-M1: a reprocess could not confirm that the content at this workflow is
+  //                    still what was approved. Fail-closed: it stops answering until a human looks.
+  // Deliberately a STRING, not an enum — a new reason ships without a database migration, and an
+  // unrecognised value still reads as "not live", which is the safe direction.
+  inactiveReason String?
+  inactiveAt     DateTime?
+  // Set only when `inactiveReason = "superseded"`. `onDelete: SetNull` is deliberate: un-approving
+  // the replacement must not leave the workspace with neither approved (a silent coverage hole).
   supersededById String?
-  supersededAt   DateTime?
+  // P3-M1 — the durable workflow this approval is FOR. REQUIRED: approving nothing is not a state.
+  // Once stage 3 moves readers over, this (not the `sourceId`/`segmentIndex` above) is what
+  // "approved" means, and a reprocess can no longer walk an approval onto content nobody reviewed.
+  // Those two columns are dropped in stage 3 — they are the old key, not a second one worth keeping.
+  workflowId     String    @unique
 
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   source       KnowledgeSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  workflow     Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   supersededBy CopilotApproval?  @relation("Supersedes", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes   CopilotApproval[] @relation("Supersedes")
 
   @@unique([sourceId, segmentIndex])
   @@index([workspaceId])
   @@index([supersededById])
+  @@index([inactiveReason])
 }
 
 model WorkflowOverlapDecision {
@@ -382,8 +449,14 @@ model QueryCitation {
   id           String   @id @default(cuid())
   queryId      String
   workspaceId  String // denormalized for direct per-workspace aggregation (cf. KnowledgeItem)
-  sourceId     String // KnowledgeSource the cited workflow belongs to
-  segmentIndex Int? // the workflow within that source (KnowledgeItem.segmentIndex)
+  // P3-M1 — the durable workflow that was cited. Grouping on this instead of a position is what
+  // keeps a workflow's citation history intact when a reprocess moves it.
+  // NO foreign key, deliberately: this is a HISTORICAL LOG. It records what happened, and it must
+  // survive the workflow being deleted — a cascade here would quietly erase the analytics history
+  // of everything a founder ever removed.
+  workflowId   String
+  sourceId     String // KnowledgeSource the cited workflow belonged to (display / legacy grouping)
+  segmentIndex Int? // its position at answer time (KnowledgeItem.segmentIndex)
   segmentTitle String? // snapshot of the workflow title at answer time (display)
   createdAt    DateTime @default(now())
 
@@ -391,4 +464,5 @@ model QueryCitation {
 
   @@index([workspaceId])
   @@index([queryId])
+  @@index([workflowId])
 }

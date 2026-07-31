@@ -57,7 +57,13 @@ export async function getTopWorkflowsByCitations(
 ): Promise<TopWorkflow[]> {
   const rows = await prisma.queryCitation.findMany({
     where: { workspaceId, createdAt: { gte: windowStart(days) } },
-    select: { queryId: true, sourceId: true, segmentIndex: true, segmentTitle: true },
+    select: {
+      queryId: true,
+      workflowId: true,
+      sourceId: true,
+      segmentIndex: true,
+      segmentTitle: true,
+    },
   });
 
   const map = new Map<
@@ -65,7 +71,9 @@ export async function getTopWorkflowsByCitations(
     { sourceId: string; segmentIndex: number | null; title: string; queries: Set<string> }
   >();
   for (const r of rows) {
-    const key = `${r.sourceId}:${r.segmentIndex ?? '-'}`;
+    // P3-M1 — grouped on the workflow's IDENTITY. Grouping on the position used to split one
+    // workflow's history in two the moment a reprocess moved it, which read as a drop in usage.
+    const key = r.workflowId;
     const existing = map.get(key);
     if (existing) {
       existing.queries.add(r.queryId);
@@ -109,8 +117,17 @@ export async function getWorkflowCopilotStats(
   sourceId: string,
   segmentIndex: number,
 ): Promise<WorkflowCopilotStats> {
-  const citations = await prisma.queryCitation.findMany({
+  // P3-M1 — resolve the position to its durable identity, then read the history against THAT, so a
+  // workflow's scorecard survives a reprocess moving it. Callers still pass a position because that
+  // is what a page URL carries.
+  const workflow = await prisma.workflow.findFirst({
     where: { workspaceId, sourceId, segmentIndex },
+    select: { id: true },
+  });
+  if (!workflow) return { citedCount: 0, lastCitedAt: null, helpfulUp: 0, helpfulDown: 0 };
+
+  const citations = await prisma.queryCitation.findMany({
+    where: { workspaceId, workflowId: workflow.id },
     select: { queryId: true, createdAt: true, query: { select: { feedback: true } } },
     orderBy: { createdAt: 'desc' },
   });

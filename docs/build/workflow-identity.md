@@ -71,9 +71,16 @@ strong argument for fixing the concept rather than patching each symptom.
 | What resolves *redundancy*? | **Supersession — selection cannot reach it** | Two tellings of one route give the answer-time rules nothing to choose between (§5, §6). |
 | How is overlap measured? | **Two signals — and the DESTINATION decides** | A workflow's identity is where it ends, not the path it took. Averaging a workflow into one score lets shared navigation outvote the goal (§5). |
 
-**Vocabulary (locked).** *Workflow* is promoted to mean the durable capability — the thing the
-product does. What a recording yields is a **variant** of a workflow: one true route to it. Today's
-coordinate identifies a variant, not a workflow. Supersession is a relation between variants.
+**Vocabulary (locked — REVISED at build time).** A **workflow** keeps the meaning it already has
+everywhere in the product: *the thing the founder approves and the copilot cites*. What changes is
+that it gains a durable identity, so it survives the recording slot it came from. When two workflows
+turn out to be two routes to one goal, they are grouped under a shared **task**.
+
+The first draft of this doc promoted "workflow" to mean the capability and called each recorded route
+a *variant*. Implementing it showed that fights the product — Studio, the UI copy and the founder's
+own speech all use "workflow" for the thing you approve, so redefining it would have rippled through
+every screen to no benefit. Same design, one less word to relearn. "Variant" survives only as
+informal shorthand for *one workflow among siblings sharing a task*.
 
 ---
 
@@ -249,9 +256,15 @@ cases in one pass — an arriving duplicate and a long-standing one are the same
 against unapproved is deliberately not compared: neither is answering anyone, so there is nothing to
 resolve yet.
 
-**Cut 2 — identity and variant selection.** Variants attach to a durable workflow, and one is
-selected per workflow before ranking. Only *keep-both* genuinely needs this, because only keep-both
-must know that two tellings are siblings.
+**Cut 2 — identity and selection.** Workflows gain a durable identity; siblings that share a task get
+one selected before ranking. Only *keep-both* genuinely needs the selection half, because only
+keep-both must know that two tellings are siblings.
+
+Cut 2 was originally justified by that selection. **The stronger reason turned out to be the
+reprocess hazard**: an approval following a position onto content nobody reviewed was the last way
+unapproved content could reach an end-user, and durable identity is what closes it. That reason
+stands on its own even in a workspace that never sees two routes to one goal — which, so far, is
+every workspace.
 
 This cut is not small in blast radius, whatever its conceptual size: **every consumer today keys on
 the recording coordinate** — retrieval, the sense plan, the walkthrough, the on-page probe, the

@@ -86,7 +86,7 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
     }),
     prisma.copilotApproval.findMany({
       where: { workspaceId },
-      select: { sourceId: true, segmentIndex: true, createdAt: true, supersededById: true },
+      select: { sourceId: true, segmentIndex: true, createdAt: true, inactiveReason: true },
     }),
     prisma.workflowOverlapDecision.findMany({
       where: { workspaceId },
@@ -109,7 +109,7 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
   for (const a of approvals) {
     const k = workflowKey(a.sourceId, a.segmentIndex);
     approvedAt.set(k, a.createdAt);
-    if (a.supersededById == null) liveKeys.push(k);
+    if (a.inactiveReason == null) liveKeys.push(k);
   }
   if (allKeys.length === 0 || liveKeys.length === 0) return [];
 

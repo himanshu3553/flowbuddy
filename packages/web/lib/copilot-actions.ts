@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
+import { workflowIdsAt } from '@/lib/copilot-approvals';
 
 /**
  * P1-M5 — approve or un-approve a workflow `(sourceId, segmentIndex)` for the copilot.
@@ -27,6 +28,10 @@ export async function setCopilotApproval(input: {
   if (!source) throw new Error('Recording not found');
 
   if (input.approved) {
+    // P3-M1 — an approval names the workflow's durable identity, never just its position.
+    const ids = await workflowIdsAt([{ sourceId: input.sourceId, segmentIndex: input.segmentIndex }]);
+    const workflowId = ids.get(`${input.sourceId}:${input.segmentIndex}`);
+    if (!workflowId) throw new Error('Workflow not found — re-process this recording and try again');
     await prisma.copilotApproval.upsert({
       where: { sourceId_segmentIndex: { sourceId: input.sourceId, segmentIndex: input.segmentIndex } },
       create: {
@@ -35,8 +40,9 @@ export async function setCopilotApproval(input: {
         segmentIndex: input.segmentIndex,
         segmentTitle: input.segmentTitle ?? null,
         approvedById: ctx.userId,
+        workflowId,
       },
-      update: { segmentTitle: input.segmentTitle ?? null, approvedById: ctx.userId },
+      update: { segmentTitle: input.segmentTitle ?? null, approvedById: ctx.userId, workflowId },
     });
   } else {
     await prisma.copilotApproval.deleteMany({
@@ -71,9 +77,16 @@ export async function setCopilotApprovalsBulk(
   const valid = workflows.filter((w) => ownedSet.has(w.sourceId));
   if (valid.length === 0) return;
 
+  const ids = await workflowIdsAt(valid);
+  // Approve every workflow we can name. One unidentified workflow must not sink the whole batch —
+  // "Approve all" is a bulk convenience, and a partial success the founder can see beats an error.
+  const identified = valid.filter((w) => ids.has(`${w.sourceId}:${w.segmentIndex}`));
+  if (identified.length === 0) return;
+
   await prisma.$transaction(
-    valid.map((w) =>
-      prisma.copilotApproval.upsert({
+    identified.map((w) => {
+      const workflowId = ids.get(`${w.sourceId}:${w.segmentIndex}`)!;
+      return prisma.copilotApproval.upsert({
         where: { sourceId_segmentIndex: { sourceId: w.sourceId, segmentIndex: w.segmentIndex } },
         create: {
           workspaceId,
@@ -81,10 +94,11 @@ export async function setCopilotApprovalsBulk(
           segmentIndex: w.segmentIndex,
           segmentTitle: w.segmentTitle ?? null,
           approvedById: ctx.userId,
+          workflowId,
         },
-        update: { segmentTitle: w.segmentTitle ?? null, approvedById: ctx.userId },
-      }),
-    ),
+        update: { segmentTitle: w.segmentTitle ?? null, approvedById: ctx.userId, workflowId },
+      });
+    }),
   );
 
   for (const id of ownedSet) revalidatePath(`/dashboard/kb/${id}`);
