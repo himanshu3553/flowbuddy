@@ -132,7 +132,7 @@ zero-downtime deploys: traffic only moves to the new instance once the path answ
 | Service | Path | Why that path |
 |---|---|---|
 | `flowbuddy-api` / `flowbuddy-dev-api` | `/healthz` | the existing health route in [`server.ts`](../../packages/api/src/server.ts) — answers `{"ok":true}` |
-| `flowbuddy-web` (prod only) | `/login` | Studio has no dedicated health endpoint; `/login` needs the Next server to actually be rendering. Note it is a **sign-in page**, not an unauthenticated endpoint — it answers for a logged-out visitor, which is all the probe needs |
+| `flowbuddy-web` (prod only) | `/signin` | Studio has no dedicated health endpoint; `/signin` needs the Next server to actually be rendering. Note it is a **sign-in page**, not an unauthenticated endpoint — it answers for a logged-out visitor, which is all the probe needs. It must be a **real route** — `/` only redirects, and a path that 404s fails the probe forever (see Troubleshooting) |
 
 Static sites (`flowbuddy-widget`, `flowbuddy-landing`) have no health check — there is no process.
 Note the check is a **liveness** signal only: `/healthz` doesn't touch Postgres or Redis, so a
@@ -583,6 +583,7 @@ custom domains make every underlying swap invisible to customers.
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
 | `Eviction policy is allkeys-lru … should be "noeviction"` | Free Key Value default eviction (BullMQ prefers `noeviction`) | The blueprints set `maxmemoryPolicy: noeviction`; on an instance created before that, flip it in the dashboard (Key Value → Settings → Maxmemory Policy) |
 | Apex domain won't verify / cert won't issue | Registrar parking **A records** on the apex (§4.2) | Delete the parking A records; keep only the Render apex IP |
+| A service builds and boots clean — `✓ Ready in …ms` — but the log **never reaches `==> Your service is live`**, and the deploy hangs or rolls back | `healthCheckPath` points at a route that **404s**. Render needs 2xx/3xx there, so a perfectly healthy process is never routed to and gets restart-looped. Hit live on prod Studio 2026-07-31: the path was `/login`, but the Studio's sign-in route is `/signin` | Point it at a route that exists (§2.6). Dashboard → the service → Settings → Health Check Path unblocks it **immediately**; also fix the blueprint or the next sync reverts it. ⚠️ The boot log looks perfect — read it for the **absent** live line, not for an error |
 
 ---
 

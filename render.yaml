@@ -88,7 +88,7 @@ services:
     plan: starter
     dockerfilePath: ./packages/web/Dockerfile
     dockerContext: .
-    healthCheckPath: /login # a public route — Studio has no dedicated health endpoint
+    healthCheckPath: /signin # a public route — Studio has no dedicated health endpoint
     envVars:
       - fromGroup: flowbuddy-r2
       - { key: LOG_LEVEL, value: info }
