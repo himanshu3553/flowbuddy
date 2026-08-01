@@ -225,6 +225,18 @@ model Workflow {
   // The workflow's name, kept here so it survives the worker's delete-and-recreate of its items.
   // (`KnowledgeItem.segmentTitle` still carries a per-item copy for now; this is the future home.)
   title        String?
+  // The workflow's PLAN in prose — what the task achieves, what is optional, what has to happen
+  // first. Written at KB build from the founder's narration plus the finished steps.
+  //
+  // The steps say what to CLICK; this says what you are DOING and why. It must never restate a
+  // click target: no overlap is what makes it impossible for the two to contradict each other, and
+  // it is the only rule this field needs. Structured step data cannot express a plan — a recording
+  // is a list of actions, and "you only need one of these" exists solely in what the founder said.
+  //
+  // ⚠️ This is MODEL OUTPUT entering approved knowledge, unlike steps, which are anchored to real
+  // captured events. Studio must show it wherever a founder approves a workflow — otherwise approval
+  // stops covering everything the copilot may say.
+  description  String?
   // P3-M1 variant grouping — workflows the founder confirmed are two ROUTES to one goal share a
   // `taskId`. `null` = its own task, which is the overwhelmingly common case. A plain shared string
   // rather than a table: grouping is a set, needs no attributes of its own, and stays transitive

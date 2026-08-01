@@ -48,8 +48,13 @@ export const ANSWER_SCHEMA = {
  *
  * ONE shape across every place the AGENT meets an item — the opening shortlist, a search result,
  * a workflow dump — so the same item read twice reads as one thing rather than two. (Mode 1 and
- * the diagnostic path each keep their own inlined copy of this rendering; their prompts are frozen
- * and must not move when this one is tuned. It is deliberately not "one shape everywhere".)
+ * the diagnostic path each keep their own inlined copy of this rendering; TUNING here must not move
+ * them. It is deliberately not "one shape everywhere".)
+ *
+ * That freeze is about tuning, not about capability. When something is wrong for every tier — the
+ * workflow PLAN was, since without it the safety floor answers a workflow with alternatives as a
+ * single mandatory sequence — it lands in all of them deliberately, each measured on its own
+ * baseline. A frozen prompt is one that nothing changes by accident, not one nothing may change.
  *
  * Each line carries the two identifiers the model is asked to hand back:
  *   `id=`  the item, for citations — resolved against the items WE supplied, never trusted raw.
@@ -64,16 +69,51 @@ export const ANSWER_SCHEMA = {
  */
 export function formatItems(items: CopilotKBItem[]): string {
   if (items.length === 0) return '- (none)';
-  return items
-    .map((i) => {
-      const tags: string[] = [];
-      if (i.segmentTitle) tags.push(`workflow: ${i.segmentTitle}`);
-      // Null segmentIndex = the item belongs to no workflow, so there is nothing `get_workflow`
-      // could be aimed at. Emitting `key=src:null` would hand the model a key that cannot resolve.
-      if (i.segmentIndex !== null) tags.push(`key=${i.sourceId}:${i.segmentIndex}`);
-      const wf = tags.length > 0 ? ` [${tags.join(' · ')}]` : '';
-      const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
-      return `- id=${i.id}${wf}: ${i.text}${narr}`;
+
+  // P3-M1 — grouped by workflow, with the workflow's PLAN above its steps.
+  //
+  // WHY GROUPED. Retrieval already returns items ordered by workflow, so this only makes visible
+  // what was already true — and it gives each plan an unambiguous owner. A plan floating beside a
+  // flat list would be one more thing for the model to associate correctly, which is exactly the
+  // kind of guessing that produced the answer-the-previous-question bug.
+  //
+  // WHY THE ITEM LINES ARE UNTOUCHED. Every `- id=… [workflow: … · key=…]` line is byte-for-byte
+  // what it was before the plan existed. Citations resolve by `id`, and `get_workflow` is aimed by
+  // `key` — reshaping either would risk the answer path to improve its prose.
+  //
+  // The plan says what the task IS and what is optional; the steps say what to click. They never
+  // overlap, by construction (see describe.ts), so there is no precedence rule to apply.
+  const order: string[] = [];
+  const byWorkflow = new Map<string, CopilotKBItem[]>();
+  for (const i of items) {
+    const k = i.workflowId || `__loose_${i.id}`;
+    if (!byWorkflow.has(k)) {
+      byWorkflow.set(k, []);
+      order.push(k);
+    }
+    byWorkflow.get(k)!.push(i);
+  }
+
+  const lineFor = (i: CopilotKBItem) => {
+    const tags: string[] = [];
+    if (i.segmentTitle) tags.push(`workflow: ${i.segmentTitle}`);
+    // Null segmentIndex = the item belongs to no workflow, so there is nothing `get_workflow`
+    // could be aimed at. Emitting `key=src:null` would hand the model a key that cannot resolve.
+    if (i.segmentIndex !== null) tags.push(`key=${i.sourceId}:${i.segmentIndex}`);
+    const wf = tags.length > 0 ? ` [${tags.join(' · ')}]` : '';
+    const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
+    return `- id=${i.id}${wf}: ${i.text}${narr}`;
+  };
+
+  return order
+    .map((k) => {
+      const group = byWorkflow.get(k)!;
+      const first = group[0]!;
+      const plan = first.workflowDescription?.trim();
+      // No plan → emit exactly what this function emitted before it existed.
+      if (!plan) return group.map(lineFor).join('\n');
+      const title = first.segmentTitle ? `WORKFLOW: ${first.segmentTitle}` : 'WORKFLOW';
+      return `${title}\n  about: ${plan}\n${group.map(lineFor).join('\n')}`;
     })
     .join('\n');
 }

@@ -1,0 +1,307 @@
+{
+  "capturedAt": "2026-07-31T21:40:26.713Z",
+  "api": "http://localhost:8787",
+  "runs": 3,
+  "contextPath": null,
+  "results": [
+    {
+      "id": "s1",
+      "group": "simple",
+      "question": "How do I create an account?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**. After registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select the checkbox agreeing to the **Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard."
+      ]
+    },
+    {
+      "id": "s2",
+      "group": "simple",
+      "question": "What do I need to sign up?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To sign up, you’ll need:\n\n1. Your full name\n2. Your email address\n3. A password\n4. Agreement to the **Terms of Service** and **Privacy Policy**",
+        "To sign up, you’ll need:\n\n1. Your **full name**\n2. Your **email address**\n3. A **password**\n4. Agreement to the **Terms of Service and Privacy Policy**\n\nClick **Start Free**, enter those details, accept the policies, then click **Create account**.",
+        "To sign up, you’ll need:\n\n1. Your **full name**\n2. Your **email address**\n3. A **password**\n4. Agreement to the **Terms of Service and Privacy Policy**"
+      ]
+    },
+    {
+      "id": "s3",
+      "group": "simple",
+      "question": "Where do I click to get started?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Are you trying to create an account or start a new chatbot project?",
+        "Are you trying to create an account or start a new chatbot project?",
+        "Are you trying to create a new account or start a new chatbot project?"
+      ]
+    },
+    {
+      "id": "s4",
+      "group": "simple",
+      "question": "Do I have to agree to the terms?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create a new account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create a Chatful AI account.",
+        "Yes. Accepting the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create a Chatful AI account."
+      ]
+    },
+    {
+      "id": "h1",
+      "group": "hard",
+      "question": "and then what?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Which task are you working on—creating a chatbot, testing it, creating an account, viewing analytics or billing, or signing out?",
+        "Which task are you working on: creating an account, building or testing a chatbot, viewing analytics or billing, or signing out?",
+        "Which task are you working on: creating an account, building or testing a chatbot, viewing analytics or billing, or signing out?"
+      ]
+    },
+    {
+      "id": "h2",
+      "group": "hard",
+      "question": "why can't I create the account?",
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create a new account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Make sure all required account details are complete:\n\n1. Enter your **Full name**.\n2. Enter your **Email address**.\n3. Enter your **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**?",
+        "Make sure you’ve entered your **full name**, **email address**, and **password**, then select **I agree to the Terms of Service and Privacy Policy** before clicking **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?",
+        "Account creation requires all login details and policy acceptance. Check that you’ve completed each item:\n\n1. Enter your **Full name**.\n2. Enter your **Email address**.\n3. Enter your **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**?"
+      ]
+    },
+    {
+      "id": "h3",
+      "group": "hard",
+      "question": "I'm stuck",
+      "answeredRate": "3/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Which task are you stuck on: creating an account, creating a chatbot project, testing it, viewing analytics or billing, or signing out?",
+        "What are you trying to do: create an account, build or test a chatbot, view analytics or billing, or sign out?",
+        "What are you trying to do: create an account, build or test a chatbot, view analytics or billing, or sign out?"
+      ]
+    },
+    {
+      "id": "f1",
+      "group": "should-decline",
+      "question": "How do I reset my password?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet."
+      ]
+    },
+    {
+      "id": "f2",
+      "group": "should-decline",
+      "question": "How much does it cost?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have current pricing amounts in our help content yet.",
+        "I don’t have current pricing in our help content yet.",
+        "I don’t have current pricing amounts in our help content yet."
+      ]
+    },
+    {
+      "id": "f3",
+      "group": "should-decline",
+      "question": "How many accounts do I have?",
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don’t have access to your account count or help content showing where to find it yet.",
+        "I don’t have a way to determine how many accounts you have from our help content yet.",
+        "I don’t have access to your account count or instructions for viewing it in our help content yet."
+      ]
+    },
+    {
+      "id": "t1",
+      "group": "topic-shift",
+      "question": "how to sign up?",
+      "after": [
+        "how do I log in?"
+      ],
+      "setupFailures": 3,
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create a new account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "To sign up:\n\n1. Click **Start Free**.\n2. Enter your **full name**, **email address**, and **password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter registration, you’ll arrive at the dashboard.",
+        "To sign up:\n\n1. Click **Start Free**.\n2. Enter your **full name**, **email address**, and **password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard."
+      ]
+    },
+    {
+      "id": "t2",
+      "group": "topic-shift",
+      "question": "how do I create an account?",
+      "after": [
+        "how do I log in?"
+      ],
+      "setupFailures": 3,
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "1. Click **Start Free**.\n2. Enter your full name, email address, and password.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **full name**, **email**, and **password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **full name**, **email**, and **password**.\n3. Select the checkbox to agree to the **Terms of Service and Privacy Policy**.\n4. Click **Create account**."
+      ]
+    },
+    {
+      "id": "t3",
+      "group": "topic-shift",
+      "question": "how do I log in?",
+      "after": [
+        "how do I create an account?"
+      ],
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have login instructions in our help content yet.",
+        "I don't have login instructions in our help content yet.",
+        "I don't have login instructions in our help content yet."
+      ]
+    },
+    {
+      "id": "t4",
+      "group": "hard",
+      "question": "and then what?",
+      "after": [
+        "how do I create an account?"
+      ],
+      "answeredRate": "3/3",
+      "citedWorkflows": [
+        "Create an account",
+        "Create and build a new chatbot project"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "After registration, you’ll arrive at the dashboard. To create your first chatbot:\n\n1. Click **New Project**.\n2. Enter the **project name**, **bot name**, and **welcome message**.\n3. Click **Next: Add Knowledge Sources**.\n4. Choose a source: a website or uploaded PDF/document files. For a website, select **Website URL**, enter the address, and click **Add**.\n5. Click **Create Project**, then **Go to Project**.\n6. Click **Build All** and wait until the status displays **Ready**.",
+        "After you click **Create account**, you’ll arrive at the dashboard. To start building a chatbot, click **New Project**.",
+        "After registration, you’ll arrive at the dashboard. To create your first chatbot:\n\n1. Click **New Project**.\n2. Enter the **Project name**, **Bot name**, and **Welcome message**.\n3. Click **Next: Add Knowledge Sources**.\n4. Add knowledge using either a website or uploaded PDF/document files. For a website, select **Website URL**, enter the address, and click **Add**.\n5. Click **Create Project**.\n6. Click **Go to Project**.\n7. Click **Build All** and wait until the status shows **Ready**."
+      ]
+    },
+    {
+      "id": "t5",
+      "group": "should-decline",
+      "question": "How much does it cost?",
+      "after": [
+        "how do I log in?"
+      ],
+      "setupFailures": 3,
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have pricing amounts in our help content yet.",
+        "I don't have pricing details in our help content yet.",
+        "I don't have current pricing amounts in our help content yet."
+      ]
+    },
+    {
+      "id": "t6",
+      "group": "should-decline",
+      "question": "What is the weather today?",
+      "after": [
+        "how do I log in?"
+      ],
+      "setupFailures": 3,
+      "answeredRate": "0/3",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have weather information in our help content.",
+        "I don't have weather information in our help content.",
+        "I don't have weather information in our help content."
+      ]
+    }
+  ]
+}

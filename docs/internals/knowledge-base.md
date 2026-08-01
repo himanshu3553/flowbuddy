@@ -46,6 +46,8 @@ they sit.
     a degraded-build notice** in `KnowledgeSource.error` (the §3.3 mechanism — "semantic search
     unavailable… until re-processed"), not just a log line; those items ride the keyword half of
     hybrid retrieval until the next (re)process (delete+recreate ⇒ automatic re-embed).
+  - `Workflow.description` — the workflow's PLAN in prose (§4 stage 6). Best-effort: `null` leaves
+    behaviour exactly as it was before the stage existed.
   - `KnowledgeSource.status = ready` (or `error`).
 
 The shape persisted into each `KnowledgeItem.data` is a
@@ -58,7 +60,7 @@ items** — they remain only inside `KnowledgeSource.manifest`.
 
 ## 4. Internal mechanics — the pipeline
 
-`buildWorkflowKB` runs five stages in order. Think of it as **noise → meaning**: each stage removes
+`buildWorkflowKB` runs six stages in order. Think of it as **noise → meaning**: each stage removes
 ambiguity the next stage would otherwise have to cope with.
 
 ```mermaid
@@ -72,7 +74,9 @@ flowchart LR
     AL --> SG
     AL --> DS
     SG --> DS["5 · distill each workflow<br/>(LLM → clean steps)"]
-    DS --> P["persist:<br/>KnowledgeItem[] + transcript<br/>status = ready"]
+    DS --> DE["6 · describe each workflow<br/>(LLM → the PLAN in prose)"]
+    RT --> DE
+    DE --> P["persist:<br/>KnowledgeItem[] + Workflow.description<br/>+ transcript · status = ready"]
 ```
 
 ### Stage 1 — Transcribe ([`transcribe.ts`](../../packages/synthesis/src/transcribe.ts))
@@ -180,6 +184,36 @@ Then each model step is *resolved* into the persisted `DistilledStep`:
 cleaned event** (never lose a workflow). Observability logs warn when a workflow sheds most of its
 events (`≥10 events → <30% kept` ⇒ a possibly mis-scoped segment), so quality regressions are visible
 in the worker log rather than silent.
+
+### Stage 6 — Describe ([`describe.ts`](../../packages/synthesis/src/describe.ts)) — LLM, per workflow
+
+Writes the workflow's **plan** in prose: what the task achieves, what is OPTIONAL, what is a CHOICE
+between alternatives, what must be true before starting.
+
+**Why it cannot be part of distillation.** A recording is a list of actions, so distilled steps can
+only say what to click, in the order it was clicked. They structurally cannot express *"you only need
+one of these"* — that is not a gap in the distiller's prompt but in the shape it emits. The plan
+exists solely in what the founder SAID. (Live symptom before this: a workflow whose middle three
+steps were alternatives answered as ten mandatory steps in order.)
+
+**Why a separate call, after distillation.** It sees the FINAL steps, so it cannot describe a step
+that was dropped or drift from settled wording; and it still gets the full transcript, because that
+is where the plan is. Running it inside the distiller would also divide that call's attention on the
+thing it is already good at.
+
+**The one rule that matters:** the description must never restate a click target. No overlap is what
+makes it impossible for the plan and the steps to contradict each other — which is why there is no
+precedence rule anywhere downstream. It is enforced in the prompt, not at runtime.
+
+**Best-effort, unlike the rest of the pipeline.** Every failure path returns `null`, and a workflow
+without a description behaves exactly as it did before this stage existed. That is the opposite of
+segmentation and distillation, where a silent failure writes a *wrong* KB and therefore throws.
+
+Stored on `Workflow.description` — the durable row, so it survives the delete-and-recreate of steps.
+
+⚠️ **It is MODEL OUTPUT entering approved knowledge**, unlike steps, which are anchored to real
+captured events. Studio must show it wherever a workflow is approved, or approval quietly stops
+covering everything the copilot may say.
 
 ### Assembly into workflows (`buildWorkflowKB`)
 

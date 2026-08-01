@@ -17,6 +17,9 @@ export interface CopilotKBItem {
   id: string;
   /** P3-M1 — the workflow's durable identity; what analytics and the approval gate key on. */
   workflowId: string;
+  /** P3-M1 — the workflow's PLAN in prose: what is optional, what is a choice, what must be true
+   *  first. The steps cannot express any of that — a recording is a list of actions. */
+  workflowDescription?: string | null;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;
@@ -119,6 +122,7 @@ Strict rules:
 - If the items genuinely cover the question, write a concise, friendly answer — step-by-step when the user is asking how to do something. Set "covered" to true.
 - Greetings & small talk: if the message is just a greeting ("hi", "hello", "hey", "good morning"), a thanks, or a meta question about you ("who are you", "what can you do") — it is NOT a product question. Reply briefly and warmly and invite them to ask about the product. Set "covered" to true with an empty "citedItemIds". Do NOT decline these, and do NOT invent any product facts, features, or steps.
 - If a genuine product question is NOT covered by the items, set "covered" to false. Write "reason" as a short, friendly message spoken directly TO the user (e.g. "I don't have that in our help content yet."), never a description of their question. Do NOT guess or partially answer from outside the items.
+- A workflow may carry an "about:" line — what the task IS, what is OPTIONAL, and what is a CHOICE. The steps below it are one recorded run through the product, so they show ONE path. When "about:" says the user can choose between options, or that something is optional, SAY SO — name the alternatives at the point the choice happens, and make clear which parts are required. Silently walking the user down the single recorded path is wrong: they may not have what that path needs. Never invent an option "about:" does not mention.
 - In "citedItemIds", list the ids of the knowledge items you actually used (empty when you greeted or declined).
 - Privacy: items are pre-redacted — placeholders like [redacted-email], [redacted-phone], [redacted-card], [redacted-ssn] mark removed personal data. Treat them as opaque, never reproduce them, and never emit personal data; refer to such values generically (e.g. "your email"). This rule ONLY governs how you phrase things — it does NOT change whether a question is "covered". Answer normally in every other respect.
 
@@ -166,11 +170,34 @@ export async function answerFromKB(input: {
   }
   const openai = new OpenAI({ apiKey: input.apiKey });
 
-  const itemBlock = input.items
-    .map((i) => {
-      const wf = i.segmentTitle ? ` [workflow: ${i.segmentTitle}]` : '';
-      const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
-      return `- id=${i.id}${wf}: ${i.text}${narr}`;
+  // P3-M1 — grouped by workflow, with the workflow's PLAN above its steps. Mode 1 keeps its OWN
+  // rendering (the engine's `formatItems` is the agent's, and the two are deliberately allowed to
+  // diverge) — but a plan is not a tuning choice. Without it the safety floor answers a workflow
+  // with alternatives as a single mandatory sequence, which is wrong in the same way for every tier.
+  // Item lines are byte-for-byte what they were, so citations resolve exactly as before.
+  const groups: Array<{ title: string | null; plan: string | null; items: typeof input.items }> = [];
+  const indexByKey = new Map<string, number>();
+  for (const i of input.items) {
+    const key = i.workflowId || `__loose_${i.id}`;
+    let at = indexByKey.get(key);
+    if (at === undefined) {
+      at = groups.length;
+      indexByKey.set(key, at);
+      groups.push({ title: i.segmentTitle, plan: i.workflowDescription?.trim() || null, items: [] });
+    }
+    groups[at]!.items.push(i);
+  }
+  const itemBlock = groups
+    .map((g) => {
+      const lines = g.items
+        .map((i) => {
+          const wf = i.segmentTitle ? ` [workflow: ${i.segmentTitle}]` : '';
+          const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
+          return `- id=${i.id}${wf}: ${i.text}${narr}`;
+        })
+        .join('\n');
+      if (!g.plan) return lines;
+      return `${g.title ? `WORKFLOW: ${g.title}` : 'WORKFLOW'}\n  about: ${g.plan}\n${lines}`;
     })
     .join('\n');
 

@@ -59,8 +59,10 @@ export interface RetrievalDb {
   copilotApproval: {
     findMany(args: {
       where: { workspaceId: string; inactiveReason: null };
-      select: { workflowId: true; workflow: { select: { taskId: true } } };
-    }): Promise<Array<{ workflowId: string; workflow: { taskId: string | null } }>>;
+      select: { workflowId: true; workflow: { select: { taskId: true; description: true } } };
+    }): Promise<
+      Array<{ workflowId: string; workflow: { taskId: string | null; description: string | null } }>
+    >;
   };
   knowledgeItem: {
     findMany(args: {
@@ -254,10 +256,11 @@ export function selectOnePerTask(
   return dropped.size === 0 ? items : items.filter((i) => !dropped.has(i.workflowId));
 }
 
-function toCopilotItem(i: RetrievableKBItem): CopilotKBItem {
+function toCopilotItem(i: RetrievableKBItem, descriptions?: Map<string, string>): CopilotKBItem {
   return {
     id: i.id,
     workflowId: i.workflowId,
+    workflowDescription: descriptions?.get(i.workflowId) ?? null,
     sourceId: i.sourceId,
     segmentIndex: i.segmentIndex,
     segmentTitle: i.segmentTitle,
@@ -267,9 +270,13 @@ function toCopilotItem(i: RetrievableKBItem): CopilotKBItem {
 }
 
 /** The shared top-K tail: sort by score desc (stable — ties keep input order) and map out. */
-function topK(scored: Array<{ i: RetrievableKBItem; score: number }>, limit: number): CopilotKBItem[] {
+function topK(
+  scored: Array<{ i: RetrievableKBItem; score: number }>,
+  limit: number,
+  descriptions?: Map<string, string>,
+): CopilotKBItem[] {
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map(({ i }) => toCopilotItem(i));
+  return scored.slice(0, limit).map(({ i }) => toCopilotItem(i, descriptions));
 }
 
 /**
@@ -282,6 +289,9 @@ export function shortlistItems(
   items: RetrievableKBItem[],
   question: string,
   opts: ShortlistOpts = {},
+  /** P3-M1 — workflow plans, so a vector-path failure degrades the RANKING without also losing the
+   *  plan. The fallback must answer as well as the primary path can, minus the ordering. */
+  descriptions?: Map<string, string>,
 ): CopilotKBItem[] {
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
@@ -298,7 +308,7 @@ export function shortlistItems(
       // enough to hold the thread against a question that genuinely moved on.
       (continuityKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 2 : 0),
   }));
-  return topK(scored, limit);
+  return topK(scored, limit, descriptions);
 }
 
 /**
@@ -366,13 +376,17 @@ export async function retrieveApprovedKBItems(
 
   const approvals = await db.copilotApproval.findMany({
     where: { workspaceId, inactiveReason: null },
-    select: { workflowId: true, workflow: { select: { taskId: true } } },
+    select: { workflowId: true, workflow: { select: { taskId: true, description: true } } },
   });
   if (approvals.length === 0) return [];
   const liveWorkflowIds = new Set(approvals.map((a) => a.workflowId));
   // P3-M1 — which live workflows the founder grouped as routes to one goal.
   const taskByWorkflow = new Map<string, string>();
-  for (const a of approvals) if (a.workflow.taskId) taskByWorkflow.set(a.workflowId, a.workflow.taskId);
+  const descriptionByWorkflow = new Map<string, string>();
+  for (const a of approvals) {
+    if (a.workflow.taskId) taskByWorkflow.set(a.workflowId, a.workflow.taskId);
+    if (a.workflow.description) descriptionByWorkflow.set(a.workflowId, a.workflow.description);
+  }
 
   const [all, vecIds] = await Promise.all([
     db.knowledgeItem.findMany({
@@ -397,7 +411,8 @@ export async function retrieveApprovedKBItems(
   const approved = selectOnePerTask(live, taskByWorkflow, (opts.contextPath ?? '').trim());
   if (approved.length === 0) return [];
 
-  if (!vecIds || vecIds.length === 0) return shortlistItems(approved, question, opts);
+  if (!vecIds || vecIds.length === 0)
+    return shortlistItems(approved, question, opts, descriptionByWorkflow);
 
   // ── Hybrid: reciprocal-rank fusion over three signals ─────────────────────────────────────────
   // (a) keyword rank over MATCHING items only — an item with zero term overlap isn't "ranked", it
@@ -439,7 +454,7 @@ export async function retrieveApprovedKBItems(
     }
     return { i, score };
   });
-  return topK(fused, limit);
+  return topK(fused, limit, descriptionByWorkflow);
 }
 
 /** Accept only well-formed user/assistant turns from an untrusted body (cap count + length). */

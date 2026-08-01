@@ -244,7 +244,28 @@ A B2B sales gate — **elevated** in Phase 1 because the copilot speaks to the c
 
 - **Grounding strictness (P1-M6):** tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob; confidently-wrong answers are the trust-killer.
 - **Decline threshold — a settings control that was designed and never built.** There is no such slider in Studio. To build it: add `copilotDeclineThreshold` to `Workspace`; have the engine emit a `confidence` (0–100) plus a prompt line rating how well the items cover the question, accept a `declineThreshold`, and turn `covered && confidence < threshold` into a friendly decline; persist it and wire the control. **Two caveats that make it less attractive than it looks:** confidence is *model self-reported* — a heuristic dial, not a calibrated probability — and a threshold-decline must still log a coverage gap, or the feedback loop goes blind exactly where quality is worst.
-- **Retrieval quality (P1-M6 / P1-M3):** settled — hybrid keyword+vector, keyword fallback on every vector-path failure. The seam and its constants live in [`internals/copilot.md`](../internals/copilot.md). **Two things remain open and are recorded nowhere else:** folding **conversation history into the retrieval query** (today only the current question and the continuity bias reach it), and an **ANN index (HNSW)** if a workspace ever exceeds tens of thousands of items.
+- **Retrieval quality (P1-M6 / P1-M3):** settled — hybrid keyword+vector, keyword fallback on every vector-path failure. The seam and its constants live in [`internals/copilot.md`](../internals/copilot.md). **Three things remain open and are recorded nowhere else:** folding **conversation history into the retrieval query** (today only the current question and the continuity bias reach it); an **ANN index (HNSW)** if a workspace ever exceeds tens of thousands of items; and the experiment below.
+
+  **EXPERIMENT — make a workflow's DESCRIPTION searchable, not just attached.** The description
+  itself is BUILT: a per-workflow prose "plan" (what the task achieves, what is optional, what has to
+  be true first), written at KB build from the founder's narration and printed above that workflow's
+  steps in both answer modes. What is NOT built is making it *findable*. Stored on the workflow row it
+  is invisible to ranking — only step text is matched — so a workflow can still only be *found*
+  through the wording of its UI actions. "Click Next: Add Knowledge Sources" matches almost nothing a
+  user would type; the description, written in their language, would.
+
+  Making it searchable means indexing it (most cheaply as a `KnowledgeItem` of its own `kind`, which
+  rides the existing embed/keyword/vector/citation rails). The cost is that it then **competes with
+  steps for the candidate budget**, and the failure mode is specific: a description wins a slot, its
+  steps do not, and the copilot explains the task without saying what to click. The shape that avoids
+  it is to let a description *earn* its workflow a place but never *cost* that workflow its steps —
+  index it, then force-include it for any workflow already represented, outside the step budget.
+
+  **Not needed yet, and the trigger is measurable.** Retrieval only chooses when the KB exceeds the
+  candidate budget; below that nearly everything reaches the prompt whatever is asked, so findability
+  cannot be the bottleneck. Revisit when the copilot starts declining, or answering from the wrong
+  workflow, on questions you know are covered. Storing the description on the workflow row does not
+  block any of this — it would be added, not replaced.
 - **Citation UX without leaking structure (P1-M6/M7):** Stage A has no articles to link, so a citation points to the workflow/step (e.g. a step thumbnail).
 - **PII in answers (P1-M12):** **Cut 1 done** — the server text-scrub protects the copilot answer path; **Cut 2 (screenshot/DOM pixel redaction)** is the remaining piece, deferred to Version 2 (needed before the public portal renders screenshots).
 - **Embed security & cost (P1-M9):** public key + origin allowlist + rate limiting; per-workspace LLM ceilings; anonymous end-user session model.

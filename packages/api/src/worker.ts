@@ -166,7 +166,7 @@ const worker = new Worker(
         if (existingId) {
           await prisma.workflow.update({
             where: { id: existingId },
-            data: { segmentIndex: wf.segmentIndex, title: wf.title },
+            data: { segmentIndex: wf.segmentIndex, title: wf.title, description: wf.description },
           });
           identified.push({ workflowId: existingId, wf });
         } else {
@@ -177,6 +177,7 @@ const worker = new Worker(
               sourceId: sessionId,
               segmentIndex: wf.segmentIndex,
               title: wf.title,
+              description: wf.description,
             },
             select: { id: true },
           });

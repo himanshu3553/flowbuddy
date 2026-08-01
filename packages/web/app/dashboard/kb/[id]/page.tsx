@@ -102,6 +102,18 @@ export default async function KbWorkflowPage({
   const recordingName = source.title || source.appBaseUrl || 'Recording';
   const ready = source.status === 'ready' || source.status === 'done';
 
+  // P3-M1 — the workflow's PLAN. Shown BEFORE the steps and before the copilot is allowed to use it:
+  // this is generated prose entering approved knowledge, unlike steps, which are anchored to real
+  // captured events. If a founder cannot read it here, approval has stopped covering everything the
+  // copilot may say.
+  const workflow =
+    selected == null
+      ? null
+      : await prisma.workflow.findFirst({
+          where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
+          select: { description: true },
+        });
+
   const stats =
     selected != null
       ? await getWorkflowCopilotStats(ctx.workspace.id, source.id, selected)
@@ -177,6 +189,23 @@ export default async function KbWorkflowPage({
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-5">
             <WorkflowDuplicates overlaps={myOverlaps} />
+
+            {workflow?.description && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">What this workflow is</CardTitle>
+                  <CardDescription>
+                    Written from your narration — it explains the task and what’s optional. The
+                    copilot reads it alongside the steps, so it is part of what you approve.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-[13.5px] leading-relaxed text-secondary-foreground">
+                    {workflow.description}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             <div>
               <h2 className="text-base font-semibold tracking-tight">

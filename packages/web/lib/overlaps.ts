@@ -20,6 +20,8 @@ import { findWorkflowOverlaps, workflowKey } from '@flowbuddy/synthesis/overlap'
 export interface OverlapSide {
   /** P3-M1 — the durable identity every mutation keys on. */
   workflowId: string;
+  /** The workflow's PLAN in prose — often what actually distinguishes two similar step lists. */
+  description: string | null;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string | null;
@@ -80,8 +82,8 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
       select: { workflowId: true, sourceId: true, segmentIndex: true, segmentTitle: true },
     }),
     prisma.workflow.findMany({
-      where: { workspaceId, NOT: { taskId: null } },
-      select: { id: true, taskId: true },
+      where: { workspaceId },
+      select: { id: true, taskId: true, description: true },
     }),
     prisma.copilotApproval.findMany({
       where: { workspaceId },
@@ -97,7 +99,10 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
     }),
   ]);
 
-  const taskByWorkflowId = new Map(grouped.map((w) => [w.id, w.taskId as string]));
+  const taskByWorkflowId = new Map(
+    grouped.filter((w) => w.taskId != null).map((w) => [w.id, w.taskId as string]),
+  );
+  const descriptionByWorkflowId = new Map(grouped.map((w) => [w.id, w.description]));
 
   const stepCount = new Map<string, number>();
   const titles = new Map<string, string | null>();
@@ -171,8 +176,10 @@ export async function listWorkflowOverlaps(workspaceId: string): Promise<Workflo
 
   const side = (w: { sourceId: string; segmentIndex: number; segmentTitle: string | null }): OverlapSide => {
     const k = workflowKey(w.sourceId, w.segmentIndex);
+    const wfId = workflowIdByKey.get(k) ?? '';
     return {
-      workflowId: workflowIdByKey.get(k) ?? '',
+      workflowId: wfId,
+      description: descriptionByWorkflowId.get(wfId) ?? null,
       sourceId: w.sourceId,
       segmentIndex: w.segmentIndex,
       segmentTitle: w.segmentTitle ?? titles.get(k) ?? null,

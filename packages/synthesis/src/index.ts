@@ -6,6 +6,7 @@ import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
+import { describeWorkflow } from './describe';
 import { createLogger } from '@flowbuddy/logger';
 import type { ArtifactReader } from './types';
 
@@ -62,6 +63,7 @@ export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step dis
 export { alignNarration } from './align';
 export { segment } from './segment';
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
+export { describeWorkflow } from './describe'; // P3-M1 — the workflow's PLAN in prose
 export type { DistilledStep, DistilledStepLLM } from './distill';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
@@ -83,6 +85,9 @@ export interface DistilledWorkflow {
   segmentIndex: number;
   title: string;
   steps: DistilledStep[];
+  /** P3-M1 — the workflow's PLAN in prose (what is optional, what is a choice). `null` when the
+   *  narration revealed nothing beyond the steps, or the call failed — both leave today's behaviour. */
+  description: string | null;
 }
 
 export interface WorkflowKB {
@@ -162,6 +167,21 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       { component: 'distill', title: seg.title, events: segEvents.length, steps: steps.length },
       'distilled workflow',
     );
+
+    // The PLAN, written from the FINAL steps plus the narration. Best-effort: a workflow without one
+    // behaves exactly as it does today.
+    const description = await describeWorkflow(
+      openai,
+      input.synthModel,
+      seg.title,
+      steps,
+      transcript.text,
+    );
+    if (description) {
+      log.info({ component: 'describe', title: seg.title, chars: description.length }, 'described workflow');
+    } else {
+      log.warn({ component: 'describe', title: seg.title }, 'no description produced — steps only');
+    }
     // Drop-guard: a workflow shedding most of its events usually means a mis-scoped segment
     // (the distiller pruned a whole off-title sub-task). Surface it rather than let it pass silently.
     if (segEvents.length >= 10 && steps.length < segEvents.length * 0.3) {
@@ -171,7 +191,7 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       );
     }
     // Contiguous segmentIndex (0..n) — the approval key; skip-on-empty keeps it dense.
-    workflows.push({ segmentIndex: workflows.length, title: seg.title, steps });
+    workflows.push({ segmentIndex: workflows.length, title: seg.title, steps, description });
   }
 
   return { transcript, workflows, warning };

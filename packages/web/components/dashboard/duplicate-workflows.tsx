@@ -29,6 +29,7 @@ import { supersedeWorkflow, dismissOverlap, groupAsOneTask } from '@/lib/overlap
 
 export interface OverlapSideView {
   workflowId: string;
+  description: string | null;
   sourceId: string;
   segmentIndex: number;
   segmentTitle: string | null;
@@ -71,6 +72,11 @@ function StepColumn({
       </p>
       <p className="text-[13.5px] font-semibold text-ink">{titleOf(side)}</p>
       <p className="mb-2 font-mono text-[10px] text-faint">{side.stepCount} steps</p>
+      {/* Two workflows can have near-identical step lists and still be different tasks — the plan is
+          often the only place that shows. It is also part of what approving them approves. */}
+      {side.description && (
+        <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">{side.description}</p>
+      )}
       <ol
         className={cn(
           'space-y-1.5 rounded-tile border px-3 py-2.5',
