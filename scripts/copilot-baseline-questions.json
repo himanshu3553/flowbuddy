@@ -3,21 +3,35 @@
   { "id": "s2", "group": "simple", "q": "What do I need to sign up?" },
   { "id": "s3", "group": "simple", "q": "Where do I click to get started?" },
   { "id": "s4", "group": "simple", "q": "Do I have to agree to the terms?" },
+  { "id": "s5", "group": "simple", "q": "How do I embed the chatbot on my website?" },
+  { "id": "s6", "group": "simple", "q": "How do I test my chatbot?" },
 
   { "id": "h1", "group": "hard", "q": "and then what?" },
   { "id": "h2", "group": "hard", "q": "why can't I create the account?" },
   { "id": "h3", "group": "hard", "q": "I'm stuck" },
 
-  { "id": "f1", "group": "should-decline", "q": "How do I reset my password?" },
-  { "id": "f2", "group": "should-decline", "q": "How much does it cost?" },
-  { "id": "f3", "group": "should-decline", "q": "How many accounts do I have?" },
+  { "id": "o1", "group": "orienting", "q": "What is Chatful AI?" },
+  { "id": "o2", "group": "orienting", "q": "What's the difference between the Professional and Business plans?" },
+  { "id": "o3", "group": "orienting", "q": "Is there a free plan?" },
+  { "id": "o4", "group": "orienting", "q": "Do I need to create a new project to add a second chatbot?" },
+  { "id": "o5", "group": "orienting", "q": "What does the general knowledge setting do?" },
+  { "id": "o6", "group": "orienting", "q": "What is the welcome message?" },
+  { "id": "o7", "group": "orienting", "q": "Can I build the knowledge base from PDF files?" },
+  { "id": "o8", "group": "orienting", "q": "Does the chatbot show where its answers come from?" },
+  { "id": "f2", "group": "orienting", "q": "How much does it cost?" },
 
-  { "id": "t1", "group": "topic-shift", "q": "how to sign up?", "after": "how do I log in?" },
-  { "id": "t2", "group": "topic-shift", "q": "how do I create an account?", "after": "how do I log in?" },
-  { "id": "t3", "group": "topic-shift", "q": "how do I log in?", "after": "how do I create an account?" },
+  { "id": "o9", "group": "orienting", "q": "Which plan should I pick if I expect 5000 messages a month?", "after": "how do I create a chatbot?" },
+  { "id": "t5", "group": "orienting", "q": "How much does it cost?", "after": "How do I test my chatbot?" },
+
+  { "id": "f1", "group": "should-decline", "q": "How do I reset my password?" },
+  { "id": "f3", "group": "should-decline", "q": "How many accounts do I have?" },
+  { "id": "f4", "group": "should-decline", "q": "How do I delete my account?" },
+
+  { "id": "t1", "group": "topic-shift", "q": "how to sign up?", "after": "How do I test my chatbot?" },
+  { "id": "t2", "group": "topic-shift", "q": "how do I create an account?", "after": "How do I test my chatbot?" },
+  { "id": "t3", "group": "should-decline", "q": "how do I log in?", "after": "how do I create an account?" },
 
   { "id": "t4", "group": "hard", "q": "and then what?", "after": "how do I create an account?" },
 
-  { "id": "t5", "group": "should-decline", "q": "How much does it cost?", "after": "how do I log in?" },
-  { "id": "t6", "group": "should-decline", "q": "What is the weather today?", "after": "how do I log in?" }
+  { "id": "t6", "group": "should-decline", "q": "What is the weather today?", "after": "How do I test my chatbot?" }
 ]

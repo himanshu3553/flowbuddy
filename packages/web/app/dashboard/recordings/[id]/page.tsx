@@ -188,6 +188,17 @@ export default async function RecordingDetailPage({
           </div>
         )}
 
+        {/* What the recording covers — derived from the narration at build time (incl. product
+            explanation that isn't any workflow, e.g. pricing). Founder-facing only. */}
+        {source.description && (
+          <div className="rounded-card border bg-card px-4 py-3.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              What this recording covers
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-ink">{source.description}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-6">
             {/* Replay */}

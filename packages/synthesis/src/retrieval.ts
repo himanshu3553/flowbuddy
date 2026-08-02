@@ -45,8 +45,11 @@ const log = createLogger('retrieval');
 /** The KnowledgeItem fields retrieval reads (a structural subset of the Prisma row). */
 export interface RetrievableKBItem {
   id: string;
-  /** P3-M1 — the workflow's durable identity. What the approval gate is decided on. */
+  /** P3-M1 — the workflow's durable identity. What the approval gate is decided on.
+   *  `''` for a product-page row (AIL slice 2) — a page belongs to no workflow. */
   workflowId: string;
+  /** `'step'` (KnowledgeItem) or `'topic'` (a ProductPage adapted into the pool). */
+  kind?: string;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;
@@ -59,9 +62,22 @@ export interface RetrievalDb {
   copilotApproval: {
     findMany(args: {
       where: { workspaceId: string; inactiveReason: null };
-      select: { workflowId: true; workflow: { select: { taskId: true; description: true } } };
+      select: {
+        workflowId: true;
+        workflow: {
+          select: { taskId: true; description: true; sourceId: true; segmentIndex: true };
+        };
+      };
     }): Promise<
-      Array<{ workflowId: string; workflow: { taskId: string | null; description: string | null } }>
+      Array<{
+        workflowId: string;
+        workflow: {
+          taskId: string | null;
+          description: string | null;
+          sourceId: string;
+          segmentIndex: number | null;
+        };
+      }>
     >;
   };
   knowledgeItem: {
@@ -78,6 +94,20 @@ export interface RetrievalDb {
       };
       orderBy: Array<{ workflowId: 'asc' } | { orderIndex: 'asc' }>;
     }): Promise<RetrievableKBItem[]>;
+  };
+  /**
+   * AIL slice 2 — the SECOND corpus: approved product-knowledge pages. This WHERE clause is the
+   * page gate's one live-only reader (the page analog of `inactiveReason: null` above — a page
+   * serves iff approved AND live; there is no per-page approval table to join).
+   */
+  productPage: {
+    findMany(args: {
+      where: { workspaceId: string; approvedAt: { not: null }; inactiveReason: null };
+      select: { id: true; type: true; title: true; content: true; links: true };
+      orderBy: Array<{ type: 'asc' } | { title: 'asc' }>;
+    }): Promise<
+      Array<{ id: string; type: string; title: string; content: string; links: unknown }>
+    >;
   };
   /**
    * P1-M3 — used ONLY for the pgvector top-K scan (Prisma has no native `vector` support).
@@ -257,15 +287,53 @@ export function selectOnePerTask(
 }
 
 function toCopilotItem(i: RetrievableKBItem, descriptions?: Map<string, string>): CopilotKBItem {
+  const related = ((i.data as { related?: Array<{ title: string; key: string }> } | null) ?? {})
+    .related;
   return {
     id: i.id,
     workflowId: i.workflowId,
+    kind: i.kind === 'topic' ? 'topic' : 'step',
     workflowDescription: descriptions?.get(i.workflowId) ?? null,
     sourceId: i.sourceId,
     segmentIndex: i.segmentIndex,
     segmentTitle: i.segmentTitle,
     text: i.text,
     narration: ((i.data as { narration?: string | null } | null) ?? {}).narration ?? null,
+    ...(related && related.length > 0 ? { related } : {}),
+  };
+}
+
+/** A live ProductPage row, adapted into the retrieval pool. No route, no position, no workflow —
+ *  the ranking signals that key on those simply never fire for it; keyword and vector rank it.
+ *
+ *  Slice 3 — the page's workflow links ride along as `data.related`, resolved to `key=` form and
+ *  filtered to LIVE approvals only: a link is only ever surfaced when `get_workflow` could
+ *  actually open it (absence, not refusal — a retired workflow's link simply isn't there). */
+function pageToPoolItem(
+  p: { id: string; title: string; content: string; links: unknown },
+  liveKeyByWorkflowId: Map<string, string>,
+): RetrievableKBItem {
+  const related = (Array.isArray(p.links) ? p.links : [])
+    .filter(
+      (l): l is { kind: string; workflowId: string; title: string } =>
+        !!l &&
+        (l as { kind?: unknown }).kind === 'workflow' &&
+        typeof (l as { workflowId?: unknown }).workflowId === 'string' &&
+        typeof (l as { title?: unknown }).title === 'string',
+    )
+    .flatMap((l) => {
+      const key = liveKeyByWorkflowId.get(l.workflowId);
+      return key ? [{ title: l.title, key }] : [];
+    });
+  return {
+    id: p.id,
+    workflowId: '',
+    kind: 'topic',
+    sourceId: '',
+    segmentIndex: null,
+    segmentTitle: p.title,
+    text: p.content,
+    data: related.length > 0 ? { related } : {},
   };
 }
 
@@ -335,6 +403,10 @@ async function embedQuestion(question: string, embedding: EmbedOpts): Promise<nu
  * P1-M3 — pgvector top-K by cosine distance (`<=>`), constrained to the APPROVED workflow keys so
  * unapproved rows can neither leak nor starve the candidate budget. Ids return in similarity
  * order. Best-effort: any failure logs once and returns null (→ keyword-only).
+ *
+ * AIL slice 2 — the scan is a UNION over BOTH corpora: step items (gated by live workflow ids) and
+ * product pages (gated by their own liveness columns, right here in the WHERE — same no-leak
+ * property, page-sized: an unapproved or retired page is not in the scan at all).
  */
 async function vectorTopK(
   db: RetrievalDb,
@@ -346,10 +418,16 @@ async function vectorTopK(
   try {
     const vec = toVectorLiteral(queryVector);
     const rows = await db.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM "KnowledgeItem"
-      WHERE "workspaceId" = ${workspaceId} AND embedding IS NOT NULL
-        AND "workflowId" = ANY(${liveWorkflowIds}::text[])
-      ORDER BY embedding <=> ${vec}::vector
+      SELECT id FROM (
+        SELECT id, embedding <=> ${vec}::vector AS d FROM "KnowledgeItem"
+        WHERE "workspaceId" = ${workspaceId} AND embedding IS NOT NULL
+          AND "workflowId" = ANY(${liveWorkflowIds}::text[])
+        UNION ALL
+        SELECT id, embedding <=> ${vec}::vector AS d FROM "ProductPage"
+        WHERE "workspaceId" = ${workspaceId} AND embedding IS NOT NULL
+          AND "approvedAt" IS NOT NULL AND "inactiveReason" IS NULL
+      ) u
+      ORDER BY d
       LIMIT ${VECTOR_CANDIDATES}`;
     return rows.map((r) => r.id);
   } catch (e) {
@@ -376,19 +454,27 @@ export async function retrieveApprovedKBItems(
 
   const approvals = await db.copilotApproval.findMany({
     where: { workspaceId, inactiveReason: null },
-    select: { workflowId: true, workflow: { select: { taskId: true, description: true } } },
+    select: {
+      workflowId: true,
+      workflow: { select: { taskId: true, description: true, sourceId: true, segmentIndex: true } },
+    },
   });
-  if (approvals.length === 0) return [];
   const liveWorkflowIds = new Set(approvals.map((a) => a.workflowId));
   // P3-M1 — which live workflows the founder grouped as routes to one goal.
   const taskByWorkflow = new Map<string, string>();
   const descriptionByWorkflow = new Map<string, string>();
+  // Slice 3 — the `key=` a page link resolves to, for LIVE workflows with a position (a detached
+  // workflow has no key `get_workflow` could take, so its links stay silent).
+  const liveKeyByWorkflowId = new Map<string, string>();
   for (const a of approvals) {
     if (a.workflow.taskId) taskByWorkflow.set(a.workflowId, a.workflow.taskId);
     if (a.workflow.description) descriptionByWorkflow.set(a.workflowId, a.workflow.description);
+    if (a.workflow.segmentIndex !== null) {
+      liveKeyByWorkflowId.set(a.workflowId, `${a.workflow.sourceId}:${a.workflow.segmentIndex}`);
+    }
   }
 
-  const [all, vecIds] = await Promise.all([
+  const [all, livePages, vecIds] = await Promise.all([
     db.knowledgeItem.findMany({
       where: { workspaceId },
       select: {
@@ -402,17 +488,26 @@ export async function retrieveApprovedKBItems(
       },
       orderBy: [{ workflowId: 'asc' }, { orderIndex: 'asc' }],
     }),
+    // AIL slice 2 — the second corpus. Live pages only: this WHERE is the page gate.
+    db.productPage.findMany({
+      where: { workspaceId, approvedAt: { not: null }, inactiveReason: null },
+      select: { id: true, type: true, title: true, content: true, links: true },
+      orderBy: [{ type: 'asc' }, { title: 'asc' }],
+    }),
     queryVectorPromise.then((qv) => (qv ? vectorTopK(db, workspaceId, qv, [...liveWorkflowIds]) : null)),
   ]);
   const live = all.filter((i) => liveWorkflowIds.has(i.workflowId));
-  if (live.length === 0) return [];
+  const pageItems = livePages.map((p) => pageToPoolItem(p, liveKeyByWorkflowId));
+  // "No approved content at all" now means no live workflows AND no live pages — a workspace whose
+  // only approved knowledge is pages (e.g. an overview approved before any workflow) still answers.
+  if (live.length === 0 && pageItems.length === 0) return [];
   // One route per goal, decided BEFORE ranking — see `selectOnePerTask`. A no-op in the usual case
-  // where nothing is grouped.
+  // where nothing is grouped. Pages join AFTER: they belong to no task and are never grouped.
   const approved = selectOnePerTask(live, taskByWorkflow, (opts.contextPath ?? '').trim());
-  if (approved.length === 0) return [];
+  const pool = [...approved, ...pageItems];
 
   if (!vecIds || vecIds.length === 0)
-    return shortlistItems(approved, question, opts, descriptionByWorkflow);
+    return shortlistItems(pool, question, opts, descriptionByWorkflow);
 
   // ── Hybrid: reciprocal-rank fusion over three signals ─────────────────────────────────────────
   // (a) keyword rank over MATCHING items only — an item with zero term overlap isn't "ranked", it
@@ -429,7 +524,7 @@ export async function retrieveApprovedKBItems(
   const continuityKeySet = new Set(opts.continuityKeys ?? []);
   const terms = questionTerms(question);
 
-  const kwScored = approved.map((i) => ({ i, score: termOverlap(i.text, terms) }));
+  const kwScored = pool.map((i) => ({ i, score: termOverlap(i.text, terms) }));
   const kwRank = new Map(
     kwScored
       .filter((s) => s.score > 0)
@@ -437,11 +532,11 @@ export async function retrieveApprovedKBItems(
       .map((s, idx) => [s.i.id, idx + 1]),
   );
 
-  const approvedIds = new Set(approved.map((i) => i.id));
+  const poolIds = new Set(pool.map((i) => i.id));
   const vecRank = new Map<string, number>();
-  for (const id of vecIds) if (approvedIds.has(id)) vecRank.set(id, vecRank.size + 1);
+  for (const id of vecIds) if (poolIds.has(id)) vecRank.set(id, vecRank.size + 1);
 
-  const fused = approved.map((i) => {
+  const fused = pool.map((i) => {
     let score = 0;
     const kr = kwRank.get(i.id);
     if (kr) score += 1 / (RRF_K + kr);

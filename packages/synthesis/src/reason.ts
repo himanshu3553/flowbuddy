@@ -287,9 +287,15 @@ function buildTools(input: ReasonInput): EngineTool[] {
 export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer> {
   const openai = new OpenAI({ apiKey: input.apiKey });
 
-  const itemBlock =
-    input.items.length > 0
-      ? input.items
+  // AIL slice 2 — pages ride along as a labelled PRODUCT BACKGROUND section. Deliberately a DATA
+  // change only: REASON_SYSTEM is the most heavily tuned prompt in the product with zero automated
+  // coverage (agent.md §9 Gap 3), so the section label carries the semantics and the prompt text
+  // stays untouched.
+  const topicItems = input.items.filter((i) => i.kind === 'topic');
+  const stepItems = input.items.filter((i) => i.kind !== 'topic');
+  const stepBlock =
+    stepItems.length > 0
+      ? stepItems
           .map((i) => {
             const wf = i.segmentTitle ? ` [workflow: ${i.segmentTitle}]` : '';
             const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
@@ -297,6 +303,18 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
           })
           .join('\n')
       : '- (none retrieved)';
+  const itemBlock =
+    topicItems.length > 0
+      ? `${stepBlock}\nPRODUCT BACKGROUND (product facts for orientation — never steps):\n${topicItems
+          .map((i) => {
+            const rel =
+              i.related && i.related.length > 0
+                ? `\n   related workflows: ${i.related.map((r) => `"${r.title}"`).join(', ')}`
+                : '';
+            return `- id=${i.id} [about: ${i.segmentTitle ?? 'the product'}]: ${i.text}${rel}`;
+          })
+          .join('\n')}`
+      : stepBlock;
 
   const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: REASON_SYSTEM }];
   for (const t of input.history ?? []) {

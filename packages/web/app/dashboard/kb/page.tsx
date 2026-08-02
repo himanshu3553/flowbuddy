@@ -4,6 +4,8 @@ import { BookOpen } from 'lucide-react';
 
 import { getCurrentWorkspace } from '@/lib/session';
 import { listCandidates } from '@/lib/candidates';
+import { listProductPages } from '@/lib/product-pages';
+import { ProductKnowledgeList } from '@/components/dashboard/product-knowledge-list';
 import { listWorkflowOverlaps, duplicatesByWorkflow } from '@/lib/overlaps';
 import { DuplicateWorkflows, type OverlapView } from '@/components/dashboard/duplicate-workflows';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -20,9 +22,10 @@ export default async function KnowledgeBasePage() {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
-  const [candidates, overlaps] = await Promise.all([
+  const [candidates, overlaps, productPages] = await Promise.all([
     listCandidates(ctx.workspace.id),
     listWorkflowOverlaps(ctx.workspace.id),
+    listProductPages(ctx.workspace.id),
   ]);
   // Dates cross the server→client boundary as strings; the view only ever renders them.
   const toView = (o: (typeof overlaps)[number]): OverlapView => ({
@@ -54,7 +57,7 @@ export default async function KnowledgeBasePage() {
         subtitle="Approve the workflows your copilot may answer from — one click each."
       />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
-        {workflows.length === 0 ? (
+        {workflows.length === 0 && productPages.length === 0 ? (
           <div className="rounded-card border bg-card p-10 text-center shadow-card">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-tile border border-brand-100 bg-brand-50 text-primary">
               <BookOpen className="h-6 w-6" />
@@ -96,9 +99,13 @@ export default async function KnowledgeBasePage() {
             </div>
           </div>
         ) : (
-          <div className="space-y-3.5">
-            <DuplicateWorkflows overlaps={overlapViews} />
-            <KbWorkflowList workflows={workflows} />
+          <div className="space-y-6">
+            <div className="space-y-3.5">
+              <DuplicateWorkflows overlaps={overlapViews} />
+              {workflows.length > 0 && <KbWorkflowList workflows={workflows} />}
+            </div>
+            {/* AIL slice 2 — what the product IS, beside how things are DONE. */}
+            <ProductKnowledgeList pages={productPages} />
           </div>
         )}
       </div>

@@ -1,0 +1,682 @@
+{
+  "capturedAt": "2026-08-01T22:56:34.475Z",
+  "api": "http://localhost:8787",
+  "runs": 8,
+  "contextPath": null,
+  "results": [
+    {
+      "id": "s1",
+      "group": "simple",
+      "question": "How do I create an account?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account",
+        "Create a new account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**. After successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**. After successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**. After successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**."
+      ]
+    },
+    {
+      "id": "s2",
+      "group": "simple",
+      "question": "What do I need to sign up?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating the account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating your account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating your account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating the account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating the account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating the account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating your account.",
+        "You’ll need your **full name**, **email address**, and a **password**. You must also agree to the **Terms of Service and Privacy Policy** before creating the account."
+      ]
+    },
+    {
+      "id": "s3",
+      "group": "simple",
+      "question": "Where do I click to get started?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a new account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Click **Start Free** to begin creating your Chatful AI account.",
+        "Click **Start Free** to begin creating your Chatful AI account.",
+        "Click **Start Free** to get started.",
+        "Click **Start Free** to begin creating your Chatful AI account.",
+        "Click **Start Free** to begin creating your Chatful AI account.",
+        "Click **Start Free** to begin creating your Chatful AI account.",
+        "Click **Start Free** to get started creating your Chatful AI account.",
+        "Click **Start Free** to begin creating your Chatful AI account."
+      ]
+    },
+    {
+      "id": "s4",
+      "group": "simple",
+      "question": "Do I have to agree to the terms?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account",
+        "Create a new account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create a Chatful AI account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to register a Chatful AI account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. Agreeing to the **Terms of Service and Privacy Policy** is required to create an account.",
+        "Yes. To create a Chatful AI account, you must agree to the **Terms of Service and Privacy Policy** before clicking **Create account**."
+      ]
+    },
+    {
+      "id": "s5",
+      "group": "simple",
+      "question": "How do I embed the chatbot on my website?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Copy the chatbot embed script"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "After creating the chatbot and its knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy button** next to the script tag.\n3. Paste that one-line script into your website’s body, before its closing tag.\n4. Deploy your website; the chatbot widget will then appear on it.",
+        "After creating the chatbot and its knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy icon** next to the script tag.\n3. Paste the one-line script into your website’s body, just before its closing tag.\n4. Deploy your website; the chatbot widget will then appear on it.",
+        "After creating your chatbot and knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy icon** beside the script tag.\n3. Paste the script into your website’s body, before its closing tag.\n4. Deploy your website; the chatbot widget will then appear on it.",
+        "After creating your chatbot and knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the copy button next to the script tag.\n3. Paste the one-line script into your website’s body, just before its closing tag.\n4. Deploy your website. The chatbot widget will then appear on it.",
+        "After creating your chatbot and knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy** button next to the script tag.\n3. Paste the one-line script into your website’s body, before its closing tag.\n4. Deploy your website; the chatbot widget will then appear on it.",
+        "After creating your chatbot and knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy button** next to the script tag.\n3. Paste the one-line script into your website’s body, before its closing tag.\n4. Deploy your website. The chatbot widget will then appear on it.",
+        "After creating your chatbot and knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy icon** next to the script tag.\n3. Paste that one-line script into your application’s body, just before its closing tag.\n4. Deploy your application; the chatbot widget will then appear on it.",
+        "After creating the chatbot and its knowledge base:\n\n1. Click **Embed**.\n2. Under **Floating Chat Widget**, click the **copy icon** next to the script tag.\n3. Paste the one-line script into your website’s body, before its closing tag.\n4. Deploy your website. The chatbot widget will then appear on it."
+      ]
+    },
+    {
+      "id": "s6",
+      "group": "simple",
+      "question": "How do I test my chatbot?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create and build a new chatbot project",
+        "Test the chatbot"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Once the chatbot has finished building and shows **Ready**, you can test it in either available test view:\n\n1. Click **Test Chat**.\n2. Enter a sample question and click the **Submit** button.\n3. Review the chatbot’s response.\n\nAlternatively, click **Embed**, then **Open** to launch the chatbot in a new tab. Enter a message, click **Send**, and confirm that it responds.",
+        "Once your chatbot and knowledge base are ready:\n\n1. Click **Test Chat**.\n2. Scroll to the input box.\n3. Enter a sample question.\n4. Click the **submit** button and review the response.\n\nThe answer uses your custom data. If you enabled general-knowledge responses, the chatbot can use those when its knowledge base doesn’t contain the answer.",
+        "Once the chatbot’s status is **Ready**:\n\n1. Click **Test Chat**.\n2. Scroll to the input box.\n3. Enter a sample question and click **Submit**.\n4. Review the response to confirm the chatbot is working.\n\nYou can also click **Embed**, then **Open**, to launch the chatbot in a new tab and send a test message there.",
+        "Once your chatbot’s build status shows **Ready**, use the testing option available on your page:\n\n1. Click **Test Chat**.\n2. Scroll to the input box.\n3. Enter a sample question and click **Submit**.\n4. Review the chatbot’s response.\n\nIf you instead see the embed flow, click **Embed**, then **Open**. The chatbot opens in a new tab where you can send a message and confirm it responds.",
+        "Once the chatbot has finished building and shows **Ready**, use whichever option appears on your page:\n\n1. Click **Test Chat**, scroll to the input box, enter a question, and click **Submit**.\n2. Alternatively, click **Embed** → **Open**. In the new tab, enter a message and click the **Send** button.\n3. Confirm that the chatbot responds.",
+        "Once the chatbot’s knowledge base is ready:\n\n1. Click **Test Chat**.\n2. Scroll to the input box.\n3. Enter a sample question and click the **Submit** button.\n4. Review the response to confirm the chatbot is working.",
+        "Once your chatbot has finished building and shows **Ready**, you can test it in either available view:\n\n1. Click **Test Chat**, scroll to the input box, enter a question, and click **Submit**.\n2. Or click **Embed** → **Open** to launch the chatbot in a new tab, then enter a message and click **Send**.\n3. Confirm that the chatbot responds.",
+        "Once your chatbot and knowledge base are ready:\n\n1. Click **Test Chat**.\n2. Scroll to the input box.\n3. Enter a sample question and click the **Submit** button.\n4. Review the chatbot’s response to confirm it’s working."
+      ]
+    },
+    {
+      "id": "h1",
+      "group": "hard",
+      "question": "and then what?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Which task are you working on—creating the chatbot, building its knowledge base, testing it, or embedding it?",
+        "What did you just click, or which screen are you on now?",
+        "Which task are you working on—creating the chatbot, building its knowledge base, testing it, or embedding it?",
+        "Which task are you working on, and what did you just click?",
+        "Which task are you working on right now—creating, building, testing, or embedding your chatbot?",
+        "Which task are you working on right now—creating, building, testing, or embedding your chatbot?",
+        "Which task are you continuing: creating the chatbot, building its knowledge base, testing it, or embedding it?",
+        "Which task are you working on right now—creating, building, testing, or embedding your chatbot?"
+      ]
+    },
+    {
+      "id": "h2",
+      "group": "hard",
+      "question": "why can't I create the account?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a new account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Make sure all required registration details are complete:\n\n1. Enter your **Full name**.\n2. Enter your **Email address**.\n3. Enter a **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?",
+        "Account creation requires all identity and sign-in details plus acceptance of the policies. Please check that you’ve:\n\n1. Entered your **Full name**.\n2. Entered your **Email address**.\n3. Entered a **Password**.\n4. Selected **I agree to the Terms of Service and Privacy Policy**.\n5. Clicked **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**?",
+        "Make sure all required registration steps are complete:\n\n1. Enter your **Full name**, **Email address**, and **Password**.\n2. Select **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?",
+        "Make sure all required registration details are complete:\n\n1. Enter your **Full name**, **Email address**, and **Password**.\n2. Select **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?",
+        "Make sure every required field is completed before submitting:\n\n1. Fill in **Full name**.\n2. Enter your **Email address**.\n3. Enter a **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?",
+        "Make sure all required registration details are complete:\n\n1. Enter your **Full name**, **Email address**, and **Password**.\n2. Select **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—does an error message appear?",
+        "Account creation requires all three details plus acceptance of the policies:\n\n1. Enter your **Full name**, **Email address**, and **Password**.\n2. Select **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**?",
+        "Make sure every required registration item is complete:\n\n1. Enter your **Full name**.\n2. Enter your **Email address**.\n3. Enter your **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.\n\nIf it still doesn’t work, what happens when you click **Create account**—do you see an error message?"
+      ]
+    },
+    {
+      "id": "h3",
+      "group": "hard",
+      "question": "I'm stuck",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "What are you trying to do—create an account, build a chatbot, test it, or something else?",
+        "What are you trying to do, and what do you see on the screen right now?",
+        "What are you trying to do—create an account, build a chatbot, test it, or something else?",
+        "What are you trying to do, and what happens when you try?",
+        "What are you trying to do—create an account, build a chatbot, test it, embed it, or something else?",
+        "What are you trying to do, and where are you getting stuck?",
+        "What are you trying to do, and what happens when you click the next button?",
+        "What are you trying to do, and what happens when you click or submit it?"
+      ]
+    },
+    {
+      "id": "o1",
+      "group": "orienting",
+      "question": "What is Chatful AI?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data, such as crawled website content or uploaded PDFs and documents, and can be embedded in your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data, and you can embed them in your SaaS application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data—such as crawled website content or uploaded PDFs and documents—and can be embedded in your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. These chatbots answer customer questions using a knowledge base created from your own data and can be embedded in your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data, such as website content or uploaded documents, and can be embedded in your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data, such as crawled website content or uploaded documents, and can be embedded into your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data, such as crawled website content or uploaded PDFs and documents, and can be embedded in your application.",
+        "Chatful AI is a SaaS product that helps SaaS companies build custom AI chatbots. The chatbots answer customer questions using a knowledge base created from your own data—such as crawled website content or uploaded PDFs and documents—and can be embedded in your application."
+      ]
+    },
+    {
+      "id": "o2",
+      "group": "orienting",
+      "question": "What's the difference between the Professional and Business plans?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything included in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and increases capacity to 10 chatbots and 10,000 messages per month. It includes everything in Professional.",
+        "**Professional** costs **$49/month** and includes 3 chatbots, 3,000 messages per month, unlimited page crawling, and unlimited document uploads.\n\n**Business** costs **$199/month** and includes 10 chatbots, 10,000 messages per month, plus everything in Professional."
+      ]
+    },
+    {
+      "id": "o3",
+      "group": "orienting",
+      "question": "Is there a free plan?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads.",
+        "Yes. The **Starter** plan is free and includes one chatbot, five messages per month, automatic website crawling, and document uploads."
+      ]
+    },
+    {
+      "id": "o4",
+      "group": "orienting",
+      "question": "Do I need to create a new project to add a second chatbot?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. A project is the required entry point for each chatbot, so create a new project to add a second one.\n\nYour plan must also support multiple chatbots: **Starter** allows 1, **Professional** allows 3, **Business** allows 10, and **Enterprise** uses custom pricing.",
+        "Yes. A project is the required entry point for creating each chatbot, so you’ll create a new project for the second one.\n\nYour plan must also support multiple chatbots: Starter allows 1, Professional 3, and Business 10. Enterprise capacity is available through sales.",
+        "Yes. A project is the required entry point for creating a chatbot, so you’ll need a new project for the second chatbot.\n\nYour plan must also support it: Starter allows 1 chatbot, Professional 3, and Business 10.",
+        "Yes. A project is the required entry point for creating a chatbot, so a second chatbot requires a new project.\n\nYour plan must also support multiple chatbots: **Starter** allows one, while **Professional** allows three, **Business** allows 10, and **Enterprise** uses custom pricing.",
+        "Yes. A project is the required starting point for creating a chatbot, so you’ll need a new project for a second chatbot.\n\nYour plan must also allow multiple chatbots: **Starter** supports 1, **Professional** 3, and **Business** 10.",
+        "Yes. A project is the required entry point for each chatbot, so you’ll need a new project for a second one.\n\nYour plan must also allow multiple chatbots: **Starter** includes 1, **Professional** 3, **Business** 10, and **Enterprise** uses custom pricing.",
+        "Yes. A project is the required entry point for creating a chatbot, so a second chatbot requires a new project.\n\nYour plan must also support multiple chatbots: Starter allows 1, Professional 3, and Business 10. Enterprise capacity uses custom pricing.",
+        "Yes. A project is the required entry point for creating a chatbot, so you’ll create a **New Project** for the second chatbot.\n\nYour plan must also support multiple chatbots: Starter allows 1, Professional 3, and Business 10."
+      ]
+    },
+    {
+      "id": "o5",
+      "group": "orienting",
+      "question": "What does the general knowledge setting do?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find the answer there, it uses general knowledge from its model pre-training. This setting is optional.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find the answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, **general knowledge responses** make the chatbot search its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond.",
+        "When enabled, the chatbot searches its knowledge base first. If it can’t find an answer there, it uses general knowledge from its model pre-training to respond."
+      ]
+    },
+    {
+      "id": "o6",
+      "group": "orienting",
+      "question": "What is the welcome message?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "The welcome message is the first message someone sees when they open the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message someone sees when they open the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message someone sees when they open the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message shown when someone opens the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message shown when someone opens the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message shown when someone opens the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message someone sees when they open the chatbot embedded in a SaaS application.",
+        "The welcome message is the first message shown when someone opens the chatbot embedded in a SaaS application."
+      ]
+    },
+    {
+      "id": "o7",
+      "group": "orienting",
+      "question": "Can I build the knowledge base from PDF files?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Build the project knowledge base",
+        "Learn how Chatful AI works"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. Chatful AI can build a knowledge base from uploaded PDF and document files. After adding the files, you still need to build the knowledge base and wait until its status is **Ready**.",
+        "Yes. You can build the knowledge base from uploaded PDF or document files instead of a crawled website. After adding the files, click **Build All** and wait until the status changes to **Ready**.",
+        "Yes. You can build the knowledge base by uploading PDF or document files. After adding the files, click **Build All** and wait until the status changes to **Ready**.",
+        "Yes. Chatful AI can build a chatbot knowledge base by processing uploaded PDF and document files. After adding the files, you’ll need to build the knowledge base and wait until its status is **Ready**.",
+        "Yes. You can build a knowledge base from uploaded PDF or document files. After adding the files, click **Build All** and wait until the status changes to **Ready** before continuing.",
+        "Yes. Chatful AI can build a knowledge base from uploaded PDFs and document files. You can use these instead of a website, or combine both source types.",
+        "Yes. Chatful AI can build a knowledge base by processing uploaded PDF and document files. You can use these instead of a website source.",
+        "Yes. Chatful AI can build a chatbot knowledge base by processing uploaded PDF and document files. After adding the files, you still need to build the knowledge base and wait until its status is **Ready**."
+      ]
+    },
+    {
+      "id": "o8",
+      "group": "orienting",
+      "question": "Does the chatbot show where its answers come from?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Yes. The chatbot can cite the knowledge-base source it used for an answer.",
+        "Yes. The chatbot can cite the knowledge-base source it used when answering a question.",
+        "Yes. The chatbot can cite the knowledge-base source it used for an answer.",
+        "Yes. The chatbot can cite the knowledge-base source it used for an answer.",
+        "Yes. The chatbot can cite the knowledge-base source it used when answering a question.",
+        "Yes. The chatbot can cite the knowledge-base source it used when answering a question.",
+        "Yes. The chatbot can cite the knowledge-base source used for its answer.",
+        "Yes. The chatbot can cite the knowledge-base source it used when answering a question."
+      ]
+    },
+    {
+      "id": "f2",
+      "group": "orienting",
+      "question": "How much does it cost?",
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Chatful AI has four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages per month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month\n- **Enterprise:** Custom pricing through the sales team",
+        "Chatful AI offers four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages/month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages/month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages/month\n- **Enterprise:** Custom pricing through the sales team",
+        "Chatful AI has four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages/month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages/month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages/month\n- **Enterprise:** Custom pricing — contact the sales team",
+        "Chatful AI has four plans:\n\n• **Starter:** Free — 1 chatbot and 5 messages/month\n• **Professional:** $49 USD/month — 3 chatbots and 3,000 messages/month\n• **Business:** $199 USD/month — 10 chatbots and 10,000 messages/month\n• **Enterprise:** Custom pricing — contact the sales team",
+        "Chatful AI has four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages/month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages/month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages/month\n- **Enterprise:** Custom pricing; contact the sales team",
+        "Chatful AI has four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages/month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages/month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages/month\n- **Enterprise:** Custom pricing — contact the sales team",
+        "Chatful AI has four plans:\n\n1. **Starter:** Free — 1 chatbot and 5 messages per month.\n2. **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n3. **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n4. **Enterprise:** Custom pricing; contact the sales team.",
+        "Chatful AI has four plans:\n\n**Starter:** Free — 1 chatbot and 5 messages/month.\n**Professional:** $49/month — 3 chatbots and 3,000 messages/month.\n**Business:** $199/month — 10 chatbots and 10,000 messages/month.\n**Enterprise:** Custom pricing through the sales team."
+      ]
+    },
+    {
+      "id": "o9",
+      "group": "orienting",
+      "question": "Which plan should I pick if I expect 5000 messages a month?",
+      "after": [
+        "how do I create a chatbot?"
+      ],
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Pick the **Business** plan. It costs **$199/month** and includes up to **10,000 messages per month**. The Professional plan only includes 3,000, so it wouldn’t cover your expected 5,000 messages.",
+        "Pick the **Business** plan. It costs **$199/month** and includes up to **10,000 messages per month**, so it covers your expected 5,000 messages. The Professional plan only includes 3,000 messages per month.",
+        "Pick the **Business** plan. It costs **$199/month** and includes up to **10,000 messages per month**, so it covers your expected 5,000. The Professional plan only includes 3,000 messages per month.",
+        "Pick the **Business** plan. It costs **$199/month** and includes up to **10,000 messages per month**, so it covers your expected 5,000. The **Professional** plan only includes 3,000 messages per month.",
+        "Pick the **Business** plan. It costs **$199 USD per month** and includes up to **10,000 messages per month**, so it covers your expected 5,000 messages. The Professional plan only includes 3,000 messages per month.",
+        "Pick the **Business plan**. It costs **$199/month** and includes up to **10,000 messages per month**, so it covers your expected 5,000. The Professional plan only includes 3,000 messages per month.",
+        "Pick the **Business** plan. It costs **$199/month** and includes up to **10,000 messages per month**, while Professional only includes 3,000. Business also supports up to 10 chatbots and includes everything in Professional.",
+        "Pick the **Business plan**. It costs **$199/month** and includes up to **10,000 messages per month**, so it covers your expected 5,000. The **Professional plan** only includes 3,000 messages per month."
+      ]
+    },
+    {
+      "id": "t5",
+      "group": "orienting",
+      "question": "How much does it cost?",
+      "after": [
+        "How do I test my chatbot?"
+      ],
+      "answeredRate": "8/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "Chatful AI offers four plans:\n\n- **Starter:** Free — 1 chatbot and 5 messages per month.\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n- **Enterprise:** Custom pricing; contact the sales team.",
+        "Chatful AI has four pricing tiers:\n\n- **Starter:** Free — 1 chatbot and 5 messages per month\n- **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month\n- **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month\n- **Enterprise:** Custom pricing through the sales team",
+        "Chatful AI has four pricing tiers:\n\n**Starter:** Free — 1 chatbot and 5 messages per month.\n\n**Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n\n**Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n\n**Enterprise:** Custom pricing; contact the sales team.",
+        "Chatful AI has four pricing tiers:\n\n1. **Starter:** Free\n2. **Professional:** $49 USD per month\n3. **Business:** $199 USD per month\n4. **Enterprise:** Custom pricing; contact the sales team",
+        "Chatful AI has four plans:\n\n1. **Starter:** Free — 1 chatbot and 5 messages per month.\n2. **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n3. **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n4. **Enterprise:** Custom pricing — contact the sales team.",
+        "Chatful AI has four pricing tiers:\n\n1. **Starter:** Free — 1 chatbot and 5 messages per month.\n2. **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n3. **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n4. **Enterprise:** Custom pricing — contact the sales team.",
+        "Chatful AI has four plans:\n\n1. **Starter:** Free — 1 chatbot and 5 messages per month.\n2. **Professional:** $49 USD/month — 3 chatbots and 3,000 messages per month.\n3. **Business:** $199 USD/month — 10 chatbots and 10,000 messages per month.\n4. **Enterprise:** Custom pricing through the sales team.",
+        "Chatful AI has four pricing tiers:\n\n• **Starter:** Free\n• **Professional:** $49 USD/month\n• **Business:** $199 USD/month\n• **Enterprise:** Custom pricing—contact the sales team"
+      ]
+    },
+    {
+      "id": "f1",
+      "group": "should-decline",
+      "question": "How do I reset my password?",
+      "answeredRate": "0/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet.",
+        "I don't have password-reset instructions in our help content yet."
+      ]
+    },
+    {
+      "id": "f3",
+      "group": "should-decline",
+      "question": "How many accounts do I have?",
+      "answeredRate": "0/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don’t have access to your account count, and our help content doesn’t show how to check it yet.",
+        "I don’t have access to your account count, and our help content doesn’t explain where to view it yet.",
+        "I don’t have access to your account data or help content showing how to check the number of accounts you have.",
+        "I don’t have access to your account count or help content showing where to find it yet.",
+        "I don’t have access to your account count or help content showing where to find it yet.",
+        "I don’t have access to your account count or help content showing where to find it yet.",
+        "I don’t have access to your account count or help content showing where to find it yet.",
+        "I don’t have access to your account count or help content showing where to find it yet."
+      ]
+    },
+    {
+      "id": "f4",
+      "group": "should-decline",
+      "question": "How do I delete my account?",
+      "answeredRate": "0/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don’t have account-deletion instructions in our help content yet.",
+        "I don't have account deletion instructions in our help content yet.",
+        "I don't have account deletion instructions in our help content yet.",
+        "I don't have account-deletion instructions in our help content yet.",
+        "I don't have account deletion steps in our help content yet.",
+        "I don't have account-deletion instructions in our help content yet.",
+        "I don't have account deletion instructions in our help content yet.",
+        "I don't have account deletion instructions in our help content yet."
+      ]
+    },
+    {
+      "id": "t1",
+      "group": "topic-shift",
+      "question": "how to sign up?",
+      "after": [
+        "How do I test my chatbot?"
+      ],
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard.",
+        "To sign up:\n\n1. Click **Start Free**.\n2. Enter your **Full Name**, **Email Address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "To sign up:\n\n1. Click **Start Free**.\n2. Enter your **Full Name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**. After successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter successful registration, you’ll arrive at the dashboard.",
+        "To sign up:\n\n1. Click **Start Free**.\n2. Enter your **Full Name**, **Email**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.\n\nAfter registration, you’ll arrive at the dashboard."
+      ]
+    },
+    {
+      "id": "t2",
+      "group": "topic-shift",
+      "question": "how do I create an account?",
+      "after": [
+        "How do I test my chatbot?"
+      ],
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account",
+        "Create an account"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **full name**, **email address**, and **password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email**, and **Password**.\n3. Agree to the **Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Select **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **full name**, **email**, and **password**.\n3. Select the checkbox agreeing to the **Terms of Service** and **Privacy Policy**.\n4. Click **Create account**. After successful registration, you’ll arrive at the dashboard.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**.",
+        "1. Click **Start Free**.\n2. Enter your **Full name**, **Email address**, and **Password**.\n3. Check **I agree to the Terms of Service and Privacy Policy**.\n4. Click **Create account**."
+      ]
+    },
+    {
+      "id": "t3",
+      "group": "should-decline",
+      "question": "how do I log in?",
+      "after": [
+        "how do I create an account?"
+      ],
+      "answeredRate": "0/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I don't have login steps in our help content yet.",
+        "I don't have login instructions in our help content yet.",
+        "I don't have login instructions in our help content yet.",
+        "I don't have login steps in our help content yet.",
+        "I don't have the login steps in our help content yet.",
+        "I don’t have login instructions in our help content yet.",
+        "I don't have the login steps in our help content yet.",
+        "I don't have login instructions in our help content yet."
+      ]
+    },
+    {
+      "id": "t4",
+      "group": "hard",
+      "question": "and then what?",
+      "after": [
+        "how do I create an account?"
+      ],
+      "answeredRate": "8/8",
+      "citedWorkflows": [
+        "Create a Chatful AI account",
+        "Create an account",
+        "Create and build a new chatbot project"
+      ],
+      "positions": [],
+      "intents": [
+        "{\"highlight\":false,\"offerWalkthrough\":false}"
+      ],
+      "errors": [],
+      "answers": [
+        "After you click **Create account**, you’ll arrive at the dashboard. To start building your chatbot, click **New Project** and enter the project details.",
+        "After creating your account, you’ll arrive at the dashboard. To build your first chatbot:\n\n1. Click **New Project**.\n2. Enter the **Project name**, **Bot name**, and **Welcome message**.\n3. Click **Next: Add Knowledge Sources**.\n4. Choose a source: a website address or uploaded PDFs/documents. For a website, select **Website URL**, enter the address, and click **Add**.\n5. Click **Create Project**, then **Go to Project**.\n6. Click **Build All** and wait until the status shows **Ready**.",
+        "After your account is created, you’ll arrive at the dashboard. To build your first chatbot:\n\n1. Click **New Project**.\n2. Enter the **Project name**, **Bot name**, and **Welcome message**.\n3. Click **Next: Add Knowledge Sources**.\n4. Choose your source: a website address or uploaded PDFs/documents. For a website, select **Website URL**, enter the address, and click **Add**.\n5. Click **Create Project**, then **Go to Project**.\n6. Click **Build All** and wait until the status shows **Ready**.",
+        "After registration, you’ll arrive at the dashboard. To create your chatbot:\n\n1. Click **New Project**.\n2. Enter the **Project name**, **Bot name**, and **Welcome message**.\n3. Click **Next: Add Knowledge Sources**.\n4. Choose a source: a website address or uploaded PDFs/documents. For a website, select **Website URL**, enter the address, and click **Add**.\n5. Click **Create Project**, then **Go to Project**.\n6. Click **Build All** and wait until the status shows **Ready**.",
+        "After registration succeeds, you’ll arrive at the dashboard. To begin creating your chatbot, click **New Project**.",
+        "After registration, you’ll arrive at the dashboard. To start creating a chatbot, click **New Project** and provide the project details.",
+        "After registration succeeds, you’ll arrive at the dashboard. To start building a chatbot, click **New Project**.",
+        "After your account is created, you’ll arrive at the dashboard. Click **New Project** to begin creating your chatbot."
+      ]
+    },
+    {
+      "id": "t6",
+      "group": "should-decline",
+      "question": "What is the weather today?",
+      "after": [
+        "How do I test my chatbot?"
+      ],
+      "answeredRate": "0/8",
+      "citedWorkflows": [],
+      "positions": [],
+      "intents": [],
+      "errors": [],
+      "answers": [
+        "I can only help with Chatful AI using our approved help content, so I can’t provide today’s weather.",
+        "I can only help with this product, so I don’t have today’s weather in our help content.",
+        "I can only help with this product, so I can’t provide today’s weather.",
+        "I don’t have weather information in our help content.",
+        "I don't have weather information in our help content.",
+        "I don’t have weather information in our help content.",
+        "I can only help with product questions, so I can’t check today’s weather.",
+        "I can only help with Chatful AI using our approved help content, so I can’t provide today’s weather."
+      ]
+    }
+  ],
+  "tailRerun": {
+    "ids": [
+      "f1",
+      "f3",
+      "f4",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "t6"
+    ],
+    "reason": "original run hit OpenAI credit exhaustion mid-capture",
+    "capturedAt": "2026-08-02T06:03:59.142Z",
+    "runs": 8
+  }
+}

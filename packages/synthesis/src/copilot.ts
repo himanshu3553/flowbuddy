@@ -15,8 +15,17 @@ import { runAnswerLoop, shapeAnswer, type AnswerLoopResult } from './engine';
 /** A KB item the copilot may ground on. `id` is the KnowledgeItem id (used for citations). */
 export interface CopilotKBItem {
   id: string;
-  /** P3-M1 — the workflow's durable identity; what analytics and the approval gate key on. */
+  /** P3-M1 — the workflow's durable identity; what analytics and the approval gate key on.
+   *  `''` for a `topic` item (AIL slice 2) — a product page belongs to no workflow. */
   workflowId: string;
+  /** `'step'` = a workflow step (default). `'topic'` = a product-knowledge page (AIL slice 2):
+   *  rendered as PRODUCT BACKGROUND in every engine, excluded from the citations array (v1 — the
+   *  citation consumers are all workflow-keyed). */
+  kind?: 'step' | 'topic';
+  /** Slice 3, `topic` items only — the page's related workflows, pre-filtered to LIVE approvals
+   *  and resolved to the `key=` form `get_workflow` takes. The bridge from an orienting answer to
+   *  the how-to. */
+  related?: Array<{ title: string; key: string }>;
   /** P3-M1 — the workflow's PLAN in prose: what is optional, what is a choice, what must be true
    *  first. The steps cannot express any of that — a recording is a list of actions. */
   workflowDescription?: string | null;
@@ -123,6 +132,7 @@ Strict rules:
 - Greetings & small talk: if the message is just a greeting ("hi", "hello", "hey", "good morning"), a thanks, or a meta question about you ("who are you", "what can you do") — it is NOT a product question. Reply briefly and warmly and invite them to ask about the product. Set "covered" to true with an empty "citedItemIds". Do NOT decline these, and do NOT invent any product facts, features, or steps.
 - If a genuine product question is NOT covered by the items, set "covered" to false. Write "reason" as a short, friendly message spoken directly TO the user (e.g. "I don't have that in our help content yet."), never a description of their question. Do NOT guess or partially answer from outside the items.
 - A workflow may carry an "about:" line — what the task IS, what is OPTIONAL, and what is a CHOICE. The steps below it are one recorded run through the product, so they show ONE path. When "about:" says the user can choose between options, or that something is optional, SAY SO — name the alternatives at the point the choice happens, and make clear which parts are required. Silently walking the user down the single recorded path is wrong: they may not have what that path needs. Never invent an option "about:" does not mention.
+- PRODUCT BACKGROUND items (when present) describe what things ARE — the product itself, concepts, plans and pricing, what a setting does. Use them to orient, explain, compare, and redirect ("you don't need a new project for that"). They are approved knowledge like every other item: answering "what is X?" or "what does the Pro plan include?" from them IS covered — cite their ids. They never contain steps: for HOW to do something, use workflow items, and never turn background prose into instructions. A background item may name "related workflows" — after an orienting answer, you may point the user to one BY NAME ("there's a guide for creating a project — just ask"); never invent its steps yourself.
 - In "citedItemIds", list the ids of the knowledge items you actually used (empty when you greeted or declined).
 - Privacy: items are pre-redacted — placeholders like [redacted-email], [redacted-phone], [redacted-card], [redacted-ssn] mark removed personal data. Treat them as opaque, never reproduce them, and never emit personal data; refer to such values generically (e.g. "your email"). This rule ONLY governs how you phrase things — it does NOT change whether a question is "covered". Answer normally in every other respect.
 
@@ -175,9 +185,14 @@ export async function answerFromKB(input: {
   // diverge) — but a plan is not a tuning choice. Without it the safety floor answers a workflow
   // with alternatives as a single mandatory sequence, which is wrong in the same way for every tier.
   // Item lines are byte-for-byte what they were, so citations resolve exactly as before.
+  // AIL slice 2 — product pages render as their own PRODUCT BACKGROUND section, never as
+  // pseudo-workflow groups (each has workflowId '', so the grouper would mislabel them).
+  const topics = input.items.filter((i) => i.kind === 'topic');
+  const steps = input.items.filter((i) => i.kind !== 'topic');
+
   const groups: Array<{ title: string | null; plan: string | null; items: typeof input.items }> = [];
   const indexByKey = new Map<string, number>();
-  for (const i of input.items) {
+  for (const i of steps) {
     const key = i.workflowId || `__loose_${i.id}`;
     let at = indexByKey.get(key);
     if (at === undefined) {
@@ -187,7 +202,7 @@ export async function answerFromKB(input: {
     }
     groups[at]!.items.push(i);
   }
-  const itemBlock = groups
+  const workflowBlock = groups
     .map((g) => {
       const lines = g.items
         .map((i) => {
@@ -200,6 +215,19 @@ export async function answerFromKB(input: {
       return `${g.title ? `WORKFLOW: ${g.title}` : 'WORKFLOW'}\n  about: ${g.plan}\n${lines}`;
     })
     .join('\n');
+  const backgroundBlock =
+    topics.length > 0
+      ? `${workflowBlock ? '\n' : ''}PRODUCT BACKGROUND (what things ARE — approved product knowledge, never steps):\n${topics
+          .map((i) => {
+            const rel =
+              i.related && i.related.length > 0
+                ? `\n   related workflows: ${i.related.map((r) => `"${r.title}"`).join(', ')}`
+                : '';
+            return `- id=${i.id} [about: ${i.segmentTitle ?? 'the product'}]: ${i.text}${rel}`;
+          })
+          .join('\n')}`
+      : '';
+  const itemBlock = `${workflowBlock}${backgroundBlock}`;
 
   const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: SYSTEM }];
   for (const t of input.history ?? []) {

@@ -37,6 +37,11 @@ import type { DistilledStep } from './distill';
 const MAX_TRANSCRIPT_CHARS = 6000; // matches the distiller's window
 const MAX_DESCRIPTION_CHARS = 900; // a plan, not a retelling — see the prompt's length rule
 
+// The recording-level call reads the WHOLE tour once per recording (not per workflow), so its
+// window is wide where the workflow describer's is narrow.
+const MAX_RECORDING_TRANSCRIPT_CHARS = 24_000;
+const MAX_RECORDING_DESCRIPTION_CHARS = 600; // a coverage line for the recordings list, not an article
+
 const SYSTEM = `You write ONE short paragraph describing a product workflow, for an in-app help copilot that ALSO has the workflow's exact steps.
 
 You get the workflow's title, its final user-facing steps, and the full narration transcript from the recording.
@@ -108,6 +113,87 @@ export async function describeWorkflow(
     if (!text) return null;
     // Redacted like every other authored string that can reach an end-user.
     return redactText(text.slice(0, MAX_DESCRIPTION_CHARS));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Say what the RECORDING covers — the recording-level sibling of the workflow description
+ * (docs/build/application-intelligence.md, slice 1: a workflow says what it IS; a recording says
+ * what it COVERS).
+ *
+ * Its one job the workflow list cannot do: name the narration content that ISN'T a workflow — "also
+ * explains the pricing plans" — which is exactly the material the Application Intelligence Layer
+ * later extracts into pages. Founder-facing (Studio recordings surfaces); never served to end-users.
+ *
+ * Same posture as `describeWorkflow`: written AFTER distillation so it names the final workflows,
+ * best-effort (a recording without a description is the status quo), and it must never invent — an
+ * empty answer is the model saying the titles already tell the whole story.
+ */
+const RECORDING_SYSTEM = `You write ONE short paragraph saying what a product recording COVERS, for the founder who recorded it.
+
+You get the list of workflows that were extracted from the recording, and the full narration transcript.
+
+Say what the recording covers, so the founder can tell their recordings apart at a glance:
+- The tasks it demonstrates — group them naturally, never enumerate every step.
+- Any product explanation the narration carries BEYOND the tasks: what the product is, features, plans or pricing, concepts explained. Name this — it is the one thing the workflow list cannot show.
+
+Hard rules:
+- Use ONLY the workflow titles and the narration. NEVER add products, features, plans, or behaviour from general knowledge — if the narration doesn't say it, it does not exist.
+- Never instruct ("click", "go to", "you should") — you are describing coverage, not how to do anything.
+- If the narration adds nothing beyond the workflow titles, return an empty string. The founder already sees the workflow list; restating it is noise.
+- One to three sentences, plain prose, no lists, no markdown.`;
+
+const recordingSchema = {
+  name: 'recording_description',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { description: { type: 'string' } },
+    required: ['description'],
+  },
+} as const;
+
+export async function describeRecording(
+  openai: OpenAI,
+  model: string,
+  workflowTitles: string[],
+  transcriptText: string,
+): Promise<string | null> {
+  const text = transcriptText.trim();
+  // No narration → the workflow titles are the whole story, and Studio already lists them.
+  if (!text) return null;
+
+  const user = [
+    'WORKFLOWS EXTRACTED FROM THIS RECORDING:',
+    workflowTitles.length > 0
+      ? workflowTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')
+      : '(none)',
+    '',
+    'NARRATION TRANSCRIPT:',
+    text.slice(0, MAX_RECORDING_TRANSCRIPT_CHARS),
+  ].join('\n');
+
+  try {
+    const raw = await structuredJsonCall({
+      openai,
+      model,
+      system: RECORDING_SYSTEM,
+      user,
+      schema: recordingSchema as unknown as {
+        name: string;
+        strict?: boolean;
+        schema: Record<string, unknown>;
+      },
+      stage: 'describe-recording',
+    });
+    const parsed = JSON.parse(raw || '{}') as { description?: unknown };
+    const out = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+    if (!out) return null;
+    // Redacted like every other authored string a human reads.
+    return redactText(out.slice(0, MAX_RECORDING_DESCRIPTION_CHARS));
   } catch {
     return null;
   }

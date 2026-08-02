@@ -128,7 +128,11 @@ async function playSetup(turns) {
     history.push({ role: 'user', content: t });
     history.push({ role: 'assistant', content: r.ok ? r.answer : '' });
     if (r.ok && r.citedKeys.length) lastCited = r.citedKeys;
-    await sleep(delayMs);
+    // A 429 is either the api's own per-minute limiter OR the model provider's, surfaced straight
+    // through — including OpenAI credit exhaustion (observed 2026-08-02: credits ran out mid-run
+    // and turned the last 8 cells into 0/8 error rows). Back off so a saturated window can clear;
+    // an exhausted-credits 429 won't recover, and the row's error text says which one you got.
+    await sleep(!r.ok && r.status === 429 ? 30_000 : delayMs);
   }
   return { history, lastCited, priorAnswered };
 }
@@ -152,7 +156,9 @@ for (const item of questions) {
     } catch (e) {
       attempts.push({ ok: false, error: String(e) });
     }
-    await sleep(delayMs);
+    // Same 429 back-off as playSetup — see the comment there.
+    const last = attempts[attempts.length - 1];
+    await sleep(last && !last.ok && last.status === 429 ? 30_000 : delayMs);
   }
   const good = attempts.filter((a) => a.ok);
   const coveredCount = good.filter((a) => a.covered).length;

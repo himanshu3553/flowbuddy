@@ -6,9 +6,14 @@ import {
   buildWorkflowKB,
   distilledStepText,
   embedTexts,
+  matchPageIdentities,
   matchWorkflowIdentities,
   meanVector,
+  pageEmbedText,
+  pageSimilarity,
+  PAGE_CONTENT_AGREE_THRESHOLD,
   toVectorLiteral,
+  type ExtractedPage,
   type WorkflowFingerprint,
 } from '@flowbuddy/synthesis';
 import { createLogger } from '@flowbuddy/logger';
@@ -71,6 +76,203 @@ function fingerprintsFrom(
   return out;
 }
 
+/** Provenance entries for one source, merged over what a page already carries: this recording's
+ *  entries replace its own older ones; other recordings' entries stand. */
+function mergeProvenance(
+  existing: unknown,
+  sourceId: string,
+  quotes: string[],
+): Array<{ sourceId: string; quote: string }> {
+  const kept = (Array.isArray(existing) ? existing : []).filter(
+    (e): e is { sourceId: string; quote: string } =>
+      !!e &&
+      typeof (e as { sourceId?: unknown }).sourceId === 'string' &&
+      typeof (e as { quote?: unknown }).quote === 'string' &&
+      (e as { sourceId: string }).sourceId !== sourceId,
+  );
+  return [...kept, ...quotes.map((quote) => ({ sourceId, quote }))];
+}
+
+const normalizeTitle = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * AIL slice 2 — reconcile freshly extracted pages with the workspace's stored ones.
+ *
+ * The lifecycle rules (docs/build/application-intelligence.md, AI-5/AI-6 + the update flow):
+ *  - Nothing extracted → stored pages UNTOUCHED. Narration silence is not evidence; only the
+ *    founder retires a page.
+ *  - Incoming matches a stored page (by embedding; same-type title equality as fallback):
+ *      · content agrees → merge provenance; the text stands.
+ *      · content differs + page was ever APPROVED → park as a PENDING UPDATE (with its embedding,
+ *        so accepting keeps vector and text in step). Never a silent change.
+ *      · content differs + never approved → overwrite the draft in place.
+ *  - No match → a new page, born unapproved.
+ *
+ * Embedding failure aborts the whole pass (unverifiable identity — the workflow-identity rule one
+ * level up) but never the job: pages are additive, the recording still lands ready.
+ */
+async function syncProductPages(
+  workspaceId: string,
+  sourceId: string,
+  pages: ExtractedPage[],
+): Promise<void> {
+  if (pages.length === 0) {
+    log.info({ sourceId, component: 'pages' }, 'no product pages extracted — stored pages untouched');
+    return;
+  }
+
+  let vectors: number[][];
+  try {
+    vectors = await embedTexts(
+      pages.map((p) => pageEmbedText(p.title, p.content)),
+      { apiKey: config.openaiApiKey, model: config.embedModel || undefined, timeoutMs: 60_000, maxRetries: 2 },
+    );
+  } catch (e) {
+    log.warn(
+      { sourceId, component: 'pages', err: e instanceof Error ? e.message : String(e) },
+      'page embedding failed — page pass skipped (identity unverifiable), stored pages untouched',
+    );
+    return;
+  }
+
+  const existing = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      type: string;
+      title: string;
+      approvedAt: Date | null;
+      provenance: unknown;
+      vec: string | null;
+    }>
+  >`SELECT id, type, title, "approvedAt", provenance, embedding::text AS vec
+    FROM "ProductPage" WHERE "workspaceId" = ${workspaceId}`;
+
+  // Slice 3 — resolve each page's related workflow TITLES to durable workflow ids. Titles were
+  // already validated against this recording's workflow list; here they land on rows. When two
+  // workflows share a title (a duplicate not yet resolved), prefer the one that is live-approved —
+  // the one the copilot can actually open.
+  const workspaceWorkflows = await prisma.workflow.findMany({
+    where: { workspaceId },
+    select: { id: true, title: true, approval: { select: { inactiveReason: true } } },
+  });
+  const workflowByTitle = new Map<string, { id: string; title: string }>();
+  for (const wf of workspaceWorkflows) {
+    if (!wf.title) continue;
+    const key = normalizeTitle(wf.title);
+    const isLive = wf.approval !== null && wf.approval.inactiveReason === null;
+    if (!workflowByTitle.has(key) || isLive) workflowByTitle.set(key, { id: wf.id, title: wf.title });
+  }
+  const linksFor = (p: ExtractedPage): Array<{ kind: 'workflow'; workflowId: string; title: string }> =>
+    p.related
+      .map((t) => workflowByTitle.get(normalizeTitle(t)))
+      .filter((w): w is { id: string; title: string } => Boolean(w))
+      .map((w) => ({ kind: 'workflow' as const, workflowId: w.id, title: w.title }));
+
+  const existingVec = new Map<string, number[]>();
+  for (const row of existing) {
+    if (!row.vec) continue;
+    try {
+      existingVec.set(row.id, JSON.parse(row.vec) as number[]);
+    } catch {
+      /* unreadable vector → matched by title fallback only */
+    }
+  }
+
+  const matched = matchPageIdentities(
+    pages.map((p, i) => ({ key: i, vector: vectors[i] ?? [] })),
+    existing.filter((e) => existingVec.has(e.id)).map((e) => ({ key: e.id, vector: existingVec.get(e.id)! })),
+  );
+  // Title fallback for what embeddings didn't claim — catches a page whose vector is missing and
+  // the same concept re-titled identically but re-explained from scratch.
+  const claimed = new Set(matched.values());
+  for (let i = 0; i < pages.length; i++) {
+    if (matched.has(i)) continue;
+    const p = pages[i]!;
+    const hit = existing.find(
+      (e) => !claimed.has(e.id) && e.type === p.type && normalizeTitle(e.title) === normalizeTitle(p.title),
+    );
+    if (hit) {
+      matched.set(i, hit.id);
+      claimed.add(hit.id);
+    }
+  }
+
+  let created = 0;
+  let refreshed = 0;
+  let parked = 0;
+  let overwritten = 0;
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i]!;
+    const vector = vectors[i];
+    const existingId = matched.get(i);
+    if (!existingId) {
+      // Genuinely new — born unapproved (AI-5).
+      const row = await prisma.productPage.create({
+        data: {
+          workspaceId,
+          type: p.type,
+          title: p.title,
+          content: p.content,
+          provenance: p.quotes.map((quote) => ({ sourceId, quote })),
+          links: linksFor(p),
+        },
+        select: { id: true },
+      });
+      if (vector) {
+        await prisma.$executeRaw`UPDATE "ProductPage" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
+      }
+      created += 1;
+      continue;
+    }
+
+    const page = existing.find((e) => e.id === existingId)!;
+    const storedVector = existingVec.get(existingId);
+    const agrees =
+      vector && storedVector ? pageSimilarity(vector, storedVector) >= PAGE_CONTENT_AGREE_THRESHOLD : false;
+    const provenance = mergeProvenance(page.provenance, sourceId, p.quotes);
+
+    // Links are structural, not prose — they refresh on every sync regardless of the pending flow
+    // (see the schema comment for why that is safe by construction).
+    if (agrees) {
+      await prisma.productPage.update({
+        where: { id: existingId },
+        data: { provenance, links: linksFor(p) },
+      });
+      refreshed += 1;
+    } else if (page.approvedAt) {
+      // The founder vouched for the current text — the new derivation waits for them.
+      await prisma.productPage.update({
+        where: { id: existingId },
+        data: {
+          pendingContent: p.content,
+          pendingProvenance: provenance,
+          pendingAt: new Date(),
+          links: linksFor(p),
+        },
+      });
+      if (vector) {
+        await prisma.$executeRaw`UPDATE "ProductPage" SET "pendingEmbedding" = ${toVectorLiteral(vector)}::vector WHERE id = ${existingId}`;
+      }
+      parked += 1;
+    } else {
+      // An unapproved draft nobody vouched for — the fresher derivation replaces it.
+      // (pendingProvenance is Json?: Prisma updates can't take a bare null, so the raw SQL below
+      // clears it alongside the vector columns.)
+      await prisma.productPage.update({
+        where: { id: existingId },
+        data: { content: p.content, provenance, links: linksFor(p), pendingContent: null, pendingAt: null },
+      });
+      await prisma.$executeRaw`UPDATE "ProductPage" SET embedding = ${vector ? toVectorLiteral(vector) : null}::vector, "pendingEmbedding" = NULL, "pendingProvenance" = NULL WHERE id = ${existingId}`;
+      overwritten += 1;
+    }
+  }
+
+  log.info(
+    { sourceId, component: 'pages', extracted: pages.length, created, refreshed, parked, overwritten },
+    'product pages synced',
+  );
+}
+
 const worker = new Worker(
   SYNTHESIS_QUEUE,
   async (job) => {
@@ -97,7 +299,7 @@ const worker = new Worker(
       // ── Module 2 (LIVE copilot path): capture → distilled workflow KB ──
       // transcribe → align → clean (B) → segment → distill (A). Persists clean steps grouped by
       // workflow (segmentIndex/segmentTitle); raw events are NOT stored. See docs/build/kb-step-distillation.md.
-      const { transcript, workflows, warning } = await buildWorkflowKB({
+      const { transcript, workflows, warning, recordingDescription, pages } = await buildWorkflowKB({
         manifest,
         getArtifact,
         apiKey: config.openaiApiKey,
@@ -105,9 +307,11 @@ const worker = new Worker(
         synthModel: config.synthModel,
       });
 
+      // `description` is overwritten (null included) like the per-workflow descriptions: on a
+      // reprocess a stale coverage line about content that changed is worse than none.
       await prisma.knowledgeSource.update({
         where: { id: sessionId },
-        data: { transcript: transcript as object },
+        data: { transcript: transcript as object, description: recordingDescription },
       });
 
       // ── P3-M1: which of these workflows ARE the ones already here? ──────────────────────────────
@@ -240,6 +444,17 @@ const worker = new Worker(
           written += 1;
         }
         log.info({ sessionId, count: written }, 'embedded items for hybrid retrieval');
+      }
+
+      // AIL slice 2 — reconcile the extracted product pages. Best-effort by design: a page-pass
+      // failure must never fail a recording whose KB built cleanly (pages are additive knowledge).
+      try {
+        await syncProductPages(rec.workspaceId, sessionId, pages);
+      } catch (e) {
+        log.warn(
+          { sessionId, component: 'pages', err: e instanceof Error ? e.message : String(e) },
+          'product page sync failed — recording proceeds without page updates',
+        );
       }
 
       // A degraded-but-successful build (e.g. narration too long to transcribe, or an embedding

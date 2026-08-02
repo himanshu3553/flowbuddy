@@ -70,9 +70,9 @@ services:
       - { key: REDIS_URL, fromService: { name: flowbuddy-dev-redis, type: keyvalue, property: connectionString } }
       - { key: OPENAI_API_KEY, sync: false }
       - { key: TRANSCRIBE_MODEL, value: whisper-1 }
-      - { key: SYNTH_MODEL, value: gpt-5.6-sol }
+      - { key: SYNTH_MODEL, value: gpt-5.6-luna }
       # The P2-M5 diagnostic path (vision); unset would fall back to SYNTH_MODEL.
-      - { key: REASON_MODEL, value: gpt-5.6-sol }
+      - { key: REASON_MODEL, value: gpt-5.6-luna }
       # P1-M3 hybrid retrieval — must match the vector(1536) column dims (see @flowbuddy/synthesis embeddings.ts).
       - { key: EMBED_MODEL, value: text-embedding-3-small }
       # The deployed Studio URL (https://flowbuddy-dev-web-....onrender.com). Its origin is exempt from

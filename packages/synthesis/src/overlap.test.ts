@@ -201,6 +201,9 @@ describe('the liveness test — retrieval enforcement surface', () => {
         },
       },
       knowledgeItem: { findMany: async () => [] },
+      // AIL slice 2 — the second corpus is part of the retrieval contract now; a double without it
+      // is not a RetrievalDb. Empty = a workspace with no product pages.
+      productPage: { findMany: async () => [] },
     } as unknown as RetrievalDb;
     return { db, seen };
   }

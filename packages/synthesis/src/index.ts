@@ -6,7 +6,8 @@ import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
-import { describeWorkflow } from './describe';
+import { describeRecording, describeWorkflow } from './describe';
+import { extractProductPages, type ExtractedPage } from './pages';
 import { createLogger } from '@flowbuddy/logger';
 import type { ArtifactReader } from './types';
 
@@ -64,6 +65,18 @@ export { alignNarration } from './align';
 export { segment } from './segment';
 export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
 export { describeWorkflow } from './describe'; // P3-M1 — the workflow's PLAN in prose
+export { describeRecording } from './describe'; // AIL slice 1 — what the RECORDING covers
+// AIL slice 2 — product knowledge pages: extraction, quote-anchoring, identity matching.
+export {
+  extractProductPages,
+  validateExtractedPages,
+  matchPageIdentities,
+  pageEmbedText,
+  pageSimilarity,
+  PAGE_MATCH_THRESHOLD,
+  PAGE_CONTENT_AGREE_THRESHOLD,
+} from './pages';
+export type { ExtractedPage, PageFingerprint } from './pages';
 export type { DistilledStep, DistilledStepLLM } from './distill';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
@@ -96,6 +109,13 @@ export interface WorkflowKB {
   /** Non-fatal build degradation (e.g. narration failed to transcribe) — the worker surfaces it
    *  on the source while the recording still lands `ready`. Null = clean build. */
   warning: string | null;
+  /** AIL slice 1 — what the RECORDING covers, incl. narration content that isn't a workflow
+   *  (pricing, concepts). Founder-facing. Best-effort: null when narration adds nothing. */
+  recordingDescription: string | null;
+  /** AIL slice 2 — product-knowledge pages extracted from the narration, quote-anchored and
+   *  validated. `[]` when the narration explains nothing (legal and common) or the call failed.
+   *  The WORKER owns what happens to them (identity match → merge/pending/create — pages.ts). */
+  pages: ExtractedPage[];
 }
 
 /** Build the copilot KB for one recording: a persistable transcript + clean steps grouped by workflow.
@@ -122,7 +142,9 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
 
   // 2. Deterministic cleanup (B) — collapse mechanical dupes / redundant events.
   const cleaned = cleanEvents(input.manifest.events);
-  if (cleaned.length === 0) return { transcript, workflows: [], warning };
+  if (cleaned.length === 0) {
+    return { transcript, workflows: [], warning, recordingDescription: null, pages: [] };
+  }
 
   // 3. Segment the cleaned events into coherent workflows (one task = one workflow).
   const segments = await segment(
@@ -194,5 +216,22 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     workflows.push({ segmentIndex: workflows.length, title: seg.title, steps, description });
   }
 
-  return { transcript, workflows, warning };
+  // The two narration-level reads run together: what the RECORDING covers (slice 1) and the
+  // product-knowledge PAGES (slice 2). Both are written after distillation so they name the final
+  // workflows; both are best-effort; neither adds latency beyond the slower of the two.
+  const titles = workflows.map((w) => w.title);
+  const [recordingDescription, pages] = await Promise.all([
+    describeRecording(openai, input.synthModel, titles, transcript.text),
+    extractProductPages(openai, input.synthModel, titles, transcript.text),
+  ]);
+  if (recordingDescription) {
+    log.info(
+      { component: 'describe-recording', chars: recordingDescription.length },
+      'described recording',
+    );
+  } else {
+    log.info({ component: 'describe-recording' }, 'no recording description produced');
+  }
+
+  return { transcript, workflows, warning, recordingDescription, pages };
 }

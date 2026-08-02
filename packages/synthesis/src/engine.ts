@@ -70,6 +70,28 @@ export const ANSWER_SCHEMA = {
 export function formatItems(items: CopilotKBItem[]): string {
   if (items.length === 0) return '- (none)';
 
+  // AIL slice 2 — product pages (kind 'topic') render as their own PRODUCT BACKGROUND section
+  // after the workflow groups: they have no workflow, no key, no steps, and grouping them as
+  // pseudo-workflows would hand the model a "workflow" that cannot be walked. Output is
+  // byte-identical to before whenever no page was retrieved.
+  const topics = items.filter((i) => i.kind === 'topic');
+  items = items.filter((i) => i.kind !== 'topic');
+  const backgroundBlock =
+    topics.length > 0
+      ? `${items.length > 0 ? '\n' : ''}PRODUCT BACKGROUND (what things ARE — approved product knowledge, never steps; cite ids as usual, but never turn this prose into instructions):\n${topics
+          .map((i) => {
+            // Slice 3 — the bridge from WHAT to HOW: keys are live-approval-filtered upstream, so
+            // every key printed here is one `get_workflow` will actually open.
+            const rel =
+              i.related && i.related.length > 0
+                ? `\n   related workflows: ${i.related.map((r) => `"${r.title}" (key=${r.key})`).join(', ')}`
+                : '';
+            return `- id=${i.id} [about: ${i.segmentTitle ?? 'the product'}]: ${i.text}${rel}`;
+          })
+          .join('\n')}`
+      : '';
+  if (items.length === 0) return backgroundBlock.trimStart();
+
   // P3-M1 — grouped by workflow, with the workflow's PLAN above its steps.
   //
   // WHY GROUPED. Retrieval already returns items ordered by workflow, so this only makes visible
@@ -105,17 +127,19 @@ export function formatItems(items: CopilotKBItem[]): string {
     return `- id=${i.id}${wf}: ${i.text}${narr}`;
   };
 
-  return order
-    .map((k) => {
-      const group = byWorkflow.get(k)!;
-      const first = group[0]!;
-      const plan = first.workflowDescription?.trim();
-      // No plan → emit exactly what this function emitted before it existed.
-      if (!plan) return group.map(lineFor).join('\n');
-      const title = first.segmentTitle ? `WORKFLOW: ${first.segmentTitle}` : 'WORKFLOW';
-      return `${title}\n  about: ${plan}\n${group.map(lineFor).join('\n')}`;
-    })
-    .join('\n');
+  return (
+    order
+      .map((k) => {
+        const group = byWorkflow.get(k)!;
+        const first = group[0]!;
+        const plan = first.workflowDescription?.trim();
+        // No plan → emit exactly what this function emitted before it existed.
+        if (!plan) return group.map(lineFor).join('\n');
+        const title = first.segmentTitle ? `WORKFLOW: ${first.segmentTitle}` : 'WORKFLOW';
+        return `${title}\n  about: ${plan}\n${group.map(lineFor).join('\n')}`;
+      })
+      .join('\n') + backgroundBlock
+  );
 }
 
 /** The raw JSON the model returns against ANSWER_SCHEMA. */
@@ -417,6 +441,11 @@ export function shapeAnswer(opts: {
     const it = byId.get(id);
     if (it && !seen.has(id)) {
       seen.add(id);
+      // AIL slice 2 (v1 cut) — pages inform the prose but stay out of the citations array: every
+      // citation consumer is workflow-keyed (the Source pill, QueryCitation analytics, lastCited
+      // continuity), and a workflow-less citation would corrupt each. The "Source: product
+      // knowledge" pill is a logged follow-up (docs/build/application-intelligence.md).
+      if (it.kind === 'topic') continue;
       citations.push({
         itemId: it.id,
         workflowId: it.workflowId,

@@ -154,6 +154,7 @@ model Workspace {
   walkthroughs     CopilotWalkthrough[]
   overlapDismissals WorkflowOverlapDismissal[]
   workflows        Workflow[]
+  productPages     ProductPage[]
 }
 
 model ApiToken {
@@ -186,6 +187,11 @@ model KnowledgeSource {
   appBaseUrl  String?
   manifest    Json? // raw capture manifest (events, markers, meta) — null until the recording is stopped and finalized
   transcript  Json? // persisted narration transcript { text, segments[] } — for retrieval
+  // What this recording COVERS, written from the narration after distillation — the recording-level
+  // sibling of Workflow.description (docs/build/application-intelligence.md, slice 1). Shown to the
+  // founder in Studio; never served to end-users. Best-effort: null when there was no narration,
+  // when it added nothing beyond the workflow titles, or when the call failed.
+  description String?
   error       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt // last touch (status flips included) — drives the "stalled processing" surface
@@ -282,6 +288,64 @@ model KnowledgeItem {
   @@index([workspaceId])
   @@index([sourceId])
   @@index([workflowId])
+}
+
+model ProductPage {
+  // AIL slice 2 (docs/build/application-intelligence.md) — one derived KNOWLEDGE PAGE: what a thing
+  // IS and how it relates, extracted from recorded narration. The knowledge-layer sibling of
+  // `Workflow`: a durable identity whose content regenerates, re-matched BY CONTENT on reprocess.
+  //
+  // Trust boundary (AI-5): this is model prose, born UNAPPROVED. Serving requires
+  // `approvedAt IS NOT NULL AND inactiveReason IS NULL` — the CopilotApproval liveness discipline,
+  // page-sized. Retrieval is the ONE live-only reader today (synthesis/retrieval.ts); Studio's
+  // review list deliberately reads all pages. Any NEW reader must choose one of those on purpose.
+  //
+  // An approved page's content NEVER changes silently: a re-derivation that no longer agrees parks
+  // in `pending*` until the founder accepts or dismisses it. Pages are also never retired by an
+  // extraction that simply didn't mention them — narration silence is not evidence of wrongness;
+  // only the founder retires a page.
+  id          String   @id @default(cuid())
+  workspaceId String
+  type        String // overview | concept  (area arrives with slice 3 — a new VALUE, not a new column)
+  title       String
+  // The page body: plain prose. It says what things ARE — it must never restate steps or click
+  // targets (AI-2; enforced by the extraction prompt + founder review, the same contract as
+  // Workflow.description one level down).
+  content     String
+  // AI-7 provenance — [{ sourceId, quote }]: which recording's narration this derives from, with
+  // verbatim anchor quotes. The pages' analog of steps citing captured events: extraction DROPS any
+  // page whose quotes don't appear in the transcript, so approval always covers grounded prose.
+  provenance  Json
+  // Slice 3 (AI-4: links are the graph) — [{ kind: 'workflow', workflowId, title }]: the tasks a
+  // reader of this page most likely wants next. STRUCTURAL, not prose: refreshed on every sync and
+  // deliberately NOT routed through the pending flow — safe because answers only ever surface the
+  // keys of LIVE approved workflows (filtered in retrieval) and `get_workflow` re-checks approval
+  // server-side, so a stale or wrong link can never open unapproved content. Page↔page links are
+  // deferred until a consumer needs them.
+  links       Json?
+  // A newer derivation whose content no longer agrees with the approved text (open Q2's
+  // propose-an-update-for-review). `pendingEmbedding` rides along so accepting the update keeps the
+  // stored vector in step with the stored content — matching would otherwise loop this page through
+  // pending forever (the stored vector would lag one derivation behind).
+  pendingContent    String?
+  pendingProvenance Json?
+  pendingAt         DateTime?
+  pendingEmbedding  Unsupported("vector(1536)")?
+  // ── liveness: served iff approvedAt != null AND inactiveReason == null ──
+  approvedAt     DateTime?
+  approvedById   String?
+  inactiveReason String? // "retired" — the founder switched it off. A new way to stop serving is a new VALUE.
+  inactiveAt     DateTime?
+  // Embedding over title+content (same model as KnowledgeItem) — decides identity on re-extraction
+  // (AI-6) and serves the vector half of retrieval. Nullable: a page without a vector still serves
+  // through keyword scoring and re-matches by title.
+  embedding Unsupported("vector(1536)")?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model CoverageGap {

@@ -213,7 +213,8 @@ export interface WorkflowFingerprint<K> {
   goal: number[];
 }
 
-function cosine(a: number[], b: number[]): number {
+/** Exported since AIL slice 2 — product-page matching is the second consumer. */
+export function cosine(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 0;
   let dot = 0;
   let na = 0;

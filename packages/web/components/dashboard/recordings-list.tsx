@@ -23,6 +23,9 @@ export interface RecordingRow {
   /** In flight (uploaded/processing) but untouched for too long — the job was likely lost. */
   stalled: boolean;
   error: string | null;
+  /** What the recording covers, derived from the narration (null until processed / when narration
+   *  added nothing beyond the workflow titles). */
+  description: string | null;
   workflowCount: number;
   durationMs: number;
   eventCount: number;
@@ -76,7 +79,9 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
       return false;
     if (
       q &&
-      !`${r.title} ${r.appUrl ?? ''} ${r.kind}`.toLowerCase().includes(q.toLowerCase())
+      !`${r.title} ${r.appUrl ?? ''} ${r.kind} ${r.description ?? ''}`
+        .toLowerCase()
+        .includes(q.toLowerCase())
     )
       return false;
     return true;
@@ -174,6 +179,12 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
                         : 'failed — capture incomplete'}
                     </span>
                   ) : (
+                    <>
+                      {r.description && (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {r.description}
+                        </span>
+                      )}
                     <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px] text-faint">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3 w-3" />
@@ -189,6 +200,7 @@ export function RecordingsList({ rows }: { rows: RecordingRow[] }) {
                       )}
                       <span>{r.recordedAgo}</span>
                     </span>
+                    </>
                   )}
                 </Link>
 

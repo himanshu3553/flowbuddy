@@ -46,6 +46,19 @@ stored value lands, and where the runtime falls back when the agent loop errors 
 That floor may only ever move *down*, which is why the product default and the floor are now
 deliberately different constants (`NEW_WORKSPACE_MODE` vs `DEFAULT_COPILOT_MODE`).
 
+**🧠 Application Intelligence Layer — 🔄 first two slices BUILT (2026-08-01, dev, not yet
+user-verified).** The KB's next altitude, and the answer to Copilot mode's top gap ("knows the
+recipes, not the product" — [`agent.md`](build/agent.md) §9 Gap 1): derive what the product **IS**
+from the same recorded narration workflows already come from. Evolves **P5-M2 Product Profile**
+from founder-authored to derivation-first. Decisions AI-1…AI-9 + the road:
+[`application-intelligence.md`](build/application-intelligence.md).
+- **Slice 0 (transcript gate)** ✅ ran 2026-08-01 — pre-coaching narration was ~90% click-commentary; the coached re-recording (11 workflows, ~10k chars) has the register the extractor needs and is the calibration set.
+- **Slice 1 (recording description)** ✅ built + verified E2E locally — every processed recording derives "what this recording covers"; shown on the recordings list + detail page.
+- **Slice 2 (overview + concept pages)** ✅ **built + verified E2E 2026-08-02** — quote-anchored extraction in the worker, pages born unapproved with narration provenance, pending-update flow for approved pages, Studio "Product knowledge" review section, retrieval serving live pages as a second corpus rendered as PRODUCT BACKGROUND in all three engines (pages emit no citations in v1). First live run: 10 pages, 10/10 anchored, founder-approved in Studio; the three canonical orienting questions answer (one with cross-page synthesis) and uncovered questions still decline.
+- **Slice 3 (links + area pages)** ✅ **built + live-verified 2026-08-02** — `area` page type; per-page related-workflow links, title-anchored at extraction and resolved to durable workflow ids at sync; answers surface them as live-approval-filtered `get_workflow` keys (the WHAT→HOW bridge); Studio "Points to" chips. Page↔page links deferred. The live run exercised the whole lifecycle at once: 2 area pages born unapproved, 3 pending updates parked on approved pages, links populated, live content untouched.
+- **Baseline formalized 2026-08-02** (`copilot-baseline-questions.json`: 28 cells incl. 11 orienting; f2/t5 regrouped decline→orienting since pricing is now legitimately covered; login-setup cells repaired — that workflow never existed in this workspace). Capture `baseline-copilot-mode-2026-08-02.json`: **20/28 cells valid, every one at its target — 11/11 orienting cells 8/8, all how-to and hard cells 8/8** — the remaining 8 (declines + topic-shift) errored on **OpenAI credit exhaustion**, not product behavior; re-run `--only f1,f3,f4,t1,t2,t3,t4,t6` and merge once credits are topped up.
+- **Next:** finish the 8 credit-blocked baseline cells · calibrate extraction thresholds on a second product · V2 portal renders pages as articles (captured direction).
+
 🟩 Done · 🟨 In Progress · ⬜ Draft  *(one square per module)*
 
 - **Module IDs are per-phase**, written `P{phase}-M{n}` — e.g. **`P1-M5`** = Phase 1, Module 5. (The old docs used one *global* `M0–M14`; those are "legacy IDs," mapped in §8.)
