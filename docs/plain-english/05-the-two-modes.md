@@ -129,14 +129,18 @@ do?", "what's the difference between the plans?" — used to be declined, becaus
 workflow answers them. The assistant now derives what your product *is* from the same recordings your
 workflows come from, and you approve that knowledge separately.
 
-**2 · You can see how it's behaving, but only in the logs.** Every question records which engine
-actually answered it, how many times it went back to the AI, and what it looked up. Still missing: a
-screen showing it. The numbers are being collected; nothing displays them yet. This is worth watching
-for a new reason now — a run of questions answered by the safety net means something upstream is
-failing, and nothing else would tell you.
+**2 · ✅ Fixed — you can see how it's behaving.** Analytics now has a *How answers were produced*
+panel: which engine answered, how often it needed more than one look, how often it went searching,
+and what a question costs in tokens. The safety net gets a red alarm rather than a row, because
+since the simpler mode was retired it only ever appears when something upstream FAILED — and nothing
+else in the product would tell you.
 
-**3 · The diagnostic reasoning isn't folded in.** Working out *why* someone is stuck still runs as
-its own separate path rather than being one of the things the assistant can choose. Merging them is
-deliberately deferred until there are proper test fixtures for page state — **do not merge it blind.**
+**3 · The diagnostic reasoning still isn't folded in — but it can now be measured.** Working out
+*why* someone is stuck still runs as its own separate path rather than being one of the things the
+assistant can choose. Three frozen page states are now saved and checked automatically, which is the
+first safety net that path has ever had. **A fourth is missing and it's the important one:** a page
+showing an error after a rejected submit. That's the state the strictest rules were written for, and
+the recorded app doesn't produce one — so merging the two paths today would be checked only against
+three versions of "the form isn't finished yet".
 
 → Next: [the help portal](06-the-help-portal.md)

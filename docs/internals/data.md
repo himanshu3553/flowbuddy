@@ -548,6 +548,9 @@ Two former gaps are closed, each leaving a residual worth knowing:
   see the raw question and answer quality is unchanged. Rows written earlier were **not** back-filled.
   **Residual:** the phone pattern needs a 3-digit area group, so international formats like
   `+91 98765-43210` are *not* caught — deliberate (false-negatives over false-positives), but real.
-- **Answer provenance** — `mode`, `engine`, `rounds` and `toolCalls` are now recorded.
-  `engine` and `mode` are stored separately because they disagree in both directions. All four are
-  `null` on earlier rows. **Residual:** nothing in Studio reads them yet.
+- **Answer provenance and cost** — `mode`, `engine`, `rounds`, `toolCalls` and (since 2026-08-03)
+  `inputTokens` / `cachedInputTokens` / `outputTokens` / `reasoningTokens` are recorded per question.
+  `engine` and `mode` are stored separately because they disagree in both directions. All are `null`
+  on earlier rows, so an un-instrumented question reads "unknown" rather than "free". Spend is the
+  TOTAL for the question, summed across every loop it ran — a question the agent failed and the
+  floor caught paid for both. Studio reads them on Analytics → *How answers were produced*.

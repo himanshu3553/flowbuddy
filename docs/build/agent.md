@@ -79,7 +79,7 @@ The striking property of this direction is how little of it is new. The primitiv
 | `read_page_state` | Structured field state, **values masked** | ✅ exists (`widget/src/reason.ts`, P2-M5) but **NOT bound to the agent** — still reached via the diagnostic path (§9 Gap 3) |
 | `highlight_step` | Sticky spotlight on the host page | ✅ exists — but **switch-decided, not agent-decided (D11, 2026-08-02)**: it fires on every positional answer the founder's switch permits. Briefly agent-decided from 2026-07-27 |
 | `run_walkthrough` | Guided, user-paced stepping | ✅ same — switch-decided since D11 |
-| `ask_user` | Clarify · prompt for input · confirm | 🔄 **clarifying questions legalised in mode 2 (2026-07-27)** — no longer the Sense tie only; input prompting + confirmation await mode 3 |
+| `ask_user` | Clarify · prompt for input · confirm | 🔄 **clarifying questions legalised in Copilot mode (2026-07-27)** — no longer the Sense tie only; input prompting + confirmation await the acting tier |
 | `product_profile` | Founder-authored product understanding | 📝 P5-M2 — **the top remaining gap (§9 Gap 1)** |
 | `execute_step` | Resolve locator → act → verify | 📝 **P4-M2 — to build (the critical path)** |
 
@@ -264,7 +264,7 @@ Copilot mode is **complete against its scope and user-verified E2E** (founder's 
 
 Everything the assistant knows is a recorded workflow: a sequence of clicks. So it can say **how** to create an account. It cannot say what a workspace *is*, how the plans differ, what "project" means here, or that the user doesn't need a new one for what they're attempting.
 
-Real support skews heavily toward orienting questions — *"do I need X or Y?"*, *"what's the difference?"* — and today every one of them declines: correctly, and uselessly. **This is the difference between an assistant that understands the product and one that recites steps**, and it is the single biggest limit on how good mode 2 can feel.
+Real support skews heavily toward orienting questions — *"do I need X or Y?"*, *"what's the difference?"* — and today every one of them declines: correctly, and uselessly. **This is the difference between an assistant that understands the product and one that recites steps**, and it is the single biggest limit on how good Copilot mode can feel.
 
 The design already exists — **P5-M2 Product Profile** (the goal layer below, §G3): founder-authored structured prose (what it is · who uses it · core concepts · plans/roles · FAQs · never-say list), compiled into a synthetic `KnowledgeSource` so retrieval, approval and grounding are untouched, and surfaced to the answer prompt as a second evidence layer (**background may orient and redirect; only workflows may instruct**).
 
@@ -289,7 +289,7 @@ Two consequences, and the second is the important one:
 
 ### ⏸ Gap 3 — fold the diagnostic path into the agent loop *(deferred with a hard prerequisite)*
 
-**Where it stands.** Mode 2 ships with **two agent loops running side by side**: `diagnoseFromKB` (diagnostic questions — page state + expected-vs-actual) and `answerAsAgent` (everything else). A **deterministic trigger still decides which one a question gets** — Reason's selective trigger, with one exception added 2026-07-29: the fast-path-decline escalation is now keyed on `engineUsed !== 'agent'`, so a mode-2 agent decline is no longer retried through the diagnostic engine (the agent already held the KB tools that retry would take away, and the escalation was overwriting the agent's decline before anything was recorded). That trigger is the last hardcoded fork left in mode 2; every other "what kind of help is this?" decision is now the agent's.
+**Where it stands.** Copilot mode ships with **two agent loops running side by side**: `diagnoseFromKB` (diagnostic questions — page state + expected-vs-actual) and `answerAsAgent` (everything else). A **deterministic trigger still decides which one a question gets** — Reason's selective trigger, with one exception added 2026-07-29: the fast-path-decline escalation is now keyed on `engineUsed !== 'agent'`, so a mode-2 agent decline is no longer retried through the diagnostic engine (the agent already held the KB tools that retry would take away, and the escalation was overwriting the agent's decline before anything was recorded). That trigger is the last hardcoded fork left in Copilot mode; every other "what kind of help is this?" decision is now the agent's.
 
 **Why folding them is right eventually.**
 - The trigger has the failure mode every rule has: it misses diagnostically-shaped questions phrased unusually, and over-fires on simple questions containing *"why"*.
@@ -317,9 +317,9 @@ The same discipline runs through the scoring: a run that did not reach the diagn
 
 ### ⚠ Not a gap in the code — the KB has almost no depth
 
-Recorded here because it distorts every judgment about mode 2: through 2026-07-27 the test workspace held **one** approved workflow ("Create an account", 6 steps), so three of the agent's abilities had **never actually fired** — searching with its own wording (nothing else to find), choosing between workflows, and asking *"did you mean X or Y?"* (nothing to disambiguate). A second workflow ("Log in") was recorded on 2026-07-29, which is what made the answer-path bug reproducible at all; two workflows is enough to expose choosing-between, still not enough to judge retrieval at depth.
+Recorded here because it distorts every judgment about Copilot mode: through 2026-07-27 the test workspace held **one** approved workflow ("Create an account", 6 steps), so three of the agent's abilities had **never actually fired** — searching with its own wording (nothing else to find), choosing between workflows, and asking *"did you mean X or Y?"* (nothing to disambiguate). A second workflow ("Log in") was recorded on 2026-07-29, which is what made the answer-path bug reproducible at all; two workflows is enough to expose choosing-between, still not enough to judge retrieval at depth.
 
-Mode 2 was verified against what a single workflow can exercise. **Recording two or three more is the cheapest way to test the half that is currently theoretical**, and it gates honest evaluation of Gap 1.
+Copilot mode was verified against what a single workflow can exercise. **Recording two or three more is the cheapest way to test the half that is currently theoretical**, and it gates honest evaluation of Gap 1.
 
 ### Suggested order
 
@@ -566,7 +566,7 @@ reach — expected-vs-actual over the founder's TRUE step evidence.
 
 ### P5-M2 — Product Profile (the product-understanding KB)
 
-> **⭐ Now the TOP capability gap for Copilot mode (recorded 2026-07-27).** Mode 2 shipped and was user-verified, and this is the clearest limit on it: the assistant knows **recipes, not the product**. It can say *how* to create an account; it cannot say what a workspace is, how the plans differ, or that the user doesn't need a new project for what they're doing — so every orienting question ("do I need X or Y?", "what's the difference?") declines: correctly, and uselessly. **Sequence it after more workflows are recorded**, or an improvement can't be attributed to the profile rather than to the KB finally having depth. See this doc.
+> **⭐ Now the TOP capability gap for Copilot mode (recorded 2026-07-27).** Copilot mode shipped and was user-verified, and this is the clearest limit on it: the assistant knows **recipes, not the product**. It can say *how* to create an account; it cannot say what a workspace is, how the plans differ, or that the user doesn't need a new project for what they're doing — so every orienting question ("do I need X or Y?", "what's the difference?") declines: correctly, and uselessly. **Sequence it after more workflows are recorded**, or an improvement can't be attributed to the profile rather than to the KB finally having depth. See this doc.
 >
 > **Direction evolved 2026-08-01 — design home moved:** the derivation-first successor of this module (same goal, same two-evidence-layer answer rule, but **extracted from narration and approved page-by-page** instead of founder-authored) is [`application-intelligence.md`](application-intelligence.md).
 

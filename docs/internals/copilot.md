@@ -233,8 +233,8 @@ was reverted. The model did not lack the rule.
 > emit fields in declaration order — so the answer-or-decline decision is sampled before a single
 > token about the items exists. Permuting the schema so it comes later fixes the same failing cell
 > 0/8 → 8/8 with **no text change at all**. A real second lever, deliberately not stacked on the
-> first so each stays measurable. (The "mode 1's wire shape is frozen" comment in `engine.ts`
-> overstates: `shapeAnswer` reads named fields only, so a model-facing field cannot reach the widget.)
+> first so each stays measurable. (Reordering is safe for the wire: `shapeAnswer` reads named fields
+> only, so a model-facing field cannot reach the widget by moving.)
 
 **Tool de-duplication is keyed on name + arguments.** The loop used to remember tool
 NAMES only, so `search_knowledge("create a project")` and `search_knowledge("new project setup")`
@@ -254,8 +254,9 @@ against the 700-token output cap truncates the final JSON — which `shapeAnswer
 prompt came from POSITION CONTEXT — the workflow the user is standing *in* — so `get_workflow` could
 only ever be aimed at the current screen, while its own description offered "the workflow an item
 belongs to". Asked about something recorded elsewhere, the agent could see fragments and had no way
-to ask for the rest. Mode 2 only: `copilot.ts` and `reason.ts` keep their own inlined rendering, so
-their prompts are byte-identical.
+to ask for the rest. The DIAGNOSTIC path is unaffected: `reason.ts` keeps its own inlined rendering, so its prompt is
+byte-identical. It is the last engine that does — `copilot.ts`'s copy went with AI Chatbot, and the
+floor now shares the agent's.
 
 The mode is resolved server-side from `Workspace.copilotMode` on every call
 ([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding

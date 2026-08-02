@@ -52,9 +52,14 @@ answered by the screen-reading engine, or by the simple fallback when something 
 only the setting would have quietly blamed the wrong one.
 
 So *"is the smarter mode worth what it costs?"* is now something you can look up rather than argue
-about. **What's still missing is a screen for it** — nothing in the dashboard shows these yet. The
-data starts piling up from now, which means the answer gets better the longer you leave it before
-asking.
+about — and since August 2026 the dashboard shows it, alongside what each question costs in tokens.
+The data piles up from here, so the answer gets better the longer you leave it before asking.
+
+The question those numbers were originally built to settle — whether to fold the cheap mode into the
+smarter one — got answered on other grounds before enough traffic accumulated: the cheap mode was
+retired for being twice the upkeep for a worse answer. The numbers changed job rather than going to
+waste. Their most useful reading now is the fallback: it only fires when something has gone wrong,
+and nothing else reports it.
 
 It became urgent the day Copilot became the default, because until then every logged question looked
 identical and couldn't be reconstructed afterwards. That's what forced it.

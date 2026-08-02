@@ -454,8 +454,9 @@ column defaults apply only to rows created afterwards.
    workspaces the old defaults while the database claims otherwise. Render's build already runs it
    via `pnpm build`; worth knowing because the failure is silent and looks like the migration didn't
    take.
-3. **Publish BOTH widget bundles again** — the base bundle carries mode-aware on-page judgment
-   (`wantsOnPage`) and the chat-persistence store.
+3. **Publish BOTH widget bundles again** — the base bundle carries the on-page ability gate and
+   the chat-persistence store. *(That gate was the assistant's judgment when this drop shipped;
+   D11 made it the founder's switch alone on 2026-08-02 — [`agent.md`](../build/agent.md).)*
 4. **No new env vars.** New per-workspace control: Studio → Copilot → Settings → **How your
    assistant works** (Copilot · AI Agent-locked). Workspaces land on **Copilot** with show-me and
    guided walkthrough permitted; every mode stays switchable both ways.

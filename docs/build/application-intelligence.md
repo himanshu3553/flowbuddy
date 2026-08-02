@@ -38,7 +38,7 @@ already ride.
 Two facts meet:
 
 1. **The biggest limit on Copilot mode is product understanding, not reasoning** — recorded as its
-   top capability gap the day mode 2 shipped ([`agent.md`](agent.md) §9 Gap 1).
+   top capability gap the day Copilot mode shipped ([`agent.md`](agent.md) §9 Gap 1).
 2. **The raw material is already being captured and discarded.** No new recording modality, no new
    founder effort — a richer read of the narration we have.
 
@@ -72,7 +72,7 @@ The trust spine — **AI-3, AI-5, AI-6, AI-7** — was explicitly founder-aligne
 | **AI-6** | **Durable identity, re-matched by content.** Pages regenerate on reprocess; each re-match must agree on content or fail closed — a new page is born unapproved, a page that lost its content detaches to review. Never matched by position or title. | [`workflow-identity.md`](workflow-identity.md), inherited wholesale. The reprocess hazard was closed once for workflows; this layer must not reopen it one level up. |
 | **AI-7** | **Provenance is anchored.** Every page cites the recording(s) and the narration span(s) it derives from — the knowledge-layer equivalent of steps citing captured events. | Approval then *means* something concrete: "this is what I said, and it's right." Staleness becomes detectable: re-record an area and the pages citing its narration become suspect. |
 | **AI-8** | **Narration is the raw material — so guiding it is product work.** The recorder should coach the founder toward a *tour* ("explain it like onboarding a new employee"), not a silent click-through. | The layer's ceiling is narration richness. Click-commentary yields workflows and nothing else; a tour yields the product. Cheapest lever on quality in the whole design. |
-| **AI-9** | **Capability lands in every tier at once.** Whatever pages feed the answer engines lands in the safety floor, the agent, and the diagnostic path alike — each on its own baseline. | The renderer freeze is about tuning, not capability. A knowledge layer only mode 2 reads would leave the sold safety floor answering worse than the tier above it for no reason. |
+| **AI-9** | **Capability lands in every tier at once.** Whatever pages feed the answer engines lands in the safety floor, the agent, and the diagnostic path alike — each on its own baseline. | The renderer freeze is about tuning, not capability. A knowledge layer only the agent reads would leave the sold safety floor answering worse than the tier above it for no reason. |
 
 ## 3. The pages (v1 sketch)
 

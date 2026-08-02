@@ -113,28 +113,50 @@ docker compose down                           # stop Postgres + Redis (add -v to
 ### Root scripts that exist (`package.json`)
 `build` · `dev` · `typecheck` · **`test`** · `lint` · `db:generate` · `db:validate` · `db:migrate`
 
-> **Tests (added 2026-07-26 — the repo's first; 49 as of 2026-07-29).** `vitest` in
+> **Tests (added 2026-07-26 — the repo's first; 125 as of 2026-08-03).** `vitest` in
 > `@flowbuddy/synthesis` only, over the *pure* seams:
 > - `retrieval.test.ts` — signal-ordering invariants (route/sense outrank continuity; a real keyword
 >   match still beats all of them — the rule that lets a user change subject).
 > - `engine.test.ts` — the answer loop's contract (the floor = exactly one model call with no tool
->   surface; a final round never serves tools).
+>   surface; a final round never serves tools) and what a question COST: usage summed across every
+>   round, the cached/reasoning figures kept as subsets, and a round that came back `incomplete` or
+>   `failed` still billed — a provider incident must never read as free.
 > - `copilot-mode.test.ts` — the mode vocabulary's safety invariants: the product default
->   (`NEW_WORKSPACE_MODE`) and the fail-closed floor (`DEFAULT_COPILOT_MODE`) are different things
->   and must not be re-collapsed, and no unrecognised value — typo, pasted label, wrong casing, null
->   column — ever reaches the agent loop. It lives here only because this is where the runner is;
->   move it if `@flowbuddy/shared` ever gets its own.
+>   (`NEW_WORKSPACE_MODE`) and the fail-closed floor (`DEFAULT_COPILOT_MODE`) hold the same value
+>   and must still not be re-collapsed, and no unrecognised value — typo, pasted label, wrong
+>   casing, null column — ever buys the ability to ACT. (Until AI Chatbot was retired the rule was
+>   "never reaches the agent loop"; with two modes the floor IS that loop, so the invariant is
+>   stated as capability instead.) It lives here only because this is where the runner is; move it
+>   if `@flowbuddy/shared` ever gets its own.
+> - `agent-prompt.test.ts` — that the FLOOR's prompt never promises a tool it does not have. With
+>   nothing bound, "search first, then answer" is an instruction the model cannot follow, and it
+>   invents a decline at the moment the user has already hit one failure.
+> - `reason-assertions.test.ts` — the rules that score a diagnosis (`scripts/reason-fixtures.mjs`).
+>   They all fail OPEN, so a mistake makes every fixture pass forever while measuring nothing.
+> - `overlap.test.ts` · `pages.test.ts` — duplicate detection (two signals, the last step deciding)
+>   and the product-page extractor's quote-anchoring and identity matching.
 >
-> Deliberately NOT tested: prompts and model output — a unit test asserting on generated text fails
-> for the wrong reasons. Answer *quality* is covered by `scripts/copilot-baseline.mjs` (below) and
-> the manual E2E plan. Still no CI, by standing decision.
+> Deliberately NOT tested: model OUTPUT — a unit test asserting on generated text fails for the
+> wrong reasons. Prompts are tested only for structural promises they must not make (see
+> `agent-prompt.test.ts`), never for wording. Answer *quality* is covered by
+> `scripts/copilot-baseline.mjs` and `scripts/reason-fixtures.mjs` (below) and the manual E2E plan.
+> Still no CI, by standing decision.
 
 **Answer-quality baselines** — `node scripts/copilot-baseline.mjs --key pk_… [--runs 3] [--only h2]`
 asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited,
 position) rather than the prose, because the model's wording
 always differs. `scripts/copilot-baseline-diff.mjs before.json after.json` reports only
 decision-level changes. Runs in `preview` mode, so a capture writes no analytics. Saved reference
-captures for both modes live in `scripts/`.
+captures live in `scripts/`.
+
+**Diagnostic baselines** — `node scripts/reason-fixtures.mjs --key pk_…` replays committed page
+states through the same `/answer` endpoint and scores each diagnosis: did it name every
+machine-checked blocker, did it speak plain English rather than leaking constraint names, did it
+diagnose rather than decline, and which evidence did it reach for. Fixtures live in
+`scripts/reason-fixtures/` and name their workflow rather than storing its ids, so a reseed cannot
+silently turn them into an unlocalized test — one that will not resolve is SKIPPED, never scored.
+This is the diagnostic path's only automated coverage; `reason-baseline-2026-08-03.json` is the
+current reference.
 
 **Multi-turn cases (2026-07-29).** A question may carry `"after"` — the turns to play FIRST, so it
 arrives as a FOLLOW-UP with real conversation state behind it (`--only t` runs just those). The
