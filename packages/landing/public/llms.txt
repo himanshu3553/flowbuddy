@@ -1,0 +1,24 @@
+# FlowBuddy
+
+> FlowBuddy is an in-app, context-aware AI assistant for SaaS products. A founder shows FlowBuddy their product once (a recorded demo); FlowBuddy turns it into an approved knowledge base and a custom AI assistant embedded in the product with one script tag — answering user questions, unblocking stuck users by highlighting their next step on the page, and walking them through whole tasks. Live in about 30 minutes, no coding required.
+
+Key facts:
+
+- The assistant answers only from workflows the founder recorded and approved. It shows the source behind every answer and honestly says "I don't know yet" instead of guessing when something isn't covered.
+- It is context-aware: it knows which page the user is on and can highlight the exact next step directly in the product's interface.
+- Three capabilities: conversational help in-app, on-page next-step guidance for stuck users, and interactive end-to-end task walkthroughs (the user stays in control; the assistant never acts for them).
+- Setup: record a product demo with the FlowBuddy Chrome recorder → FlowBuddy automatically creates product knowledge and step-by-step workflows → the founder reviews and approves them → embed one small script tag to go live.
+- Works with any web app. The assistant is a floating overlay and never changes the host product's pages or layout. Its accent color can match the host brand.
+- Privacy and safety: sensitive data is masked in the browser during recording before anything is uploaded; the embed key is public-safe, restricted to allowlisted domains, and rotatable.
+- Pricing: free during early access; no credit card required.
+- Outcomes it is bought for: in-app user assistance, faster onboarding, higher activation, fewer support tickets.
+
+## Pages
+
+- [Home](https://flowbuddyai.com/): what FlowBuddy is, capabilities, how it works, benefits, FAQ
+- [The road ahead](https://flowbuddyai.com/future): FlowBuddy's direction — one approved knowledge base serving the in-app assistant today, with a hosted help portal and AI-agent access to the same knowledge in development (not yet available)
+
+## Get started
+
+- [Create an account](https://app.flowbuddyai.com/signup): free during early access
+- [Sign in to FlowBuddy Studio](https://app.flowbuddyai.com): the dashboard where founders record, approve, and configure their assistant

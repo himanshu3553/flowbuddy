@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="Page not found | FlowBuddy"
+  description="This page doesn't exist. FlowBuddy is the in-app, context-aware AI assistant for your SaaS."
+  path="/404"
+  noindex={true}
+>
+  <section class="relative overflow-hidden">
+    <div
+      class="pointer-events-none absolute inset-0"
+      style="background: radial-gradient(55rem 32rem at 50% -15%, rgba(59, 80, 224, 0.08), transparent 60%);"
+      aria-hidden="true"
+    >
+    </div>
+    <div class="relative mx-auto max-w-[820px] px-5 py-24 text-center md:px-8 md:py-36">
+      <p class="eyebrow mb-5">404</p>
+      <h1 class="display-hero">This page doesn't exist</h1>
+      <p class="lead mx-auto mt-6 max-w-xl">
+        The page you're looking for isn't here — but the assistant that stops your users from
+        ever feeling this lost is.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <a href="/" class="btn-primary">Back to the homepage</a>
+        <a href="https://app.flowbuddyai.com/signup" class="btn-secondary">Get started free</a>
+      </div>
+    </div>
+  </section>
+</Base>

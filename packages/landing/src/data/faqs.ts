@@ -27,10 +27,6 @@ export const faqs: Faq[] = [
     a: 'No. The assistant is a small floating helper that sits on top of your product. It never moves, resizes, or restyles anything on your pages, and you can match its accent color to your brand.',
   },
   {
-    q: 'What does it cost?',
-    a: 'FlowBuddy is free during early access. No credit card required — create an account, record your demo, and go live.',
-  },
-  {
     q: 'Is my data safe?',
     a: 'Sensitive data is masked in your browser while you record, before anything leaves your machine. The embed key is safe to include in your pages, works only on the domains you allow, and can be rotated at any time.',
   },

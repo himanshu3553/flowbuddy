@@ -32,7 +32,7 @@ The old "copilot-first vs. agent-ready" fork is resolved: **both, in order.**
 
 **The demo is the page itself:** the real widget embeds as the landing page's own overlay (FlowBuddy answering questions about FlowBuddy) — no demo section. The embed renders only when the build provides the landing widget key (names & defaults: `.env.example`), so the page never blocks on the dogfood KB existing.
 
-**SEO/GEO on-page:** canonical + OG/Twitter meta, JSON-LD (`Organization` + `SoftwareApplication` + `FAQPage`), `robots.txt`, `sitemap.xml`, declarative meta descriptions.
+**SEO/GEO on-page:** canonical + OG/Twitter meta with a branded `og.png` card, JSON-LD (`Organization` + `SoftwareApplication` + `FAQPage`), `robots.txt` (explicit allow-groups for the named AI/LLM crawlers), `llms.txt` (the declarative product summary for generative engines), `sitemap.xml` with lastmod, a noindexed 404 page, declarative meta descriptions.
 
 ---
 
@@ -40,5 +40,4 @@ The old "copilot-first vs. agent-ready" fork is resolved: **both, in order.**
 
 1. **Sign-up block (section 5) final copy** — placeholder-quality copy shipped; the founder decides the real content.
 2. **Live-widget dogfood prerequisites:** record + approve a FlowBuddy-on-FlowBuddy KB in Studio, allowlist `flowbuddyai.com`, and set the widget key on the Render landing service.
-3. **`og:image`** — link previews are text-only until a card image is designed.
-4. **Off-page SEO/GEO** (content, articles, listings) — untouched; a separate work stream.
+3. **Off-page SEO/GEO** (content, articles, listings, Search Console/Bing submission) — untouched; a separate work stream.
