@@ -42,6 +42,7 @@ import {
   type AgentWorkflow,
   type CopilotCitation,
   type AnswerLoopResult,
+  type TokenUsage,
 } from '@flowbuddy/synthesis';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
@@ -898,7 +899,26 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // What the agent's loop DID — rounds, and every tool call including the ones that did not run.
   // A holder rather than a bare `let`: the loop reports through a callback, and TypeScript narrows
   // a `let` that is only ever assigned inside a closure to `null` at every read.
-  const loop: { stats: AnswerLoopResult | null } = { stats: null };
+  const loop: { stats: AnswerLoopResult | null; spent: TokenUsage } = {
+    stats: null,
+    spent: { input: 0, cachedInput: 0, output: 0, reasoning: 0 },
+  };
+  /**
+   * Every loop this question ran reports through here.
+   *
+   * `stats` is REPLACED and `spent` is ACCUMULATED, and the asymmetry is the point. `stats`
+   * describes what the engine that finally answered did — rounds, tools — so the last one wins.
+   * Cost is not like that: a question the agent loop failed and the floor caught paid for BOTH, and
+   * a loop that searched twice before answering paid for all three calls. Recording only the
+   * surviving engine's tokens would understate exactly the questions worth finding.
+   */
+  const recordLoop = (stats: AnswerLoopResult): void => {
+    loop.stats = stats;
+    loop.spent.input += stats.usage.input;
+    loop.spent.cachedInput += stats.usage.cachedInput;
+    loop.spent.output += stats.usage.output;
+    loop.spent.reasoning += stats.usage.reasoning;
+  };
   // THE FLOOR — one round of the agent's own prompt with no tools bound, over the items retrieval
   // has already produced. It is no longer a sellable mode (AI Chatbot was retired); it is purely
   // what answers when something above it fails, which is why nothing here consults `gate.mode`.
@@ -913,9 +933,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       history: sanitizeHistory(body.history),
       items,
       context: { path: contextPath, sense: sense ?? undefined },
-      onLoop: (stats) => {
-        loop.stats = stats;
-      },
+      onLoop: recordLoop,
       apiKey: config.openaiApiKey,
       model: config.synthModel,
     });
@@ -949,9 +967,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         pageImage: reasonPayload.image,
         workflow,
         expected,
-        onLoop: (stats) => {
-          loop.stats = stats;
-        },
+        onLoop: recordLoop,
         apiKey: config.openaiApiKey,
         model: config.reasonModel,
       });
@@ -1011,9 +1027,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
             embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
           }),
         loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
-        onLoop: (stats) => {
-          loop.stats = stats;
-        },
+        onLoop: recordLoop,
         apiKey: config.openaiApiKey,
         model: config.synthModel,
       });
@@ -1068,6 +1082,19 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       items: items.length,
       contextPath,
       sensed: sense?.hypotheses.length ?? 0,
+      // Spend rides the log line too: an incident is usually noticed as "why was yesterday
+      // expensive?", and the per-question answer to that has to be greppable before anyone builds a
+      // dashboard query for it.
+      ...(loop.spent.input > 0 || loop.spent.output > 0
+        ? {
+            tokens: {
+              in: loop.spent.input,
+              cached: loop.spent.cachedInput,
+              out: loop.spent.output,
+              reasoning: loop.spent.reasoning,
+            },
+          }
+        : {}),
       ...(loop.stats
         ? {
             rounds: loop.stats.rounds,
@@ -1179,6 +1206,17 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       mode: gate.mode,
       engine: engineUsed,
       ...(loop.stats ? { rounds: loop.stats.rounds, toolCalls: loop.stats.toolCalls.length } : {}),
+      // What it COST — the whole question, every loop it ran (see `recordLoop`). Written only when
+      // a loop actually reported usage, so a row where the provider told us nothing stays null and
+      // honestly reads "unknown" rather than claiming a free question.
+      ...(loop.spent.input > 0 || loop.spent.output > 0
+        ? {
+            inputTokens: loop.spent.input,
+            cachedInputTokens: loop.spent.cachedInput,
+            outputTokens: loop.spent.output,
+            reasoningTokens: loop.spent.reasoning,
+          }
+        : {}),
       ...senseLogFields(sense, probed, position),
       ...(reasonPayload
         ? { reasonTrigger: reasonPayload.trigger, reasonImage: Boolean(reasonPayload.image) }

@@ -498,6 +498,36 @@ model CopilotQuery {
   engine      String?
   rounds      Int?
   toolCalls   Int?
+  // WHAT THE QUESTION COST (2026-08-03). The columns above say what the answer path DID; these say
+  // what it spent. Until they existed, "what does a question cost to serve?" could only be answered
+  // from a provider invoice for the whole workspace — which cannot separate a cheap lookup from an
+  // expensive diagnosis, and so cannot price a tier or set a budget.
+  //
+  // TOTAL FOR THE QUESTION, not for one engine. A question that failed the agent loop and was caught
+  // by the floor paid for BOTH, and a loop that searched twice before answering paid for all three
+  // calls. Anything scoped to the engine that finally answered would understate exactly the
+  // questions worth finding.
+  //
+  // The two "details" columns are SUBSETS of their neighbours, mirroring the provider's own shape:
+  //   inputTokens        — all prompt tokens, cached portion INCLUDED
+  //   cachedInputTokens  — the part of inputTokens served from cache, billed at a fraction. These
+  //                        prompts are long and stable, so ignoring this OVERSTATES spend badly.
+  //   outputTokens       — everything produced, reasoning INCLUDED
+  //   reasoningTokens    — the part of outputTokens spent thinking. Bills as output on a reasoning
+  //                        model, and explains both why an answer was expensive and the
+  //                        `max_output_tokens` failure mode (a budget spent thinking returns empty
+  //                        text that reads downstream as an ordinary decline).
+  //
+  // NOT counted: the embedding call retrieval makes for the question (a separate, tiny request on a
+  // different model) and everything the worker spends building the KB. This is the ANSWER path's
+  // cost, which is the one that scales with customer traffic.
+  //
+  // Nullable and never back-filled, like their neighbours: an older row honestly reads "unknown"
+  // rather than being given a zero that would drag every average down.
+  inputTokens       Int?
+  cachedInputTokens Int?
+  outputTokens      Int?
+  reasoningTokens   Int?
   reasonTrigger     String?
   reasonImage       Boolean?
   createdAt   DateTime @default(now())

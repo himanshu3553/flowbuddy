@@ -25,6 +25,10 @@ interface StubReply {
   incomplete?: 'max_output_tokens' | 'content_filter';
   /** Scripts a TERMINAL provider failure delivered in the body (200 + status:'failed'). */
   failed?: { code?: string; message?: string };
+  /** What this round consumed. `cached` ⊆ `input` and `reasoning` ⊆ `output`, as the provider
+   *  reports them — the harness reproduces that nesting so a test cannot accidentally prove the
+   *  loop right about a shape the API does not actually send. */
+  usage?: { input: number; cached?: number; output: number; reasoning?: number };
 }
 
 /** A fake OpenAI whose `responses.create` returns scripted replies and records every request.
@@ -61,6 +65,17 @@ function stubOpenAI(replies: StubReply[]) {
         return {
           output,
           output_text: r.content ?? '',
+          ...(r.usage
+            ? {
+                usage: {
+                  input_tokens: r.usage.input,
+                  input_tokens_details: { cached_tokens: r.usage.cached ?? 0 },
+                  output_tokens: r.usage.output,
+                  output_tokens_details: { reasoning_tokens: r.usage.reasoning ?? 0 },
+                  total_tokens: r.usage.input + r.usage.output,
+                },
+              }
+            : {}),
           ...(r.failed
             ? { status: 'failed', error: r.failed }
             : r.incomplete
@@ -534,5 +549,76 @@ describe('shapeAnswer', () => {
       declineReason: 'fallback',
     });
     expect(r).toEqual({ covered: false, reason: 'I have not been taught that yet.' });
+  });
+});
+
+/**
+ * What a question COST (2026-08-03).
+ *
+ * These exist because the failure mode is silent and one-directional: every plausible mistake here
+ * UNDER-reports, and it under-reports exactly the expensive questions — the ones that searched
+ * twice, or failed and were caught by the floor. A cost number that is quietly low is worse than no
+ * cost number, because it will be used to price a tier.
+ */
+describe('token usage', () => {
+  const answer = JSON.stringify({ covered: true, answer: 'a', citedItemIds: [] });
+
+  it('sums every round rather than reporting the last one', async () => {
+    // THE test. A loop that searched twice before answering paid for all three calls; anything that
+    // overwrites per round would report the final, cheapest one.
+    const { openai } = stubOpenAI([
+      { toolCalls: ['search_knowledge'], usage: { input: 100, output: 20 } },
+      { toolCalls: [{ name: 'search_knowledge', arguments: '{"query":"other"}' }], usage: { input: 200, output: 30 } },
+      { content: answer, usage: { input: 300, output: 50 } },
+    ]);
+    const r = await runAnswerLoop({
+      openai,
+      model: 'm',
+      messages: [],
+      tools: [tool('search_knowledge')],
+      maxOutputTokens: 100,
+    });
+    expect(r.rounds).toBe(3);
+    expect(r.usage.input).toBe(600);
+    expect(r.usage.output).toBe(100);
+  });
+
+  it('keeps the cached and reasoning subsets separate from their totals', async () => {
+    // Both are SUBSETS the provider nests inside the number above them. Adding either to its parent
+    // would double-count; dropping the cache would overstate spend on these long, stable prompts.
+    const { openai } = stubOpenAI([
+      { content: answer, usage: { input: 1000, cached: 800, output: 200, reasoning: 150 } },
+    ]);
+    const r = await runAnswerLoop({ openai, model: 'm', messages: [], maxOutputTokens: 100 });
+    expect(r.usage).toEqual({ input: 1000, cachedInput: 800, output: 200, reasoning: 150 });
+  });
+
+  it('bills a round the provider could not finish', async () => {
+    // An `incomplete` response was paid for — the budget was spent on reasoning, which is precisely
+    // the case worth being able to see in the cost data.
+    const { openai } = stubOpenAI([
+      { content: '', incomplete: 'max_output_tokens', usage: { input: 500, output: 4000, reasoning: 4000 } },
+    ]);
+    const r = await runAnswerLoop({ openai, model: 'm', messages: [], maxOutputTokens: 4000 });
+    expect(r.incomplete).toBe('max_output_tokens');
+    expect(r.usage.output).toBe(4000);
+    expect(r.usage.reasoning).toBe(4000);
+  });
+
+  it('bills a round that came back as a terminal failure', async () => {
+    // A `failed` body still consumed the prompt. The loop breaks out of the round — the count must
+    // not break with it, or every provider incident reads as free.
+    const { openai } = stubOpenAI([{ failed: { code: 'server_error' }, usage: { input: 700, output: 0 } }]);
+    const r = await runAnswerLoop({ openai, model: 'm', messages: [], maxOutputTokens: 100 });
+    expect(r.failed?.code).toBe('server_error');
+    expect(r.usage.input).toBe(700);
+  });
+
+  it('reports zeros, never nulls, when the provider sent no usage at all', async () => {
+    // The caller decides whether zeros mean "free" or "unknown" (the API writes null on all-zero).
+    // The loop's own contract stays a plain object so nothing downstream needs a null check.
+    const { openai } = stubOpenAI([{ content: answer }]);
+    const r = await runAnswerLoop({ openai, model: 'm', messages: [], maxOutputTokens: 100 });
+    expect(r.usage).toEqual({ input: 0, cachedInput: 0, output: 0, reasoning: 0 });
   });
 });

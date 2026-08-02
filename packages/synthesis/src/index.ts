@@ -29,7 +29,7 @@ export { diagnoseFromKB, blockerList } from './reason';
 export { answerAsAgent, answerAsFloor } from './agent';
 export type { AgentInput, AgentWorkflow } from './agent';
 // What a loop DID, for the caller to log — the same record the loop de-duplicates tool calls with.
-export type { AnswerLoopResult, ToolCallRecord } from './engine';
+export type { AnswerLoopResult, ToolCallRecord, TokenUsage } from './engine';
 export type {
   ReasonInput,
   ReasonSnapshot,

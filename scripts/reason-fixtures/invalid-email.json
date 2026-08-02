@@ -1,0 +1,100 @@
+{
+  "_note": "Every field entered and the box ticked, but the email is malformed (typeMismatch) so submit stays disabled.  LIFTED from a real browser session against the recorded app \u2014 the constraint names, the disabled state and the sense step are all the live page's own reading, not an author's guess. The page image is deliberately not stored (v1 is structure-only; it would be ~900KB of base64 per fixture).",
+  "id": "invalid-email",
+  "label": "Everything filled but the email is malformed",
+  "question": "why can't I create the account?",
+  "path": "/auth/signup",
+  "capturedAt": "2026-08-03",
+  "trigger": "intent",
+  "workflow": {
+    "title": "Create an account",
+    "step": 6,
+    "stepsDone": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "confidence": 1
+  },
+  "snapshot": {
+    "path": "/auth/signup",
+    "title": "Chatful AI",
+    "viewport": {
+      "w": 756,
+      "h": 469
+    },
+    "elements": [
+      {
+        "tag": "a",
+        "name": "Chatful AI"
+      },
+      {
+        "tag": "a",
+        "name": "Chatful AI"
+      },
+      {
+        "tag": "input",
+        "role": "text",
+        "name": "Full Name",
+        "required": true,
+        "filled": true
+      },
+      {
+        "tag": "input",
+        "role": "email",
+        "name": "Email",
+        "required": true,
+        "filled": true,
+        "valid": false,
+        "invalidReason": "typeMismatch"
+      },
+      {
+        "tag": "input",
+        "role": "password",
+        "name": "Password",
+        "required": true,
+        "filled": true
+      },
+      {
+        "tag": "button"
+      },
+      {
+        "tag": "input",
+        "role": "checkbox",
+        "name": "I agree to the Terms of Service and Privacy Policy",
+        "required": true,
+        "checked": true
+      },
+      {
+        "tag": "a",
+        "name": "I agree to the Terms of Service and Privacy Policy"
+      },
+      {
+        "tag": "a",
+        "name": "I agree to the Terms of Service and Privacy Policy"
+      },
+      {
+        "tag": "button",
+        "name": "Create account",
+        "disabled": true,
+        "current": true
+      },
+      {
+        "tag": "a",
+        "name": "Sign in"
+      }
+    ],
+    "texts": [
+      "Full Name",
+      "Email",
+      "Password",
+      "I agree to the",
+      "and"
+    ]
+  },
+  "expect": {
+    "covered": true,
+    "coversAllBlockers": true
+  }
+}

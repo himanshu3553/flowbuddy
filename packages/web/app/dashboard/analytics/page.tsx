@@ -13,12 +13,14 @@ import {
   getCoverageGapsRanked,
   getRecentDeclines,
   getStepFriction,
+  getAnswerPathStats,
 } from '@/lib/analytics';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { MiniBarChart, ChartLegend } from '@/components/dashboard/mini-bar-chart';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { AnalyticsRange } from '@/components/dashboard/analytics-range';
+import { AnswerPath } from '@/components/dashboard/answer-path';
 import { Button } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
@@ -35,12 +37,13 @@ export default async function AnalyticsPage({
   const days = parseRange((await searchParams).range);
   const label = rangeLabel(days).toLowerCase();
 
-  const [metrics, topWorkflows, gaps, declines, friction] = await Promise.all([
+  const [metrics, topWorkflows, gaps, declines, friction, answerPath] = await Promise.all([
     getCopilotMetrics(wsId, days),
     getTopWorkflowsByCitations(wsId, days),
     getCoverageGapsRanked(wsId),
     getRecentDeclines(wsId),
     getStepFriction(wsId, days),
+    getAnswerPathStats(wsId, days),
   ]);
 
   const rangeControl = <AnalyticsRange value={days} options={RANGE_OPTIONS} />;
@@ -231,6 +234,11 @@ export default async function AnalyticsPage({
               </ul>
             )}
           </section>
+
+          {/* Which engine answered, and how hard it worked. Lives in the main column rather than
+              the aside because of one row: `floor` only appears when something upstream FAILED, and
+              nothing else in the product — or in any log a founder reads — reports that. */}
+          <AnswerPath stats={answerPath} label={label} />
           </div>
 
           <aside className="min-w-0 space-y-6">

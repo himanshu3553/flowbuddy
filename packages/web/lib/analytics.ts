@@ -447,3 +447,124 @@ export async function getQuestionLog(
     to: total === 0 ? 0 : (safePage - 1) * pageSize + rows.length,
   };
 }
+
+// ── How the answer was produced (P1-M10 / agent.md §9 Gap 2) ───────────────────────────────────
+// `CopilotQuery` has recorded `engine` · `rounds` · `toolCalls` since 2026-07-29 and nothing has
+// ever read them. What changed on 2026-08-02 is what they are FOR: with AI Chatbot retired there is
+// one selectable mode, so "did the setting do anything?" is no longer a question — and `floor`
+// became the value that matters, because it is the only engine with no mode behind it.
+
+/** Engine → how to describe it to a founder who has never read the source. */
+export const ENGINE_LABELS: Record<string, { name: string; blurb: string }> = {
+  agent: {
+    name: 'Copilot',
+    blurb: 'Answered from your approved knowledge, searching again when the first look missed.',
+  },
+  reason: {
+    name: 'Diagnosis',
+    blurb: "Read the user's page to work out what was blocking them.",
+  },
+  floor: {
+    name: 'Fallback',
+    blurb: 'Something above it failed, so the question got one plain answer with no tools.',
+  },
+};
+
+export interface AnswerPathStats {
+  /** Questions in the window that recorded an engine. */
+  recorded: number;
+  /** Questions with no engine recorded — asked before 2026-07-29. Surfaced so a share is never
+   *  read as coverage of everything that happened. */
+  unrecorded: number;
+  byEngine: { engine: string; count: number }[];
+  /** THE ALARM. `floor` means the agent loop or the diagnostic path failed and the fallback caught
+   *  it. Since AI Chatbot was retired nothing else exercises that path, so any run of these is a
+   *  reliability signal rather than a configuration one — and nothing else in the product reports it. */
+  floorCount: number;
+  /** Answers that took more than one model call — i.e. the loop actually escalated. Round one IS
+   *  the old fast path, so this is the honest measure of how often the extra rounds earn their cost. */
+  escalated: number;
+  /** Answers where the assistant reached for at least one tool. */
+  withTools: number;
+  /** What the window COST, over the questions that recorded it. Null when none did.
+   *
+   *  Deliberately TOKENS, not money. Converting needs a price per model, and there are two models
+   *  on this path (the answer model and the stronger diagnostic one) whose rates change without
+   *  warning — a hardcoded figure would drift into confidently wrong, which is worse than a number
+   *  the founder converts themselves against a rate card they can see. */
+  tokens: {
+    /** Questions this is averaged over — never the window total, since older rows recorded nothing. */
+    questions: number;
+    input: number;
+    cachedInput: number;
+    output: number;
+    reasoning: number;
+  } | null;
+}
+
+/**
+ * How the copilot produced its answers over the window.
+ *
+ * Every count is scoped to rows that actually recorded the field, and `unrecorded` is returned
+ * alongside rather than folded in: a percentage computed over a partially-instrumented history
+ * would quietly understate every engine, and this is the one surface whose whole job is to be
+ * trusted when it says the fallback fired.
+ */
+export async function getAnswerPathStats(
+  workspaceId: string,
+  days: number,
+): Promise<AnswerPathStats> {
+  const where = { workspaceId, createdAt: { gte: windowStart(days) } };
+
+  const [engineRows, unrecorded, escalated, withTools, spend] = await Promise.all([
+    prisma.copilotQuery.groupBy({
+      by: ['engine'],
+      where: { ...where, engine: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.copilotQuery.count({ where: { ...where, engine: null } }),
+    // `rounds > 1` rather than `>= 1`: one round is the fast path every question rides, so counting
+    // it as escalation would report 100% and mean nothing.
+    prisma.copilotQuery.count({ where: { ...where, rounds: { gt: 1 } } }),
+    prisma.copilotQuery.count({ where: { ...where, toolCalls: { gt: 0 } } }),
+    // Scoped to rows that RECORDED usage — averaging over questions asked before this existed would
+    // divide a real total by an inflated count and report a cost that quietly falls over time.
+    prisma.copilotQuery.aggregate({
+      where: { ...where, inputTokens: { not: null } },
+      _count: { _all: true },
+      _sum: { inputTokens: true, cachedInputTokens: true, outputTokens: true, reasoningTokens: true },
+    }),
+  ]);
+
+  // Rows written before 2026-08-02 call the same engine `chatbot` — it was a sellable mode then and
+  // is the unsellable fallback now. Folded together at read time rather than back-filled: the rows
+  // are not wrong, they are the old name for the same thing, and a history that spans the rename
+  // should read as one line rather than two.
+  const merged = new Map<string, number>();
+  for (const r of engineRows) {
+    const engine = r.engine === 'chatbot' ? 'floor' : (r.engine as string);
+    merged.set(engine, (merged.get(engine) ?? 0) + r._count._all);
+  }
+  const byEngine = [...merged.entries()]
+    .map(([engine, count]) => ({ engine, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    recorded: byEngine.reduce((n, e) => n + e.count, 0),
+    unrecorded,
+    byEngine,
+    floorCount: merged.get('floor') ?? 0,
+    escalated,
+    withTools,
+    tokens:
+      spend._count._all === 0
+        ? null
+        : {
+            questions: spend._count._all,
+            input: spend._sum.inputTokens ?? 0,
+            cachedInput: spend._sum.cachedInputTokens ?? 0,
+            output: spend._sum.outputTokens ?? 0,
+            reasoning: spend._sum.reasoningTokens ?? 0,
+          },
+  };
+}

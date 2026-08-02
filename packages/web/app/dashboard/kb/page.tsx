@@ -15,12 +15,22 @@ import {
   KbWorkflowList,
   type WorkflowRow,
 } from '@/components/dashboard/kb-workflow-list';
+import { KbTabs, type KbTab } from '@/components/dashboard/kb-tabs';
 
 export const dynamic = 'force-dynamic';
 
-export default async function KnowledgeBasePage() {
+/** The two halves of the KB. Anything unrecognised in `?tab=` falls back to workflows. */
+type Tab = 'workflows' | 'product';
+
+export default async function KnowledgeBasePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
+  const raw = (await searchParams).tab;
+  const tab: Tab = raw === 'product' ? 'product' : 'workflows';
 
   const [candidates, overlaps, productPages] = await Promise.all([
     listCandidates(ctx.workspace.id),
@@ -50,11 +60,30 @@ export default async function KnowledgeBasePage() {
 
   const overlapViews: OverlapView[] = overlaps.map(toView);
 
+  // What is still waiting on the founder, per tab. Surfaced ON the tabs because tabbing hides the
+  // half you are not looking at, and unapproved content serves nobody without saying so.
+  const tabs: KbTab[] = [
+    {
+      key: 'workflows',
+      label: 'Workflows',
+      count: workflows.length,
+      pending: workflows.filter((w) => !w.copilotApproved && !w.inactiveReason).length,
+    },
+    {
+      key: 'product',
+      label: 'Product knowledge',
+      count: productPages.length,
+      // Two different waits, one number: never reviewed, and an approved page whose re-derivation
+      // disagrees with what is live (the pending-update flow).
+      pending: productPages.filter((p) => (!p.live && !p.everApproved) || p.pendingContent).length,
+    },
+  ];
+
   return (
     <>
       <PageHeader
         title="Knowledge Base"
-        subtitle="Approve the workflows your copilot may answer from — one click each."
+        subtitle="Approve what your copilot may use — the workflows it follows, and what your product is."
       />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
         {workflows.length === 0 && productPages.length === 0 ? (
@@ -99,13 +128,35 @@ export default async function KnowledgeBasePage() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-3.5">
-              <DuplicateWorkflows overlaps={overlapViews} />
-              {workflows.length > 0 && <KbWorkflowList workflows={workflows} />}
-            </div>
-            {/* AIL slice 2 — what the product IS, beside how things are DONE. */}
-            <ProductKnowledgeList pages={productPages} />
+          <div className="space-y-5">
+            <KbTabs tabs={tabs} active={tab} />
+
+            {tab === 'workflows' ? (
+              <div className="space-y-3.5">
+                <DuplicateWorkflows overlaps={overlapViews} />
+                {workflows.length > 0 ? (
+                  <KbWorkflowList workflows={workflows} />
+                ) : (
+                  <div className="rounded-card border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+                    No workflows yet — record a session and they will be distilled here.
+                  </div>
+                )}
+              </div>
+            ) : /* AIL slice 2 — what the product IS, beside how things are DONE. */
+            productPages.length > 0 ? (
+              <ProductKnowledgeList pages={productPages} />
+            ) : (
+              <div className="rounded-card border bg-card px-4 py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No product knowledge yet.
+                </p>
+                <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-faint">
+                  These pages are derived from what you SAY while recording, not from what you
+                  click. Narrate what a thing is and who it is for, and pages appear here for you to
+                  approve.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

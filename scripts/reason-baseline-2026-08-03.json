@@ -1,0 +1,98 @@
+{
+  "capturedAt": "2026-08-02T19:46:52.321Z",
+  "api": "http://localhost:8787",
+  "runs": 3,
+  "fixtures": [
+    "empty-form.json",
+    "half-filled.json",
+    "invalid-email.json"
+  ],
+  "measured": 3,
+  "skipped": [],
+  "results": [
+    {
+      "id": "empty-form",
+      "label": "Signup form, nothing filled in",
+      "question": "why can't I create the account?",
+      "path": "/auth/signup",
+      "workflow": "Create an account",
+      "localized": true,
+      "invalidRuns": 0,
+      "enginesSeen": [
+        "reason"
+      ],
+      "covered": "3/3",
+      "noVocabularyLeak": "3/3",
+      "coversAllBlockers": "3/3",
+      "mustMention": "3/3",
+      "toolExpectations": "3/3",
+      "rounds": [
+        1
+      ],
+      "toolsUsed": [],
+      "failures": [],
+      "errors": [],
+      "answers": [
+        "**Create account** is unavailable because **Full Name**, **Email**, and **Password** are still empty, and the required agreement box has not been selected.\n\n1. Fill in **Full Name**.\n2. Fill in **Email** with your email address.\n3. Fill in **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.",
+        "You can’t create the account yet because **Full Name**, **Email**, and **Password** are still empty, and the required agreement box hasn’t been selected. **Create account** stays unavailable until these are completed.\n\n1. Fill in **Full Name**.\n2. Enter your email address in **Email**.\n3. Enter your password in **Password**.\n4. Select **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account**.",
+        "You can’t create the account yet because **Full Name**, **Email**, and **Password** are still empty, and the required agreement box isn’t selected.\n\n1. Fill in **Full Name**.\n2. Enter your email in **Email**.\n3. Enter a password in **Password**.\n4. Tick **I agree to the Terms of Service and Privacy Policy**.\n5. Click **Create account** once it becomes available."
+      ]
+    },
+    {
+      "id": "half-filled",
+      "label": "Name and email in, password and terms still missing",
+      "question": "why can't I create the account?",
+      "path": "/auth/signup",
+      "workflow": "Create an account",
+      "localized": true,
+      "invalidRuns": 0,
+      "enginesSeen": [
+        "reason"
+      ],
+      "covered": "3/3",
+      "noVocabularyLeak": "3/3",
+      "coversAllBlockers": "3/3",
+      "mustMention": "3/3",
+      "toolExpectations": "3/3",
+      "rounds": [
+        1
+      ],
+      "toolsUsed": [],
+      "failures": [],
+      "errors": [],
+      "answers": [
+        "You can’t create the account yet because **Password** is still empty, and the required Terms of Service and Privacy Policy checkbox isn’t selected. **Create account** stays unavailable until both are completed.\n\n1. Enter your password in **Password**.\n2. Tick **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.",
+        "The **Create account** button stays unavailable until you enter a password and accept the required Terms of Service and Privacy Policy.\n\n1. Fill in **Password**.\n2. Tick **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**.",
+        "You can’t create the account yet because **Password** is still empty, and the required agreement box hasn’t been selected. **Create account** will stay unavailable until both are completed.\n\n1. Enter your password in **Password**.\n2. Tick **I agree to the Terms of Service and Privacy Policy**.\n3. Click **Create account**."
+      ]
+    },
+    {
+      "id": "invalid-email",
+      "label": "Everything filled but the email is malformed",
+      "question": "why can't I create the account?",
+      "path": "/auth/signup",
+      "workflow": "Create an account",
+      "localized": true,
+      "invalidRuns": 0,
+      "enginesSeen": [
+        "reason"
+      ],
+      "covered": "3/3",
+      "noVocabularyLeak": "3/3",
+      "coversAllBlockers": "3/3",
+      "mustMention": "3/3",
+      "toolExpectations": "3/3",
+      "rounds": [
+        1
+      ],
+      "toolsUsed": [],
+      "failures": [],
+      "errors": [],
+      "answers": [
+        "Your **Email** isn’t a valid email address, so **Create account** stays disabled.\n\n1. Correct the **Email** field.\n2. Click **Create account**.",
+        "Your **Email** isn’t a valid email address, so **Create account** stays unavailable. Correct the email, then click **Create account**.",
+        "Your **Email** isn’t a valid email address, so **Create account** is currently unavailable. Correct the **Email** field, then click **Create account**."
+      ]
+    }
+  ]
+}

@@ -198,9 +198,36 @@ export interface ToolCallRecord {
 
 /** What the loop did, alongside what it said. Returned rather than logged in here: the engine has
  *  no logger and no opinion about persistence — the caller owns both. */
+/**
+ * What one question actually consumed, summed across every round of the loop.
+ *
+ * The two "details" numbers are SUBSETS of the ones above them, not additions — that is the
+ * provider's own shape and reproducing it means nobody has to remember which way round it goes:
+ *   `cachedInput` ⊆ `input`      · cached prompt tokens bill at a fraction of the rest
+ *   `reasoning`   ⊆ `output`     · thinking bills as output on a reasoning model
+ *
+ * Both are recorded because omitting either makes a cost number quietly wrong in one direction:
+ * ignoring the cache OVERSTATES spend (these prompts are long and stable, so much of the input is
+ * cached), and ignoring reasoning hides why an answer was expensive. Reasoning also explains a
+ * failure mode this file already carries — `max_output_tokens` is shared with thinking, so a budget
+ * spent reasoning returns empty text that reads downstream as an ordinary decline.
+ */
+export interface TokenUsage {
+  /** All prompt tokens, cached portion included. */
+  input: number;
+  /** The part of `input` served from the provider's cache. */
+  cachedInput: number;
+  /** Everything the model produced, its reasoning included. */
+  output: number;
+  /** The part of `output` spent thinking rather than answering. */
+  reasoning: number;
+}
+
 export interface AnswerLoopResult {
   /** The model's final JSON text, or null if it never produced one. */
   content: string | null;
+  /** What this loop cost, summed over its rounds. Zeros when the provider reported no usage. */
+  usage: TokenUsage;
   /** Model calls actually made. */
   rounds: number;
   /** Every tool invocation the model asked for, in order — including the ones that did not run. */
@@ -297,6 +324,7 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
   let content: string | null = null;
   let incomplete: AnswerLoopResult['incomplete'];
   let failed: AnswerLoopResult['failed'];
+  const usage: TokenUsage = { input: 0, cachedInput: 0, output: 0, reasoning: 0 };
 
   for (let round = 0; round < maxRounds; round++) {
     const finalRound = round === maxRounds - 1 || executed >= maxToolCalls || tools.length === 0;
@@ -325,6 +353,16 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
       store: false, // stateless: we replay the transcript ourselves, nothing is retained server-side
     });
     rounds++;
+    // Counted BEFORE the failure checks below, and summed rather than replaced: a round that came
+    // back `failed` or `incomplete` still consumed tokens, and a loop that searched twice before
+    // answering cost all three calls. Anything that reports only the last round would understate
+    // exactly the questions that were expensive.
+    if (res.usage) {
+      usage.input += res.usage.input_tokens ?? 0;
+      usage.cachedInput += res.usage.input_tokens_details?.cached_tokens ?? 0;
+      usage.output += res.usage.output_tokens ?? 0;
+      usage.reasoning += res.usage.output_tokens_details?.reasoning_tokens ?? 0;
+    }
     if (res.status === 'incomplete') incomplete = res.incomplete_details?.reason ?? 'max_output_tokens';
     if (res.status === 'failed') {
       failed = { code: res.error?.code ?? undefined, message: res.error?.message ?? undefined };
@@ -400,7 +438,7 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
     if (imageParts.length > 0) messages.push({ role: 'user', content: imageParts });
   }
 
-  return { content, rounds, toolCalls: ledger, ...(incomplete ? { incomplete } : {}), ...(failed ? { failed } : {}) };
+  return { content, usage, rounds, toolCalls: ledger, ...(incomplete ? { incomplete } : {}), ...(failed ? { failed } : {}) };
 }
 
 /**

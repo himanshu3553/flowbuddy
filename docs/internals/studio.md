@@ -153,7 +153,23 @@ share this one function so both read identically.
 
 The per-workflow and feedback-loop breakdowns live beside it in
 [`analytics.ts`](../../packages/web/lib/analytics.ts): top workflows by citations, step friction
-("where users get stuck"), ranked coverage gaps, recent declines — and the **question log**.
+("where users get stuck"), ranked coverage gaps, recent declines, **how answers were produced** —
+and the **question log**.
+
+**How answers were produced (`getAnswerPathStats`).** The `CopilotQuery.engine` / `rounds` /
+`toolCalls` columns, finally read — plus, since 2026-08-03, the token columns as an average
+per question, with the cached and reasoning shares called out. Tokens rather than money: two models
+answer on this path and their rates change, so a baked-in price would drift into confidently wrong,
+and a founder converting against a rate card they can see is better served than one trusting a
+number that silently aged. Three things it does deliberately: it renders `engine: 'floor'`
+as an ALARM rather than a row, because since the mode retirement that value appears only when the
+agent loop or the diagnostic path FAILED and nothing else surfaces it; it counts `rounds > 1` as
+escalation (round one is the fast path every question rides, so `>= 1` would report 100% and mean
+nothing); and it computes every percentage over rows that RECORDED an engine, returning the
+uninstrumented remainder separately — a partially-instrumented history folded into the denominator
+would understate every engine on the one surface whose job is to be believed. Rows written before
+2026-08-02 carry `chatbot` for what is now `floor`; they are folded together at read time rather
+than back-filled, because they are the old name for the same engine, not wrong data.
 
 **The question log (`/dashboard/analytics/questions`).** Every aggregate above answers
 *"how is the copilot doing?"*; this answers *"what did people actually ask?"* — the raw

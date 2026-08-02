@@ -421,6 +421,8 @@ The founder browses the built workflows and flips **Approve**
 | `reasonImage` | Whether a page image rode along |
 | `mode` | The workspace's setting when they asked — `copilot` \| `agent` (`chatbot` on rows predating its 2026-08-02 retirement) |
 | `engine` | **Which engine actually answered** — `agent` \| `reason` \| `floor`. Not always what `mode` predicts, and `floor` matches no mode at all: it is the fallback, so a run of them is a reliability signal |
+| `inputTokens` · `cachedInputTokens` | What the question's prompts cost. The cached figure is a SUBSET of the first, billed at a fraction — ignoring it overstates spend badly, because these prompts are long and stable |
+| `outputTokens` · `reasoningTokens` | What the model produced. Reasoning is a SUBSET of output (it bills as output on a reasoning model) and explains both expensive answers and the `max_output_tokens` failure mode |
 | `rounds` | Model calls made (1 = answered straight from retrieval) |
 | `toolCalls` | Tool invocations the model asked for, including ones the loop refused |
 

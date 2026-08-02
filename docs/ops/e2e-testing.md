@@ -388,7 +388,11 @@ All three ride the Part-10 embed (or your own test app — remember to copy **bo
 
 The four states above are the ones the diagnostic prompt's rules were learned from, and re-creating them by hand is why diagnosis has never had automated coverage. Capture each one **once** and it is replayable from a cold checkout forever — including after a database wipe, which every other form of copilot measurement does not survive.
 
-*Capture (do this while you are already in the state, during the manual run above):*
+*Capture — by hand, or by driving a browser.* The manual recipe is below; it can also be automated end-to-end with Chrome DevTools Protocol, and the one non-obvious trick is worth recording: the widget reads `window.FlowBuddyDebug` at mount, so `Page.addScriptToEvaluateOnNewDocument` turns capture on **without editing the host app at all**. Fill the form through the native value setter and dispatch `input` (React discards a bare `.value =`), then read `window.FlowBuddyLastAsk` after asking. No driver is committed here — the selectors and states belong to whichever product was recorded, and a script hardcoded to one signup form would rot the moment you record another.
+
+**Read the form back before trusting a capture.** A selector that silently misses leaves you with several "different" fixtures that are all the same state, and every assertion still passes.
+
+*The manual recipe (do this while you are already in the state, during the run above):*
 
 1. Add `data-flowbuddy-debug="true"` to the widget snippet on the host page and reload.
 2. Put the page in the state you want and ask the diagnostic question. (It must be a **real embed** — the Studio preview never captures page state.)

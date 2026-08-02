@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -13,6 +13,7 @@ import {
 import type { ProductPageView } from '@/lib/product-pages';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 
 /**
@@ -24,11 +25,56 @@ import { Switch } from '@/components/ui/switch';
  * approve it. Content is expandable but never truncated away, and a parked re-derivation shows
  * both tellings before Accept/Dismiss.
  */
+type Filter = 'all' | 'approved' | 'pending' | 'retired';
+
 export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [q, setQ] = useState('');
   const [, start] = useTransition();
   const router = useRouter();
+
+  /**
+   * Two of these deliberately OVERLAP, and the counts therefore do not sum to `all`.
+   *
+   * A live page whose re-derivation is parked is BOTH approved (it is serving right now) and
+   * pending (it is waiting on the founder). Forcing a partition would have to drop it from one of
+   * them, and dropping it from Pending is the harmful direction: a founder who filters Pending,
+   * sees nothing and concludes they are done would leave an update parked forever — the same
+   * silent-no-op the tab badge exists to prevent. The row itself carries an "Update waiting" chip,
+   * so a page appearing under both reads as deliberate rather than as a miscount.
+   */
+  const counts = useMemo(
+    () => ({
+      all: pages.length,
+      approved: pages.filter((p) => p.live).length,
+      pending: pages.filter((p) => (!p.live && !p.everApproved) || p.pendingContent).length,
+      // Retired is RESOLVED, not outstanding — it must never inflate the "waiting on you" count,
+      // or the founder is chased to re-approve something they deliberately took out of service.
+      retired: pages.filter((p) => p.everApproved && !p.live).length,
+    }),
+    [pages],
+  );
+
+  const visible = pages.filter((p) => {
+    if (filter === 'approved' && !p.live) return false;
+    if (filter === 'pending' && !((!p.live && !p.everApproved) || p.pendingContent)) return false;
+    if (filter === 'retired' && !(p.everApproved && !p.live)) return false;
+    // Searches the page CONTENT as well as its title. A page is prose the model wrote, so the
+    // phrase a founder remembers is far more often inside it than in the heading.
+    if (q && !`${p.title} ${p.content}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
+  const tabs: { key: Filter; label: string; n: number }[] = [
+    { key: 'all', label: 'All', n: counts.all },
+    { key: 'approved', label: 'Approved', n: counts.approved },
+    { key: 'pending', label: 'Pending', n: counts.pending },
+    ...(counts.retired > 0
+      ? [{ key: 'retired' as Filter, label: 'Not answering', n: counts.retired }]
+      : []),
+  ];
 
   if (pages.length === 0) return null;
 
@@ -56,166 +102,202 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
 
   return (
     <section className="space-y-2.5">
-      <div>
-        <h2 className="text-base font-semibold tracking-tight">Product knowledge</h2>
-        <p className="text-sm text-muted-foreground">
-          What your product <em>is</em> — pages derived from your narration. Approved pages let the
-          copilot orient, explain and compare; workflows keep owning the how-to.
-        </p>
+      {/* No heading: the selected tab already says "Product knowledge", and repeating it directly
+          beneath reads as a stutter. The description stays — it is the part that explains where
+          these pages come from, which is not obvious from a tab label. */}
+      <p className="text-sm text-muted-foreground">
+        What your product <em>is</em> — pages derived from your narration. Approved pages let the
+        copilot orient, explain and compare; workflows keep owning the how-to.
+      </p>
+
+      {/* Same filter row and search as the workflow list — one KB, one way to find things in it. */}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b">
+        <div className="flex items-center gap-[18px]">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setFilter(t.key)}
+              className={cn(
+                '-mb-px border-b-2 px-0.5 pb-2.5 text-[12.5px] font-semibold transition-colors',
+                filter === t.key
+                  ? 'border-primary text-ink'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t.label} <span className="font-mono text-[10px] opacity-70">{t.n}</span>
+            </button>
+          ))}
+        </div>
+        <div className="relative mb-2 w-full sm:w-56">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search product knowledge"
+            className="h-8 pl-8"
+          />
+        </div>
       </div>
-      <ul className="space-y-2.5">
-        {pages.map((p) => {
-          const st = statusOf(p);
-          const open = openId === p.id;
-          const busy = busyId === p.id;
-          return (
-            <li key={p.id} className="rounded-list border bg-card">
-              <div className="flex items-center gap-3 px-[15px] py-[13px]">
-                <span className="shrink-0 rounded-pill border bg-secondary px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
-                  {p.type}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOpenId(open ? null : p.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-[13.5px] font-semibold text-ink">{p.title}</span>
-                    <ChevronDown
-                      className={cn('h-3.5 w-3.5 shrink-0 text-faint transition-transform', open && 'rotate-180')}
-                    />
+
+      {visible.length === 0 ? (
+        <div className="rounded-card border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          No pages match this filter.
+        </div>
+      ) : (
+        <ul className="space-y-2.5">
+          {visible.map((p) => {
+            const st = statusOf(p);
+            const open = openId === p.id;
+            const busy = busyId === p.id;
+            return (
+              <li key={p.id} className="rounded-list border bg-card">
+                <div className="flex items-center gap-3 px-[15px] py-[13px]">
+                  <span className="shrink-0 rounded-pill border bg-secondary px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
+                    {p.type}
                   </span>
-                  {!open && (
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                      {p.content}
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(open ? null : p.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-[13.5px] font-semibold text-ink">{p.title}</span>
+                      <ChevronDown
+                        className={cn('h-3.5 w-3.5 shrink-0 text-faint transition-transform', open && 'rotate-180')}
+                      />
+                    </span>
+                    {!open && (
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {p.content}
+                      </span>
+                    )}
+                  </button>
+                  {p.pendingContent && (
+                    <span className="shrink-0 rounded-pill border border-warning-border bg-warning-bg px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-warning-text">
+                      Update waiting
                     </span>
                   )}
-                </button>
-                {p.pendingContent && (
-                  <span className="shrink-0 rounded-pill border border-warning-border bg-warning-bg px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-warning-text">
-                    Update waiting
-                  </span>
-                )}
-                <span
-                  className={cn(
-                    'shrink-0 rounded-pill px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide',
-                    st.cls,
-                  )}
-                >
-                  {st.label}
-                </span>
-                {p.everApproved && !p.live ? (
-                  <Button
-                    size="sm"
-                    variant="soft"
-                    disabled={busy}
-                    onClick={() =>
-                      run(
-                        p,
-                        () => setProductPageApproval({ pageId: p.id, approved: true }),
-                        `“${p.title}” is live for the copilot`,
-                      )
-                    }
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-pill px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide',
+                      st.cls,
+                    )}
                   >
-                    Re-approve
-                  </Button>
-                ) : (
-                  <Switch
-                    checked={p.live}
-                    disabled={busy}
-                    onCheckedChange={(next: boolean) =>
-                      run(
-                        p,
-                        () => setProductPageApproval({ pageId: p.id, approved: next }),
-                        next
-                          ? `“${p.title}” is live for the copilot`
-                          : `“${p.title}” retired — the copilot stopped using it`,
-                      )
-                    }
-                  />
-                )}
-              </div>
-
-              {open && (
-                <div className="space-y-3 border-t px-[15px] py-3.5">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{p.content}</p>
-                  {p.provenance.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
-                        From your narration
-                      </p>
-                      {p.provenance.map((e, i) => (
-                        <p key={i} className="text-xs leading-relaxed text-muted-foreground">
-                          “{e.quote}” <span className="text-faint">— {e.recordingTitle}</span>
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  {p.relatedWorkflows.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
-                        Points to
-                      </span>
-                      {p.relatedWorkflows.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-pill border bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground"
-                        >
-                          → {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {p.pendingContent && (
-                    <div className="rounded-card border border-warning-border bg-warning-bg px-3.5 py-3">
-                      <p className="text-sm font-semibold text-warning-text">
-                        A newer derivation is waiting for review.
-                      </p>
-                      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
-                        {p.pendingContent}
-                      </p>
-                      <p className="mt-1.5 font-mono text-[10.5px] text-warning-text">
-                        Accepting replaces the text above and goes live immediately. Dismissing keeps
-                        the current page.
-                      </p>
-                      <div className="mt-2.5 flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          disabled={busy}
-                          onClick={() =>
-                            run(
-                              p,
-                              () => acceptProductPageUpdate({ pageId: p.id }),
-                              `“${p.title}” updated and live`,
-                            )
-                          }
-                        >
-                          Accept update
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() =>
-                            run(
-                              p,
-                              () => dismissProductPageUpdate({ pageId: p.id }),
-                              `Update dismissed — “${p.title}” unchanged`,
-                            )
-                          }
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
+                    {st.label}
+                  </span>
+                  {p.everApproved && !p.live ? (
+                    <Button
+                      size="sm"
+                      variant="soft"
+                      disabled={busy}
+                      onClick={() =>
+                        run(
+                          p,
+                          () => setProductPageApproval({ pageId: p.id, approved: true }),
+                          `“${p.title}” is live for the copilot`,
+                        )
+                      }
+                    >
+                      Re-approve
+                    </Button>
+                  ) : (
+                    <Switch
+                      checked={p.live}
+                      disabled={busy}
+                      onCheckedChange={(next: boolean) =>
+                        run(
+                          p,
+                          () => setProductPageApproval({ pageId: p.id, approved: next }),
+                          next
+                            ? `“${p.title}” is live for the copilot`
+                            : `“${p.title}” retired — the copilot stopped using it`,
+                        )
+                      }
+                    />
                   )}
                 </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+
+                {open && (
+                  <div className="space-y-3 border-t px-[15px] py-3.5">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{p.content}</p>
+                    {p.provenance.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          From your narration
+                        </p>
+                        {p.provenance.map((e, i) => (
+                          <p key={i} className="text-xs leading-relaxed text-muted-foreground">
+                            “{e.quote}” <span className="text-faint">— {e.recordingTitle}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {p.relatedWorkflows.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          Points to
+                        </span>
+                        {p.relatedWorkflows.map((t) => (
+                          <span
+                            key={t}
+                            className="rounded-pill border bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground"
+                          >
+                            → {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {p.pendingContent && (
+                      <div className="rounded-card border border-warning-border bg-warning-bg px-3.5 py-3">
+                        <p className="text-sm font-semibold text-warning-text">
+                          A newer derivation is waiting for review.
+                        </p>
+                        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                          {p.pendingContent}
+                        </p>
+                        <p className="mt-1.5 font-mono text-[10.5px] text-warning-text">
+                          Accepting replaces the text above and goes live immediately. Dismissing keeps
+                          the current page.
+                        </p>
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                p,
+                                () => acceptProductPageUpdate({ pageId: p.id }),
+                                `“${p.title}” updated and live`,
+                              )
+                            }
+                          >
+                            Accept update
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                p,
+                                () => dismissProductPageUpdate({ pageId: p.id }),
+                                `Update dismissed — “${p.title}” unchanged`,
+                              )
+                            }
+                          >
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
