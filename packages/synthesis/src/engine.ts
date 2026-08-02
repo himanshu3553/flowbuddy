@@ -4,16 +4,16 @@ import type { AnswerPosition, CopilotAnswer, CopilotCitation, CopilotKBItem, Sen
 /**
  * The shared answering engine — ONE loop, ONE answer shape, several configurations.
  *
- * WHY THIS EXISTS (2026-07-26, ahead of mode 2 — docs/build/agent.md). The two answer paths were
- * always the same machine wearing different hats: the diagnostic path runs a tool loop, and the
- * fast path is that identical loop with **no tools bound** — with zero tools the loop makes exactly
- * one model call and breaks. Extracting it makes that literal, which is what lets `AI Chatbot`
- * stop being a second pipeline standing beside the agent and become *the agent with nothing bound
- * and a forced stop after step one*.
+ * WHY THIS EXISTS (2026-07-26 — docs/build/agent.md). The answer paths were always the same machine
+ * wearing different hats: the diagnostic path runs a tool loop, and a single grounded answer is that
+ * identical loop with **no tools bound** — with zero tools the loop makes exactly one model call and
+ * breaks. Extracting it made that literal.
  *
- * The payoff is the user's own requirement: collapsing AI Chatbot into Copilot later is raising a
- * cap and binding tools, never a rewrite. And adding a tool is adding an object to an array — the
- * loop itself never changes shape again.
+ * THE PREDICTION PAID OFF (2026-08-02). It was written so that "collapsing AI Chatbot into Copilot
+ * later is raising a cap and binding tools, never a rewrite" — and when that mode was retired, that
+ * is exactly what it cost. Mode 1's engine did not need porting anywhere: what remained of it, the
+ * floor beneath a failed agent loop, is this loop with `maxRounds: 1` and an empty tools array.
+ * Adding a tool is still adding an object to an array; the loop itself never changes shape.
  *
  * The invariant that survives every configuration: **the model chooses which grounded primitive to
  * invoke; it never chooses what to do on the page.** Tools are supplied by the caller, so the
@@ -21,7 +21,10 @@ import type { AnswerPosition, CopilotAnswer, CopilotCitation, CopilotKBItem, Sen
  * not refusal — a tool that isn't bound doesn't exist as far as the model is concerned.
  */
 
-/** The one answer shape every path returns. Identical in both engines before the extraction. */
+/** The one answer shape EVERY path returns — the agent, its floor, and the diagnostic engine.
+ *  It briefly had a superset variant carrying the agent's on-page intents; that went with D11
+ *  (2026-08-02), when the founder's switch became the only thing that decides whether an ability
+ *  fires. One schema again, and no `schema` override for a caller to reach for. */
 export const ANSWER_SCHEMA = {
   name: 'copilot_answer',
   strict: true,
@@ -47,12 +50,13 @@ export const ANSWER_SCHEMA = {
  * Render knowledge items for a prompt.
  *
  * ONE shape across every place the AGENT meets an item — the opening shortlist, a search result,
- * a workflow dump — so the same item read twice reads as one thing rather than two. (Mode 1 and
- * the diagnostic path each keep their own inlined copy of this rendering; TUNING here must not move
- * them. It is deliberately not "one shape everywhere".)
+ * a workflow dump — so the same item read twice reads as one thing rather than two. Since AI Chatbot
+ * was retired this is also what the FLOOR renders, because the floor is now this same prompt with
+ * nothing bound: the second copy that used to live in copilot.ts went with the mode. Only the
+ * DIAGNOSTIC path still keeps its own inlined rendering, and TUNING here must not move it.
  *
- * That freeze is about tuning, not about capability. When something is wrong for every tier — the
- * workflow PLAN was, since without it the safety floor answers a workflow with alternatives as a
+ * That freeze is about tuning, not about capability. When something is wrong for every path — the
+ * workflow PLAN was, since without it a workflow with alternatives is answered as a
  * single mandatory sequence — it lands in all of them deliberately, each measured on its own
  * baseline. A frozen prompt is one that nothing changes by accident, not one nothing may change.
  *
@@ -151,9 +155,6 @@ interface AnswerDraft {
   usedPosition?: boolean;
   positionKey?: string;
   positionStep?: number;
-  // Copilot mode only — absent from mode 1's schema, so always undefined there.
-  highlight?: boolean;
-  offerWalkthrough?: boolean;
 }
 
 /** Images cannot ride a `tool` message (string-only), so a tool returns a text reply and any
@@ -266,12 +267,10 @@ export interface AnswerLoopOpts {
   /** Empty (the default) = the single-shot path: exactly one model call, no tool surface at all. */
   tools?: EngineTool[];
   maxOutputTokens: number;
-  /** Hard ceiling on model calls. **1 = AI Chatbot** — the loop, forced to stop after step one. */
+  /** Hard ceiling on model calls. **1 = the FLOOR** — the loop forced to stop after step one, which
+   *  is what answers when the agent path above it fails (agent.ts `answerAsFloor`). */
   maxRounds?: number;
   maxToolCalls?: number;
-  /** Response schema. Defaults to ANSWER_SCHEMA; Copilot mode passes a SUPERSET so it can also
-   *  declare on-page intents. Mode 1's schema is never widened — its wire shape is frozen. */
-  schema?: unknown;
   /** Reasoning effort. Omitted entirely when unset, so the model applies its own default — which
    *  is the point of the Responses API: reasoning and function tools together, which
    *  /v1/chat/completions refuses. Set it to trade depth against latency and cost. */
@@ -313,7 +312,7 @@ export async function runAnswerLoop(opts: AnswerLoopOpts): Promise<AnswerLoopRes
       text: {
         format: {
           type: 'json_schema',
-          ...(opts.schema ?? ANSWER_SCHEMA),
+          ...ANSWER_SCHEMA,
         } as OpenAI.Responses.ResponseTextConfig['format'],
       },
       // Cost ceiling: the answer endpoint is public (rate-limited but key-in-page-source), so cap
@@ -463,12 +462,5 @@ export function shapeAnswer(opts: {
     position = { sourceId: match.sourceId, segmentIndex: match.segmentIndex, step: match.step };
   }
 
-  // Only surface intents the model was actually ASKED for (its schema included them). Mode 1's
-  // schema has no such fields, so this stays undefined and its wire shape is untouched.
-  const intents =
-    a.highlight !== undefined || a.offerWalkthrough !== undefined
-      ? { highlight: a.highlight === true, offerWalkthrough: a.offerWalkthrough === true }
-      : undefined;
-
-  return { covered: true, answer: a.answer, citations, position, ...(intents ? { intents } : {}) };
+  return { covered: true, answer: a.answer, citations, position };
 }

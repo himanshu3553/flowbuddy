@@ -33,9 +33,8 @@ into the same house.
    │  BUILT  │      │ not built   │   │ not built    │
    └─────────┘      └─────────────┘   └──────────────┘
 
-   The copilot has three modes:
-     AI Chatbot  · answers questions                       built
-     Copilot     · decides how to help, turn by turn       built · the default
+   The copilot has two modes:
+     Copilot     · decides how to help, turn by turn       built · what everyone gets
      AI Agent    · does things for the user                not built
 ```
 
@@ -56,7 +55,7 @@ into the same house.
 |---|---|
 | [03 · Building the knowledge base](03-building-the-knowledge-base.md) | Recording, turning clicks into readable steps, and approving |
 | [04 · The copilot](04-the-copilot.md) | What your customers' assistant can do today |
-| [05 · The copilot's three modes](05-the-three-modes.md) | AI Chatbot · Copilot · AI Agent — what each one is and who picks |
+| [05 · The copilot's two modes](05-the-two-modes.md) | Copilot · AI Agent — where the line is, and why a third mode was retired |
 | [06 · The help portal](06-the-help-portal.md) | The second consumer: a public help site. Not built |
 | [07 · Opening up to other AI agents](07-other-ai-agents.md) | The third consumer: letting Claude and friends use your product. Not built |
 | [08 · The company agent](08-the-company-agent.md) | The flip: record the tools you *use*, not the one you sell. An idea, not a plan |
@@ -76,9 +75,9 @@ into the same house.
 ## A note on names
 
 The technical docs sometimes call the copilot's modes "mode 1 / mode 2 / mode 3", and sometimes
-"Copilot / Agent read-only / Agent acting". Those are older internal names.
+"Copilot / Agent read-only / Agent acting". Those are older internal names, and the numbers are now
+doubly stale: a third mode, **AI Chatbot**, was retired in August 2026, so anything numbering from it
+is counting from a rung that no longer exists.
 
-**The names that are actually in the product are `AI Chatbot`, `Copilot`, and `AI Agent`** — that's
-what you see in Studio, and that's what these docs use throughout.
-
-Last updated 2026-07-27.
+**The names that are actually in the product are `Copilot` and `AI Agent`** — that's what you see in
+Studio, and that's what these docs use throughout.

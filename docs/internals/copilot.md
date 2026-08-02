@@ -37,11 +37,13 @@ Paths are in `CLAUDE.md` and the source; what matters here is the contract each 
 - **The shared loop** owns the model call, the tool rounds (**capped at 4 rounds / 4 tool calls**) and
   the answer shaper. Two invariants live in the shaper: **citations resolve only against items we
   supplied**, and **the position step comes from the probe, never from the model**.
-- **AI Chatbot is not a separate pipeline** — it is the same loop with no tools bound and
-  `maxRounds: 1`, so it makes exactly one call and breaks. A truncated response degrades to a decline.
-- **Copilot mode** is that loop with KB-reading tools, its own prompt, and a superset schema. **Round
-  one *is* the fast path**, so simple lookups cost the same; the extra rounds are escalation.
-- **The mode vocabulary fails closed** — anything unrecognised resolves to the safety floor.
+- **Copilot mode** is that loop with KB-reading tools and a superset schema. **Round one *is* the
+  fast path**, so simple lookups cost the same; the extra rounds are escalation.
+- **The floor is not a separate pipeline** — it is the SAME loop and the SAME prompt with no tools
+  bound and `maxRounds: 1`, so it makes exactly one call and breaks. A truncated response degrades to
+  a decline. It is what answers when the loop above it fails, and it is not selectable.
+- **The mode vocabulary fails closed** — anything unrecognised resolves to `copilot`, which is now
+  both the default and the floor. The floor's rule is "cannot ACT", not "can do least".
 
 ---
 
@@ -94,7 +96,7 @@ flowchart TD
     RL -- ok --> RET["retrieveApprovedKBItems(ws, question, contextPath)"]
     RET --> Z{"0 items?"}
     Z -- "yes (no approved content)" --> NP["log CopilotQuery(answered=false)<br/>return covered:false<br/>reason: 'no approved content yet'"]
-    Z -- no --> ANS["pick the engine by mode + Reason trigger:<br/>answerFromKB · answerAsAgent · diagnoseFromKB"]
+    Z -- no --> ANS["pick the engine by the Reason trigger:<br/>answerAsAgent · diagnoseFromKB<br/>(answerAsFloor if either fails)"]
     ANS --> LOG["log CopilotQuery(answered = covered)"]
     ANS --> TEL["record mode · engine · rounds · toolCalls<br/>+ one copilot answer log line"]
     TEL --> LOG
@@ -195,16 +197,17 @@ Reason trigger:
 
 | Path | When | Tools bound | Rounds |
 |---|---|---|:---:|
-| **AI Chatbot** (`copilot.ts`) | mode `chatbot` | **none** | **1** |
-| **Copilot** (`agent.ts`) | mode `copilot`, non-diagnostic | `search_knowledge` · `get_workflow` | ≤4 |
-| **Diagnostic** (`reason.ts`) | Reason trigger fires, either mode | expected screenshot · expected DOM · page image | ≤4 |
+| **Copilot** (`agent.ts`) | non-diagnostic — every mode | `search_knowledge` · `get_workflow` | ≤4 |
+| **Diagnostic** (`reason.ts`) | Reason trigger fires | expected screenshot · expected DOM · page image | ≤4 |
+| **Floor** (`agent.ts`, `answerAsFloor`) | either of the above failed | **none** | **1** |
 
 Two properties worth not losing:
 
-- **Mode 1 is the loop with nothing bound.** With zero tools the `tools`/`tool_choice` keys are
+- **The floor is the loop with nothing bound.** With zero tools the `tools`/`tool_choice` keys are
   omitted from the request entirely, `finalRound` is true immediately, and exactly one call is made
   — byte-identical to the pre-restructure fast path (proven by re-running the answer baseline: no
-  decision-level change). This is what makes collapsing mode 1 into mode 2 later a config change.
+  decision-level change). **This is what made retiring the single-shot MODE cost nothing in 2026-08:**
+  the engine did not need porting anywhere, because the fallback is this same configuration.
 - **A final round NEVER serves tools.** `tool_choice: 'none'` asks the model not to call any, but a
   model that does anyway is not obeyed: there is no round left to use the result, so the call would
   be pure cost — and in a future acting mode, an action taken after the loop decided to stop, which
@@ -258,23 +261,33 @@ The mode is resolved server-side from `Workspace.copilotMode` on every call
 ([`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts)) and **fails closed** — a page holding
 the public key can never talk itself into a higher mode.
 
-**Default vs. floor.** New workspaces are created in mode 2 (`@default("copilot")` on
-the column, mirrored by `NEW_WORKSPACE_MODE`), while `parseCopilotMode` still resolves anything
-unrecognised to `chatbot` (`DEFAULT_COPILOT_MODE`). These are two constants on purpose: the product
-default may climb the ladder as modes prove out, the fail-closed floor may only descend. Note the
+**Default vs. floor.** Workspaces are created as `copilot` (`@default("copilot")` on the column,
+mirrored by `NEW_WORKSPACE_MODE`), and `parseCopilotMode` resolves anything unrecognised to the same
+value (`DEFAULT_COPILOT_MODE`). **They read identically and are still two constants on purpose:** the
+product default may climb the ladder as modes prove out, the fail-closed floor may only descend —
+and the day the default becomes `agent`, a single constant would take every typo with it. Since AI
+Chatbot's retirement the floor's rule is that it may never be a mode where `modeCanAct` is true;
+`copilot-mode.test.ts` enforces exactly that, and a pre-retirement `chatbot` row reads forward
+through this same fail-closed path with no special case. Note the
 Prisma client — not the column — is what a `create` actually applies, since it bakes scalar defaults
 in at `prisma generate` time; the migration keeps the column in step for direct SQL.
 
 **The fallback is real, not just documented.** `answerAsAgent` is wrapped in
 [`server.ts`](../../packages/api/src/server.ts): any failure — timeout, malformed tool argument,
-anything — degrades that question to a normal `answerFromKB` answer rather than erroring. Retrieval
-has already run by then, so the fallback sees exactly the items the loop's own first round would
-have. Both the mode-1 path and the fallback call one named closure (`answerAsChatbot`) so they
-cannot drift apart. The mode setting is untouched: this is per-question, not a demotion.
+anything — degrades that question to a single no-tools answer rather than erroring. Retrieval has
+already run by then, so the floor sees exactly the items the loop's own first round would have. The
+mode setting is untouched: this is per-question, not a demotion.
 
-#### The grounded call ([`synthesis/copilot.ts`](../../packages/synthesis/src/copilot.ts))
+**Since the retirement it can no longer drift from what it falls back to**, because it *is* that
+thing: same prompt, same item rendering, one round, nothing bound. That replaces a property the old
+arrangement had and this one doesn't — the floor is no longer exercised by ordinary traffic, so
+nothing would notice it rotting. What guards it now is sharing the agent's prompt plus one test
+(`agent-prompt.test.ts`) pinning the single way the shared prompt can still be wrong for it: with no
+tools bound, an instruction to "search first, then answer" invents a decline at the worst moment.
 
-`answerFromKB` makes one LLM call with a **strict JSON schema**
+#### The grounded call ([`synthesis/agent.ts`](../../packages/synthesis/src/agent.ts))
+
+The loop makes its calls with a **strict JSON schema**
 (`{ covered, reason, answer, citedItemIds }`) and a system prompt that is the product's no-leak
 contract in words:
 
@@ -300,8 +313,8 @@ segmentTitle`), deduped. A response that isn't `covered` or has no `answer` beco
 
 `/v1/copilot/answer` orchestrates: gate (auth + rate-limit + **mode**) → input caps → resolve context
 (Sense hypotheses **and** P5-M0 continuity keys, in ONE `Promise.all` so neither adds a serial hop) →
-retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFromKB` \| `answerAsAgent` \|
-`answerFromKB`) → **log + respond**. Input caps (cost ceiling — the key is public):
+retrieve → (zero-items shortcut) → **the path for this question** (`diagnoseFromKB` when the widget
+shipped page state, else `answerAsAgent`; `answerAsFloor` if either fails) → **log + respond**. Input caps (cost ceiling — the key is public):
 **question ≤ 2000 chars** (`400` above it; the widget input additionally caps at 400 via
 `maxlength`), `context.path` clipped to 512.
 
@@ -311,9 +324,10 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
 - **Every answered/declined question** logs a `CopilotQuery(answered = covered)` and returns its
   `queryId` (the handle the widget uses for thumbs feedback).
   **Since 2026-07-29 the row also records HOW the answer was produced** — `mode` (the workspace
-  setting) · `engine` (what actually ran: `chatbot` | `agent` | `reason`) · `rounds` · `toolCalls`.
-  All three engines hand the loop's result back through the same `onLoop` hook, so AI Chatbot's
-  `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim and one query compares all three.
+  setting) · `engine` (what actually ran: `agent` | `reason` | `floor`) · `rounds` · `toolCalls`.
+  Every engine hands the loop's result back through the same `onLoop` hook, so the floor's
+  `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim and one query compares them all.
+  `floor` is the value with no matching mode — a run of those rows means something upstream is failing.
 - **A decline** additionally logs a `CoverageGap(source: 'copilot')` — **deduped**: at most one *open*
   gap per distinct question per workspace. This is the "record this next" feed Studio surfaces.
 - **A decline from the AGENT is no longer swapped for a diagnostic one.** The P2-M5
@@ -321,8 +335,9 @@ retrieve → (zero-items shortcut) → **the path for this mode** (`diagnoseFrom
   state — but the retry takes the diagnostic branch, which has no mode guard, so in Copilot mode
   the agent never ran the second time and its `search_knowledge`/`get_workflow` were dropped. The
   guard is keyed on `engineUsed !== 'agent'`, **not** on the workspace mode: when the loop throws,
-  the floor answers as AI Chatbot while `gate.mode` still reads `copilot`, and *that* decline should
-  still escalate. A consequence worth knowing: the agent's decline now reaches the `CopilotQuery`
+  the floor answers with no tools while `gate.mode` still reads `copilot`, and *that* decline should
+  still escalate. Since the retirement a floor decline is the ONLY way this line is reached, which
+  makes it narrower than it was and still exactly right for the case it was written for. A consequence worth knowing: the agent's decline now reaches the `CopilotQuery`
   write, so the coverage gap records what the AGENT said rather than the diagnostic engine's
   page-shaped text.
 - **The stored question is PII-scrubbed.** `CopilotQuery.question` and
@@ -346,7 +361,7 @@ rows.
 | Store | Reads | Writes |
 |---|---|---|
 | **Postgres** | `Workspace` (key/allowlist), `CopilotApproval` (the gate), `KnowledgeItem` (candidates) | `CopilotQuery` (every Q — question PII-scrubbed), `QueryCitation` (one per cited **workflow**), `CoverageGap` (on decline), `CopilotQuery.feedback` (thumbs) |
-| **OpenAI** | the chat model (`answerFromKB`) | — |
+| **OpenAI** | the chat model (the agent loop and its floor) | — |
 | **In-memory** | the rate-limit buckets | per-key request counts (ephemeral) |
 
 It **never writes the KB** — knowledge flows one way (see [connections.md](connections.md) §8).

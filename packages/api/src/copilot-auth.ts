@@ -54,7 +54,9 @@ export async function resolveCopilotKey(
     ok: true,
     workspaceId: ws.id,
     showCitations: ws.copilotShowCitations,
-    // Fail closed: an unrecognised stored value resolves to AI Chatbot, never to more capability.
+    // Fail closed: an unrecognised stored value resolves to Copilot — read-only — never to a mode
+    // that can act. `chatbot` rows written before that mode was retired land here and read forward
+    // as Copilot, which is the intended migration and needs no special case.
     mode: parseCopilotMode(ws.copilotMode),
     reason: { enabled: ws.reasonEnabled, image: ws.reasonImageEnabled, values: ws.reasonIncludeValues },
   };

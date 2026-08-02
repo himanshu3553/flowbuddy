@@ -2,7 +2,6 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { prisma } from '@flowbuddy/db';
 import {
-  modeUsesAgentLoop,
   parseCopilotMode,
   sessionManifestSchema,
   type CapturedEvent,
@@ -26,8 +25,9 @@ import { synthesisQueue } from './queue';
 // the Studio preview uses the same functions, so both surfaces answer identically.
 import {
   answerAsAgent,
-  answerFromKB,
+  answerAsFloor,
   diagnoseFromKB,
+  blockerList,
   retrieveApprovedKBItems,
   sanitizeHistory,
   redactText,
@@ -890,20 +890,25 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   let result: CopilotAnswer;
   // WHICH ENGINE ACTUALLY ANSWERED — not which mode the workspace is configured for. The two come
   // apart in both directions: the diagnostic path preempts the agent whenever the widget shipped
-  // evidence, and the safety floor answers as AI Chatbot while `gate.mode` still reads "copilot".
+  // evidence, and the safety floor answers with no tools while `gate.mode` still reads "copilot".
   // Anything that reasons about how an answer was produced (this log line today; the escalation
   // decision next) must key on this, or it will misfire on exactly the requests that already went
   // wrong once.
-  let engineUsed: 'chatbot' | 'agent' | 'reason' = 'chatbot';
+  let engineUsed: 'floor' | 'agent' | 'reason' = 'agent';
   // What the agent's loop DID — rounds, and every tool call including the ones that did not run.
   // A holder rather than a bare `let`: the loop reports through a callback, and TypeScript narrows
   // a `let` that is only ever assigned inside a closure to `null` at every read.
   const loop: { stats: AnswerLoopResult | null } = { stats: null };
-  // AI Chatbot — one grounded call over the items retrieval has already produced. Named rather
-  // than inlined because it is BOTH the mode-1 path and the fallback underneath Copilot mode, and
-  // a fallback that drifts from the thing it falls back to is worse than none.
-  const answerAsChatbot = () =>
-    answerFromKB({
+  // THE FLOOR — one round of the agent's own prompt with no tools bound, over the items retrieval
+  // has already produced. It is no longer a sellable mode (AI Chatbot was retired); it is purely
+  // what answers when something above it fails, which is why nothing here consults `gate.mode`.
+  //
+  // It shares the agent's prompt and item rendering on purpose. As a separate engine it carried a
+  // second prompt and a second renderer, and a fallback that drifts from the thing it falls back to
+  // is worse than none — the founder tunes the agent, the failure path silently keeps the old
+  // behaviour, and the worst answers in the product come from the path nobody is looking at.
+  const answerFromFloor = () =>
+    answerAsFloor({
       question,
       history: sanitizeHistory(body.history),
       items,
@@ -964,10 +969,10 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       // has already run, so degrade to the same knowledge one rung down, exactly as mode 2 does.
       req.log.error(
         { err, workspaceId, model: config.reasonModel, hadImage: Boolean(reasonPayload.image) },
-        'reason path failed — falling back to AI Chatbot',
+        'reason path failed — falling back to the floor',
       );
-      engineUsed = 'chatbot'; // the floor answered; downstream must not treat this as the reason path
-      result = await answerAsChatbot();
+      engineUsed = 'floor'; // the floor answered; downstream must not treat this as the reason path
+      result = await answerFromFloor();
     }
     // A provider failure returned IN THE BODY (200 + status:'failed') never throws, so the catch
     // above cannot see it — it would sail through as an empty answer and be filed as a coverage
@@ -975,16 +980,21 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     if (loop.stats?.failed) {
       req.log.error(
         { workspaceId, model: config.reasonModel, failed: loop.stats.failed },
-        'reason path returned a failed response — falling back to AI Chatbot',
+        'reason path returned a failed response — falling back to the floor',
       );
-      engineUsed = 'chatbot';
-      result = await answerAsChatbot();
+      engineUsed = 'floor';
+      result = await answerFromFloor();
     }
-  } else if (modeUsesAgentLoop(gate.mode)) {
-    // Copilot mode — the assistant decides how to help. Round one sees exactly what AI Chatbot
+  } else {
+    // The agent loop — the assistant decides how to help. Round one sees exactly what the floor
     // sees (retrieval has already run), so a simple lookup costs the same and answers just as
     // fast; the extra rounds are the escalation. Both tools are approval-constrained HERE, in the
     // closures, so the model's action space is the approved KB and nothing else.
+    //
+    // NO MODE CHECK. Every mode runs this loop — `copilot` is the floor of the ladder now, and
+    // `agent` will be this loop plus acting tools rather than a different path. The `modeUsesAgentLoop`
+    // gate that used to stand here went with AI Chatbot: a gate that can only ever answer yes reads
+    // like a fork still exists and invites someone to add a branch to the side of it that is dead.
     req.log.info({ workspaceId, mode: gate.mode }, 'agent path engaged');
     engineUsed = 'agent';
     try {
@@ -1018,22 +1028,20 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       // Deliberately catches everything, including a timeout or a malformed tool argument. There
       // is no failure of the loop that is better served by showing the end-user an error than by
       // answering from the same knowledge one rung down.
-      req.log.error({ err, workspaceId, mode: gate.mode }, 'agent path failed — falling back to AI Chatbot');
-      engineUsed = 'chatbot'; // the floor answered; downstream must not treat this as the agent
-      result = await answerAsChatbot();
+      req.log.error({ err, workspaceId, mode: gate.mode }, 'agent path failed — falling back to the floor');
+      engineUsed = 'floor'; // the floor answered; downstream must not treat this as the agent
+      result = await answerFromFloor();
     }
     // As on the reason path: a body-level provider failure does not throw, so the catch above
     // cannot see it. Same floor, same reasoning.
     if (loop.stats?.failed) {
       req.log.error(
         { workspaceId, mode: gate.mode, failed: loop.stats.failed },
-        'agent path returned a failed response — falling back to AI Chatbot',
+        'agent path returned a failed response — falling back to the floor',
       );
-      engineUsed = 'chatbot';
-      result = await answerAsChatbot();
+      engineUsed = 'floor';
+      result = await answerFromFloor();
     }
-  } else {
-    result = await answerAsChatbot();
   }
 
   // WHAT THE ANSWER PATH ACTUALLY DID — one line per question, emitted before anything downstream
@@ -1107,8 +1115,10 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // happen to be standing on, for a question that was never about that screen.
   //
   // Keyed on WHICH ENGINE ANSWERED, not on the workspace's mode, because the two come apart exactly
-  // here: when the agent loop throws, the safety floor answers as AI Chatbot while `gate.mode` still
-  // reads "copilot" — and that decline SHOULD still escalate, since it really was one blind look.
+  // here: when the agent loop throws, the FLOOR answers — one round, no tools — while `gate.mode`
+  // still reads "copilot", and that decline SHOULD still escalate, since it really was one blind
+  // look. With AI Chatbot retired the floor is the only way this line is now reached at all, which
+  // makes it narrower than it used to be and still correct for exactly the case it was written for.
   //
   // Little is lost: a genuinely diagnostic question ("why can't I proceed?") never reaches this
   // line, because the widget's own trigger fires on the FIRST call and takes the diagnostic branch
@@ -1121,10 +1131,36 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   }
 
   // Preview answers are never persisted — return the engine's result as-is (no queryId).
+  //
+  // `engine` + `loop` ride along on PREVIEW ONLY (the widget's response shape is untouched, and no
+  // end-user surface can see these). They exist because the diagnostic path's quality rules are
+  // partly about what the model REACHED FOR, not only what it said: "look at the image before
+  // concluding or hedging" and "never call the same tool twice" are invisible in the answer text,
+  // so a harness that reads prose alone cannot tell a diagnosis that examined the evidence from one
+  // that guessed and happened to be right. `engine` is here for the same reason it is in the log
+  // line — the diagnostic branch preempts the agent and the floor answers without tools, so a fixture
+  // that silently fell through to a different engine must be visibly invalid, not quietly counted.
   if (preview) {
+    const previewLoop = {
+      engine: engineUsed,
+      ...(loop.stats
+        ? {
+            loop: {
+              rounds: loop.stats.rounds,
+              ...(loop.stats.incomplete ? { incomplete: loop.stats.incomplete } : {}),
+              ...(loop.stats.failed ? { failed: loop.stats.failed } : {}),
+              toolCalls: loop.stats.toolCalls.map((t) => ({ name: t.name, round: t.round, skipped: t.skipped })),
+            },
+          }
+        : {}),
+      // The machine-checkable blockers the prompt declared EXHAUSTIVE for form state ("the answer
+      // MUST cover every entry"). Returned rather than recomputed harness-side so the assertion is
+      // made against the very list the model was shown — the two can never drift apart.
+      ...(reasonPayload ? { blockers: blockerList(reasonPayload.snapshot) } : {}),
+    };
     return result.covered
-      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position, ...(result.intents ? { intents: result.intents } : {}) }
-      : { covered: false, answer: null, citations: [], reason: result.reason };
+      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position, ...previewLoop }
+      : { covered: false, answer: null, citations: [], reason: result.reason, ...previewLoop };
   }
 
   // P1-M10: log the Q&A (analytics + the thumbs-feedback target). On a grounded answer,
@@ -1139,7 +1175,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       contextPath,
       // How this answer was produced. `engine` is what ACTUALLY ran, which is not always what
       // `mode` would predict — the diagnostic path preempts the agent, and the safety floor
-      // answers as AI Chatbot without the mode changing. Storing both makes that gap countable.
+      // answers from the floor without the mode changing. Storing both makes that gap countable.
       mode: gate.mode,
       engine: engineUsed,
       ...(loop.stats ? { rounds: loop.stats.rounds, toolCalls: loop.stats.toolCalls.length } : {}),
@@ -1166,14 +1202,14 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }
 
-  // `intents` = what the assistant DECIDED to do on the page (Copilot mode only; absent in mode 1,
-  // whose on-page behaviour stays rule-driven). The widget still checks the founder's switches.
+  // `position` is the only on-page signal the widget needs: what it DOES there is decided by the
+  // founder's switches (D11). The answer used to also carry the assistant's own `intents`; those
+  // went when the switch became the sole decider, taking their prompt section with them.
   return {
     covered: true,
     answer: result.answer,
     citations: forClient(result.citations),
     position,
-    ...(result.intents ? { intents: result.intents } : {}),
     queryId: logged.id,
   };
 });
@@ -1367,7 +1403,7 @@ app.get('/v1/copilot/config', async (req, reply) => {
     reason: ws.reasonEnabled,
     reasonImage: ws.reasonImageEnabled,
     reasonValues: ws.reasonIncludeValues,
-    // The operating mode (AI Chatbot | Copilot | AI Agent). The widget needs it because some of
+    // The operating mode (Copilot | AI Agent). The widget needs it because some of
     // the assistant's abilities run in the page; the SERVER re-checks it on every call regardless
     // — a page holding the public key must never be able to talk itself into a higher mode.
     mode: parseCopilotMode(ws.copilotMode),

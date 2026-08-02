@@ -117,7 +117,7 @@ docker compose down                           # stop Postgres + Redis (add -v to
 > `@flowbuddy/synthesis` only, over the *pure* seams:
 > - `retrieval.test.ts` — signal-ordering invariants (route/sense outrank continuity; a real keyword
 >   match still beats all of them — the rule that lets a user change subject).
-> - `engine.test.ts` — the answer loop's contract (AI Chatbot = exactly one model call with no tool
+> - `engine.test.ts` — the answer loop's contract (the floor = exactly one model call with no tool
 >   surface; a final round never serves tools).
 > - `copilot-mode.test.ts` — the mode vocabulary's safety invariants: the product default
 >   (`NEW_WORKSPACE_MODE`) and the fail-closed floor (`DEFAULT_COPILOT_MODE`) are different things
@@ -130,8 +130,8 @@ docker compose down                           # stop Postgres + Redis (add -v to
 > the manual E2E plan. Still no CI, by standing decision.
 
 **Answer-quality baselines** — `node scripts/copilot-baseline.mjs --key pk_… [--runs 3] [--only h2]`
-asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited, position,
-agent intents) rather than the prose, because the model's wording
+asks a fixed question set and records the DECISIONS (answered vs declined, workflows cited,
+position) rather than the prose, because the model's wording
 always differs. `scripts/copilot-baseline-diff.mjs before.json after.json` reports only
 decision-level changes. Runs in `preview` mode, so a capture writes no analytics. Saved reference
 captures for both modes live in `scripts/`.

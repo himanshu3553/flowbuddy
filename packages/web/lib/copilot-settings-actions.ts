@@ -82,12 +82,12 @@ export async function setCopilotAppearance(input: {
 }
 
 /**
- * The operating mode — how much the assistant decides for itself (AI Chatbot · Copilot · AI Agent).
+ * The operating mode — whether the assistant may ACT (Copilot · AI Agent).
  *
  * Only SELECTABLE modes may be set here. `agent` exists in the vocabulary so the ladder is stable
  * and the stored value never has to change, but it is not buildable yet and must not become
  * reachable through a hand-crafted form post — acting is a capability nobody should acquire by
- * accident. Anything unrecognised falls back to `chatbot`, never upward.
+ * accident. Anything unrecognised falls back to `copilot` — read-only — never upward.
  */
 export async function setCopilotMode(mode: string): Promise<void> {
   const ctx = await getCurrentWorkspace();

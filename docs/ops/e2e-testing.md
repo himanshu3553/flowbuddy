@@ -384,6 +384,29 @@ All three ride the Part-10 embed (or your own test app — remember to copy **bo
 
 ✅ **PASS:** correct blocker(s) in plain words; the rejection banner beats form theories; `CopilotQuery.reasonTrigger` = `intent`/`blocked` (+ `reasonImage=true` when the tier is on); a plain "how do I…" on the same page stays fast-path (`reasonTrigger` null).
 
+**Reason fixtures — freezing the four states so this stops being a manual-only test:**
+
+The four states above are the ones the diagnostic prompt's rules were learned from, and re-creating them by hand is why diagnosis has never had automated coverage. Capture each one **once** and it is replayable from a cold checkout forever — including after a database wipe, which every other form of copilot measurement does not survive.
+
+*Capture (do this while you are already in the state, during the manual run above):*
+
+1. Add `data-flowbuddy-debug="true"` to the widget snippet on the host page and reload.
+2. Put the page in the state you want and ask the diagnostic question. (It must be a **real embed** — the Studio preview never captures page state.)
+3. In the console, read `window.FlowBuddyLastAsk`. Copy `context.reason.snapshot` and `context.reason.trigger` into a new `scripts/reason-fixtures/<id>.json` — the shape and every option are documented in `_template.json` beside it.
+4. **Name the workflow, never paste its ids.** The harness re-resolves `sourceId:segmentIndex` from the live sense plan on every run; a fixture holding stale ids would silently test an unlocalized engine after the next reseed. If the title can't be resolved the fixture is **skipped**, never scored.
+
+Capture all four: **empty form · half-filled · invalid email · rejection banner showing.** The last one is the most valuable — it is the state that produced the "read the on-page error first" rule.
+
+*Replay:*
+
+```bash
+node scripts/reason-fixtures.mjs --key pk_xxx            # add --dir for a scratch fixture folder
+```
+
+Each fixture runs a few times and reports **rates**, not pass/fail (the model is non-deterministic, so a binary would flap): `covered` · `plain-language` (no leaked constraint names or flag words) · `blockers` (did it name every machine-checked one) · `phrases` · `tools` (did it reach for the page image where pixels were the only evidence). Pace is deliberately slow — the diagnostic path has its own 6/min per-key ceiling, and running under it degrades the whole capture to the fast path.
+
+✅ **PASS:** every fixture reports **fully measured** (nothing skipped, no runs that missed the diagnostic engine) and the rates are the ones you intend to defend. Save the capture — it is the before-half of any later change to the diagnostic prompt, and the hard prerequisite for merging that path into the agent loop ([`agent.md`](../build/agent.md) §9 Gap 3).
+
 **Guided walkthrough (P4-M0 — zero-acting):**
 1. Studio → Copilot → Settings → **confirm Guided walkthrough is ON** (it is, for any workspace created since 2026-07-27; the switch is disabled while Sense is off). If you had to flip it, reload the host page — config is mount-time.
 2. Mid-workflow, ask a positional question → the answer carries a **"Walk me through it"** pill. Click it: the panel closes, the step card shows **your current step k/N** (not 1), and the step's element gets a persistent highlight.
@@ -408,26 +431,28 @@ Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.ser
 
 **Copilot mode — the read-only agent (built + user-verified 2026-07-27):**
 
-1. **Confirm the mode.** Studio → Copilot → Settings → **How your assistant works** → a workspace created since 2026-07-27 already reads **Copilot**; only select it if it doesn't (toast; the AI Agent row is visible but locked). If you changed it, reload the host page — mode is read at mount, like every other config flag.
+1. **Confirm the mode.** Studio → Copilot → Settings → **How your assistant works** → it reads **Copilot**, and there are exactly **two** rows (the AI Agent row visible but locked). If a third row appears, or the picker offers *AI Chatbot*, the retirement (2026-08-02) has been partially reverted — the mode is gone from the vocabulary, the picker and the database. If you changed anything, reload the host page — mode is read at mount, like every other config flag.
 2. **Simple questions must not get worse.** Ask three or four straightforward "how do I…" questions you know are covered. They must answer as before, and at the same speed — round one of the agent loop *is* the old fast path. **This is the non-negotiable check**: a simple lookup that starts declining is the failure mode to watch (one such regression was caught during the build, at roughly 1-in-6).
 3. **Ambiguity → a question back.** With two or more approved workflows that could both match, ask something ambiguous ("how do I cancel?"). It should ask *which one you mean* rather than guessing or declining. *(With a single approved workflow this cannot fire — there is nothing to disambiguate.)*
 4. **It searches on its own.** Ask a follow-up that shifts topic ("what about …?"). It should find the other workflow rather than declining on the user's literal words.
-5. **On-page abilities become judgment.** Mid-workflow, ask a positional question: the highlight and the **"Walk me through it"** offer now appear only when the assistant judges them useful — *expect them less often than in AI Chatbot, and that is the feature, not a bug*. Turn the founder switches OFF and confirm neither ever appears regardless of what the assistant wants; the switches still rule.
-6. **Honest declines survive.** Ask two things the KB genuinely doesn't cover. Still declined, still no invention.
-7. **Flip back to AI Chatbot** and confirm the old rule-driven behaviour returns exactly — the offer reappears on every positional answer.
+5. **On-page abilities fire on a RULE, not judgment (2026-08-02).** With both switches ON, ask several positional questions mid-workflow: the highlight and the **"Walk me through it"** pill must appear **every time**, not sometimes. If they come and go, the D8 amendment has been reverted and the assistant is judging again. Then turn both switches OFF and confirm neither *ever* appears. The switch is the only decider — on means always, off means never.
+6. **Including on a DIAGNOSTIC answer.** Ask *"why can't I proceed?"* from a blocked step: both must still appear. Worth testing separately because the diagnostic engine emits no intents at all, so it was the one path that went dark under the old judgment behaviour — and it is the moment the offer matters most, since the walkthrough's own **"Explain what's blocking me"** button leads here and a user must not be stranded without a way back in.
+7. **Honest declines survive.** Ask two things the KB genuinely doesn't cover. Still declined, still no invention.
 
-✅ **PASS:** simple questions unchanged in quality and speed; the assistant asks rather than guesses on genuine ambiguity; it searches again instead of declining on a topic shift; on-page abilities appear on judgment but NEVER without the founder's switch; declines still honest; switching modes is instant and fully reversible.
+✅ **PASS:** simple questions unchanged in quality and speed; the assistant asks rather than guesses on genuine ambiguity; it searches again instead of declining on a topic shift; **on-page abilities appear on every positional answer when their switch is on, including on a diagnosis, and never when it is off**; declines still honest.
 
-*(Since 2026-07-27 a **newly created workspace is already in Copilot mode**, with show-me and
-walkthrough permitted — so a clean-slate run tests this path by default and step 7's "flip back" is
-the deliberate detour, not the setup. Workspaces made before that date keep whatever they had. A
-DB-level shortcut either way: `UPDATE "Workspace" SET "copilotMode"='copilot' WHERE
-"copilotPublicKey"='pk_…';` — and note an unrecognised value fails closed to `chatbot` by design.)*
+*(A newly created workspace is already in Copilot mode with show-me and guided walkthrough
+permitted, so a clean-slate run tests this path by default. A DB-level shortcut if you ever need to
+force it: `UPDATE "Workspace" SET "copilotMode"='copilot' WHERE "copilotPublicKey"='pk_…';` — and
+note an unrecognised value fails closed to `copilot`, which is how a pre-retirement `chatbot` row
+reads forward with no special case.)*
 
 8. **The fallback is invisible.** There is no UI for it: if the agent loop errors, that single
-   question is answered as AI Chatbot would answer it and the mode setting stays put. To confirm it
-   is wired rather than to force it, look for `agent path failed — falling back to AI Chatbot` in
-   the api log; in normal runs you should never see it.
+   question is answered in one round with no tools and the mode setting stays put. To confirm it is
+   wired rather than to force it, look for `agent path failed — falling back to the floor` in the api
+   log; in normal runs you should never see it. **Since AI Chatbot's retirement nothing else
+   exercises this path**, so those log lines are the only evidence it works — and a run of them means
+   something upstream is failing.
 
 ---
 

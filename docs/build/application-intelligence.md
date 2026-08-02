@@ -29,8 +29,8 @@ nowhere.
 This layer collects that other half into **knowledge pages**: a product overview, a page per
 concept, a page per product area — plus a description on each recording saying what it covers.
 Pages link to each other and to the workflows they explain. The founder approves each page the way
-they approve a workflow, and every consumer — AI Chatbot, Copilot, the future agent tier, and
-eventually third-party agents — reads them through the same approved-only retrieval the workflows
+they approve a workflow, and every consumer — Copilot, the diagnostic path, the future acting tier,
+and eventually third-party agents — reads them through the same approved-only retrieval the workflows
 already ride.
 
 ## 1. Why — and why this shape

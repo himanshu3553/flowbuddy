@@ -19,8 +19,8 @@ depth, not breadth.**
 
 Kept in one place so it can't drift: [`roadmap.md`](../roadmap.md). In one line — **everything in the
 first product is live and real people have used it end to end; the assistant is the only one of the
-consumers that exists.** The verdict after testing Copilot mode: *"much more accurate than the AI
-Chatbot."*
+consumers that exists.** The verdict after testing Copilot mode: *"much more accurate"* than the
+single-shot mode it replaced — which is ultimately why that mode was retired.
 
 This chapter is about the **gaps**, which is the part a status table can't tell you.
 

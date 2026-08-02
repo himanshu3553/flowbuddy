@@ -155,7 +155,7 @@ function elementLine(e: ReasonSnapshotElement): string {
  * unticked required boxes) so completeness never depends on the model's own scan — the answer
  * must cover every entry. Requirement lists the validity API can't check stay the model's job.
  */
-function blockerList(s: ReasonSnapshot): string[] {
+export function blockerList(s: ReasonSnapshot): string[] {
   const out: string[] = [];
   for (const e of s.elements) {
     const label = e.name ? `"${e.name}"` : e.tag;

@@ -7,7 +7,7 @@
 
 > **One chat, one agent, one grounded tool surface.** Instead of a copilot that *routes* a user into one of three separate mechanisms — an answer (Phase 1), a walkthrough (P4-M0), an execution run (P4-M2) — FlowBuddy becomes a single agentic loop for which **Tell · Show · Do are tools it may call, turn by turn**. The user stays in one conversation; the agent moves up and down the intensity ladder as the task demands, narrating what it does and asking for what it needs. **The division of labor that survives: the agent deliberates, the grounded primitives act.**
 
-- **Status:** 🟩 **MODE 2 BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than mode 1) **— and the DEFAULT for new workspaces since 2026-07-27**, with its on-page abilities permitted and the mode-1 runtime fallback finally built beneath it. D1–D8 locked 2026-07-25, D9 2026-07-26. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
+- **Status:** 🟩 **COPILOT MODE BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than the single-shot mode it replaced) **— and since 2026-08-02 the only selectable mode**, AI Chatbot having been retired (D10). D1–D8 locked 2026-07-25, D9 2026-07-26, D10 2026-08-02. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
 - **This doc is the reconciliation.** The Phase-4 / Phase-5 "hands vs. brain" split still holds as a *concept*; it no longer holds as a document boundary.
 - **Companion docs:** the substrate → [`copilot.md`](copilot.md) · position + diagnosis → [`sense-and-reason.md`](sense-and-reason.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](../roadmap.md) · outward-facing tools → [`interop.md`](interop.md)
 
@@ -24,13 +24,16 @@ modal — a single question often needs a fact, a look at your page, and a nudge
 So: **one chat, one loop, one grounded tool surface.** Tell, Show and Do become tools the agent picks
 turn by turn, not tiers it routes to once.
 
-**Three operating modes**, founder-selected per workspace and switchable both ways:
+**Two operating modes**, founder-selected per workspace and switchable both ways:
 
 | | Mode | What it is |
 |---|---|---|
-| 1 | **AI Chatbot** | Single-shot answers. A sold tier *and* the safety floor the runtime falls back to. |
-| 2 | **Copilot** | The read-only loop — Tell, Show and diagnose, fluidly. **Built, verified, and the default for new workspaces.** Cannot act. |
-| 3 | **AI Agent** | The loop with acting bound. Not built. Never a default. |
+| 1 | **Copilot** | The read-only loop — Tell, Show and diagnose, fluidly. **Built, verified, and what every workspace gets.** Cannot act. |
+| 2 | **AI Agent** | The loop with acting bound. Not built. Never a default. |
+
+*(A third mode below these, **AI Chatbot** — single-shot answers, fixed rules for everything else —
+was **retired 2026-08-02**. Its engine survives as the floor beneath a failed loop but is not a mode
+and cannot be selected. D10 below records why.)*
 
 **The boundary is at *acting*, not at *the agent*.** Tell and Guide leave the user as the actor; Do
 transfers accountability — a wrong button is a tooltip in Guide and a liability event in Do. The
@@ -74,15 +77,15 @@ The striking property of this direction is how little of it is new. The primitiv
 | `get_workflow` | Distilled per-workflow steps | ✅ **bound 2026-07-27**; approval re-checked server-side in `loadApprovedWorkflow` |
 | `where_am_i` | Read-only locator probe → workflow + step | ✅ `widget/src/sense.ts` `probeForAsk` (P2-M0/M1) |
 | `read_page_state` | Structured field state, **values masked** | ✅ exists (`widget/src/reason.ts`, P2-M5) but **NOT bound to the agent** — still reached via the diagnostic path (§9 Gap 3) |
-| `highlight_step` | Sticky spotlight on the host page | ✅ **agent-decided 2026-07-27** via the `highlight` intent (founder switch still gates it) |
-| `run_walkthrough` | Guided, user-paced stepping | ✅ **agent-decided 2026-07-27** via the `offerWalkthrough` intent (founder switch still gates it) |
+| `highlight_step` | Sticky spotlight on the host page | ✅ exists — but **switch-decided, not agent-decided (D11, 2026-08-02)**: it fires on every positional answer the founder's switch permits. Briefly agent-decided from 2026-07-27 |
+| `run_walkthrough` | Guided, user-paced stepping | ✅ same — switch-decided since D11 |
 | `ask_user` | Clarify · prompt for input · confirm | 🔄 **clarifying questions legalised in mode 2 (2026-07-27)** — no longer the Sense tie only; input prompting + confirmation await mode 3 |
 | `product_profile` | Founder-authored product understanding | 📝 P5-M2 — **the top remaining gap (§9 Gap 1)** |
 | `execute_step` | Resolve locator → act → verify | 📝 **P4-M2 — to build (the critical path)** |
 
 **Reason is already an agentic loop.** `diagnoseFromKB` runs a read-tool loop over expected-vs-actual — the phase docs call it "the skeleton Phase 4 inherits." The unified agent is not built from scratch; it is that loop **promoted to the main path** and given more tools.
 
-## 4. Decisions locked (D1–D8 2026-07-25 · D9 2026-07-26)
+## 4. Decisions locked (D1–D8 2026-07-25 · D9 2026-07-26 · D10–D11 2026-08-02)
 
 | # | Decision | Rationale |
 |:---:|:---|:---|
@@ -93,37 +96,51 @@ The striking property of this direction is how little of it is new. The primitiv
 | **D5** | **Sensing informs, the click decides.** Masked state (`filled`/`valid`/`invalidReason`) is read **on** the Continue click to validate and to write better prompts — never to advance. | Turns a blind march into a failed step into an honest *"that email isn't being accepted — the field is showing a format error."* Reason, applied inline and mid-run. |
 | **D6** | **Never infer intent; always stay oriented.** The agent must never infer the user finished typing — but it **must** detect that the page navigated or the DOM changed underneath it. | Users will fill a field and hit the app's *own* Save before touching Continue. Without navigation detection the agent waits for a click on a page that no longer exists. These are different mechanisms and conflating them is a bug. |
 | **D7** | **Founder control = capability posture + spend cap, not a latency dial.** One control over *what the copilot may do* (answers only · in-context help · full agent), with the existing five toggles as advanced disclosure, paired with a per-workspace cost ceiling. | A speed dial exposes internal architecture as a setting and is wrong for half of any workspace's traffic. Capability and spend are things a founder genuinely has an opinion about; latency follows from them. |
-| **D8** | **Conversational offer, structured consent.** *"Want me to do this for you?"* becomes a **move the agent makes**, not a payload the server attaches to positional answers — but the **commitment moment stays a typed affordance**, never free text the model interprets. | The offer needs judgment (proactive · reactive · escalating mid-walkthrough · silent) that a hardcoded pill can't express. Consent needs an audit boundary: when someone asks *"did this user authorize this run?"*, the answer must be a DB row, not the model's reading of "ok sure why not." |
-| **D9** | **Three operating modes — and the boundary is at *acting*, not at *the agent*.** `1 Copilot` · `2 Agent (read-only)` · `3 Agent (acting)`, founder-selected per workspace, strictly ordered. **These are also the pricing tiers** (decision 2026-07-26). | Tell and Guide are both *copilot* — the user is still the actor, and you are only changing what they know. **Do is not one more rung; it transfers accountability.** "Confidently wrong about which button" is an unhelpful tooltip in Guide and a **liability event** in Do — decisive in regulated verticals (neobank, fintech, health). But the read-only unification carries **~zero** added risk, so gating it behind the risky half would deny the fluent copilot to exactly the cautious buyers who benefit most. Put the wall where the liability is. |
+| **D8** | *(Its OFFER half was reversed by D11 — the consent half stands unchanged.)* **Conversational offer, structured consent.** *"Want me to do this for you?"* becomes a **move the agent makes**, not a payload the server attaches to positional answers — but the **commitment moment stays a typed affordance**, never free text the model interprets. | The offer needs judgment (proactive · reactive · escalating mid-walkthrough · silent) that a hardcoded pill can't express. Consent needs an audit boundary: when someone asks *"did this user authorize this run?"*, the answer must be a DB row, not the model's reading of "ok sure why not." |
+| **D9** | *(Amended by D10 — the ladder is now two rungs, the boundary is unchanged.)* **Operating modes — and the boundary is at *acting*, not at *the agent*.** `1 Copilot` · `2 Agent (read-only)` · `3 Agent (acting)`, founder-selected per workspace, strictly ordered. **These are also the pricing tiers** (decision 2026-07-26). | Tell and Guide are both *copilot* — the user is still the actor, and you are only changing what they know. **Do is not one more rung; it transfers accountability.** "Confidently wrong about which button" is an unhelpful tooltip in Guide and a **liability event** in Do — decisive in regulated verticals (neobank, fintech, health). But the read-only unification carries **~zero** added risk, so gating it behind the risky half would deny the fluent copilot to exactly the cautious buyers who benefit most. Put the wall where the liability is. |
 
-### D9 in practice — the three modes (the build spec in miniature)
+| **D10** | **Retire AI Chatbot entirely (2026-08-02).** The single-shot mode stops being a sellable tier and stops being a stored value. Its ENGINE survives, unsellable, as the floor beneath a failed agent loop — the agent's own prompt run for one round with nothing bound. | It was a **strictly worse Copilot that cost twice to maintain**: a second prompt and a second knowledge renderer, both of which had to be tuned in parallel forever, and every knowledge feature had to be built into both (the workflow plan and the Application Intelligence pages each paid that tax). CLAUDE.md carried a standing trap for the failure it invited — update one, forget the other, and the *safety floor* answers worse than the tier above it. Retiring it deletes the trap rather than documenting it. The founder's judgment (2026-08-02): *"I simply can't see any benefit of keeping AI Chatbot mode."* **This reverses D9's pricing corollary**, which had assumed a sold tier could not be un-sold; it could, because nobody was on it. |
 
-**Two boundaries, and they are different kinds of boundary.**
+| **D11** | **The founder's switch decides when an on-page ability fires — not the assistant (2026-08-02).** `copilotShowMe` and `copilotWalkthrough` fire on EVERY positional answer when on, and never when off. This reverses D8's *offer* half; D8's consent half (a typed affordance, never free text) is untouched, and so is *absence, not refusal*. **The assistant's preference was removed entirely, not merely ignored** — see below. | **A "maybe" is a bad control.** Under judgment a founder cannot distinguish a switch that is OFF from one that is ON and being declined — which makes the feature undemonstrable to a prospect, undiscoverable to end-users, and unsupportable when someone asks why it didn't appear. **And the judgment was never measured:** §8's own regression list flagged the agent under-offering as a risk to watch across a cutover, and nobody watched it. Trading an unmeasured judgment for a predictable rule is the cheap direction, and reversible — the intents are still recorded, so "would judgment have won?" stays a query. **The noise D8 feared is bounded by structure, not by judgment:** only POSITIONAL answers reach the rule, a clarifying question sets `usedPosition` false so nothing fires, the highlight needs an element the probe actually resolved, and `walkthroughOffer` returns null on the last step. What remains is a user mid-workflow seeing one ring and one pill. **Given up:** the assistant can no longer stay quiet at a moment only it can see is wrong. **Why the telemetry went too:** the first cut kept the two intent fields as unobeyed telemetry, so a future reversal would have evidence. That does not survive contact with the prompt — the fields are only meaningful while the prompt keeps ~4 lines teaching the model *when* to set them, and that is reasoning spent on an answer nobody reads, competing for attention with instructions that are read. Keep the section and pay forever; drop it and the telemetry records noise. So both went, and reversal means re-adding four prompt lines and two schema fields. The schema collapse was the tell: without them the agent's "superset" schema was byte-identical to the base one, so `AGENT_ANSWER_SCHEMA` and the engine's `schema` override both disappeared with it. |
 
-- **1 → 2 is an orchestration change.** A different decision-maker over the *same* primitives, with the same risk profile. Instantly reversible: flip back and you are on the deterministic path.
-- **2 → 3 is an accountability change.** Same orchestrator, one more tool bound, plus the gate and the rails. **This is the contractual line** — the only boundary that needs terms, acceptance, and an audit trail.
+### D9 + D10 in practice — the two modes (the build spec in miniature)
 
-| | **1 · Copilot** | **2 · Agent (read-only)** | **3 · Agent (acting)** |
-|:---|:---|:---|:---|
-| **Orchestrator** | Today's deterministic pipeline — `/answer` fast path · Reason's selective trigger · the walkthrough pill on positional answers | The agent loop (`diagnoseFromKB` promoted to the main path) | The same loop |
-| **Tools bound** | n/a — the pipeline hardcodes the order | `search_kb` · `get_workflow` · `where_am_i` · `read_page_state` · `highlight_step` · `run_walkthrough` · `ask_user` · `product_profile` | all of mode 2 **+ `execute_step`** |
-| **Explicitly NOT bound** | — | **`execute_step`** — absent, not refused (D8) | — |
-| **Gated by** | the existing five feature toggles | the workspace mode setting | mode setting **+** per-workflow `autopilot` flag **+** certification (P4-M1) **+** a recorded acceptance |
-| **Risk** | Shipped, known | **~zero on the page** — nothing acts. The real risks are prompt regression and cost/latency | **Accountability transfer** — a wrong action ≫ a wrong answer |
-| **What to build** | **Nothing — it exists.** Keep it working; it is also the internal fallback for modes 2 and 3 | Migration steps 2–3 (§8) | P4-M1 · **P4-M2** · P4-M3 + migration step 4 |
+**One boundary now, and it is the one that always mattered.**
 
-**Strictly ordered, not à la carte.** Mode 3 *is* mode 2 plus a tool, so acting cannot exist without the agent loop.
+- **Copilot → AI Agent is an accountability change.** Same orchestrator, one more tool bound, plus the gate and the rails. **This is the contractual line** — the only boundary that needs terms, acceptance, and an audit trail.
+- *(The boundary that disappeared — single-shot → agent loop — was only ever an orchestration change: a different decision-maker over the same primitives at the same risk. That is exactly why it could be deleted rather than defended.)*
+
+| | **1 · Copilot (read-only)** | **2 · AI Agent (acting)** |
+|:---|:---|:---|
+| **Orchestrator** | The agent loop | The same loop |
+| **Tools bound** | `search_kb` · `get_workflow` · `where_am_i` · `read_page_state` · `highlight_step` · `run_walkthrough` · `ask_user` · `product_profile` | all of Copilot **+ `execute_step`** |
+| **Explicitly NOT bound** | **`execute_step`** — absent, not refused (D8) | — |
+| **Gated by** | the workspace mode setting | mode setting **+** per-workflow `autopilot` flag **+** certification (P4-M1) **+** a recorded acceptance |
+| **Risk** | **~zero on the page** — nothing acts. The real risks are prompt regression and cost/latency | **Accountability transfer** — a wrong action ≫ a wrong answer |
+| **What to build** | **Nothing — it exists.** | P4-M1 · **P4-M2** · P4-M3 + migration step 4 |
+
+**Strictly ordered, not à la carte.** AI Agent *is* Copilot plus a tool, so acting cannot exist without the agent loop.
+
+**What retiring a rung cost, recorded because it was so much less than expected.** The shared loop
+(`engine.ts`, extracted 2026-07-26) predicted this: *"collapsing AI Chatbot into Copilot later is
+raising a cap and binding tools, never a rewrite."* That held exactly. Mode 1's engine needed no
+porting — the floor is the same loop with `maxRounds: 1` and an empty tools array — and because the
+stored mode is a STRING rather than an enum, un-selling a tier cost an `UPDATE` instead of a type
+change. The one thing that did need care was the prompt: the surviving one talks about tools, and
+the floor has none, so telling a model to *"search first, then answer"* with nothing bound invents a
+decline at the exact moment the user has already hit one failure. The prompt is therefore assembled
+in two configurations, and a test asserts the floor's never names a tool.
 
 **Two triads — do not conflate them.** **Tell / Guide / Do** is *what the user receives*. **Copilot / read-only / acting** is *how it is orchestrated and what is permitted*. Guide exists in modes 1 and 2 — the same `walkthrough.ts`, reached two different ways (a deterministic pill vs. an agent offer).
 
-**Invariant across all three modes:** one KB, one approval model, one retrieval seam, values masked at capture, grounded-only, honest declines. **The mode picks the orchestrator and the permission ceiling — never the knowledge model.** The existing five toggles (`senseEnabled` · `copilotShowMe` · `copilotWalkthrough` · `reasonEnabled` · `reasonImageEnabled`) tune features *within* a mode, underneath it (D7) — and the switch always wins: no mode can turn on an ability the founder turned off. What changes across modes is what "on" *means* (§7 Q7, resolved 2026-07-27): a rule in mode 1, a permission in mode 2.
+**Invariant across every mode:** one KB, one approval model, one retrieval seam, values masked at capture, grounded-only, honest declines. **The mode picks the orchestrator and the permission ceiling — never the knowledge model.** The existing five toggles (`senseEnabled` · `copilotShowMe` · `copilotWalkthrough` · `reasonEnabled` · `reasonImageEnabled`) tune features *within* a mode, underneath it (D7) — and the switch always wins: no mode can turn on an ability the founder turned off. What "on" means is settled (§7 Q7, resolved 2026-07-27): a **permission**, never an instruction to fire every time. The rule-driven reading went with AI Chatbot — with one deliberate exception, the diagnostic path, whose schema has no intent fields and so cannot express a judgment at all (see §9 Gap 3; the exception deletes itself when that path merges).
 
-**Defaults.** Mode 2 is what every NEW workspace gets (since 2026-07-27) — strictly better, no new risk. Existing workspaces were left untouched: the stored value cannot tell a founder's deliberate choice from an inherited one, so no back-fill ran. Mode 1 remains the fail-closed floor. **Mode 3 is never a default**, and plausibly not self-serve at all for regulated verticals.
+**Defaults.** Copilot is what every workspace gets, and since D10 it is also the fail-closed value — the floor is no longer "the rung that can do least" but **the rung that cannot ACT**, which was always the part that mattered. `NEW_WORKSPACE_MODE` and `DEFAULT_COPILOT_MODE` therefore read identically today and are still deliberately two constants: the day the default climbs to AI Agent, the floor must not follow. **AI Agent is never a default**, and plausibly not self-serve at all for regulated verticals.
 
-**Pricing (decision 2026-07-26).** The three modes are the pricing tiers. Two consequences that follow and must not be lost:
+**Pricing (decision 2026-07-26, amended by D10).** The modes are the pricing tiers. Two consequences that follow and must not be lost:
 
-1. **The mode boundary becomes a billing control, not only a safety control** — which makes D8's *absence, not refusal* load-bearing twice over: a mode-2 workspace must have no `execute_step` bound at all, never a refusal the model could be talked out of.
-2. **The cost measurement still matters** — but for **margin per tier**, not for consolidation. Mode 1 is now commercially durable regardless of the delta (you cannot easily un-sell a tier), so "collapse 1 into 2?" is effectively closed; "what does each tier cost to serve?" is not (§7 Q6).
+1. **The mode boundary becomes a billing control, not only a safety control** — which makes D8's *absence, not refusal* load-bearing twice over: a Copilot workspace must have no `execute_step` bound at all, never a refusal the model could be talked out of.
+2. **The cost measurement still matters** — but for **margin per tier**, not for consolidation. The consolidation question is closed: D10 removed the cheaper tier outright rather than costing it. What each remaining tier costs to serve is still open (§7 Q6), and now sits on a thinner ladder — there is no cheap rung left to fall back to if Copilot turns out expensive at volume.
 
 ### D8 in practice — absence, not refusal
 
@@ -201,8 +218,8 @@ Stripe Elements, Plaid, hosted checkout: the widget cannot see inside them, so i
 3. **Chaining scope for v1** — single-workflow goals first, chains later? *(= §5 Q5.)*
 4. **How mode 3 is accepted** — D9 makes it a contractual line, so the toggle is probably not just a Studio switch: explicit acceptance, versioned terms, and a record of who enabled it and when. What exactly gets stored? Far cheaper now than retrofitted.
 5. **Cross-origin iframe UX** — is "highlight the region + Continue" enough, or does the payment case want a bespoke affordance?
-6. **Cost per mode (measurement, not a design choice)** — the real cost-per-question and p50/p95 delta between the mode-1 pipeline and the mode-2 loop, on live traffic. **Half-instrumented 2026-07-29:** every question now records the engine that answered, its rounds and its tool calls (§9 Gap 2), so the rounds-and-escalation half is answerable from live traffic; **token cost is still not recorded**, so the money half is not. Now a *margin* question rather than a consolidation one (D9 pricing), but it still sets tier prices and D7's spend caps.
-7. ~~**Where the five existing toggles land per mode**~~ — **RESOLVED 2026-07-27 for the two on-page toggles.** They survive into mode 2 unchanged in *shape* and change in *meaning*: the founder switch is still checked first and can still turn an ability off, but it stops meaning "do this every time" and starts meaning "you MAY do this when it helps" — the widget's `wantsOnPage` is exactly that swap. So `copilotShowMe` does still mean something: it is the permission, and the agent's judgment refines it rather than replacing it. Consequence: both defaulted **ON for new workspaces** alongside the mode-2 default, because a Copilot that the picker describes as pointing and guiding must be able to. Still open for `reasonEnabled`/`reasonImageEnabled`, which wait on the un-merged diagnostic path (§9 gap 3).
+6. **Cost per mode (measurement, not a design choice)** — the real cost-per-question and p50/p95 of the agent loop on live traffic. **Sharper since D10**, not softer: the cheap single-shot tier it would have been compared against no longer exists, so every question now rides the loop and there is no lower rung to retreat to. Round one *is* the old fast path, so the expected delta is small — but "expected" is doing real work in that sentence and nothing has measured it. **Half-instrumented 2026-07-29:** every question now records the engine that answered, its rounds and its tool calls (§9 Gap 2), so the rounds-and-escalation half is answerable from live traffic; **token cost is still not recorded**, so the money half is not. Now a *margin* question rather than a consolidation one (D9 pricing), but it still sets tier prices and D7's spend caps.
+7. ~~**Where the five existing toggles land per mode**~~ — **RESOLVED, then re-resolved.** 2026-07-27 made the two on-page toggles a *permission* the agent's judgment refined ("you MAY do this when it helps"). **D11 reversed that on 2026-08-02:** the switch is the whole decision again — on fires every positional answer, off fires none — because a switch that might or might not do anything cannot be demonstrated or supported. Both stay defaulted **ON**, which is the combination deliberately never shipped before (rule-driven *and* on by default); it is accepted now because the noise is bounded by structure rather than by the assistant's restraint, and because a Copilot the picker describes as pointing and guiding must be able to. Still open for `reasonEnabled`/`reasonImageEnabled`, which wait on the un-merged diagnostic path (§9 gap 3).
 
 ## 8. Migration path
 
@@ -218,21 +235,30 @@ quietly they bite:
    **the diagnostic path has none.** Re-run the Sense / Reason / walkthrough legs by hand before
    calling anything done. *(Not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially
    covered question, caught **only** because that path was measurable.)*
-2. **Offer quality — the agent under- or over-offering.** The walkthrough offer used to be
-   deterministic; under D8 it is judgment. Watch walkthrough starts per positional answer across a
-   mode cutover — a step change either way is the signal. **Some** change here is D8 working as
-   designed; agree which is which *before* the cutover, so it doesn't get debugged as a bug.
+2. ~~**Offer quality — the agent under- or over-offering.**~~ **Closed by D11 (2026-08-02), and the
+   way it closed is the lesson.** The walkthrough offer was deterministic, D8 made it judgment, and
+   this line said to watch walkthrough starts per positional answer across the cutover. Nobody did —
+   so when the question came up months later there was no evidence either way, and the decision was
+   made on control-surface grounds instead: the switch decides, always. **A risk you write down but
+   never instrument does not stop being a risk; it stops being answerable.** *(The intents were
+   briefly kept as unobeyed telemetry so a reversal would have data. They were then removed too —
+   see D11's note: keeping the fields without the prompt section that made them meaningful would
+   have recorded noise, and keeping the prompt section meant paying for reasoning nobody reads.)*
 3. **Cost and latency.** Round one *is* the old fast path, so simple lookups must not get slower.
 
-**Keep mode 1's single-shot path as the runtime fallback** when the loop errors or times out. Because
-mode 1 is a supported, sold configuration, that fallback stays exercised in production rather than
-rotting as dead code.
+**The single-shot path survives as the runtime fallback** when the loop errors or times out — but
+since D10 it is no longer a sold configuration, which removes the property this paragraph used to
+rely on: it is *not* exercised by ordinary production traffic any more, and can rot unnoticed.
+Two things replace that safety net, and both are deliberate. It shares the agent's prompt and item
+renderer, so it cannot drift from the thing it falls back to. And `agent-prompt.test.ts` pins the
+one way it can still go wrong on its own — promising a tool it does not have. A run of `engine:
+"floor"` rows is now a **reliability** signal rather than a configuration one.
 
 ---
 
-## 9. What's still open in Copilot mode (mode 2) — built + verified 2026-07-26/27
+## 9. What's still open in Copilot mode — built + verified 2026-07-26/27
 
-Mode 2 is **complete against its scope and user-verified E2E** (founder's verdict: markedly more accurate than mode 1). Nothing below is half-built — these are the gaps that remain, recorded 2026-07-27 in priority order.
+Copilot mode is **complete against its scope and user-verified E2E** (founder's verdict: markedly more accurate than the single-shot mode it replaced). Nothing below is half-built — these are the gaps that remain, recorded 2026-07-27 in priority order.
 
 ### ⏸ Gap 1 — it knows the RECIPES, not the PRODUCT *(the biggest one)*
 
@@ -251,15 +277,15 @@ Verified in the code 2026-07-27: `CopilotQuery` logs the question, `answered`, `
 Two consequences, and the second is the important one:
 
 1. **The founder is blind.** After switching to Copilot mode nothing in Studio shows it behaving differently — no evidence the upgrade is doing anything.
-2. **§7 Q6's measurement is currently impossible.** Escalation rate and cost-per-question are exactly the numbers that decide *"should AI Chatbot collapse into Copilot?"* — the founder raised that question himself, and his mode-2 verdict already leans toward yes. Without these columns the decision stays an opinion.
+2. **§7 Q6's measurement is currently impossible.** Escalation rate and cost-per-question are exactly the numbers that decide *"should AI Chatbot collapse into Copilot?"* — the founder raised that question himself, and his mode-2 verdict already leans toward yes. Without these columns the decision stays an opinion. *(**Overtaken 2026-08-02:** D10 answered the question without the numbers, on simplicity rather than cost. The columns still matter — for margin, and for noticing the floor firing — but they no longer gate a decision.)*
 
-**Half of this closed 2026-07-29.** `server.ts` now emits one `copilot answer` log line per question — the scrubbed question, the configured **mode**, the **engine that actually answered** (`agent` \| `chatbot` \| `reason` — the two come apart in both directions, so mode alone was never the right field), `covered`, `rounds`, **every tool call with the exact query it searched**, and on a decline the assistant's **own words**. Diagnosing one incident no longer means reading source. Two things forced it: a decline used to be indistinguishable from a decline that searched three times and found nothing, and the escalation short-circuited before the `CopilotQuery` write, so the agent's own reason was never stored anywhere — the surviving `CoverageGap` held the *diagnostic engine's* text, filed against content the KB actually had. That second half is fixed too: a mode-2 decline no longer escalates, so it reaches the write.
+**Half of this closed 2026-07-29.** `server.ts` now emits one `copilot answer` log line per question — the scrubbed question, the configured **mode**, the **engine that actually answered** (`agent` \| `reason` \| `floor` — the engine and the mode come apart in both directions, so mode alone was never the right field), `covered`, `rounds`, **every tool call with the exact query it searched**, and on a decline the assistant's **own words**. Diagnosing one incident no longer means reading source. Two things forced it: a decline used to be indistinguishable from a decline that searched three times and found nothing, and the escalation short-circuited before the `CopilotQuery` write, so the agent's own reason was never stored anywhere — the surviving `CoverageGap` held the *diagnostic engine's* text, filed against content the KB actually had. That second half is fixed too: a mode-2 decline no longer escalates, so it reaches the write.
 
-**And the columns landed the same day.** `CopilotQuery` now carries `mode` · `engine` · `rounds` · `toolCalls` (migration `20260728201609_copilot_query_answer_path` — four nullable columns, nothing back-filled, so a pre-2026-07-29 row still honestly reads "unknown"). All three engines report through the same `onLoop` hook, so **AI Chatbot's `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim** and one query compares all three without special-casing.
+**And the columns landed the same day.** `CopilotQuery` now carries `mode` · `engine` · `rounds` · `toolCalls` (migration `20260728201609_copilot_query_answer_path` — four nullable columns, nothing back-filled, so a pre-2026-07-29 row still honestly reads "unknown"). Every engine reports through the same `onLoop` hook, so **the floor's `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim** and one query compares them all without special-casing. Since D10, `engine: "floor"` is the value to watch: it is the only one that is not a mode, and a run of them means something upstream is failing.
 
-**`engine` is the column that matters, and it is deliberately not `mode`.** The two come apart in both directions — the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers as AI Chatbot while `mode` still reads `copilot`. Storing only the configured mode would attribute both to the wrong engine and quietly corrupt the very comparison this exists to enable. Storing both makes the gap between intent and reality countable.
+**`engine` is the column that matters, and it is deliberately not `mode`.** The two come apart in both directions — the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers with no tools while `mode` still reads `copilot`. Storing only the configured mode would attribute both to the wrong engine and quietly corrupt the very comparison this exists to enable. Storing both makes the gap between intent and reality countable.
 
-**What this unblocks.** §7 Q6 — *"should AI Chatbot collapse into Copilot?"* — is now a query rather than an opinion: escalation rate, rounds per question, and how often the floor caught a failure. It pairs with the roadmap §9 backlog's token-usage column for real cost analytics. What is still missing is the Studio surface; the data is being recorded from today, so the answer improves the longer it runs before anyone asks.
+**What this unblocks.** Escalation rate, rounds per question, and how often the floor caught a failure — all now queryable rather than argued. It pairs with the roadmap §9 backlog's token-usage column for real cost analytics. What is still missing is the Studio surface: nothing in `web` reads these columns yet. *(The question they were built to settle — collapse the tiers? — was answered on other grounds by D10 before enough traffic accumulated to answer it with data. The instrumentation is not wasted; it just changed job, from deciding the ladder to watching the floor.)*
 
 ### ⏸ Gap 3 — fold the diagnostic path into the agent loop *(deferred with a hard prerequisite)*
 
@@ -272,9 +298,18 @@ Two consequences, and the second is the important one:
 
 **Why it was NOT done in stage 3, and must not be done casually.** `REASON_SYSTEM` is the most heavily tuned prompt in the product — [`sense-and-reason.md`](sense-and-reason.md) §B7.1 records **ten** diagnosis-quality rules, each learned from a real session it got wrong (read the on-page error first · never claim a control is disabled when the state says otherwise · never conclude "looks fine" from structure alone · look at the image before hedging · no speculative declines · …). That is scar tissue, not styling.
 
-And it is **still barely testable**: `scripts/copilot-baseline.mjs` gained page paths and multi-turn cases (2026-07-29), but it never sends live page STATE and runs in `preview`, which suppresses the decline→diagnostic escalation — so diagnosis still has *zero* automated coverage. Rewriting rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
+And it was **untestable by construction**: the question-set baseline never sends live page STATE, so diagnosis had *zero* automated coverage. Rewriting rounds of hard-won prompt behaviour with no way to detect a regression is the exact risk §8's "regression protection" exists to prevent — and it is not hypothetical: stage 3 introduced a 1-in-6 decline on a trivially-covered question, caught **only** because that path was measurable.
 
-**The prerequisite, concretely.** Make diagnosis measurable first: capture real `ReasonSnapshot` fixtures from the demo signup page in a few states (empty form · half-filled · invalid email · rejection banner showing), commit them, and teach the baseline script to replay them through `/answer`. Diagnosis then gets before/after numbers like every other path, and the merge becomes verifiable instead of hopeful. Useful on its own — it would be the first coverage Reason has ever had.
+**Why this went unfixed so long, and what changed.** Testing diagnosis always meant "re-record something and click around", so it never happened — and the question-set baselines cannot fill the gap even in principle, because their cells are tuned to specific workflows in a specific workspace and die with it. A committed page state is the first copilot measurement that outlives the workspace it was captured in.
+
+**The prerequisite — the HARNESS is built, the fixtures are not.** Make diagnosis measurable first: replay frozen page states (empty form · half-filled · invalid email · rejection banner showing) through `/answer` and assert what came back. The machinery for that now exists — a debug-gated capture hook in the widget, a fixture format, and a replay harness that scores each answer against the machine-checkable subset of the ten rules (plain language, every blocker addressed, decline-vs-diagnose, which evidence it reached for). **What is missing is the four captures themselves**, which need a workspace with an approved workflow to stand in. How to capture and run: [`e2e-testing.md`](../ops/e2e-testing.md) §11.
+
+Two design points that are load-bearing rather than incidental, because the obvious version of each fails silently:
+
+- **A snapshot alone measures a crippled engine.** The founder's expected-state artifacts are attached off the top SENSE hypothesis, so a fixture without sense binds only `get_page_image` — a third of the path goes unexercised while still reporting a rate. Fixtures carry both halves, captured from the same moment.
+- **Fixtures name their workflow; they never store its ids.** Ids change on every reseed, and a fixture holding stale ones keeps reporting rates while testing an unlocalized engine. The harness re-resolves from the live sense plan each run and **skips** what it cannot resolve — an unrunnable fixture must never emit a number.
+
+The same discipline runs through the scoring: a run that did not reach the diagnostic engine is excluded rather than counted, and the harness reports how many fixtures were *fully measured* so a shrinking suite cannot masquerade as a passing one.
 
 **Priority: low.** Diagnosis works today, and mid-walkthrough diagnostic questions already reach it. What the merge buys is consistency and combined-evidence answers, not capability. Sequence it behind anything that grows the KB past a single workflow — with one workflow, half of the agent's judgment has nothing to exercise it.
 

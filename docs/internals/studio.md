@@ -39,7 +39,7 @@ empty / loading / error states.
 | **Settings** | Account / workspace / token management. | `auth`, `tokens` |
 
 **Copilot → Settings** opens with **How your assistant works** — the operating-mode
-selector (AI Chatbot · Copilot · AI Agent, the last shown but locked). Below it the five ability
+selector (Copilot · AI Agent, the second shown but locked). Below it the five ability
 switches (Sense · show-me · guided walkthrough · Reason · image tier) sit inside a folded
 `<details>` **"What it may do on your page / Advanced"**. The split is deliberate: the mode says WHO
 decides how users get helped, the switches say WHAT the assistant is permitted to touch. Selecting

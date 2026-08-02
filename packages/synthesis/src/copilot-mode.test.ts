@@ -7,18 +7,25 @@ import {
   NEW_WORKSPACE_MODE,
   SELECTABLE_MODES,
   modeCanAct,
-  modeUsesAgentLoop,
   parseCopilotMode,
 } from '@flowbuddy/shared/copilot-mode';
 
 /**
- * The mode vocabulary's safety invariants (2026-07-27).
+ * The mode vocabulary's safety invariants.
  *
- * WHY THIS FILE EXISTS. New workspaces now start in Copilot mode, which means the product default
- * and the fail-closed floor are DIFFERENT values for the first time. That gap is the whole safety
- * property, and it is invisible: both are one-line constants in the same file, twelve lines apart,
- * and re-collapsing them would look like tidying. These tests state what each one is FOR, so the
- * next person to touch them finds out from a failing test rather than from a support ticket.
+ * WHY THIS FILE EXISTS. The product default and the fail-closed floor are two constants in one
+ * file, a dozen lines apart, and they now hold the SAME value — which makes collapsing them look
+ * like obvious tidying. It isn't: the day "new workspaces start as agents" is decided, the floor
+ * must stay put, and a single constant would take every typo and every rolled-back row up the
+ * ladder with the default. These tests state what each one is FOR, so the next person to touch
+ * them finds out from a failing test rather than from a support ticket.
+ *
+ * WHAT CHANGED WHEN MODE 1 WAS RETIRED. The floor used to be "the rung that can do least", and the
+ * test for it asked whether the floor reached the agent loop. With two modes the floor IS the agent
+ * loop, so that question has no safe answer to assert — and asserting it would have forced the
+ * floor down to a mode that no longer exists. The invariant was always really about CAPABILITY, so
+ * it is now stated that way: the floor may never be a mode that ACTS. Same protection, and it
+ * survives the next mode being added above it.
  *
  * Lives in @flowbuddy/synthesis only because that is where the repo's vitest runner is; it depends
  * on @flowbuddy/shared, so the import is clean. Move it if `shared` ever gets its own runner.
@@ -51,6 +58,13 @@ describe('the safety floor', () => {
     expect(MODE_RANK[DEFAULT_COPILOT_MODE]).toBe(Math.min(...ranks));
   });
 
+  it('cannot act on the user\'s behalf — the rule that outlived mode 1', () => {
+    // THE invariant, in its durable form. Not "the floor is the dumbest mode" (that died with the
+    // AI Chatbot rung) but "the floor cannot do anything to anyone". An unrecognised value may cost
+    // a read-only assistant; it may never buy an unattended one.
+    expect(modeCanAct(DEFAULT_COPILOT_MODE)).toBe(false);
+  });
+
   it('never lets an unrecognised value reach the agent loop', () => {
     // THE test. Every one of these is a real way a bad value arrives: a typo, a label pasted
     // instead of a key, a row written by a future version and then rolled back, a null column, a
@@ -59,6 +73,7 @@ describe('the safety floor', () => {
       'garbage',
       '',
       'Copilot', // the LABEL, not the key — casing must not be forgiven
+      'chatbot', // THE RETIRED MODE — must resolve forward to copilot, not linger as a special case
       'AI Chatbot',
       'agent ',
       'AGENT',
@@ -70,22 +85,30 @@ describe('the safety floor', () => {
     ]) {
       const resolved = parseCopilotMode(bad);
       expect(resolved, `${JSON.stringify(bad)} must not be trusted`).toBe(DEFAULT_COPILOT_MODE);
-      expect(modeUsesAgentLoop(resolved)).toBe(false);
-      expect(modeCanAct(resolved)).toBe(false);
+      expect(modeCanAct(resolved), `${JSON.stringify(bad)} must not buy the ability to act`).toBe(false);
     }
   });
 
   it('does NOT follow the product default upward', () => {
     // The one that would break silently. If someone "simplifies" these back into one constant,
-    // then the day the default climbs a rung, every typo climbs with it.
+    // then the day the default climbs a rung, every typo climbs with it. They hold the same value
+    // today, which is exactly why this test has to exist rather than the constants being merged.
     expect(MODE_RANK[DEFAULT_COPILOT_MODE]).toBeLessThanOrEqual(MODE_RANK[NEW_WORKSPACE_MODE]);
-    expect(modeUsesAgentLoop(DEFAULT_COPILOT_MODE)).toBe(false);
   });
 });
 
 describe('the ladder', () => {
   it('passes every real mode through unchanged', () => {
     for (const m of COPILOT_MODES) expect(parseCopilotMode(m)).toBe(m);
+  });
+
+  it('has retired AI Chatbot completely', () => {
+    // Not a nostalgia test. A half-retirement — the key gone from the ladder but still lurking in
+    // the labels or the picker — would render a tier a founder can select and the API will not
+    // honour, and the failure would show up as "my setting keeps reverting".
+    expect(COPILOT_MODES as readonly string[]).not.toContain('chatbot');
+    expect(SELECTABLE_MODES as readonly string[]).not.toContain('chatbot');
+    expect(Object.keys(MODE_LABELS)).not.toContain('chatbot');
   });
 
   it('keeps acting behind the top rung, which is not selectable yet', () => {

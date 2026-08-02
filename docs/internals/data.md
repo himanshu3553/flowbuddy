@@ -99,7 +99,7 @@ erDiagram
 | Table | Purpose | Key detail |
 |---|---|---|
 | **`CopilotApproval`** | The trust gate — one row = one approved workflow. | **`@@unique([sourceId, segmentIndex])`** — keyed by the workflow *coordinate*, not item ids, so it **survives the worker's delete+recreate of items**. Absence = not approved. |
-| **`CopilotQuery`** | Every end-user question (analytics + feedback target). | `answered` (covered vs. declined), `feedback` (`up`/`down`/null); P2 added the `sense*` localization-outcome columns + `reasonTrigger`/`reasonImage`. **2026-07-29 added how the answer was produced:** `mode` (the workspace setting) · `engine` (what actually ran — `chatbot`/`agent`/`reason`; NOT always what `mode` predicts, since the diagnostic path preempts the agent and the safety floor answers as chatbot without the mode changing) · `rounds` · `toolCalls`. All nullable, nothing back-filled — an older row honestly reads "unknown". |
+| **`CopilotQuery`** | Every end-user question (analytics + feedback target). | `answered` (covered vs. declined), `feedback` (`up`/`down`/null); P2 added the `sense*` localization-outcome columns + `reasonTrigger`/`reasonImage`. **2026-07-29 added how the answer was produced:** `mode` (the workspace setting) · `engine` (what actually ran — `agent`/`reason`/`floor`; NOT always what `mode` predicts, since the diagnostic path preempts the agent and the floor answers without tools while the mode is unchanged) · `rounds` · `toolCalls`. All nullable, nothing back-filled — an older row honestly reads "unknown", and rows written before 2026-08-02 may read `chatbot` for what is now called `floor`: the same engine under the name it had while it was still a sellable mode. |
 | **`CopilotWalkthrough`** (P4-M0) | One row per guided-walkthrough RUN (a session, not a query; optional `queryId` joins the originating question). | `startStep`/`lastStep`/`totalSteps`, `autoAdvances` (detection-confirmed Nexts) vs `manualAdvances` (override Nexts), `outcome` `active\|completed\|aborted\|stalled` (+`stalledAtStep`); `active` past the widget's 30-min session TTL reads as abandoned — no sweeper by design. |
 | **`CoverageGap`** | A question the KB couldn't cover → "record this next". | `source` = `copilot` (live) or `prompt` (historical — written by the removed article path; old rows only); `status` `open`/`resolved`. |
 
@@ -419,8 +419,8 @@ The founder browses the built workflows and flips **Approve**
 | `senseUsed` | `used` (the answer was about that position) \| `ignored` (we located them, answered about something else) \| `none` (we looked, found nothing) \| `null` (never looked) |
 | `reasonTrigger` | Why diagnosis fired: `intent` (they used diagnostic words) \| `blocked` (the step's button was disabled) \| `escalation` (the fast path declined, the widget retried with evidence) |
 | `reasonImage` | Whether a page image rode along |
-| `mode` | The workspace's setting when they asked — `chatbot` \| `copilot` \| `agent` |
-| `engine` | **Which engine actually answered** — `chatbot` \| `agent` \| `reason`. Not always what `mode` predicts |
+| `mode` | The workspace's setting when they asked — `copilot` \| `agent` (`chatbot` on rows predating its 2026-08-02 retirement) |
+| `engine` | **Which engine actually answered** — `agent` \| `reason` \| `floor`. Not always what `mode` predicts, and `floor` matches no mode at all: it is the fallback, so a run of them is a reliability signal |
 | `rounds` | Model calls made (1 = answered straight from retrieval) |
 | `toolCalls` | Tool invocations the model asked for, including ones the loop refused |
 

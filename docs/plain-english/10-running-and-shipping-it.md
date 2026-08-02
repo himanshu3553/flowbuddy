@@ -72,7 +72,7 @@ disagrees fail to compile.
 
 **About the tests:** there aren't many, deliberately. They cover the trickiest, purest logic —
 the rules that decide which knowledge gets found for a question, the answering loop's contract, and
-the safety rules around the three modes. They deliberately **don't** test what the AI writes: a test
+the safety rules around the modes. They deliberately **don't** test what the AI writes: a test
 that asserts on generated text fails for the wrong reasons.
 
 There's no automated CI. That's a standing decision, not an oversight.
@@ -288,8 +288,20 @@ product.
 
 ## If something goes wrong with the assistant in production
 
-**The fastest lever is switching a workspace to AI Chatbot mode** in Studio → Copilot → Settings.
-Instant, per account, no deploy required.
+**There is no longer a "make it simpler" lever, and that is worth knowing before you need one.**
+Until August 2026 you could drop a misbehaving workspace to the single-shot AI Chatbot mode from
+Studio — instant, per account, no deploy. Retiring that mode removed the escape hatch along with the
+maintenance cost. It was the right trade (nobody was on the tier, and it cost double to maintain
+forever), but it is a real loss and this is where you'd have felt it.
+
+What you still have, per account and without a deploy, in Studio → Copilot → Settings:
+
+- **Turn off the on-page abilities** — pointing and guided walkthroughs. Narrows what the assistant
+  can do on your customers' screens without touching what it knows.
+- **Turn off diagnostics** — stops the assistant reading page state at all, so every question takes
+  the plain answering path.
+- **Un-approve a workflow** — the sharpest instrument. If one workflow is producing bad answers, it
+  stops being answerable at all, immediately.
 
 Individual failures already handle themselves — if the smarter mode fails on one question, that
 question quietly falls back to a simple answer, and the setting stays put.
@@ -429,9 +441,11 @@ can't fire with only one workflow in the knowledge base.
 **It should search on its own.** Ask a follow-up that shifts topic. It should go find the other
 workflow rather than declining on your literal words.
 
-**Highlights and walkthroughs appear less often — that's correct.** They now happen when the
-assistant judges they help, rather than on every positional answer. Then turn the switches off and
-confirm neither *ever* appears no matter what the assistant wants. **The switches must always win.**
+**Highlights and walkthroughs appear on every positional answer.** Your switch is the only thing
+that decides — on means always, off means never. (For a few months the assistant judged it per
+message; that was reversed in August 2026, because a switch that might or might not do anything is
+one you can't demo, can't support, and can't tell apart from an off switch.) Turn the switches off
+and confirm neither *ever* appears. **The switches must always win.**
 
 **Declines must still be honest.** The whole point survives or dies here.
 
@@ -442,12 +456,15 @@ quietly answer the *earlier* question instead — sometimes repeating the previo
 sometimes claiming it knew nothing about a workflow it was holding in full. Every single-question
 check passed the entire time it was broken.
 
-**Switch back to AI Chatbot** and confirm the old rule-driven behaviour returns exactly.
+*(This step used to end by switching back to AI Chatbot to confirm the old rule-driven behaviour
+returned. That mode was retired in August 2026, so there is nothing to switch back to — which also
+means the on-page abilities are now always the assistant's judgment, never a fixed rule.)*
 
 **The fallback is invisible by design.** If the loop fails, that question is answered simply and the
 mode setting stays put. There's no UI for it — you'd confirm it's wired by finding
-`agent path failed — falling back to AI Chatbot` in the API log, and in a healthy run you should
-never see it.
+`agent path failed — falling back to the floor` in the API log, and in a healthy run you should
+never see it. Since the simple mode was retired, this path is no longer exercised by ordinary
+traffic, so a run of these lines is the only signal that it fired at all.
 
 ---
 

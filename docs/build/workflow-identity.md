@@ -227,10 +227,11 @@ the prompt budget is spent on distinct capabilities rather than repeated telling
 as the KB grows.
 
 The cost is real and worth stating: a wrong pick makes the right answer **absent**, not merely
-lower-ranked. That is acceptable only because of how the modes differ — in **Copilot** mode the agent
-can search out the sibling variant when the first does not fit, so a wrong pick is recoverable; in
-**AI Chatbot** mode there are no tools, so the pick is the whole answer. The conservative tiebreak in
-rule 2 is what protects the mode that cannot recover. Mode vocabulary and the ceiling each mode
+lower-ranked. That is acceptable because the agent can search out the sibling variant when the first does not fit,
+so a wrong pick is recoverable. The conservative tiebreak in rule 2 is what protects the case that
+cannot recover — the no-tools floor, where the pick is the whole answer. *(That path used to be a
+sellable mode, AI Chatbot, retired 2026-08-02; it is now only the fallback beneath a failed loop, so
+the tiebreak protects rarer traffic than it was written for and is kept for the same reason.)* Mode vocabulary and the ceiling each mode
 implies: [`agent.md`](agent.md).
 
 ---

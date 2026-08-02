@@ -1,0 +1,17 @@
+-- Retire the AI Chatbot operating mode.
+--
+-- The mode was a strictly worse Copilot that carried a second prompt and a second knowledge
+-- renderer, both of which had to be tuned in parallel forever. Its ENGINE survives in the
+-- application as the floor beneath a failed agent loop (one round, no tools bound); what is retired
+-- is the sellable TIER, and with it the stored value.
+--
+-- `copilot` is the only forward destination: it is what `chatbot` was, plus the assistant deciding
+-- how to help. Nothing is lost by moving a workspace there, and the alternative — leaving rows on a
+-- value the vocabulary no longer contains — would resolve through `parseCopilotMode`'s fail-closed
+-- path anyway. This makes the retirement true in the DATA rather than only in the reader, so a
+-- direct SQL consumer, a dashboard, or an export cannot report a mode that no longer exists.
+--
+-- Expected to affect ZERO rows when it first runs (the column has defaulted to 'copilot' since
+-- 2026-07-27, and every environment is empty at the time of writing). It exists for the environment
+-- that is NOT empty — a restored backup, a long-lived branch database, a fork.
+UPDATE "Workspace" SET "copilotMode" = 'copilot' WHERE "copilotMode" <> 'copilot' AND "copilotMode" <> 'agent';

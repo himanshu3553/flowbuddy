@@ -457,16 +457,20 @@ column defaults apply only to rows created afterwards.
 3. **Publish BOTH widget bundles again** — the base bundle carries mode-aware on-page judgment
    (`wantsOnPage`) and the chat-persistence store.
 4. **No new env vars.** New per-workspace control: Studio → Copilot → Settings → **How your
-   assistant works** (AI Chatbot · Copilot · AI Agent-locked). New workspaces land on **Copilot**
-   with show-me and guided walkthrough permitted; every mode stays switchable both ways.
+   assistant works** (Copilot · AI Agent-locked). Workspaces land on **Copilot** with show-me and
+   guided walkthrough permitted; every mode stays switchable both ways.
 5. **New defaults for new workspaces:** mode **Copilot** · Sense **ON** · show-me **ON** ·
    walkthrough **ON** · Reason **ON** · page image **ON** · typed values **OFF**.
 6. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) — the Copilot-mode leg. Confirm the API logs
    `agent path engaged` on a question, and that a *new* signup shows Copilot pre-selected in
    Settings without touching anything.
-7. **If the loop misbehaves in production**, the fastest lever is Studio → Copilot → Settings →
-   **AI Chatbot** — instant, per workspace, no deploy. Individual loop failures already degrade to
-   an AI Chatbot answer on their own.
+7. **If the loop misbehaves in production**, note the simplest lever is gone: dropping a workspace
+   to the single-shot **AI Chatbot** mode was retired with that mode on 2026-08-02, and there is no
+   "make it simpler" switch any more. What remains, per workspace and without a deploy: turn off the
+   on-page abilities (show-me / walkthrough), turn off Reason so every question takes the plain
+   answering path, or un-approve the offending workflow — the sharpest instrument, since it stops
+   being answerable at all. Individual loop failures still degrade to a single no-tools answer on
+   their own, and log `agent path failed — falling back to the floor`.
 
 ### 8.4 The upload-identity drop (recording uploads)
 

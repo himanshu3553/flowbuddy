@@ -108,7 +108,7 @@ export function CopilotWorkspace({
   primaryOrigin,
   widgetIsPlaceholder = false,
   showCitations = true,
-  mode = 'chatbot',
+  mode = 'copilot',
   senseEnabled = true,
   showMe = false,
   walkthrough = false,
@@ -639,9 +639,9 @@ export function CopilotWorkspace({
 
       {tab === 'settings' && (
         <div className="space-y-5">
-          {/* The operating mode is the headline decision on this screen: it says WHO decides how
-              your users get helped. Everything below it is what the assistant is PERMITTED to do,
-              which is why the abilities sit under an "advanced" fold rather than beside this. */}
+          {/* The operating mode is the headline decision on this screen: it says whether the
+              assistant may ACT. Everything below it is what it is PERMITTED to do, which is why the
+              abilities sit under an "advanced" fold rather than beside this. */}
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">How your assistant works</h3>
             <p className="text-xs text-muted-foreground">
@@ -735,9 +735,10 @@ export function CopilotWorkspace({
           </section>
 
           {/* The ABILITIES fold. These say what the assistant may do on your customers' pages —
-              the same permissions in every mode. What changes with the mode above is WHO decides
-              when to use them: a fixed rule in AI Chatbot, the assistant's own judgment in Copilot.
-              Folded away because most founders should pick a mode and never open this. */}
+              the same permissions in every mode, and always the founder's to grant. Since D11
+              (2026-08-02) each switch is also the whole DECISION: on fires on every positional
+              answer, off fires on none. Folded away because most founders should pick a mode and
+              never open this. */}
           <details className="group rounded-card border bg-card shadow-card [&_section]:border-0 [&_section]:shadow-none">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
               <span>

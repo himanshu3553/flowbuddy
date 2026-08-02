@@ -527,35 +527,6 @@ describe('shapeAnswer', () => {
     expect(uncovered).toEqual({ covered: false, reason: 'D' });
   });
 
-  it('reports NO intents when the caller did not ask for them (mode 1 stays untouched)', async () => {
-    // AI Chatbot's schema has no intent fields, so the model can never set them. If this ever
-    // returns an object, mode 1 has started emitting agent behaviour and its wire shape has moved.
-    const r = shapeAnswer({
-      content: JSON.stringify({ covered: true, answer: 'x', citedItemIds: [] }),
-      items,
-      declineReason: 'no',
-    });
-    if (r.covered) expect(r.intents).toBeUndefined();
-  });
-
-  it('carries the on-page intents through when the model was asked for them', async () => {
-    const r = shapeAnswer({
-      content: JSON.stringify({ covered: true, answer: 'x', citedItemIds: [], highlight: true, offerWalkthrough: false }),
-      items,
-      declineReason: 'no',
-    });
-    if (r.covered) expect(r.intents).toEqual({ highlight: true, offerWalkthrough: false });
-  });
-
-  it('treats anything non-true as a NO — an intent must be asserted, never inferred', async () => {
-    const r = shapeAnswer({
-      content: JSON.stringify({ covered: true, answer: 'x', citedItemIds: [], highlight: 'yes', offerWalkthrough: 1 }),
-      items,
-      declineReason: 'no',
-    });
-    if (r.covered) expect(r.intents).toEqual({ highlight: false, offerWalkthrough: false });
-  });
-
   it('prefers the model\'s own decline wording when it gave one', async () => {
     const r = shapeAnswer({
       content: JSON.stringify({ covered: false, reason: 'I have not been taught that yet.' }),

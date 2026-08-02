@@ -156,8 +156,8 @@ call uses `/v1/chat/completions`. *(Whisper and embeddings are separate APIs and
 callers took for granted: an **explicit `temperature`**, and **function tools alongside reasoning**.
 Both arrive as hard 400s, not degradations. The second is the load-bearing one — it is impossible to
 satisfy on chat-completions, and it broke exactly the two paths that bind tools (the agent loop and
-the diagnostic path) while leaving AI Chatbot working, which made it look like a feature bug rather
-than an API-level constraint. Rather than carry a growing list of per-model workarounds, the whole
+the diagnostic path) while leaving the no-tools path working, which made it look like a feature bug
+rather than an API-level constraint. Rather than carry a growing list of per-model workarounds, the whole
 package moved.
 
 **What it bought.** Reasoning *and* tools together, on the paths where deliberation is the point.
@@ -174,9 +174,11 @@ Segmentation and distillation can now reason too — they were on the endpoint t
    entirely on thinking, returning empty text that reads downstream as an ordinary decline — and
    gets filed as a coverage gap the founder could never fix by recording anything. Caps were raised
    accordingly, and a truncated response is now reported as `incomplete` rather than swallowed.
-3. **Cost per answer is up**, and AI Chatbot gained nothing for it — it binds no tools, so reasoning
-   was never blocked for it, yet it now runs on a reasoning model with a much larger ceiling. It is
-   also the fallback every agent failure lands on.
+3. **Cost per answer is up**, and the no-tools path gained nothing for it — binding no tools, it was
+   never blocked from reasoning in the first place, yet it now runs on a reasoning model with a much
+   larger ceiling. It is the fallback every agent failure lands on, and since AI Chatbot's retirement
+   (2026-08-02) that is the *only* traffic it sees — so this cost is now paid rarely rather than by a
+   whole tier.
 
 **Still unmeasured.** Whether answers are actually *better*. `scripts/copilot-baseline.mjs` compares
 answer decisions over a fixed question set and is the tool for it — but the KB is only about two

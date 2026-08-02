@@ -24,27 +24,28 @@ VERSION 2 — Portal & articles · modalities · depth  ⬜×13                 
 VERSION 3 — Buyer-side: record the tools you USE · the company agent       📝 direction (2026-07-25)
 ```
 
-**⭐ The copilot now ships in THREE OPERATING MODES** (D9 — [`agent.md`](build/agent.md)), founder-selected
+**⭐ The copilot ships in TWO OPERATING MODES** (D9 + D10 — [`agent.md`](build/agent.md)), founder-selected
 per workspace and also the pricing tiers. This cuts ACROSS the phases above rather than sitting inside one:
 
 ```
-1 · AI Chatbot   answers, fixed rules decide the rest   🟩 shipped — the SAFETY FLOOR (below)
-2 · Copilot      the read-only agent: it decides how    🟩 BUILT + user-verified E2E 2026-07-27
-                 to help, turn by turn. Never acts.        ⭐ the default for NEW workspaces
-3 · AI Agent     adds acting on the user's behalf       ⬜ not built · never a default
+1 · Copilot      the read-only agent: it decides how    🟩 BUILT + user-verified E2E 2026-07-27
+                 to help, turn by turn. Never acts.        ⭐ what every workspace gets
+2 · AI Agent     adds acting on the user's behalf       ⬜ not built · never a default
 ```
 
-**Mode 2 is what a new workspace gets (2026-07-27)** — signed up, embedded, and already a Copilot,
-with the on-page abilities it advertises (`copilotShowMe`, `copilotWalkthrough`) permitted too.
-Every mode stays switchable both ways in Studio → Copilot → Settings, and **existing workspaces are
-untouched**: a column default applies only to new rows, and the stored value cannot tell a founder's
-deliberate choice from an inherited one.
+**A third rung below these — `AI Chatbot`, single-shot answers with fixed rules for the rest — was
+RETIRED 2026-08-02** (D10). It was a strictly worse Copilot carrying a second prompt and a second
+knowledge renderer that had to be tuned in parallel forever. Its ENGINE survives as the floor
+beneath a failed agent loop — the agent's own prompt, one round, no tools — but it is not a mode,
+has no stored value, and cannot be selected. Migration `20260802180000_retire_chatbot_mode` moves
+any surviving row to `copilot`; a row that escapes it reads forward correctly anyway, because
+parsing fails closed.
 
-Mode 1 keeps two jobs it does not share with the ladder position: it is a **sold tier** (the
-predictable, single-call configuration), and it is the **safety floor** — where an unrecognised
-stored value lands, and where the runtime falls back when the agent loop errors (built 2026-07-27).
-That floor may only ever move *down*, which is why the product default and the floor are now
-deliberately different constants (`NEW_WORKSPACE_MODE` vs `DEFAULT_COPILOT_MODE`).
+Every mode stays switchable both ways in Studio → Copilot → Settings. Copilot is now BOTH the
+product default and the fail-closed floor, so `NEW_WORKSPACE_MODE` and `DEFAULT_COPILOT_MODE` read
+identically — and are still deliberately two constants, because the day the default climbs to
+`AI Agent` the floor must not follow. The floor's rule is no longer "the rung that can do least" but
+**the rung that cannot ACT**, which was always the part that mattered.
 
 **🧠 Application Intelligence Layer — 🔄 first two slices BUILT (2026-08-01, dev, not yet
 user-verified).** The KB's next altitude, and the answer to Copilot mode's top gap ("knows the
@@ -54,7 +55,7 @@ from founder-authored to derivation-first. Decisions AI-1…AI-9 + the road:
 [`application-intelligence.md`](build/application-intelligence.md).
 - **Slice 0 (transcript gate)** ✅ ran 2026-08-01 — pre-coaching narration was ~90% click-commentary; the coached re-recording (11 workflows, ~10k chars) has the register the extractor needs and is the calibration set.
 - **Slice 1 (recording description)** ✅ built + verified E2E locally — every processed recording derives "what this recording covers"; shown on the recordings list + detail page.
-- **Slice 2 (overview + concept pages)** ✅ **built + verified E2E 2026-08-02** — quote-anchored extraction in the worker, pages born unapproved with narration provenance, pending-update flow for approved pages, Studio "Product knowledge" review section, retrieval serving live pages as a second corpus rendered as PRODUCT BACKGROUND in all three engines (pages emit no citations in v1). First live run: 10 pages, 10/10 anchored, founder-approved in Studio; the three canonical orienting questions answer (one with cross-page synthesis) and uncovered questions still decline.
+- **Slice 2 (overview + concept pages)** ✅ **built + verified E2E 2026-08-02** — quote-anchored extraction in the worker, pages born unapproved with narration provenance, pending-update flow for approved pages, Studio "Product knowledge" review section, retrieval serving live pages as a second corpus rendered as PRODUCT BACKGROUND in every engine (pages emit no citations in v1). First live run: 10 pages, 10/10 anchored, founder-approved in Studio; the three canonical orienting questions answer (one with cross-page synthesis) and uncovered questions still decline.
 - **Slice 3 (links + area pages)** ✅ **built + live-verified 2026-08-02** — `area` page type; per-page related-workflow links, title-anchored at extraction and resolved to durable workflow ids at sync; answers surface them as live-approval-filtered `get_workflow` keys (the WHAT→HOW bridge); Studio "Points to" chips. Page↔page links deferred. The live run exercised the whole lifecycle at once: 2 area pages born unapproved, 3 pending updates parked on approved pages, links populated, live content untouched.
 - **Baseline formalized 2026-08-02** (`copilot-baseline-questions.json`: 28 cells incl. 11 orienting; f2/t5 regrouped decline→orienting since pricing is now legitimately covered; login-setup cells repaired — that workflow never existed in this workspace). Capture `baseline-copilot-mode-2026-08-02.json`: **20/28 cells valid, every one at its target — 11/11 orienting cells 8/8, all how-to and hard cells 8/8** — the remaining 8 (declines + topic-shift) errored on **OpenAI credit exhaustion**, not product behavior; re-run `--only f1,f3,f4,t1,t2,t3,t4,t6` and merge once credits are topped up.
 - **Next:** finish the 8 credit-blocked baseline cells · calibrate extraction thresholds on a second product · V2 portal renders pages as articles (captured direction).
@@ -202,9 +203,9 @@ Only **Phase 1** gates the Version 1 release — and the release-gating work is 
 
 The residual open items from the Phase-1 end-to-end review — nothing release-blocking; schedule deliberately. Full detail behind each: [`archive/phase-1-review.md`](archive/phase-1-review.md).
 
-- **Automated test layer — ✅ started 2026-07-27, extended 2026-07-29; still partial.** `@flowbuddy/synthesis` carries the repo's first tests (`vitest`, run as `pnpm test` beside typecheck; **49 passing**, no CI): the shared answer loop (round + tool budgets, de-duplication by name **and** arguments, what the loop reports back), `formatItems`, the retrieval shortlist's signal ordering, `sanitizeHistory`, and the operating-mode vocabulary. Beside them `scripts/copilot-baseline.mjs` measures answer *quality* against a fixed question set — including multi-turn cases where the question under test arrives as a follow-up. **Still uncovered:** `cleanEvents`, `redactText` (Luhn/phone/email edges), `shortcutCombo`, the segmenter carry-forward guard, `checkRateLimit`, `distillSteps` grounding validation, `highlightFromBbox` — and the diagnostic path, which has no coverage at all and is the hard prerequisite for folding it into the agent loop ([`agent.md`](build/agent.md) §9 Gap 3).
+- **Automated test layer — ✅ started 2026-07-27, extended since; still partial.** `@flowbuddy/synthesis` carries the repo's tests (`vitest`, run as `pnpm test` beside typecheck; **114 passing**, no CI): the shared answer loop (round + tool budgets, de-duplication by name **and** arguments, what the loop reports back), `formatItems`, the retrieval shortlist's signal ordering, `sanitizeHistory`, the operating-mode vocabulary, duplicate detection, the page extractor, and the Reason fixture-scoring rules. Two quality harnesses sit beside them: `scripts/copilot-baseline.mjs` (answer quality over a fixed question set, incl. multi-turn cases) and `scripts/reason-fixtures.mjs` (the **diagnostic** path — replays frozen page states and scores the answers). **Diagnosis is now measurable in principle but not yet measured:** the harness is built, the four page-state captures it needs are not, and they require a workspace with an approved workflow to stand in — the hard prerequisite for folding that path into the agent loop ([`agent.md`](build/agent.md) §9 Gap 3). **Still uncovered:** `cleanEvents`, `redactText` (Luhn/phone/email edges), `shortcutCombo`, the segmenter carry-forward guard, `checkRateLimit`, `distillSteps` grounding validation, `highlightFromBbox`.
 - **Observability** — error aggregation (Sentry-class) on api + web, and per-call model latency/token logging in `answerFromKB`. *(Structured pino logging is done — [`dev-setup.md`](ops/dev-setup.md) §7.)*
-- **Cost ceiling + agent observability** — a per-workspace daily budget counter + an OpenAI token-usage column on `CopilotQuery` (also unlocks real cost analytics). *(The cheap caps — question length, `max_completion_tokens`, low temperature, rate limits — are done.)* **Raised in priority 2026-07-27 by Copilot mode, and the answer-path half ✅ CLOSED 2026-07-29:** `CopilotQuery` now records **mode** (the workspace setting) · **engine** (what actually answered) · **rounds** · **toolCalls** — four nullable columns, nothing back-filled, so an older row honestly reads "unknown" — and the api emits one `copilot answer` log line per question. `engine` is deliberately *not* `mode`: the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers as AI Chatbot while the mode still reads Copilot, so recording only the setting would attribute both to the wrong engine. *"Should AI Chatbot collapse into Copilot?"* is now a query rather than an opinion — [`agent.md`](build/agent.md) §9 Gap 2. **Still open here:** the token-usage column, the daily budget counter, and a Studio surface — nothing in `web` reads the new columns yet. *(The spend guard itself stays deliberately unbuilt — founder decision 2026-07-26; revisit before real customer traffic.)*
+- **Cost ceiling + agent observability** — a per-workspace daily budget counter + an OpenAI token-usage column on `CopilotQuery` (also unlocks real cost analytics). *(The cheap caps — question length, `max_completion_tokens`, low temperature, rate limits — are done.)* **Raised in priority 2026-07-27 by Copilot mode, and the answer-path half ✅ CLOSED 2026-07-29:** `CopilotQuery` now records **mode** (the workspace setting) · **engine** (what actually answered) · **rounds** · **toolCalls** — four nullable columns, nothing back-filled, so an older row honestly reads "unknown" — and the api emits one `copilot answer` log line per question. `engine` is deliberately *not* `mode`: the diagnostic path preempts the agent whenever the widget shipped page state, and the safety floor answers with no tools while the mode still reads Copilot, so recording only the setting would attribute both to the wrong engine. *(The question these were built to settle — "should AI Chatbot collapse into Copilot?" — was answered on simplicity rather than cost by D10 on 2026-08-02, before enough traffic accumulated to answer it with data. The columns changed job rather than becoming waste: `engine: "floor"` is now a **reliability** signal, and the only way to notice the fallback firing.)* **Still open here:** the token-usage column, the daily budget counter, and a Studio surface — nothing in `web` reads the new columns yet. *(The spend guard itself stays deliberately unbuilt — founder decision 2026-07-26; revisit before real customer traffic.)*
 - **Extension injection scope** — switch the recorder from static `<all_urls>` content-script injection to programmatic injection into session tabs only (lower Web-Store scrutiny + better privacy optics; the on-demand `armTab` machinery already exists).
 - **Signup gate** — an invite/allowlist gate for private beta (deliberately left open; sign-in rate-limiting + email verification/reset are done).
 - **Presigned artifact uploads carry no size ceiling — ⏸ DEFERRED BY DECISION (2026-07-28), revisit later.** Opened by the idempotent-upload change: artifacts now go browser → object storage directly, so the API never sees those bytes and neither of its caps applies to them (`MAX_BUNDLE_BYTES` = 500 MB total and the 300 MB per-file multipart limit only ever covered the `/v1/sessions` bundle, which is now just the fallback). A signed URL authorizes *one key*, not *a size*, so a recording can write an unbounded amount.

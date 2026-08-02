@@ -97,11 +97,11 @@ const cfg = {
   // P4-M0 guided walkthrough — arrives from /v1/copilot/config; defaults OFF (it draws on the
   // host page and observes progression, so the founder knowingly enables it). Needs Sense.
   walkthrough: false,
-  // The workspace's operating mode, from /v1/copilot/config: 'chatbot' (today's behaviour — the
-  // default and the fallback) · 'copilot' (the agent decides how to help, still read-only) ·
-  // 'agent' (adds acting; not built). The widget needs it because some abilities run in the page —
-  // but the SERVER re-checks on every call, so nothing here can grant capability.
-  mode: 'chatbot' as 'chatbot' | 'copilot' | 'agent',
+  // The workspace's operating mode, from /v1/copilot/config: 'copilot' (the assistant decides how
+  // to help, read-only — the default and the fail-closed value) · 'agent' (adds acting; not built).
+  // The widget needs it because some abilities run in the page — but the SERVER re-checks on every
+  // call, so nothing here can grant capability.
+  mode: 'copilot' as 'copilot' | 'agent',
   // P2-M5 Reason — all three arrive from /v1/copilot/config. reason defaults ON (structure-only,
   // masked); the image tier and value unmasking default OFF (the founder knowingly enables them).
   reason: true,
@@ -344,29 +344,12 @@ async function buildReasonPayload(trigger: ReasonTrigger): Promise<ReasonAskPayl
   return { trigger, snapshot, ...(image ? { image } : {}) };
 }
 
-/** What the assistant DECIDED to do on the page — Copilot mode only; absent in AI Chatbot, whose
- *  on-page behaviour stays rule-driven. A request, not a permission: the founder's switches below
- *  still decide what actually happens. */
-interface AnswerIntents { highlight?: boolean; offerWalkthrough?: boolean }
-
 interface AnswerResponse {
   covered?: boolean; answer?: string | null; citations?: Citation[]; reason?: string; error?: string; queryId?: string;
   // Fastify's DEFAULT error shape is { statusCode, error: 'Bad Request', message }. `error` is only
   // the HTTP status NAME — the useful half is `message`. Typed so it can be logged, never rendered.
   message?: string;
-  position?: AnswerPosition | null; escalate?: boolean; intents?: AnswerIntents;
-}
-
-/**
- * Should this on-page ability run? Two gates, in order:
- *  1. the founder's switch — always, in every mode. Nothing here can turn something on.
- *  2. WHO decides the timing: in AI Chatbot a fixed rule does (offer whenever it applies); in
- *     Copilot mode the assistant does, per message. That swap is the whole of D8 in one function.
- * A missing intent in Copilot mode means "not this time" — never "fall back to always".
- */
-function wantsOnPage(intents: AnswerIntents | undefined, which: keyof AnswerIntents): boolean {
-  if (cfg.mode === 'chatbot') return true; // the rule decides; the caller already checked its switch
-  return intents?.[which] === true;
+  position?: AnswerPosition | null; escalate?: boolean;
 }
 
 /**
@@ -404,30 +387,56 @@ async function postAnswer(
   reasonPayload: ReasonAskPayload | null,
 ): Promise<{ ok: boolean; status: number; data: AnswerResponse }> {
   const lastCited = lastCitedKeys();
+  const context = {
+    path: location.pathname,
+    title: document.title,
+    // P5-M0 cut 2 — what the previous answer cited (omitted entirely when there is nothing to
+    // say, so a first question is byte-identical to today's payload).
+    ...(lastCited.length > 0 ? { lastCited } : {}),
+    ...(lastProbe && lastProbe.hypotheses.length > 0
+      ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
+      : {}),
+    // P2-M5 Reason — either the captured evidence, or a capability flag so the server knows a
+    // fast-path decline may be escalated (it then skips logging and asks us to retry).
+    ...(reasonPayload ? { reason: reasonPayload } : reasonActive() ? { reason: { available: true } } : {}),
+  };
+  captureForFixture(question, context);
   const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
-    body: JSON.stringify({
-      question,
-      history,
-      context: {
-        path: location.pathname,
-        title: document.title,
-        // P5-M0 cut 2 — what the previous answer cited (omitted entirely when there is nothing to
-        // say, so a first question is byte-identical to today's payload).
-        ...(lastCited.length > 0 ? { lastCited } : {}),
-        ...(lastProbe && lastProbe.hypotheses.length > 0
-          ? { sense: { probed: true, tie: lastProbe.tie, hypotheses: lastProbe.hypotheses } }
-          : {}),
-        // P2-M5 Reason — either the captured evidence, or a capability flag so the server knows a
-        // fast-path decline may be escalated (it then skips logging and asks us to retry).
-        ...(reasonPayload ? { reason: reasonPayload } : reasonActive() ? { reason: { available: true } } : {}),
-      },
-      ...(cfg.preview ? { preview: true } : {}),
-    }),
+    body: JSON.stringify({ question, history, context, ...(cfg.preview ? { preview: true } : {}) }),
   });
   const data = (await res.json().catch(() => ({}))) as AnswerResponse;
   return { ok: res.ok, status: res.status, data };
+}
+
+/**
+ * FIXTURE CAPTURE — debug builds only (`data-flowbuddy-debug="true"`), so a customer's page is
+ * untouched and nothing is emitted on a normal embed.
+ *
+ * The diagnostic path's test fixtures are LIFTED from a real page, never hand-written. `filled`,
+ * `valid` and `invalidReason` come from the live constraint-validation API, and `reason.ts`
+ * deliberately OMITS `valid` where a control carries no machine-checkable constraint — so a
+ * hand-authored snapshot encodes what we IMAGINE a page reports, which is the one thing a
+ * regression fixture must not do.
+ *
+ * Sense is stashed alongside the snapshot because a snapshot alone measures a crippled engine: the
+ * server attaches the founder's expected-state artifacts off the top SENSE hypothesis, so without
+ * it `get_expected_screenshot` / `get_expected_dom` are never bound and a third of the diagnostic
+ * path goes unexercised. Both halves must come from the SAME moment on the SAME page.
+ *
+ * Capture recipe + how to turn this into a fixture file: docs/ops/e2e-testing.md.
+ */
+function captureForFixture(question: string, context: Record<string, unknown>): void {
+  if (!cfg.debug) return;
+  const g = window as unknown as { FlowBuddyLastAsk?: unknown };
+  // `path` and `title` ride along: the replay harness sends them as the host-page context, and a
+  // fixture captured on the wrong route would otherwise be indistinguishable from a good one.
+  g.FlowBuddyLastAsk = { question, context };
+  log.debug('fixture capture: window.FlowBuddyLastAsk updated', {
+    reason: 'reason' in context,
+    sense: 'sense' in context,
+  });
 }
 
 async function ask(question: string): Promise<void> {
@@ -484,10 +493,31 @@ async function ask(question: string): Promise<void> {
       // element, resolved by THIS question's probe (never a stale one). Fallback: the probe keeps
       // one element PER STEP, so a step-number disagreement still highlights a workflow match.
       // Suppressed while a walkthrough runs — its sticky highlight owns the page.
+      //
+      // THE FOUNDER'S SWITCH IS THE ONLY DECIDER — this and the walkthrough offer below both fire on
+      // EVERY positional answer when their switch is on. **This amends D8** (founder decision
+      // 2026-08-02), which had made each offer the assistant's judgment per message.
+      //
+      // Why the rule won. A "maybe" is a bad control: under judgment a founder cannot tell a switch
+      // that is OFF from one that is ON and being declined, which leaves the feature undemonstrable,
+      // undiscoverable to end-users and unsupportable. As a rule the switch means yes or no, and OFF
+      // is the escape hatch. The judgment it replaces was never measured — the risk of the agent
+      // UNDER-offering was flagged when mode 2 shipped and nobody watched it — so this trades an
+      // unmeasured judgment for a predictable rule. Reversal is cheap and explicit: re-add the
+      // prompt section and the two schema fields the answer used to carry — both were removed with
+      // the judgment, because a preference nobody obeys is prompt real estate spent on nothing.
+      //
+      // And the noise D8 feared is mostly structural anyway. Four gates already stand here: the
+      // answer must be POSITIONAL (a general question never reaches this code); a clarifying question
+      // sets `usedPosition` false, so "interrupting someone you just asked a question" cannot happen;
+      // the highlight needs an element THIS probe resolved; and `walkthroughOffer` returns null on
+      // the last step, so the offer cannot fire with nothing left to walk. What remains is a user
+      // mid-workflow seeing one ring and one pill, which is the intended behaviour.
+      //
+      // Given up: the assistant can no longer stay quiet at a moment only it can see is wrong.
       if (data.position && !walkthroughActive()) {
         const key = `${data.position.sourceId}:${data.position.segmentIndex}:${data.position.step}`;
         if (!cfg.showMe) log.debug('show-me: off (enable it in Studio → Copilot → Settings, then reload this page)');
-        else if (!wantsOnPage(data.intents, 'highlight')) log.debug('show-me: the assistant judged a highlight unhelpful here');
         else if (!lastProbe) log.debug('show-me: no probe result for this question');
         else {
           const prefix = `${data.position.sourceId}:${data.position.segmentIndex}:`;
@@ -500,7 +530,7 @@ async function ask(question: string): Promise<void> {
       }
       // P4-M0 — offer to walk the user through the rest (config-gated; needs a position + a shard
       // workflow to walk; the shard is cached from panel open, so this is normally instant).
-      if (data.position && cfg.walkthrough && senseActive() && !walkthroughActive() && wantsOnPage(data.intents, 'offerWalkthrough')) {
+      if (data.position && cfg.walkthrough && senseActive() && !walkthroughActive()) {
         const workflows = await ensureShard(cfg.apiBase, cfg.key, location.pathname, 800);
         const offer = walkthroughOffer(data.position, workflows);
         if (offer) answered.walkOffer = offer;
@@ -753,7 +783,7 @@ interface ServerConfig {
   position?: string | null; launcher?: string | null; launcherText?: string | null;
   sense?: boolean; showMe?: boolean; // P2 Sense — Studio-controlled flags
   walkthrough?: boolean; // P4-M0 guided walkthrough — Studio-controlled
-  mode?: string; // operating mode — 'chatbot' | 'copilot' | 'agent' (unknown values fail closed)
+  mode?: string; // operating mode — 'copilot' | 'agent' (unknown values fail closed to 'copilot')
   reason?: boolean; reasonImage?: boolean; reasonValues?: boolean; // P2-M5 Reason — Studio-controlled
 }
 
@@ -797,8 +827,9 @@ function applyServerConfig(s: ServerConfig): void {
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
   cfg.walkthrough = s.walkthrough === true; // P4-M0 — workspace policy too (explicit true only)
-  // Operating mode — anything unrecognised stays 'chatbot'. The widget never widens its own
-  // capability from a config value; the server is the authority and re-checks every call.
+  // Operating mode — anything unrecognised stays 'copilot', the read-only floor. That covers a
+  // pre-retirement 'chatbot' row without a special case. The widget never widens its own capability
+  // from a config value; the server is the authority and re-checks every call.
   if (s.mode === 'copilot' || s.mode === 'agent') cfg.mode = s.mode;
   // P2-M5 Reason — workspace policy too; the image tier and unmasking require an explicit true.
   if (s.reason === false) cfg.reason = false;

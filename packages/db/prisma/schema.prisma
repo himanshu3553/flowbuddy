@@ -95,15 +95,23 @@ model Workspace {
   // P2-M3 "show me" — when on, the widget also HIGHLIGHTS the current step's element on the host
   // page alongside a positional answer (off = text-only). Served to the widget via /v1/copilot/config.
   //
-  // Default flipped to ON for new workspaces 2026-07-27, together with the Copilot-mode default
-  // below it. These two switches were off because in AI Chatbot mode they fire on a FIXED RULE —
-  // every positional answer highlights, every positional answer offers a walkthrough — which is
-  // noisy enough that a founder should opt in. In Copilot mode there is no rule: the assistant
-  // decides per message whether pointing actually helps (widget `wantsOnPage`). So the switch stops
-  // meaning "do this every time" and starts meaning "you MAY do this when it helps" — and left off,
-  // the default Copilot is one the picker describes as pointing and guiding while being unable to.
-  // The switch still wins in both modes: nothing here can turn an ability on that the founder
-  // turned off. Existing workspaces are untouched (a column default applies only to new rows).
+  // Default flipped to ON 2026-07-27, together with the Copilot-mode default below it.
+  //
+  // **This switch is the ONLY decider (2026-08-02).** ON means every positional answer highlights;
+  // OFF means none do. There is no third behaviour. It briefly meant "you MAY do this when it
+  // helps" — the assistant judging per message — and that reading was reversed by founder decision
+  // (agent.md D8, amended): a switch that might or might not do anything is a control a founder
+  // cannot demo, support, or tell apart from an OFF switch, and the judgment replacing it had never
+  // been measured. The assistant's preference is still recorded on the answer, unobeyed, so the
+  // question stays answerable from real traffic.
+  //
+  // These switches defaulted OFF in the era when a fixed rule last governed them, on the grounds
+  // that firing every time is noisy enough to deserve opt-in. Both facts are true at once now, and
+  // that is deliberate: the noise is bounded by structure (only POSITIONAL answers reach the rule,
+  // a clarifying question sets no position, the highlight needs a resolved element, and the offer
+  // needs remaining steps), and left off, the default Copilot is one the picker describes as
+  // pointing and guiding while being unable to. Existing workspaces are untouched (a column default
+  // applies only to new rows).
   copilotShowMe         Boolean  @default(true)
   // P4-M0 guided walkthrough — when on, positional answers offer "Walk me through it": the widget
   // highlights each remaining step and follows the user's progress (the user does everything;
@@ -116,22 +124,31 @@ model Workspace {
   // for its default and why, see the field below). `reasonIncludeValues`
   // unmasks typed field values in the capture (hard floors apply regardless: passwords are never
   // captured, card/SSN patterns always masked). All served to the widget via /v1/copilot/config.
-  // The copilot's OPERATING MODE — how much the assistant is allowed to decide for itself, and
-  // (later) the pricing tier. Founder-selected, strictly ordered, one per workspace:
-  //   "chatbot" → shown as **AI Chatbot** — one grounded answer per question, fixed rules decide
-  //               the rest. The SAFETY FLOOR: where an unrecognised value lands, and the runtime
-  //               fallback underneath the others when the agent loop errors or times out.
+  // The copilot's OPERATING MODE — whether the assistant may ACT, and (later) the pricing tier.
+  // Founder-selected, strictly ordered, one per workspace. TWO legal values:
   //   "copilot" → shown as **Copilot** — the agent loop: it chooses which grounded primitive to
-  //               use, turn by turn (explain · point · guide · diagnose). Still READ-ONLY: it
-  //               never clicks, types, or navigates. **The default for new workspaces since
-  //               2026-07-27** — the product's opinion about what FlowBuddy is. Note the default
-  //               below and the floor above are now DIFFERENT values, and deliberately so: the
-  //               default may climb the ladder as modes prove out, the floor may only descend.
-  //   "agent"   → shown as **AI Agent** — adds acting. NOT BUILT; never a default.
-  // Deliberately a STRING, not an enum: mode 3 (and anything after it) slots in by adding a value
-  // rather than altering the database. The stored key is internal — the founder-facing labels above
-  // live in the UI layer, so renaming a tier is a text change with no migration (user decision
-  // 2026-07-26). Unknown values are treated as "chatbot" by the server: fail closed, never open.
+  //               use, turn by turn (explain · point · guide · diagnose). READ-ONLY: it never
+  //               clicks, types, or navigates. The default for new workspaces, AND the safety
+  //               floor where an unrecognised value lands.
+  //   "agent"   → shown as **AI Agent** — adds acting. NOT BUILT; never a default, never a floor.
+  //
+  // A third value, "chatbot" (one grounded answer, fixed rules for the rest), was RETIRED — it was
+  // a strictly worse Copilot carrying a second prompt and a second knowledge renderer that had to
+  // be tuned in parallel forever. Migration 20260802180000 moves any surviving row to "copilot",
+  // and a row that escapes it still reads forward correctly: the server's `parseCopilotMode` does
+  // not recognise the value and fails closed to "copilot", which is exactly where it belongs.
+  // (The ENGINE lives on as the floor beneath a failed agent loop, but it is not a mode and has no
+  // stored value — see CopilotQuery.engine below.)
+  //
+  // The default and the floor now read IDENTICALLY and are still two separate constants in
+  // shared/copilot-mode.ts. That is not redundancy: the day the default climbs to "agent", the
+  // floor must not follow, or every typo and every rolled-back row becomes an acting agent.
+  //
+  // Deliberately a STRING, not an enum: a further mode slots in by adding a value rather than
+  // altering the database — and retiring one costs an UPDATE rather than a type change, which is
+  // what made this retirement a one-line migration. The stored key is internal — the founder-facing
+  // labels live in the UI layer, so renaming a tier is a text change with no migration (user
+  // decision 2026-07-26).
   // Nothing sets this on create (see web/lib/workspace.ts), so THIS default is the only lever;
   // mirrored for readers in shared/copilot-mode.ts `NEW_WORKSPACE_MODE` — change both together.
   // GOTCHA: Prisma Client bakes scalar defaults in at `prisma generate` time and sends them
@@ -465,10 +482,14 @@ model CopilotQuery {
   //
   // `engine` is the one that matters, and it is NOT the same as the workspace's configured mode:
   // the diagnostic path preempts the agent whenever the widget shipped page state, and the safety
-  // floor answers as AI Chatbot while the mode still reads "copilot". Recording the mode alone
+  // floor answers with no tools while the mode still reads "copilot". Recording the mode alone
   // would attribute both to the wrong engine. Both are stored so the gap between them is visible.
-  //   mode   — the workspace setting at ask time: chatbot | copilot | agent
-  //   engine — what actually produced this answer: chatbot | agent | reason
+  //   mode   — the workspace setting at ask time: copilot | agent
+  //   engine — what actually produced this answer: agent | reason | floor
+  //            "floor" is the one that is NOT a mode — it is the agent's own prompt run for one
+  //            round with no tools, after something above it failed. A run of these rows is a
+  //            reliability signal, not a configuration one. (Rows written before 2026-08-02 may
+  //            read "chatbot": the same engine under the name it had while it was still a tier.)
   //   rounds — model calls made (1 = answered straight from retrieval, no tool use)
   //   toolCalls — tool invocations the model asked for, INCLUDING ones the loop refused
   // Deliberately strings, not enums, and all nullable: pre-2026-07-29 rows keep meaning "unknown"

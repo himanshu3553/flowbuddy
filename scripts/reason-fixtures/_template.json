@@ -1,0 +1,78 @@
+{
+  "_readme": [
+    "TEMPLATE — not a fixture. reason-fixtures.mjs skips every file whose name starts with '_'.",
+    "",
+    "A fixture is one FROZEN PAGE STATE plus the question a stuck person asked from it. The whole",
+    "point is that `snapshot` is LIFTED from a real page, never typed by hand: `filled`, `valid` and",
+    "`invalidReason` come from the live constraint-validation API, and the widget deliberately OMITS",
+    "`valid` where a control has no machine-checkable constraint. A hand-authored snapshot encodes",
+    "what we imagine a page reports, which is the one thing a regression fixture must not do.",
+    "",
+    "To capture: embed the widget with data-flowbuddy-debug=\"true\", put the page in the state you",
+    "want, ask a diagnostic question, then read window.FlowBuddyLastAsk in the console. Copy",
+    "context.reason.snapshot into `snapshot` and context.reason.trigger into `trigger`. The full",
+    "recipe, including which four states to capture, is in docs/ops/e2e-testing.md.",
+    "",
+    "Do NOT paste context.sense's ids into this file. Name the workflow instead (see `workflow`):",
+    "ids change on every reseed, and a fixture holding stale ids keeps reporting a rate while",
+    "silently testing an unlocalized version of the engine."
+  ],
+
+  "id": "empty-form",
+  "label": "Signup form, nothing filled in",
+  "question": "why can't I create the account?",
+  "path": "/signup",
+  "capturedAt": "2026-08-02",
+
+  "trigger": "intent",
+
+  "workflow": {
+    "_readme": "Resolved to live ids at run time via GET /v1/copilot/sense-plan. Title must match the approved workflow EXACTLY; no match = the row is reported INVALID and never scored.",
+    "title": "Create an account",
+    "step": 4,
+    "stepsDone": [1, 2, 3],
+    "confidence": 0.8
+  },
+
+  "snapshot": {
+    "_readme": "Paste window.FlowBuddyLastAsk.context.reason.snapshot here, verbatim. The shape below is illustrative only.",
+    "path": "/signup",
+    "title": "Sign up",
+    "viewport": { "w": 1440, "h": 900 },
+    "elements": [
+      { "tag": "input", "role": "text", "name": "Full Name", "required": true, "filled": false },
+      { "tag": "input", "role": "email", "name": "Email", "required": true, "filled": false },
+      { "tag": "button", "name": "Create account", "current": true }
+    ],
+    "texts": ["Create your account", "Password must be at least 8 characters"]
+  },
+
+  "expect": {
+    "_readme": [
+      "Every field is optional. Omitted = not asserted. Rates are reported per assertion, never",
+      "pass/fail — the model is non-deterministic and a binary would flap.",
+      "",
+      "The plain-language check (no leaked constraint names / flag words / 'page state') is ALWAYS",
+      "on and needs no declaration: it is a rule for every answer the diagnostic engine ever gives.",
+      "",
+      "covered           — true asserts it diagnosed rather than declined. The rule it guards is",
+      "                    'never conclude everything looks fine, and never decline, from structure",
+      "                    alone'. Set false only for a fixture where declining IS correct.",
+      "coversAllBlockers — defaults ON. Asserts the answer names every machine-checked blocker the",
+      "                    server computed (the prompt calls that list exhaustive and says the answer",
+      "                    MUST cover it). Set false where the fixture has no form blockers.",
+      "mustMention       — case-insensitive substrings the diagnosis has to contain. Use for the",
+      "                    fixture's actual cause, e.g. a rejection banner's meaning.",
+      "mustNotMention    — extra forbidden strings on top of the always-on vocabulary check.",
+      "tools.required    — tool calls that must have RUN, e.g. get_page_image for a fixture whose",
+      "                    blocker is only visible in pixels ('look at the image BEFORE hedging').",
+      "tools.forbidden   — tool calls that must NOT have run, e.g. asserting a cheap fixture stays",
+      "                    cheap ('call a tool ONLY when it would change the diagnosis')."
+    ],
+    "covered": true,
+    "coversAllBlockers": true,
+    "mustMention": [],
+    "mustNotMention": [],
+    "tools": { "required": [], "forbidden": [] }
+  }
+}

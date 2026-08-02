@@ -60,7 +60,7 @@ Everything is under `packages/`.
 | Folder | What it is |
 |---|---|
 | **`db`** | The database schema, in one file. Every table lives here. |
-| **`shared`** | Type definitions everyone agrees on — including the one place the three modes are defined. |
+| **`shared`** | Type definitions everyone agrees on — including the one place the copilot's modes are defined. |
 | **`logger`** | One logger for everything that runs on the server. |
 | **`landing`** | The marketing page. Currently a coming-soon card. |
 
@@ -120,9 +120,11 @@ All three surfaces are aligned to it. If you're building UI, take from here rath
 **Every action that changes something on the server shows a toast** — success or error, top right.
 No silent saves. If you add something that mutates, add the toast.
 
-**Anything new should work for all three modes.** Build the general thing, make today's feature one
-user of it. Prefer open lists and allowlists over closed either-or choices, so a future mode adds a
-value rather than forcing a rewrite. Extract shared code at the *second* user, not speculatively.
+**Anything new should work for every mode.** Build the general thing, make today's feature one user
+of it. Prefer open lists and allowlists over closed either-or choices, so a future mode adds a value
+rather than forcing a rewrite — and so retiring one costs a line of housekeeping, which is exactly
+what happened when the simplest mode was removed in August 2026. Extract shared code at the *second*
+user, not speculatively.
 
 ---
 

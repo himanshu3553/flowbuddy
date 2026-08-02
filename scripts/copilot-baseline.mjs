@@ -100,8 +100,6 @@ async function ask(question, history = [], lastCited = []) {
       .map((c) => ({ sourceId: c.sourceId, segmentIndex: c.segmentIndex }))
       .slice(0, 4),
     position: data.position ? `${data.position.sourceId}:${data.position.segmentIndex}#${data.position.step}` : null,
-    // Copilot mode only — what the assistant decided to do ON the page. Absent in AI Chatbot.
-    intents: data.intents ?? null,
   };
 }
 
@@ -174,7 +172,6 @@ for (const item of questions) {
     answeredRate: `${coveredCount}/${attempts.length}`,
     citedWorkflows: cited,
     positions: [...new Set(good.map((a) => a.position).filter(Boolean))],
-    intents: [...new Set(good.map((a) => (a.intents ? JSON.stringify(a.intents) : null)).filter(Boolean))],
     errors: attempts.filter((a) => !a.ok).map((a) => a.error ?? `HTTP ${a.status}`),
     answers: good.map((a) => a.answer),
   };

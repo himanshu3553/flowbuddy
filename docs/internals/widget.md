@@ -182,14 +182,20 @@ now **spans navigations**.
 
 ### 4.8 Operating mode & the on-page gate
 
-`/v1/copilot/config` also serves the workspace's **mode** (`chatbot` · `copilot` · `agent`), which
-the widget stores in `cfg.mode`. It changes ONE thing on the client: **who decides when an on-page
-ability fires.**
+`/v1/copilot/config` also serves the workspace's **mode** (`copilot` · `agent`), which the widget
+stores in `cfg.mode`. Since AI Chatbot's retirement it changes nothing about on-page behaviour — it
+is there for the acting tier.
 
-`wantsOnPage(intents, which)` is the whole rule — an ability runs when the founder's switch is on
-**AND** either (a) mode 1's fixed rule applies, or (b) mode 2's answer carried an explicit request
-(`intents.highlight` / `intents.offerWalkthrough`, present only on agent answers). A missing intent
-in mode 2 means *"not this time"*, never *"fall back to always"*.
+**The founder's switch is the whole rule (2026-08-02).** An on-page ability runs on EVERY positional
+answer when its switch is on, and never when it is off. D8 made the assistant's own judgment the
+decider for a while; D11 reversed that, because a switch that might or might not fire cannot be
+demonstrated, discovered by end-users, or told apart from an OFF switch. **The `intents` fields the
+answer used to carry are gone from the wire, the schema and the prompt** — a preference nobody obeys
+is prompt real estate spent on nothing, and once the prompt section teaching the model when to set
+them went, the fields could only have recorded noise. The noise this could
+have caused is bounded by structure rather than by judgment: only POSITIONAL answers reach the code
+at all, a clarifying question sets `usedPosition` false so nothing fires, the highlight needs an
+element this question's probe resolved, and `walkthroughOffer` returns null on the last step.
 
 Two properties this preserves: the founder's switches remain the only thing that grants a
 capability — nothing the model returns can turn something on — and an ability the workspace has

@@ -16,14 +16,17 @@ const log = createLogger('synthesis');
 export type { ArtifactReader } from './types';
 export type { Transcript } from './transcribe';
 export type { Segment } from './segment';
-export { answerFromKB } from './copilot';
 export type { CopilotKBItem, CopilotTurn, CopilotCitation, CopilotAnswer } from './copilot';
 export type { SenseContext, SenseHypothesisContext, AnswerPosition } from './copilot'; // P2 Sense
 // P2-M5 Reason — the diagnostic engine (structured page state + expected-vs-actual, agentic read-tools).
-export { diagnoseFromKB } from './reason';
-// Copilot mode (mode 2) — the agent loop over KB-reading tools. Mode 1 keeps its own path and
-// prompt untouched; this is the escalation-capable sibling, not a replacement.
-export { answerAsAgent } from './agent';
+// `blockerList` is public so the fixture harness can assert the answer against THE SAME exhaustive
+// list the prompt was given, rather than a reimplementation of it that would drift the moment the
+// element vocabulary changed. See the preview branch of the answer route.
+export { diagnoseFromKB, blockerList } from './reason';
+// Copilot mode — the agent loop over KB-reading tools, and the FLOOR beneath it (the same prompt,
+// one round, nothing bound) that answers when the loop fails. `answerFromKB` — the retired AI
+// Chatbot engine, with its own second prompt and its own item renderer — was deleted into these two.
+export { answerAsAgent, answerAsFloor } from './agent';
 export type { AgentInput, AgentWorkflow } from './agent';
 // What a loop DID, for the caller to log — the same record the loop de-duplicates tool calls with.
 export type { AnswerLoopResult, ToolCallRecord } from './engine';

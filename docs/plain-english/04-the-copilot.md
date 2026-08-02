@@ -138,7 +138,7 @@ than the agent.
 
 All in **Studio → Copilot → Settings**:
 
-**How your assistant works** — the mode. See [the three modes](05-the-three-modes.md).
+**How your assistant works** — the mode. See [the two modes](05-the-two-modes.md).
 
 **What it may do on your page** (folded under Advanced):
 
@@ -169,7 +169,7 @@ X?" and it declines — because a question like that isn't answered by any singl
 It knows how to *do* things without knowing what your product *is*. Fixing this needs somewhere for
 you to describe your product in your own words. **This is the biggest gap.**
 
-**It can't do anything for the user.** That's [the third mode](05-the-three-modes.md), not built.
+**It can't do anything for the user.** That's [the acting mode](05-the-two-modes.md), not built.
 
 **It can't check whether its own knowledge is still true.** If you redesign a screen, the assistant
 keeps confidently describing the old one until you re-record. Fixing this is the hardest item on the
@@ -178,4 +178,4 @@ whole roadmap.
 **It never starts a conversation.** It waits to be asked. Whether it *should* ever tap someone on
 the shoulder is an open idea, deliberately parked.
 
-→ Next: [the copilot's three modes](05-the-three-modes.md)
+→ Next: [the copilot’s two modes](05-the-two-modes.md)
