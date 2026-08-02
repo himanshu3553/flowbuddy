@@ -1,0 +1,48 @@
+---
+import Icon from './Icon.astro';
+
+const benefits = [
+  {
+    icon: 'inapp' as const,
+    title: 'In-app user assistance',
+    body: 'Help lives where the questions happen — inside your product, on the page your user is on. No doc-site detours, no waiting on support.',
+  },
+  {
+    icon: 'onboard' as const,
+    title: 'Faster onboarding',
+    body: 'New users learn your product from inside your product, at the exact moment they need it — so they reach value on day one.',
+  },
+  {
+    icon: 'activation' as const,
+    title: 'Higher activation',
+    body: 'Fewer users stall on a setup step or a page they don’t understand. More of them reach the moment your product clicks.',
+  },
+  {
+    icon: 'tickets' as const,
+    title: 'Fewer support tickets',
+    body: 'The how-do-I questions answer themselves, so your team keeps its time for the conversations that actually need a human.',
+  },
+];
+---
+
+<section class="border-y border-gray-100 bg-paper">
+  <div class="mx-auto max-w-[1140px] px-5 py-16 md:px-8 md:py-24">
+    <div class="max-w-2xl">
+      <p class="eyebrow mb-4">Why it pays off</p>
+      <h2 class="display-section">Built for the metrics you already care about</h2>
+    </div>
+    <div class="mt-12 grid gap-6 sm:grid-cols-2">
+      {
+        benefits.map((b) => (
+          <div class="flex items-start gap-5 rounded-card border border-gray-100 bg-white p-7 shadow-card">
+            <Icon name={b.icon} />
+            <div>
+              <h3 class="text-[1.05rem] font-bold tracking-tight text-ink">{b.title}</h3>
+              <p class="mt-2.5 text-[0.9rem] leading-relaxed text-gray-600">{b.body}</p>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

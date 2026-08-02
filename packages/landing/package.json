@@ -2,8 +2,16 @@
   "name": "@flowbuddy/landing",
   "version": "0.0.0",
   "private": true,
-  "description": "FlowBuddy marketing landing page (flowbuddyai.com) — static, served by the flowbuddy-landing Render service.",
+  "type": "module",
+  "description": "FlowBuddy marketing landing page (flowbuddyai.com) — Astro static build, served by the flowbuddy-landing Render service.",
   "scripts": {
-    "build": "rm -rf dist && cp -r public dist"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "astro": "^5.12.3",
+    "tailwindcss": "^4.1.11"
   }
 }

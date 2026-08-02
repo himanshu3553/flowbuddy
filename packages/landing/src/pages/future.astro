@@ -1,0 +1,109 @@
+---
+// The version-2 positioning placeholder ("make your product AI-agent ready").
+// Copy guardrail (docs/build/interop.md): agent access is presented as
+// DIRECTION only — never as available — until Phase 6 ships.
+import Base from '../layouts/Base.astro';
+
+const consumers = [
+  {
+    title: 'Your in-app AI assistant',
+    body: 'Answers, unblocks, and walks your users through tasks inside your product.',
+    status: 'Live today',
+    live: true,
+  },
+  {
+    title: 'A hosted help portal',
+    body: 'The same approved workflows, published as a searchable help site for your product.',
+    status: 'Coming',
+    live: false,
+  },
+  {
+    title: 'AI-agent access',
+    body: 'AI agents — assistants like Claude, browser agents, and whatever comes next — reading your approved knowledge to use your product correctly on a user’s behalf.',
+    status: 'In development',
+    live: false,
+  },
+  {
+    title: 'Documents & SOPs',
+    body: 'Your workflows exported as clean step-by-step documents for training and operations.',
+    status: 'Planned',
+    live: false,
+  },
+];
+---
+
+<Base
+  title="The road ahead — make your product AI-agent ready | FlowBuddy"
+  description="FlowBuddy is building the AI interface layer for SaaS: record your product once, and one approved knowledge base serves your in-app assistant today — and AI agents tomorrow."
+  path="/future"
+>
+  <section class="relative overflow-hidden">
+    <div
+      class="pointer-events-none absolute inset-0"
+      style="background: radial-gradient(55rem 32rem at 50% -15%, rgba(59, 80, 224, 0.09), transparent 60%);"
+      aria-hidden="true"
+    >
+    </div>
+    <div class="relative mx-auto max-w-[820px] px-5 pb-16 pt-16 text-center md:px-8 md:pb-24 md:pt-24">
+      <p class="eyebrow mb-5">The road ahead</p>
+      <h1 class="display-hero">Make your product AI-agent ready</h1>
+      <p class="lead mx-auto mt-6 max-w-2xl">
+        Every product will soon be used by two kinds of users: people, and the AI agents working
+        for them. FlowBuddy is building the AI interface layer for SaaS — so the demo you record
+        once serves both.
+      </p>
+      <div class="mx-auto mt-8 w-fit rounded-pill border border-warning-border bg-warning-bg px-4 py-1.5 font-mono text-[0.68rem] font-bold uppercase tracking-widest text-warning-text">
+        In development
+      </div>
+    </div>
+  </section>
+
+  <section class="border-t border-gray-100 bg-paper">
+    <div class="mx-auto max-w-[900px] px-5 py-16 md:px-8 md:py-20">
+      <h2 class="display-section text-center">One knowledge base, many consumers</h2>
+      <p class="lead mx-auto mt-4 max-w-2xl text-center">
+        You record your product once and approve what it may say. That single, trusted knowledge
+        base is built to serve everything below.
+      </p>
+      <div class="mt-12 grid gap-6 sm:grid-cols-2">
+        {
+          consumers.map((c) => (
+            <div class="rounded-card border border-gray-100 bg-white p-7 shadow-card">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-[1.02rem] font-bold tracking-tight text-ink">{c.title}</h3>
+                <span
+                  class={`shrink-0 rounded-pill border px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-wider ${
+                    c.live
+                      ? 'border-success-border bg-success-bg text-success-text'
+                      : 'border-gray-150 bg-paper-2 text-gray-500'
+                  }`}
+                >
+                  {c.status}
+                </span>
+              </div>
+              <p class="mt-2.5 text-[0.9rem] leading-relaxed text-gray-600">{c.body}</p>
+            </div>
+          ))
+        }
+      </div>
+      <p class="mx-auto mt-10 max-w-2xl text-center text-[0.9rem] leading-relaxed text-gray-500">
+        Nothing here changes the rule your assistant already lives by: every consumer reads only
+        the workflows you approved — and nothing else.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="mx-auto max-w-[820px] px-5 py-16 text-center md:px-8 md:py-20">
+      <h2 class="display-section">Start with the assistant today</h2>
+      <p class="lead mx-auto mt-4 max-w-xl">
+        The knowledge base you build for your in-app assistant now is the same one that makes your
+        product AI-agent ready later. Record once — you're set up for both.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <a href="https://app.flowbuddyai.com/signup" class="btn-primary">Get started free</a>
+        <a href="/" class="btn-secondary">See what's live today</a>
+      </div>
+    </div>
+  </section>
+</Base>

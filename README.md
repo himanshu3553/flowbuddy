@@ -80,7 +80,7 @@ packages/
   web/        # Next.js Studio — copilot-first: approval gate + copilot settings/analytics
   widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js + lazy flowbuddy-copilot-render.js, deployed as siblings)
   extension/  # Chrome MV3 recorder
-  landing/    # static marketing page for flowbuddyai.com (v1 = coming-soon + sign-in card)
+  landing/    # marketing page for flowbuddyai.com (Astro static build → dist/)
 ```
 
 *(`portal` — the public help site — is built in Version 2 ([`docs/build/portal.md`](docs/build/portal.md)); it's not in the current workspace.)*

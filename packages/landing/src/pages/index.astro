@@ -1,0 +1,34 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import Capabilities from '../components/Capabilities.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Benefits from '../components/Benefits.astro';
+import SignupCta from '../components/SignupCta.astro';
+import Faq from '../components/Faq.astro';
+import { faqs } from '../data/faqs';
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+---
+
+<Base
+  title="FlowBuddy — the in-app, context-aware AI assistant for your SaaS product"
+  description="Record a demo of your product once and get a custom in-app AI assistant that answers questions, unblocks stuck users, and walks them through tasks — grounded only in what you approved. Go live in 30 minutes, no coding required."
+  path="/"
+  jsonLd={[faqJsonLd]}
+>
+  <Hero />
+  <Capabilities />
+  <HowItWorks />
+  <Benefits />
+  <SignupCta />
+  <Faq />
+</Base>

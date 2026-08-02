@@ -1,0 +1,395 @@
+/* ============================================================================
+   FlowBuddy landing — global styles.
+   Tokens ported from docs/design_system/tokens/ (indigo brand, cool-gray
+   neutrals, soft elevation). The type ramp here is a MARKETING-scale layer:
+   the design system's app ramp is density-tuned for Studio and too small for
+   a landing hero, so display sizes are clamp()-scaled up while keeping the
+   same families, weights and tracking.
+   ============================================================================ */
+@import 'tailwindcss';
+
+@theme {
+  /* ---- Brand (indigo ramp) ---- */
+  --color-brand-50: #eef0fe;
+  --color-brand-100: #dfe3fc;
+  --color-brand-150: #e6e9fb;
+  --color-brand-200: #c3ccfb;
+  --color-brand-400: #4a63e8;
+  --color-brand-500: #3b50e0;
+  --color-brand-600: #3a50dd;
+  --color-brand-700: #2f3fb0;
+
+  /* ---- Neutrals ---- */
+  --color-paper: #f6f7f9;
+  --color-paper-2: #fafbfc;
+  --color-ink: #14161f;
+  --color-gray-100: #eceef3;
+  --color-gray-150: #e6e8ee;
+  --color-gray-200: #d8dbe4;
+  --color-gray-300: #b4b8c6;
+  --color-gray-400: #9a9faf;
+  --color-gray-500: #7a808e;
+  --color-gray-600: #6b7180;
+  --color-gray-700: #3a3f4d;
+
+  /* ---- Status (pills on the /future page + "live" dots) ---- */
+  --color-success-dot: #4e8d6e;
+  --color-success-text: #127249;
+  --color-success-bg: #f3faf6;
+  --color-success-border: #cfe9da;
+  --color-warning-text: #8a6d2e;
+  --color-warning-bg: #f8f2e3;
+  --color-warning-border: #ecdfc2;
+
+  /* ---- Type ---- */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Radii (design-system ramp) ---- */
+  --radius-control: 9px;
+  --radius-tile: 11px;
+  --radius-list: 13px;
+  --radius-card: 16px;
+  --radius-dialog: 18px;
+  --radius-pill: 999px;
+
+  /* ---- Shadows ---- */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+  --shadow-frame: 0 8px 30px rgba(16, 24, 40, 0.1);
+  --shadow-widget: 0 8px 26px rgba(40, 50, 90, 0.1);
+  --shadow-primary: 0 2px 10px rgba(58, 80, 221, 0.3);
+  --shadow-step: 0 4px 16px rgba(58, 80, 221, 0.1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-gray-700);
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-brand-100);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(58, 80, 221, 0.18);
+  border-radius: var(--radius-control);
+}
+
+/* ---- Marketing type layer ---------------------------------------------- */
+.display-hero {
+  font-weight: 800;
+  font-size: clamp(2.1rem, 5.2vw, 3.5rem);
+  line-height: 1.07;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+.display-section {
+  font-weight: 800;
+  font-size: clamp(1.6rem, 3.2vw, 2.35rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+/* "AI Assistant" hero accent: brand-gradient text with a slow shimmer sweep
+   (light stop is brand-200 — a ramp step, not a new hue) + a twinkling spark. */
+.hero-ai {
+  display: inline-block;
+  background: linear-gradient(
+    110deg,
+    #4a63e8 0%,
+    #3a50dd 38%,
+    #c3ccfb 50%,
+    #3a50dd 62%,
+    #4a63e8 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Negative delays start both effects mid-cycle, so the shimmer glint is
+     already inside the letters (and the spark mid-twinkle) at first paint. */
+  animation: fb-gradient-pan 3.5s linear infinite;
+  animation-delay: -0.9s;
+}
+.hero-ai-spark {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.06em;
+  vertical-align: 0.55em;
+  animation: fb-twinkle 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  animation-delay: -0.65s;
+}
+@keyframes fb-gradient-pan {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-ai,
+  .hero-ai-spark {
+    animation: none;
+  }
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-brand-500);
+}
+.lead {
+  font-size: clamp(1.02rem, 1.5vw, 1.17rem);
+  line-height: 1.65;
+  color: var(--color-gray-600);
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: linear-gradient(180deg, var(--color-brand-400), var(--color-brand-600));
+  border-radius: var(--radius-control);
+  padding: 13px 26px;
+  box-shadow: var(--shadow-primary);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(58, 80, 221, 0.35);
+}
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-ink);
+  background: #fff;
+  border: 1px solid var(--color-gray-150);
+  border-radius: var(--radius-control);
+  padding: 12px 24px;
+  transition: border-color 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.btn-secondary:hover {
+  border-color: var(--color-gray-200);
+}
+
+/* ---- "See it in action" AI button --------------------------------------- */
+.btn-ai {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-brand-600);
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, var(--color-brand-400), var(--color-brand-600)) border-box;
+  border-radius: var(--radius-control);
+  padding: 12px 24px;
+  box-shadow: var(--shadow-step);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    background 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.btn-ai:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(58, 80, 221, 0.22);
+  background:
+    linear-gradient(var(--color-brand-50), #fff) padding-box,
+    linear-gradient(135deg, var(--color-brand-400), var(--color-brand-600)) border-box;
+}
+.btn-ai-light {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow: none;
+}
+.btn-ai-light:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow: none;
+}
+.btn-ai .sparkle {
+  transform-origin: 10px 9.4px;
+  animation: fb-twinkle 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.btn-ai .sparkle-sm {
+  transform-origin: 18.8px 17.2px;
+  animation: fb-twinkle 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite 1.3s;
+}
+.btn-ai:hover .sparkle,
+.btn-ai:hover .sparkle-sm {
+  animation-duration: 1.1s;
+}
+@keyframes fb-twinkle {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.68);
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-ai .sparkle,
+  .btn-ai .sparkle-sm {
+    animation: none;
+  }
+}
+
+/* ---- Media placeholder (design-system stripe — never a fake photo) ------ */
+.media-fill {
+  background: repeating-linear-gradient(45deg, #ececec 0 8px, #f6f6f6 8px 16px);
+  border: 1px solid #e4e4e4;
+}
+
+/* ---- Hero demo animation (typed question · dots · streamed answer) ------ */
+.fb-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  background: currentColor;
+  vertical-align: -0.15em;
+  animation: fb-blink 0.9s steps(2, start) infinite;
+}
+@keyframes fb-blink {
+  to {
+    visibility: hidden;
+  }
+}
+.fb-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-gray-400);
+  animation: fb-dotpulse 1s ease-in-out infinite;
+}
+.fb-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.fb-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes fb-dotpulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.fb-pop {
+  animation: fb-pop 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes fb-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---- Capability walkthrough mock (steps + badges) ----------------------- */
+.cap-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-gray-100);
+  background: #fff;
+  border-radius: var(--radius-tile);
+  padding: 8px 12px;
+  transition: all 300ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cap-step-active {
+  border-color: var(--color-brand-200);
+  background: var(--color-brand-50);
+  box-shadow: var(--shadow-step);
+}
+.cap-step-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-gray-600);
+  transition: color 300ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cap-step-active .cap-step-title {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+.cap-badge {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  transition: all 300ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cap-badge-on {
+  background: linear-gradient(150deg, #4a63e8, #3a50dd);
+  color: #fff;
+}
+.cap-badge-off {
+  background: var(--color-gray-100);
+  color: var(--color-gray-500);
+}
+
+/* ---- FAQ accordion ------------------------------------------------------ */
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary .faq-icon {
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.faq-item[open] summary .faq-icon {
+  transform: rotate(45deg);
+}

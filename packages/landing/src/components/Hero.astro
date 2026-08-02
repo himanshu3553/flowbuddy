@@ -1,0 +1,266 @@
+---
+// Hero: the locked positioning-1 headline + an HTML recreation (design-system
+// rule: recreate the product in HTML on the tokens, never a fake photo) of the
+// widget answering in context — spotlight on the nav item it is pointing at.
+import AiButton from './AiButton.astro';
+---
+
+<section class="relative overflow-hidden">
+  <div
+    class="pointer-events-none absolute inset-0"
+    style="background:
+      radial-gradient(55rem 32rem at 85% -12%, rgba(59, 80, 224, 0.08), transparent 60%),
+      radial-gradient(45rem 30rem at -8% 30%, rgba(59, 80, 224, 0.05), transparent 55%);"
+    aria-hidden="true"
+  >
+  </div>
+  <!-- On lg+ the hero fills the first viewport (minus the 62px header) and the
+       caption is pinned to its bottom edge; below lg it flows naturally. -->
+  <div
+    class="relative mx-auto flex max-w-[1140px] flex-col px-5 pb-8 pt-14 md:px-8 md:pt-20 lg:min-h-[calc(100vh-62px)]"
+  >
+    <div class="my-auto grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
+      <div>
+        <h1 class="display-hero">
+          In-App<br />Context-Aware<br />
+          <span class="hero-ai">
+            AI Assistant<svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              class="hero-ai-spark"
+            >
+              <defs>
+                <linearGradient id="fb-sg-h1" x1="18%" y1="0%" x2="82%" y2="100%">
+                  <stop offset="0" stop-color="#4a63e8"></stop>
+                  <stop offset="1" stop-color="#3a50dd"></stop>
+                </linearGradient>
+              </defs>
+              <path
+                d="M10 3c.8 4.2 2.2 5.6 6.4 6.4-4.2.8-5.6 2.2-6.4 6.4-.8-4.2-2.2-5.6-6.4-6.4 4.2-.8 5.6-2.2 6.4-6.4Z"
+                fill="url(#fb-sg-h1)"></path>
+              <path
+                d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
+                fill="url(#fb-sg-h1)"></path>
+            </svg>
+          </span><br />for your SaaS
+        </h1>
+        <p class="lead mt-6 max-w-xl">
+          Show FlowBuddy your product once and let it help your users by giving the right
+          answers at the right moment.
+        </p>
+        <div class="mt-8 flex flex-wrap items-center gap-4">
+          <a href="https://app.flowbuddyai.com/signup" class="btn-primary">Get started free</a>
+          <AiButton id="hero" />
+        </div>
+      </div>
+
+      <!-- HTML recreation: a host SaaS page with the assistant answering in context.
+           Animated once on load (typed question → streamed answer → nav spotlight);
+           the markup below IS the end state, so no-JS / reduced-motion get it as-is. -->
+      <div class="relative mx-auto w-full max-w-[560px]" aria-hidden="true" data-hero-demo>
+        <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
+          <!-- browser chrome -->
+          <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
+            <span class="size-2.5 rounded-full bg-gray-200"></span>
+            <span class="size-2.5 rounded-full bg-gray-200"></span>
+            <span class="size-2.5 rounded-full bg-gray-200"></span>
+            <span
+              class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
+              >yoursaas.com/billing</span
+            >
+          </div>
+          <div class="flex">
+            <!-- host sidebar -->
+            <div class="hidden w-[130px] shrink-0 space-y-1 border-r border-gray-100 bg-paper-2 p-3 sm:block">
+              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+                Dashboard
+              </div>
+              <div
+                data-anim="invoices"
+                class="relative rounded-control bg-brand-50 px-2.5 py-1.5 text-[0.7rem] font-bold text-brand-600 ring-2 ring-brand-400 ring-offset-1 transition-all duration-300"
+              >
+                Invoices
+              </div>
+              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+                Team
+              </div>
+              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+                Settings
+              </div>
+            </div>
+            <!-- host content (striped placeholders) -->
+            <div class="min-h-[290px] flex-1 space-y-3 p-4">
+              <div class="media-fill h-6 w-2/5 rounded-control"></div>
+              <div class="media-fill h-20 rounded-tile"></div>
+              <div class="media-fill h-9 rounded-control"></div>
+              <div class="media-fill h-9 w-4/5 rounded-control"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- the assistant panel -->
+        <div
+          class="absolute -bottom-6 -right-2 w-[280px] rounded-card border border-gray-100 bg-white shadow-widget sm:-right-6 sm:w-[300px]"
+        >
+          <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+            <span
+              class="grid size-6 place-items-center rounded-[7px] text-[0.65rem] font-extrabold text-white"
+              style="background: linear-gradient(150deg, #4a63e8, #3a50dd)"
+              >F</span
+            >
+            <span class="text-[0.82rem] font-bold text-ink">Help</span>
+            <span class="ml-auto flex items-center gap-1.5 text-[0.62rem] font-semibold text-success-text">
+              <span class="size-1.5 rounded-full bg-success-dot"></span>Online
+            </span>
+          </div>
+          <div class="space-y-3 px-4 py-4">
+            <div
+              data-anim="q"
+              class="ml-auto w-fit max-w-[85%] rounded-tile bg-brand-500 px-3 py-2 text-[0.76rem] font-medium leading-snug text-white"
+            >
+              How do I download an invoice?
+            </div>
+            <div
+              data-anim="a"
+              class="w-fit max-w-[92%] rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.76rem] leading-relaxed text-gray-700"
+            >
+              <span data-anim="dots" class="hidden items-center gap-1 py-1">
+                <span class="fb-dot"></span><span class="fb-dot"></span><span class="fb-dot"></span>
+              </span>
+              You're close — invoices live one step away.
+              <span class="mt-1.5 block font-semibold text-ink"
+                >1. Open <span class="text-brand-600">Invoices</span> in the sidebar — I've
+                highlighted it for you.</span
+              >
+              <span class="block font-semibold text-ink"
+                >2. Choose an invoice and select Download PDF.</span
+              >
+              <span
+                data-anim="chip"
+                class="mt-2 inline-block rounded-pill border border-brand-100 bg-brand-50 px-2 py-0.5 font-mono text-[0.58rem] font-bold uppercase tracking-wide text-brand-600"
+                >From: Download an invoice</span
+              >
+            </div>
+            <button
+              data-anim="walk"
+              class="w-full rounded-control border border-brand-200 bg-brand-50 px-3 py-2 text-[0.74rem] font-bold text-brand-600"
+              tabindex="-1">Walk me through it</button
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="eyebrow mt-14 text-center lg:mt-auto lg:pt-10">
+      Go live in 30 minutes · No credit card required
+    </p>
+  </div>
+</section>
+
+<!-- Plays the demo once on load: typed question → typing dots → streamed answer →
+     citation + walkthrough button → nav spotlight. Runs synchronously before first
+     paint (no flash); any early return leaves the static end state untouched. -->
+<script is:inline>
+  (() => {
+    const demo = document.querySelector('[data-hero-demo]');
+    if (!demo || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const pick = (k) => demo.querySelector('[data-anim="' + k + '"]');
+    const q = pick('q');
+    const a = pick('a');
+    const dots = pick('dots');
+    const chip = pick('chip');
+    const walk = pick('walk');
+    const inv = pick('invoices');
+    if (!q || !a || !dots || !chip || !walk || !inv) return;
+
+    const qText = (q.textContent || '').trim();
+    const nodes = [];
+    const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (chip.contains(n) || dots.contains(n) || !n.textContent) continue;
+      nodes.push([n, n.textContent]);
+    }
+
+    const spotOn = ['bg-brand-50', 'text-brand-600', 'font-bold', 'ring-2', 'ring-brand-400', 'ring-offset-1'];
+    const spotOff = ['text-gray-500', 'font-semibold'];
+
+    // Freeze both bubbles at their final rendered size BEFORE emptying them, so
+    // the panel stays fully open and nothing reflows while the text writes in.
+    const lock = (el) => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+    };
+    lock(q);
+    lock(a);
+
+    q.textContent = '';
+    q.style.opacity = '0';
+    q.style.transition = 'opacity 200ms';
+    nodes.forEach(([n]) => (n.textContent = ''));
+    a.style.visibility = 'hidden';
+    chip.style.opacity = '0';
+    chip.style.transition = 'opacity 300ms';
+    walk.style.opacity = '0';
+    walk.style.transition = 'opacity 300ms';
+    inv.classList.remove(...spotOn);
+    inv.classList.add(...spotOff);
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const caret = document.createElement('span');
+    caret.className = 'fb-caret';
+
+    // The bubbles stay size-locked for the whole session (the panel width is a
+    // fixed px class, so the frozen sizes never go stale) — the demo replays in
+    // a loop, resetting to the empty state between runs.
+    const reset = () => {
+      q.textContent = '';
+      q.style.opacity = '0';
+      nodes.forEach(([n]) => (n.textContent = ''));
+      a.style.visibility = 'hidden';
+      chip.style.opacity = '0';
+      walk.style.opacity = '0';
+      inv.classList.remove(...spotOn, 'fb-pop');
+      inv.classList.add(...spotOff);
+    };
+
+    (async () => {
+      while (true) {
+        await sleep(500);
+        q.style.opacity = '1';
+        q.appendChild(caret);
+        for (const ch of qText) {
+          caret.before(ch);
+          await sleep(38);
+        }
+        await sleep(280);
+        caret.remove();
+
+        a.style.visibility = 'visible';
+        dots.style.display = 'inline-flex';
+        await sleep(800);
+        dots.style.display = 'none';
+
+        for (const [n, text] of nodes) {
+          for (let i = 0; i < text.length; i += 2) {
+            n.textContent = text.slice(0, i + 2);
+            await sleep(14);
+          }
+          n.textContent = text;
+        }
+
+        await sleep(180);
+        chip.style.opacity = '1';
+        walk.style.opacity = '1';
+        await sleep(380);
+        inv.classList.remove(...spotOff);
+        inv.classList.add(...spotOn, 'fb-pop');
+
+        // Hold the finished state, then reset for the next run.
+        await sleep(1500);
+        reset();
+      }
+    })();
+  })();
+</script>

@@ -1,0 +1,32 @@
+---
+// Section 5 — the sign-up block. Copy is deliberately simple for now; the
+// founder will decide its final content later.
+import AiButton from './AiButton.astro';
+---
+
+<section>
+  <div class="mx-auto max-w-[1140px] px-5 py-16 md:px-8 md:py-24">
+    <div
+      class="rounded-dialog px-7 py-14 text-center shadow-primary md:px-16"
+      style="background: linear-gradient(160deg, #4a63e8, #3a50dd)"
+    >
+      <h2
+        class="mx-auto max-w-2xl text-[clamp(1.5rem,3vw,2.2rem)] font-extrabold leading-tight tracking-tight text-white"
+      >
+        Your users have questions right now. Answer them today.
+      </h2>
+      <p class="mx-auto mt-4 max-w-xl text-[1rem] leading-relaxed text-white/85">
+        Record your product demo this morning — your assistant can be live this afternoon. Free
+        during early access, no credit card required.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <a
+          href="https://app.flowbuddyai.com/signup"
+          class="inline-flex items-center justify-center rounded-control bg-white px-7 py-3.5 text-[0.95rem] font-bold text-brand-600 shadow-card transition-transform hover:-translate-y-px"
+          >Get started free</a
+        >
+        <AiButton id="cta" variant="light" />
+      </div>
+    </div>
+  </div>
+</section>

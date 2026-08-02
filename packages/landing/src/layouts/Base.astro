@@ -1,0 +1,117 @@
+---
+// Base layout: head (SEO/OG/JSON-LD), fonts, header/footer, and the live
+// dogfood widget. The widget renders only when FLOWBUDDY_LANDING_WIDGET_KEY is
+// set at build time (the workspace's PUBLIC embeddable key — safe in HTML), so
+// the page never blocks on the FlowBuddy-on-FlowBuddy KB existing.
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Path for the canonical URL, e.g. "/" or "/future". */
+  path: string;
+  /** Extra JSON-LD objects to embed alongside Organization + SoftwareApplication. */
+  jsonLd?: object[];
+}
+
+const { title, description, path, jsonLd = [] } = Astro.props;
+const canonical = new URL(path, Astro.site).href;
+
+const widgetKey = import.meta.env.FLOWBUDDY_LANDING_WIDGET_KEY;
+const widgetSrc =
+  import.meta.env.FLOWBUDDY_LANDING_WIDGET_SRC ??
+  'https://widget.flowbuddyai.com/flowbuddy-copilot.js';
+const widgetApi =
+  import.meta.env.FLOWBUDDY_LANDING_API_URL ?? 'https://api.flowbuddyai.com';
+
+const baseJsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'FlowBuddy',
+    url: 'https://flowbuddyai.com',
+    logo: 'https://flowbuddyai.com/favicon.svg',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'FlowBuddy',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    url: 'https://flowbuddyai.com',
+    description:
+      'FlowBuddy is an in-app, context-aware AI assistant for SaaS products. Record a demo of your product once and get a custom AI assistant that answers questions, unblocks stuck users, and walks them through tasks — live in about 30 minutes, no coding required.',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+      description: 'Free during early access',
+    },
+  },
+  ...jsonLd,
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FlowBuddy" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="application/ld+json" set:html={JSON.stringify(baseJsonLd)} />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+    {
+      widgetKey && (
+        <script
+          is:inline
+          src={widgetSrc}
+          data-flowbuddy-api={widgetApi}
+          data-flowbuddy-key={widgetKey}
+        />
+      )
+    }
+    <!-- "See it in action": opens the embedded copilot (clicks its launcher inside the
+         open shadow root). Until the widget is embedded, falls back to the capabilities
+         section so the button is never dead. -->
+    <script is:inline>
+      document.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
+        if (!e.target.closest('[data-open-copilot]')) return;
+        const launcher = document
+          .getElementById('flowbuddy-copilot-root')
+          ?.shadowRoot?.querySelector('.fb-launcher');
+        if (launcher instanceof HTMLElement) launcher.click();
+        else document.getElementById('capabilities')?.scrollIntoView({ behavior: 'smooth' });
+      });
+    </script>
+  </body>
+</html>

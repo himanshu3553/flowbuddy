@@ -1,0 +1,25 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 32 } = Astro.props;
+---
+
+<span
+  class="inline-grid shrink-0 place-items-center overflow-hidden rounded-[8px]"
+  style={`width:${size}px;height:${size}px`}
+  aria-hidden="true"
+>
+  <svg width={size} height={size} viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id={`fb-g-${size}`} x1="18%" y1="0%" x2="82%" y2="100%">
+        <stop offset="0" stop-color="#4a63e8"></stop>
+        <stop offset="1" stop-color="#3a50dd"></stop>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="64" height="64" rx="16" fill={`url(#fb-g-${size})`}></rect>
+    <rect x="23" y="17" width="9" height="30" rx="2.5" fill="#fff"></rect>
+    <rect x="23" y="17" width="19" height="9" rx="2.5" fill="#fff"></rect>
+    <rect x="23" y="31" width="14" height="8" rx="2.5" fill="#fff"></rect>
+  </svg>
+</span>

@@ -1,0 +1,37 @@
+---
+// "See it in action" — opens the embedded copilot (see the data-open-copilot
+// handler in Base.astro). Two variants: default (white sections — gradient
+// border, brand text) and light (on the indigo CTA panel — white on tint).
+interface Props {
+  /** Unique per page placement — namespaces the SVG gradient id. */
+  id: string;
+  variant?: 'default' | 'light';
+}
+const { id, variant = 'default' } = Astro.props;
+const gid = `fb-sg-${id}`;
+const fill = variant === 'light' ? '#ffffff' : `url(#${gid})`;
+---
+
+<button type="button" data-open-copilot class:list={['btn-ai', variant === 'light' && 'btn-ai-light']}>
+  <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+    {
+      variant === 'default' && (
+        <defs>
+          <linearGradient id={gid} x1="18%" y1="0%" x2="82%" y2="100%">
+            <stop offset="0" stop-color="#4a63e8" />
+            <stop offset="1" stop-color="#3a50dd" />
+          </linearGradient>
+        </defs>
+      )
+    }
+    <path
+      class="sparkle"
+      d="M10 3c.8 4.2 2.2 5.6 6.4 6.4-4.2.8-5.6 2.2-6.4 6.4-.8-4.2-2.2-5.6-6.4-6.4 4.2-.8 5.6-2.2 6.4-6.4Z"
+      fill={fill}></path>
+    <path
+      class="sparkle-sm"
+      d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
+      fill={fill}></path>
+  </svg>
+  See it in action
+</button>
