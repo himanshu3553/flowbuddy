@@ -10,6 +10,8 @@
  *    way so a bot can't mail-bomb an inbox or burn the Resend quota.
  */
 
+import { normalizeEmail } from '@/lib/email';
+
 interface Bucket {
   count: number;
   resetAt: number;
@@ -43,7 +45,10 @@ function current(map: Map<string, Bucket>, key: string, now: number): number {
   return !b || now >= b.resetAt ? 0 : b.count;
 }
 
-const norm = (email: string) => email.trim().toLowerCase();
+// The same canonical form the database now stores. Kept as one definition on purpose: while these
+// were separate, the limiter and the user table disagreed about identity — two addresses differing
+// only in case shared a failure bucket while resolving to two different rows.
+const norm = normalizeEmail;
 
 /** True = block this sign-in attempt outright (too many recent failures). */
 export function signInBlocked(email: string, ip: string, now: number = Date.now()): boolean {

@@ -11,9 +11,38 @@
  * before real users need these emails.
  */
 
+import { z } from 'zod';
 import { createLogger } from '@flowbuddy/logger';
 
 const log = createLogger('web:email');
+
+/**
+ * The ONE canonical form of an email address. Everything that identifies a user by email — the
+ * lookup, the create, the token mint, the rate limiter — must agree on this or they are talking
+ * about different people.
+ *
+ * WHY IT EXISTS. `User.email` is a plain `@unique` column, which Postgres compares case-SENSITIVELY.
+ * A founder whose phone capitalises the first letter signs up as `Fiona@acme.com`; every later
+ * lowercase sign-in finds no row and reads "Invalid email or password". They click Forgot password,
+ * and that flow — correctly — shows the same non-enumerating message whether or not an account
+ * exists, so no email arrives and they are told nothing at all. Nothing in the system can explain
+ * what happened to them. Silent, unrecoverable, and the cheapest possible fix.
+ *
+ * The limiter in `auth-limits.ts` already normalised while the database did not, so the two disagreed
+ * about identity: attempts against `Fiona@` and `fiona@` shared one failure bucket while resolving to
+ * different rows. It now delegates here, so there is one definition rather than two that can drift.
+ */
+export const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+/**
+ * Parse an email address into its canonical form.
+ *
+ * Deliberately a SCHEMA rather than a helper to call: normalisation happens inside the parse, at the
+ * only boundary untrusted input crosses, so a new auth entry point cannot forget it and quietly mint
+ * a second unreachable account. Order matters — `.email()` validates the raw input, the transform
+ * canonicalises what it returns.
+ */
+export const emailField = z.string().email().transform(normalizeEmail);
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'FlowBuddy <onboarding@resend.dev>';

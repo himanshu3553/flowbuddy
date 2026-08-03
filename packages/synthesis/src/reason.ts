@@ -8,7 +8,13 @@ import {
   type SenseContext,
 } from './copilot';
 // The loop + the answer shaper are shared with the fast path (and, from mode 2, with the agent).
-import { runAnswerLoop, shapeAnswer, type AnswerLoopResult, type EngineTool } from './engine';
+import {
+  ANSWER_TIMEOUT_MS,
+  runAnswerLoop,
+  shapeAnswer,
+  type AnswerLoopResult,
+  type EngineTool,
+} from './engine';
 
 /**
  * P2-M5 — REASON, the diagnostic answer engine (docs/build/sense-and-reason.md §B4). Sense locates the user;
@@ -285,7 +291,7 @@ function buildTools(input: ReasonInput): EngineTool[] {
  * fast path — callers, logging, and the widget treat both identically.
  */
 export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
+  const openai = new OpenAI({ apiKey: input.apiKey, timeout: ANSWER_TIMEOUT_MS, maxRetries: 1 });
 
   // AIL slice 2 — pages ride along as a labelled PRODUCT BACKGROUND section. Deliberately a DATA
   // change only: REASON_SYSTEM is the most heavily tuned prompt in the product with zero automated

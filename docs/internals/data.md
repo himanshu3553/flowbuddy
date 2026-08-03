@@ -405,7 +405,7 @@ The founder browses the built workflows and flips **Approve**
 | 1 | `Workspace` | Every answer | The `widgetLastSeenAt` heartbeat (same 5-min throttle) |
 | 2 | **`CopilotQuery`** | Always (one row per question) | See the breakdown below |
 | 3 | **`QueryCitation`** | Only on a grounded answer | **One row per cited workflow** — `sourceId`, `segmentIndex`, `segmentTitle` snapshot. Created in the same call, nested under the query. |
-| 4 | **`CoverageGap`** | Only on a decline | `prompt` = the question, `reason` = why it declined, `source: "copilot"`, `status: "open"` — **deduped**: if an open gap with the identical question exists, no new row |
+| 4 | **`CoverageGap`** | Only on a decline the ENGINE made (see behaviour 4) | `prompt` = the question, `reason` = why it declined, `source: "copilot"`, `status: "open"` — **deduped**: if an open gap with the identical question exists, no new row |
 
 **Inside one `CopilotQuery` row:**
 
@@ -426,7 +426,7 @@ The founder browses the built workflows and flips **Approve**
 | `rounds` | Model calls made (1 = answered straight from retrieval) |
 | `toolCalls` | Tool invocations the model asked for, including ones the loop refused |
 
-**Three behaviours that trip people up:**
+**Four behaviours that trip people up:**
 
 1. **The Studio preview writes nothing.** A founder testing their own copilot sends `preview: true` —
    same engine, same answer, but **zero** analytics writes and no `queryId` (so no thumbs).
@@ -435,6 +435,15 @@ The founder browses the built workflows and flips **Approve**
    the real outcome, so one question never becomes two rows or a phantom coverage gap.
 3. **"No approved content at all" is logged as a decline but not as a gap.** An un-provisioned copilot
    isn't a knowledge gap, so `CopilotQuery` gets a row and `CoverageGap` doesn't.
+4. **OUR OWN failures are logged as declines but not as gaps.** A truncated answer (the output budget
+   spent on reasoning) and a body-level provider failure both come back as empty text that reads as an
+   ordinary decline. A gap is a claim about the KB — *"someone asked this and you never recorded it"* —
+   and a founder cannot fix either of these by recording anything, so filing them poisons the one feed
+   that decides what to record next. Suppression keys on the **final** engine's stats, so an agent
+   failure the floor rescued still files its decline as the real gap it is. The end-user still gets the
+   decline and `CopilotQuery` still gets its row; only the accusation against the KB is withheld.
+   **These are countable in the logs, not in the database** — a `coverage gap suppressed` warning
+   carries the reason, and no column records it.
 
 **In the end-user's browser**, meanwhile: the conversation is written to `sessionStorage` so it
 survives a full-page navigation — **max 20 messages, 30-minute TTL, tab-scoped, gone when the tab

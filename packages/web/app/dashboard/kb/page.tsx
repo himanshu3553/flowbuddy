@@ -52,6 +52,7 @@ export default async function KnowledgeBasePage({
     segmentTitle: c.segmentTitle,
     itemCount: c.itemCount,
     sourceTitle: c.appBaseUrl || 'recording',
+    description: c.description,
     copilotApproved: c.copilotApproved,
     inactiveReason: c.inactiveReason,
     supersededByTitle: c.supersededByTitle ?? null,

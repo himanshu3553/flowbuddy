@@ -284,6 +284,30 @@ const DEFAULT_MAX_ROUNDS = 4; // up to 3 tool rounds, then the final answer is f
 // round cap is what bounds a model that does nothing but repeat itself.
 const DEFAULT_MAX_TOOL_CALLS = 4;
 
+/**
+ * The per-CALL ceiling for every model request on the answer path, and the retry budget beneath it.
+ *
+ * The SDK's defaults are 600 s and 2 retries — an unbounded wait by any product standard. The end
+ * user is on the CUSTOMER's production page watching three dots with the input disabled and no
+ * cancel, and the safety floor cannot rescue them, because it only runs once the promise settles: a
+ * call that never returns is a floor that never fires. The pattern already existed one seam over
+ * (`retrieval.ts` gives the query embed 2 s, precisely so "a hanging embeddings API must never stall
+ * the user-facing answer"); the answer path itself simply never adopted it.
+ *
+ * ⚠️ THIS BOUNDS A CALL, NOT AN ANSWER. The loop runs up to DEFAULT_MAX_ROUNDS, each of which may
+ * retry once, so the true worst case is roughly `2 × 60 s × 4` plus a floor attempt — minutes, not
+ * seconds. Bounding the ANSWER needs a deadline threaded through the loop so each round gets only
+ * what is left; that is the real fix and it is deliberately not this one.
+ *
+ * WHY THESE NUMBERS, HONESTLY: nothing measures how long a real answer takes — cost is tracked per
+ * question, elapsed time is not — so a tight ceiling would be a guess that silently downgrades good
+ * answers to the floor. 60 s is chosen to be unreachable by a healthy call, so it can only ever catch
+ * a genuine hang. The retry is KEPT for the same reason: without it a single dropped connection costs
+ * a downgraded answer, and one dial cannot tell "the provider is slow" from "the socket hiccuped".
+ * Tighten this from the latency the log line now records — not from feel.
+ */
+export const ANSWER_TIMEOUT_MS = 60_000;
+
 export interface AnswerLoopOpts {
   openai: OpenAI;
   model: string;

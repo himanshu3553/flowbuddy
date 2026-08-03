@@ -3,10 +3,12 @@ import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
 import { prisma } from '@flowbuddy/db';
 import { verifyPassword } from '@/lib/password';
-import { emailEnabled } from '@/lib/email';
+import { emailEnabled, emailField } from '@/lib/email';
 
 const credsSchema = z.object({
-  email: z.string().email(),
+  // Canonicalised in the parse — the lookup below is `findUnique` on a case-SENSITIVE column, so an
+  // un-normalised address here is an account that exists and can never be signed into.
+  email: emailField,
   password: z.string().min(1),
 });
 

@@ -36,7 +36,7 @@ export interface DistilledStep {
 
 const SYSTEM = `You convert ONE recorded product workflow into a short, clean, user-facing list of steps for an in-app help copilot.
 
-You get the workflow's title, its captured interaction events in order (each with the element, the page route, any typed value, and the narration spoken around it), and the full narration transcript.
+You get the workflow's title, its captured interaction events in order (each with the element, the page route, what was done to it, and the narration spoken around it), and the full narration transcript.
 
 Produce the MINIMAL sequence of steps a user would actually follow to accomplish the task:
 - DROP orienting/stray actions that don't advance the goal — e.g. clicking around the landing page, the logo, or a chat widget while explaining. The narration reveals intent ("this is the landing page" = not a step).
@@ -44,8 +44,22 @@ Produce the MINIMAL sequence of steps a user would actually follow to accomplish
 - Write each instruction imperatively and concretely ("Click 'Sign In'", "Enter your email"). Put any helpful context in "detail" (else "").
 - Preserve order.
 
+Reading an element's description:
+- \`click "Save"\` — the quoted text is the element's real label. Use it.
+- \`input placeholder "My Website Chatbot"\` — there is NO label; that is the EXAMPLE text the product shows inside the empty field. It tells you what the field is FOR, and it is never something to enter. A field with placeholder "My Website Chatbot" is the project-name field; one with placeholder "AI Assistant" is the bot-name field. Two fields with different placeholders are two DIFFERENT fields and need two steps — never merge them.
+- \`<input>\` — no label and no placeholder; identify it from the narration and its surroundings.
+
+You are writing for SOMEONE ELSE'S account, not describing the recording:
+- "entered: <...>" stands for text the recorder typed into a field. It is their own sample data. Say what the reader must supply, taking the wording from the field's own name or placeholder — "Enter your project name", "Upload a PDF". NEVER invent a specific value to put there.
+- "selected: X" is an option the product itself offers, so naming it is allowed. Name it when it is part of THIS task ("Choose the Website URL tab"). When it is a personal preference — a country, a plan, a theme, a language — say what to choose, not what the recorder chose.
+- "toggled" means a checkbox or switch was used. THE RECORDING DOES NOT CAPTURE WHETHER IT ENDED ON OR OFF. So never state a position unless the narration states one. Read the narration:
+  · It marks the reader's own decision ("you can enable or disable this", "for now I'm just keeping it on") → write the DECISION and what it changes: "Decide whether to enable general-knowledge responses — with them on, the bot also answers from its own knowledge." NEVER the recorder's position.
+  · It marks a requirement, or the control is plainly required (accepting terms) → write the required action: "Accept the terms and conditions."
+  · It says nothing → write the neutral action for the control the element name describes.
+- NEVER write "Keep X enabled", "Leave X as is", or "Keep the default" — that describes the recording rather than instructing the reader.
+
 Grounding (critical — do not violate):
-- Use ONLY the provided events and narration. NEVER invent steps, UI, or values from general knowledge.
+- Use ONLY the provided events and narration. NEVER invent steps, UI, or behaviour from general knowledge — and never reproduce the recorder's sample values either.
 - For every step, "sourceEventIds" MUST list the real event id(s) it is built from, and "keyEventId" MUST be one id from that step's sourceEventIds — the event whose screen best represents the step.
 - "route" is the page path the step happens on (copy it from the key event's route).
 - Never output a step that has no real source event.`;
@@ -76,6 +90,76 @@ const schema = {
     required: ['steps'],
   },
 } as const;
+
+/**
+ * What a recorded value actually IS — the difference between the task and the recorder.
+ *
+ * THE BUG THIS EXISTS TO END. The timeline used to hand the model every captured value verbatim
+ * (`typed: "Test 123"`) beside a prompt rule reading "NEVER invent values", so it dutifully baked the
+ * recorder's own sample data into the instruction: *Enter "Test 123" in the project name field*. The
+ * copilot then read that out to the customer as though it were the task. Worse, `maskValue`
+ * (extension/content.ts) masks by input TYPE — password and email become `••••••`, a plain text field
+ * does not — so a real person's name typed into a signup form became copilot-speakable content.
+ *
+ * `content` is therefore the FAIL-SAFE default: an unrecognised control's value is treated as the
+ * recorder's own and never reproduced. A missed generalisation costs one vague step; a missed
+ * redaction puts someone's data in front of an end user.
+ */
+type ValueKind =
+  /** The recorder supplied it. Never reproduced — only its shape is described. */
+  | 'content'
+  /** Chosen from a set the PRODUCT offers, so naming it is not inventing. */
+  | 'choice'
+  /** A checkbox or radio, whose real state we do not capture at all (see `valueHint`). */
+  | 'unknown-state';
+
+function valueKind(ev: CapturedEvent): ValueKind {
+  const tag = (ev.target?.tag ?? '').toLowerCase();
+  const type = (ev.target?.attributes?.type ?? '').toLowerCase();
+  if (tag === 'select') return 'choice';
+  if (type === 'checkbox' || type === 'radio') return 'unknown-state';
+  if (type === 'range') return 'choice'; // a position on a scale the product defines
+  return 'content'; // textarea and every free-text input type — and anything unrecognised
+}
+
+/** The kind of thing that goes in a free-text field, without the thing itself. */
+function contentShape(ev: CapturedEvent, value: string): string {
+  const type = (ev.target?.attributes?.type ?? '').toLowerCase();
+  if (type === 'file') {
+    // Keep the EXTENSION, drop the filename: that the product took a .pdf is a fact about the
+    // product; that it was called Hotel.pdf is a fact about the recorder.
+    const ext = /\.([a-z0-9]{1,6})$/i.exec(value.trim())?.[1];
+    return ext ? `<a .${ext.toLowerCase()} file>` : '<a file>';
+  }
+  if (type === 'email') return '<an email address>';
+  if (type === 'url') return '<a web address>';
+  if (type === 'password') return '<a password>';
+  if (type === 'tel') return '<a phone number>';
+  if (type === 'number') return '<a number>';
+  if (type === 'date' || type === 'datetime-local' || type === 'month' || type === 'week' || type === 'time') {
+    return '<a date>';
+  }
+  return '<text>';
+}
+
+/**
+ * What the model is told about a value — never the value itself unless the product supplied it.
+ *
+ * The `unknown-state` case is not caution, it is accuracy: the recorder captures `el.value`, and for
+ * a checkbox that is the value ATTRIBUTE — literally the string "on" whether the box was ticked or
+ * cleared. Passing it through told the model it knew a state it has never had, which is how "for now
+ * I'm just keeping it enabled" became the instruction *Keep general knowledge responses enabled*.
+ * Reporting the interaction without a position leaves the narration as the only source for one, which
+ * is the only honest place it can come from.
+ */
+export function valueHint(ev: CapturedEvent): string {
+  const kind = valueKind(ev);
+  if (kind === 'unknown-state') return ' | toggled';
+  const value = (ev.value ?? '').trim();
+  if (!value) return '';
+  if (kind === 'choice') return ` | selected: "${value.slice(0, 80)}"`;
+  return ` | entered: ${contentShape(ev, value)}`;
+}
 
 /** Join the unique narration spoken across a step's source events (the smear self-corrects once merged). */
 function stepNarration(sourceIds: string[], narration: Map<string, string>): string | null {
@@ -161,7 +245,7 @@ export async function distillSteps(
       const nav = post && post !== ev.route?.path ? ` -> navigates to ${post}` : '';
       return (
         `- id=${ev.id} | ${eventLabel(ev)}` +
-        (ev.value ? ` | typed: "${ev.value}"` : '') +
+        valueHint(ev) +
         nav +
         (n ? ` | said: "${n.slice(0, 200)}"` : '')
       );

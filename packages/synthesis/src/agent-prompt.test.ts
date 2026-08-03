@@ -18,6 +18,38 @@ import { __agentSystemForTest as agentSystem } from './agent';
 
 const TOOL_NAMES = ['search_knowledge', 'get_workflow'];
 
+/**
+ * Position handling has THREE branches, and the middle one is the whole point.
+ *
+ * It used to have two — "unrelated to the workflow" and "about the workflow". A question that is
+ * about the workflow but asks what a FIELD is falls in the second, so "what should I put in the
+ * welcome message?" was answered correctly and then followed by the project name, the bot name and
+ * everything still to come. The user asked what one field means; the copilot recited the task.
+ *
+ * The middle branch also decides `usedPosition`, which is not cosmetic: it becomes `senseUsed` and
+ * drives Studio's "Where users get stuck". A factual question must not register as friction, or the
+ * chart reports a blockage that never happened.
+ */
+describe('position handling, in both configurations', () => {
+  for (const [name, prompt] of [
+    ['floor', agentSystem(false)],
+    ['copilot', agentSystem(true)],
+  ] as const) {
+    it(`${name}: answers a "what is this" question without narrating the task`, () => {
+      expect(prompt).toContain('ANSWER ONLY THAT');
+      expect(prompt).toContain('Do NOT list the other steps');
+    });
+
+    it(`${name}: reserves positional answers for questions about what to DO`, () => {
+      expect(prompt).toContain('Answer POSITIONALLY only when they ask what to DO');
+    });
+
+    it(`${name}: keeps the unrelated-question branch that ignores position entirely`, () => {
+      expect(prompt).toContain('IGNORE the position entirely');
+    });
+  }
+});
+
 describe('the floor configuration', () => {
   const floor = agentSystem(false);
 

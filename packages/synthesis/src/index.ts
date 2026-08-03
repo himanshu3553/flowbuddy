@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import type { SessionManifest, CapturedEvent } from '@flowbuddy/shared';
-import { transcribe, type Transcript } from './transcribe';
-import { alignNarration } from './align';
+import { transcribe, type Transcript, type TranscriptGap } from './transcribe';
+import { alignNarration, transcriptWindow } from './align';
 import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
@@ -121,10 +121,44 @@ export interface WorkflowKB {
   pages: ExtractedPage[];
 }
 
+/**
+ * What the founder is told when a recording produced no narration.
+ *
+ * Each says the same two things — what is missing, and what it COST — because the cost is the part
+ * they cannot see for themselves: a steps-only recording looks complete in Studio, and the absence
+ * only shows up later as a copilot that answers thinly. Then they differ on the remedy, which is the
+ * whole reason the three causes are kept apart upstream.
+ *
+ * Rendered verbatim by Studio's existing "Processed with a warning" banner — no formatting, so these
+ * are written as finished sentences.
+ */
+const TRANSCRIPT_GAP_WARNING: Record<TranscriptGap, string> = {
+  'no-audio':
+    'No narration was captured — this recording has no audio at all. Steps were built from your actions alone, so it produced no workflow descriptions and no product knowledge. Re-record with the microphone granted to get them.',
+  'audio-missing':
+    'The narration audio never reached us, so it could not be transcribed. Steps were built from your actions alone — no workflow descriptions and no product knowledge were produced. The recording itself is fine; re-processing it will not help, so re-record if you need the narration.',
+  silent:
+    'The narration audio contained no speech. Steps were built from your actions alone, so this recording produced no workflow descriptions and no product knowledge. Re-record saying what each task is for, and what is optional, to get them.',
+};
+
 /** Build the copilot KB for one recording: a persistable transcript + clean steps grouped by workflow.
  *  Raw events are NOT returned/persisted — only the distilled steps (each with one curated screenshot). */
+/**
+ * The per-call ceiling for the BUILD path — deliberately far looser than the answer path's.
+ *
+ * Different failure, different number. Nobody is waiting on a screen here, and a call cut off early
+ * does not degrade to a simpler answer — it fails the job and can leave a recording parked at
+ * `processing`. Segmentation and distillation also send genuinely large prompts (every cleaned event
+ * plus the transcript), so a healthy call here is legitimately slow in a way an answer never is.
+ *
+ * So this exists ONLY to stop a hung request from parking a recording forever: it must be
+ * unreachable by any real call, not a tuning dial. The SDK's default is 600 s × 3 attempts — half an
+ * hour per call, and the worker's concurrency is 1, so one hang stalls every recording behind it.
+ */
+const BUILD_TIMEOUT_MS = 300_000;
+
 export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<WorkflowKB> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
+  const openai = new OpenAI({ apiKey: input.apiKey, timeout: BUILD_TIMEOUT_MS, maxRetries: 1 });
 
   // 1. Transcribe (PII-scrubbed) + align narration to the RAW events (alignment needs raw timestamps).
   // A transcription failure (Whisper's 25 MB cap on long recordings, a transient API error) must
@@ -133,9 +167,16 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
   let transcript: Transcript = { text: '', segments: [] };
   let warning: string | null = null;
   try {
-    transcript = redactTranscript(
-      await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact),
-    );
+    const result = await transcribe(openai, input.transcribeModel, input.manifest, input.getArtifact);
+    transcript = redactTranscript(result.transcript);
+    // A build with no narration used to land `ready` looking healthy, because none of these three
+    // throw. Everything downstream of narration is silently absent — descriptions, the recording
+    // summary, product pages — so the founder sees a shallow copilot and no reason for it. Naming
+    // WHICH failure it was is the point: the remedy differs, and one of the three is not their fault.
+    if (result.gap) {
+      warning = TRANSCRIPT_GAP_WARNING[result.gap];
+      log.warn({ component: 'transcribe', gap: result.gap }, 'no narration — transcript-less build');
+    }
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
     warning = `Narration could not be transcribed (${msg}) — steps were built from the captured actions without voice-over context.`;
@@ -193,19 +234,45 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       'distilled workflow',
     );
 
-    // The PLAN, written from the FINAL steps plus the narration. Best-effort: a workflow without one
-    // behaves exactly as it does today.
+    // The PLAN, written from the FINAL steps plus THIS workflow's OWN narration — everything said in
+    // the run-up to its clicks, never the head of the whole tape (see transcriptWindow). `cleaned` is
+    // passed whole because the rule is "which workflow owns the NEXT event", which only the full
+    // recording can answer. The `||` is the degrade path, not a nicety: with no segments to window
+    // (transcription failed, or Whisper returned text without them) the whole transcript is still the
+    // best material there is, and passing it preserves exactly the pre-window behaviour. Best-effort
+    // throughout — a workflow without a description behaves as it always has.
+    const narrationWindow = transcriptWindow(segEvents, cleaned, transcript);
     const description = await describeWorkflow(
       openai,
       input.synthModel,
       seg.title,
       steps,
-      transcript.text,
+      narrationWindow || transcript.text,
     );
+    // `windowed: false` is the only signal that a workflow fell back to the whole recording. Worth
+    // logging because segmentation is non-deterministic: this cannot be verified by diffing prose
+    // across two runs, so the window has to say for itself whether it fired.
     if (description) {
-      log.info({ component: 'describe', title: seg.title, chars: description.length }, 'described workflow');
+      log.info(
+        {
+          component: 'describe',
+          title: seg.title,
+          chars: description.length,
+          narrationChars: narrationWindow.length,
+          windowed: narrationWindow.length > 0,
+        },
+        'described workflow',
+      );
     } else {
-      log.warn({ component: 'describe', title: seg.title }, 'no description produced — steps only');
+      log.warn(
+        {
+          component: 'describe',
+          title: seg.title,
+          narrationChars: narrationWindow.length,
+          windowed: narrationWindow.length > 0,
+        },
+        'no description produced — steps only',
+      );
     }
     // Drop-guard: a workflow shedding most of its events usually means a mis-scoped segment
     // (the distiller pruned a whole off-title sub-task). Surface it rather than let it pass silently.

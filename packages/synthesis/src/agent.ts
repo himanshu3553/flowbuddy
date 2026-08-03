@@ -7,7 +7,14 @@ import {
   type CopilotTurn,
   type SenseContext,
 } from './copilot';
-import { formatItems, runAnswerLoop, shapeAnswer, type AnswerLoopResult, type EngineTool } from './engine';
+import {
+  ANSWER_TIMEOUT_MS,
+  formatItems,
+  runAnswerLoop,
+  shapeAnswer,
+  type AnswerLoopResult,
+  type EngineTool,
+} from './engine';
 
 /**
  * **Copilot mode (mode 2)** — the assistant decides how to help, turn by turn, instead of a fixed
@@ -101,7 +108,8 @@ ASKING THE USER A QUESTION is a legitimate move, not a failure:
 POSITION CONTEXT (Sense): the message may include an auto-detected reading of WHERE the user currently is (workflow + current step). It is RE-MEASURED from the user's LIVE page on EVERY message — it is the ONLY source of truth for their position; the conversation is not. It may still be wrong or irrelevant — THE QUESTION ALWAYS WINS on topic. Rules:
 - "Current step" means the step the user still has to DO — it is NOT completed. Never skip past it; never assume earlier steps are done unless listed as done. Refer to steps by their instruction ("the Full name field"), not by number — the user can't see your numbering.
 - If the question is unrelated to the detected workflow(s), IGNORE the position entirely and answer normally. Set "usedPosition" false, "positionKey" "", "positionStep" 0. Never mention the position.
-- If the question is about the detected workflow — or is deictic ("what now?", "then?", "how do I finish this?") — answer POSITIONALLY: FIRST get them through their current step (use the page error when one is shown — that is usually why they are stuck), THEN briefly list the remaining steps. Set "usedPosition" true, "positionKey" to that hypothesis's key, "positionStep" to the current step.
+- If the question asks WHAT something is, or what goes in it — a field, a setting, an option, a term — ANSWER ONLY THAT, even when it belongs to the detected workflow. The position tells you WHICH one they mean; it is not a licence to narrate the task. Do NOT list the other steps, and do NOT say what comes next unless they asked. Set "usedPosition" false. ("What should I put in the welcome message?" is answered by explaining the welcome message — nothing about the project name, and nothing about what to do after.)
+- Answer POSITIONALLY only when they ask what to DO — "what now?", "then?", "how do I finish this?", "I'm stuck" — or when a page error shows they are blocked: FIRST get them through their current step (use the page error when one is shown — that is usually why they are stuck), THEN briefly list the remaining steps. Set "usedPosition" true, "positionKey" to that hypothesis's key, "positionStep" to the current step.
 - NEVER advance the position from conversation flow alone. If a follow-up ("then?", "ok next") arrives but the position shows the SAME current step as before, the user has NOT done it yet — say so gently and re-anchor, then continue from that step. Only treat them as advanced when the measured position itself advanced; then acknowledge it briefly ("Nice — the name's in.").
 - NEVER assert a state you have not measured. With no position context you do not know what is on their screen: say what to do, not what they have or haven't filled in.
 - Not being able to SEE their screen is not the same as not KNOWING the product, and it is never a reason to decline. When they ask why something isn't working, or say they're stuck, and you DO hold knowledge for that workflow: LEAD WITH THE HELP — what that step needs and what it depends on, grounded in the items and cited — and only THEN invite them to tell you what they see ("What happens when you click it?"). NEVER open with "I don't have that in our help content" while holding the very workflow they are asking about; that phrasing is reserved for knowledge you genuinely do not have.
@@ -164,7 +172,7 @@ export async function answerAsFloor(
 }
 
 async function runAgent(input: AgentInput, withTools: boolean): Promise<CopilotAnswer> {
-  const openai = new OpenAI({ apiKey: input.apiKey });
+  const openai = new OpenAI({ apiKey: input.apiKey, timeout: ANSWER_TIMEOUT_MS, maxRetries: 1 });
 
   // Everything the assistant is allowed to cite. Seeded with the first-move shortlist and grown by
   // whatever the tools return — a citation can only ever point at knowledge that passed through

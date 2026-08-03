@@ -13,6 +13,14 @@ import { DuplicateChip, type OverlapView } from '@/components/dashboard/duplicat
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 
 export interface WorkflowRow {
@@ -23,6 +31,11 @@ export interface WorkflowRow {
   segmentTitle: string;
   itemCount: number;
   sourceTitle: string;
+  /** P3-M1 — the workflow's PLAN in prose, shown ON the row that carries the switch. It is model
+   *  output entering approved knowledge (steps are anchored to captured events; this is not) and the
+   *  copilot reads it in both answer modes, so approving without seeing it approves less than it
+   *  looks. `null` = the narration revealed nothing beyond the steps — a real state, shown as one. */
+  description?: string | null;
   copilotApproved: boolean;
   /** P3-M0/M1 — why this stopped answering, if it did. NOT the same as "never approved": it WAS
    *  approved. Showing it as Pending would look like the founder's approval had been lost.
@@ -41,8 +54,15 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
   const [q, setQ] = useState('');
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
   const router = useRouter();
+
+  const pendingRows = useMemo(
+    () => workflows.filter((w) => !w.copilotApproved && !w.inactiveReason),
+    [workflows],
+  );
 
   const counts = useMemo(
     () => ({
@@ -50,10 +70,10 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
       approved: workflows.filter((w) => w.copilotApproved).length,
       // A replaced workflow is RESOLVED, not outstanding — it must never inflate the "awaiting
       // approval" nag, or the founder is chased to re-approve something they deliberately retired.
-      pending: workflows.filter((w) => !w.copilotApproved && !w.inactiveReason).length,
+      pending: pendingRows.length,
       replaced: workflows.filter((w) => w.inactiveReason).length,
     }),
-    [workflows],
+    [workflows, pendingRows],
   );
 
   const visible = workflows.filter((w) => {
@@ -114,19 +134,29 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     });
   }
 
+  /** Confirmed from the review sheet, never straight off the banner button — this is the single
+   *  action that can put an entire knowledge base in front of paying customers, and every workflow it
+   *  approves carries model-written prose the copilot will read out. Approving all of them without
+   *  seeing any of them is the failure the sheet exists to prevent. */
   function approveAll() {
-    const pendingRows = workflows.filter((w) => !w.copilotApproved && !w.inactiveReason);
-    if (pendingRows.length === 0) return;
+    const rows = pendingRows;
+    if (rows.length === 0) return;
     setError(null);
     setBusyKey('all');
     start(async () => {
       try {
         await setCopilotApprovalsBulk(
-          pendingRows.map((w) => ({ workflowId: w.workflowId, segmentTitle: w.segmentTitle })),
+          rows.map((w) => ({ workflowId: w.workflowId, segmentTitle: w.segmentTitle })),
         );
+        toast.success(
+          `${rows.length} workflow${rows.length === 1 ? '' : 's'} live in the copilot`,
+        );
+        setConfirmAll(false);
         router.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to approve all');
+        const msg = e instanceof Error ? e.message : 'Failed to approve all';
+        setError(msg);
+        toast.error(msg);
       } finally {
         setBusyKey(null);
       }
@@ -157,14 +187,57 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
           </p>
           <Button
             size="sm"
-            onClick={approveAll}
+            onClick={() => setConfirmAll(true)}
             disabled={pending}
             className="shrink-0"
           >
-            {busyKey === 'all' ? 'Approving…' : 'Approve all'}
+            Review &amp; approve all
           </Button>
         </div>
       )}
+
+      <Dialog open={confirmAll} onOpenChange={(o) => !pending && setConfirmAll(o)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Approve {pendingRows.length} workflow{pendingRows.length === 1 ? '' : 's'}?
+            </DialogTitle>
+            <DialogDescription>
+              This puts them live in the copilot for your customers. Each one answers from its steps
+              and from the description below — written by the model from your narration, so it is
+              worth reading before it speaks for you.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-[45vh] space-y-3 overflow-y-auto pr-1">
+            {pendingRows.map((w) => (
+              <li key={keyOf(w)} className="rounded-list border bg-card px-3.5 py-3">
+                <p className="text-[13px] font-semibold text-ink">{w.segmentTitle}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-faint">
+                  {w.itemCount} steps · from “{w.sourceTitle}”
+                </p>
+                <p
+                  className={cn(
+                    'mt-1.5 text-[12px] leading-relaxed',
+                    w.description ? 'text-secondary-foreground' : 'text-faint',
+                  )}
+                >
+                  {w.description ?? 'No description — the copilot will answer from the steps alone.'}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAll(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={approveAll} disabled={pending}>
+              {busyKey === 'all'
+                ? 'Approving…'
+                : `Approve ${pendingRows.length} workflow${pendingRows.length === 1 ? '' : 's'}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-b">
         <div className="flex items-center gap-[18px]">
@@ -238,6 +311,46 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
                       ? ` · replaced by “${w.supersededByTitle}”`
                       : ''}
                   </span>
+                  {/* The PLAN, on the row that carries the switch. Shown only while a decision is
+                      outstanding: this is where approving-unseen can happen, and once approved the
+                      workflow's own page carries it in full. Clamped so a dense list stays scannable,
+                      expandable because two lines is enough to judge relevance and not enough to
+                      approve on. */}
+                  {!w.copilotApproved && !w.inactiveReason && (
+                    <span className="mt-1.5 block">
+                      {w.description ? (
+                        <>
+                          <span
+                            className={cn(
+                              'block text-[11.5px] leading-relaxed text-secondary-foreground',
+                              !expanded.has(keyOf(w)) && 'line-clamp-2',
+                            )}
+                          >
+                            {w.description}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpanded((prev) => {
+                                const next = new Set(prev);
+                                if (!next.delete(keyOf(w))) next.add(keyOf(w));
+                                return next;
+                              })
+                            }
+                            className="mt-0.5 text-[11px] font-medium text-primary hover:underline"
+                          >
+                            {expanded.has(keyOf(w)) ? 'Show less' : 'Show more'}
+                          </button>
+                        </>
+                      ) : (
+                        /* Absence is a real state, not an empty slot — blank would read as "nothing
+                           more to see" when it actually means the narration carried no plan. */
+                        <span className="block text-[11.5px] leading-relaxed text-faint">
+                          No description — the copilot will answer from the steps alone.
+                        </span>
+                      )}
+                    </span>
+                  )}
                   {/* A suspended workflow needs its reason ON the row. "It stopped answering" is
                       alarming on its own; "the recording changed, take a look" is actionable. */}
                   {w.inactiveReason === 'needs_review' && (

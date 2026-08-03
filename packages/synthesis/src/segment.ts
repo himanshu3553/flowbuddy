@@ -7,11 +7,31 @@ const log = createLogger('segment');
 
 export interface Segment { title: string; eventIds: string[]; }
 
+/**
+ * How one captured event is described to every model in the pipeline.
+ *
+ * A PLACEHOLDER IS NOT A LABEL, and collapsing the two costs a whole step. This used to fall back
+ * `accessibleName || text || placeholder` and render all three identically, so a project-name field
+ * whose only DOM text is `placeholder="My Website Chatbot"` arrived looking like a field CALLED "My
+ * Website Chatbot" — sitting next to a bot-name field called "AI Assistant". Two adjacent text fields
+ * that both read as a bot name: the distiller merged them and the project name lost its step
+ * entirely. (It survived only while the recorder's sample values were passed through and happened to
+ * tell them apart — which is exactly the leak `valueHint` had to close.)
+ *
+ * Marking the source makes the placeholder do the job it can actually do: "the field whose example
+ * text is My Website Chatbot" reads as a project-name field, where a field NAMED that does not.
+ */
 export function eventLabel(ev: CapturedEvent): string {
   const t = ev.target || {};
-  const name = t.accessibleName || t.text || t.attributes?.placeholder || t.tag || ev.type;
-  const clipped = String(name).replace(/\s+/g, ' ').trim().slice(0, 80);
-  return `${ev.type} "${clipped}" @ ${ev.route?.path ?? ''}`;
+  const clip = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const label = clip(t.accessibleName || t.text || '');
+  const placeholder = clip(t.attributes?.placeholder || '');
+  const what = label
+    ? `"${label}"`
+    : placeholder
+      ? `placeholder "${placeholder}"`
+      : `<${t.tag || ev.type}>`;
+  return `${ev.type} ${what} @ ${ev.route?.path ?? ''}`;
 }
 
 // Single-stage, event-aware segmenter. Boundaries are driven primarily by goal-completion /

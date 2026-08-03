@@ -34,7 +34,7 @@ import type { DistilledStep } from './distill';
  * covering everything the copilot may say.
  */
 
-const MAX_TRANSCRIPT_CHARS = 6000; // matches the distiller's window
+const MAX_TRANSCRIPT_CHARS = 10_000; // ~12 min of speech — and trimmed from the FRONT, see keepTail
 const MAX_DESCRIPTION_CHARS = 900; // a plan, not a retelling — see the prompt's length rule
 
 // The recording-level call reads the WHOLE tour once per recording (not per workflow), so its
@@ -49,10 +49,12 @@ You get the workflow's title, its final user-facing steps, and the full narratio
 Describe the PLAN — what the user is accomplishing and how the parts relate:
 - What the task achieves, in the user's own terms.
 - What is OPTIONAL, what is a CHOICE between alternatives, and whether they may do more than one of them. This is the most valuable thing you can capture, and it is usually only in the narration ("you can either…", "or you can just…", "you don't have to…", "instead of that…").
+- SETTINGS the narration presents as the reader's own decision ("you can enable or disable this", "for now I'm just keeping it on") — say what the choice is and what it changes for them. NEVER say which way the recorder left it: that setting changes how the product behaves for whoever is following, and it is theirs to make, not a step to copy.
 - Anything required BEFORE starting, and anything that happens after (waiting, processing, a result to check).
 
 Hard rules:
 - NEVER restate a click target, a button name, a field name, or a step number. The copilot already has the steps and shows them separately. If your sentence could be mistaken for an instruction, rewrite it.
+- NEVER reproduce a specific value from the recording — a project name, a bot name, a title, a URL, a filename, a person's name. Those are the recorder's own sample data, entered in their own account. Describe the KIND of thing that is needed instead.
 - Use ONLY the steps and the narration. NEVER add features, options, or behaviour from general knowledge about similar products — if the narration doesn't say it, it does not exist.
 - If the narration reveals nothing beyond the steps themselves, write a plain one-sentence summary of the goal. A short honest description is correct; an invented one is not.
 - Plain prose, no lists, no markdown, no heading. Two to four sentences.
@@ -68,6 +70,28 @@ const schema = {
     required: ['description'],
   },
 } as const;
+
+/**
+ * Keep the LAST `max` characters, not the first.
+ *
+ * The narration handed to `describeWorkflow` is the workflow's RUN-UP (align.ts) — everything said
+ * since the previous workflow's last click, which for the first workflow of a tour includes however
+ * long the founder spent explaining the product before touching anything. So the front of that string
+ * is the oldest set-up talk and the back is the words spoken closest to the clicks, about THIS task.
+ *
+ * Trimming from the back would therefore feed the describer a concept explanation and cut the task's
+ * own narration off the end — the whole-tape bug, recreated inside a single workflow. Trimming from
+ * the front keeps the task's own words unconditionally and as much preamble as still fits.
+ *
+ * Snaps forward to whitespace so the window never opens mid-word.
+ */
+export function keepTail(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(t.length - max);
+  const sp = cut.search(/\s/);
+  return (sp > 0 ? cut.slice(sp + 1) : cut).trim();
+}
 
 /**
  * Returns the description, or `null` when there is nothing worth describing.
@@ -96,7 +120,7 @@ export async function describeWorkflow(
     stepList,
     '',
     'NARRATION TRANSCRIPT:',
-    transcriptText.trim().slice(0, MAX_TRANSCRIPT_CHARS) || '(none)',
+    keepTail(transcriptText, MAX_TRANSCRIPT_CHARS) || '(none)',
   ].join('\n');
 
   try {

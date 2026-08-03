@@ -225,8 +225,25 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
     if (wf.steps.length === 0) continue;
     let exact = false;
     let anyMatch = false;
-    let candidate: { step: SenseStep; el: Element } | null = null;
-    let lastFound: { step: SenseStep; el: Element } | null = null;
+    // Candidates are kept SEPARATE by how well their route matched, because "is this workflow
+    // relevant here" and "where in it am I" are different questions and only the first one is served
+    // by a loose match.
+    //
+    // THE BUG THIS ENDS. `matchStrength` matches segment-boundary prefixes in EITHER direction, so a
+    // step recorded at /dashboard/projects is "on route" for every /dashboard/projects/<id> page. Its
+    // element is typically a SIDE-NAV link — visible on every screen in the product — so it resolved,
+    // was visible, and won the first-match race before any exactly-matching step was considered. A
+    // user standing on the project page with the Add Source button in front of them was told to start
+    // from the sidebar, and the walkthrough highlighted that link.
+    //
+    // The exactness signal already existed and was thrown away: `exact` feeds the CONFIDENCE below
+    // (0.45 vs 0.3) while having no say in which step was picked. That asymmetry was the whole defect.
+    // Prefix candidates still win when nothing matches exactly, which is the ancestor-route case the
+    // bidirectional rule was written for.
+    let exactCandidate: { step: SenseStep; el: Element } | null = null;
+    let prefixCandidate: { step: SenseStep; el: Element } | null = null;
+    let exactLast: { step: SenseStep; el: Element } | null = null;
+    let prefixLast: { step: SenseStep; el: Element } | null = null;
     const filled: number[] = [];
 
     for (const step of wf.steps) {
@@ -242,15 +259,26 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       const stepFilled = step.kind === 'input' && isFilled(el);
       if (stepFilled) filled.push(step.index);
       if (m > 0 && isVisible(el)) {
-        lastFound = { step, el };
         // The current step = the FIRST on-route, on-screen step NOT already completed (a filled
         // input is behind the user, not in front of them). A disabled target still localizes —
-        // a disabled Send button IS the user's current wall.
-        if (!candidate && !stepFilled) candidate = { step, el };
+        // a disabled Send button IS the user's current wall. "First" is now resolved within each
+        // match strength, so an exactly-placed step is never beaten by an ancestor-route one.
+        if (m === 2) {
+          exactLast = { step, el };
+          if (!exactCandidate && !stepFilled) exactCandidate = { step, el };
+        } else {
+          prefixLast = { step, el };
+          if (!prefixCandidate && !stepFilled) prefixCandidate = { step, el };
+        }
       }
     }
     if (!anyMatch) continue;
 
+    // Exact placement beats an ancestor route at every stage, including the fallback: a step whose
+    // recorded route IS the user's URL is better evidence of where they stand than one that merely
+    // contains it.
+    const candidate = exactCandidate ?? prefixCandidate;
+    const lastFound = exactLast ?? prefixLast;
     const cur = candidate ?? lastFound;
     const inputsBefore = cur ? wf.steps.filter((s) => s.kind === 'input' && s.index < cur.step.index).length : 0;
     const filledBefore = cur ? filled.filter((i) => i < cur.step.index).length : 0;
@@ -258,7 +286,13 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
     const score = Math.min(1, (exact ? 0.45 : 0.3) + (cur ? 0.35 : 0) + 0.2 * doneFrac);
     if (score < MIN_SCORE) continue;
 
-    const stepIndex = cur ? cur.step.index : wf.steps.find((s) => matchStrength(s.route, ctx) > 0)?.index ?? 1;
+    // Last resort — nothing resolved on screen, so fall back to route alone. Same precedence: an
+    // exactly-matching step first, an ancestor-route one only if there is none.
+    const stepIndex =
+      cur?.step.index ??
+      wf.steps.find((s) => matchStrength(s.route, ctx) === 2)?.index ??
+      wf.steps.find((s) => matchStrength(s.route, ctx) > 0)?.index ??
+      1;
     const h: SenseHypothesisWire = {
       sourceId: wf.sourceId,
       segmentIndex: wf.segmentIndex,

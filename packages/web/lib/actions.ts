@@ -8,7 +8,7 @@ import { prisma } from '@flowbuddy/db';
 import { signIn, signOut } from '@/auth';
 import { createUserWithWorkspace } from '@/lib/workspace';
 import { hashPassword, verifyPassword } from '@/lib/password';
-import { emailEnabled, sendPasswordResetEmail, sendVerificationEmail } from '@/lib/email';
+import { emailEnabled, emailField, sendPasswordResetEmail, sendVerificationEmail } from '@/lib/email';
 import { mintAuthToken, consumeAuthToken } from '@/lib/auth-tokens';
 import {
   signInBlocked,
@@ -17,12 +17,14 @@ import {
   emailRequestAllowed,
 } from '@/lib/auth-limits';
 
+// Both schemas canonicalise the address in the parse (see `emailField`), so every downstream use —
+// the create, the lookups, the token mints, the limiter — is talking about the same person.
 const creds = z.object({
-  email: z.string().email(),
+  email: emailField,
   password: z.string().min(6, 'Password must be at least 6 characters.'),
 });
 
-const emailOnly = z.string().email();
+const emailOnly = emailField;
 
 /** Best-effort client IP for the auth limiter (Render/proxies set x-forwarded-for). */
 async function clientIp(): Promise<string> {

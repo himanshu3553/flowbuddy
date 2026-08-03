@@ -805,6 +805,11 @@ async function buildReasonEvidence(
  * The raised bodyLimit exists for the (validated, size-capped) page image.
  */
 app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply) => {
+  // How long the END USER waited. Cost has been measured per question since 2026-08-03; time never
+  // has been — which is why the answer path's model timeout had to be set to a number chosen for
+  // being unreachable rather than one chosen from a distribution. Started before the gate so it
+  // covers everything the user actually waits through, not just the model.
+  const startedAt = Date.now();
   const gate = await copilotGate(req, reply, 'answer');
   if (!gate) return reply;
   const { workspaceId, key, origin } = gate;
@@ -1082,6 +1087,11 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       items: items.length,
       contextPath,
       sensed: sense?.hypotheses.length ?? 0,
+      // What the end user waited, end to end. The one number the answer path's timeouts must be set
+      // from: `ANSWER_TIMEOUT_MS` is currently a ceiling picked to be unreachable, because there was
+      // no distribution to pick it from. Read this together with `engine` — a rise in `floor` rows
+      // beside a cluster near the ceiling is a timeout that has started costing real answers.
+      ms: Date.now() - startedAt,
       // Spend rides the log line too: an incident is usually noticed as "why was yesterday
       // expensive?", and the per-question answer to that has to be greppable before anyone builds a
       // dashboard query for it.
@@ -1229,13 +1239,42 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   });
 
   if (!result.covered) {
-    // Decline → log a coverage gap (dedupe: one open gap per distinct question).
-    const existing = await prisma.coverageGap.findFirst({
-      where: { workspaceId, prompt: storedQuestion, status: 'open' },
-      select: { id: true },
-    });
-    if (!existing) {
-      await prisma.coverageGap.create({ data: { workspaceId, prompt: storedQuestion, reason: result.reason, source: 'copilot' } });
+    // A coverage gap is a claim about the KNOWLEDGE BASE — "a real user asked this and you have not
+    // recorded it" — and it is only true when an engine actually looked and found nothing.
+    //
+    // OUR OWN failures arrive here wearing exactly the same clothes. A reasoning model that spends
+    // its whole output budget thinking returns empty text; a body-level provider failure returns 200
+    // with no content. Both parse as a perfectly ordinary decline. Filing those as coverage gaps puts
+    // a row the founder CANNOT FIX BY RECORDING ANYTHING into the one feed they use to decide what to
+    // record next — and once written it is indistinguishable from a real gap, so the cost is an
+    // afternoon re-recording a workflow that was never missing.
+    //
+    // Keyed on `loop.stats`, which is the FINAL engine's (recordLoop replaces it, and only `spent`
+    // accumulates). That is what keeps this narrow rather than over-eager: an agent loop that failed
+    // and was rescued by the floor carries the FLOOR's stats here, so its decline still files as the
+    // real gap it is. Only a decline whose LAST engine was itself truncated or failed is suppressed —
+    // which is also how the second-order case (the floor itself failing) is caught, with no extra
+    // branch. The decline still reaches the end-user and is still logged as an unanswered question;
+    // the only thing withheld is the accusation against the KB.
+    if (loop.stats?.incomplete || loop.stats?.failed) {
+      req.log.warn(
+        {
+          workspaceId,
+          engine: engineUsed,
+          ...(loop.stats.incomplete ? { incomplete: loop.stats.incomplete } : {}),
+          ...(loop.stats.failed ? { failed: loop.stats.failed } : {}),
+        },
+        'decline was ours, not missing coverage — coverage gap suppressed',
+      );
+    } else {
+      // Decline → log a coverage gap (dedupe: one open gap per distinct question).
+      const existing = await prisma.coverageGap.findFirst({
+        where: { workspaceId, prompt: storedQuestion, status: 'open' },
+        select: { id: true },
+      });
+      if (!existing) {
+        await prisma.coverageGap.create({ data: { workspaceId, prompt: storedQuestion, reason: result.reason, source: 'copilot' } });
+      }
     }
     return { covered: false, answer: null, citations: [], reason: result.reason, queryId: logged.id };
   }

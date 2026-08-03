@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
+import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +112,7 @@ export default async function KbWorkflowPage({
       ? null
       : await prisma.workflow.findFirst({
           where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
-          select: { description: true },
+          select: { id: true, description: true },
         });
 
   const stats =
@@ -121,16 +122,20 @@ export default async function KbWorkflowPage({
 
   // Approval state (the P1-M5 trust gate) — the copilot only cites APPROVED workflows, so the
   // status box below must not claim citability without it.
-  const approved =
-    selected != null &&
-    (await prisma.copilotApproval.findFirst({
-      where: {
-        workspaceId: ctx.workspace.id,
-        inactiveReason: null,
-        workflow: { sourceId: source.id, segmentIndex: selected },
-      },
-      select: { id: true },
-    })) != null;
+  //
+  // Deliberately NOT filtered on `inactiveReason: null` — this is the ALL-APPROVALS read, one of the
+  // two the liveness rule allows, chosen on purpose (see CLAUDE.md). The page now carries the
+  // control, so it has to distinguish "never approved" from "approved and since retired": rendering
+  // a retired workflow as Pending would read as the founder's own decision having been lost, and the
+  // action it needs is Restore, not Approve. Liveness is re-derived below from the same column.
+  const approval =
+    selected == null || workflow == null
+      ? null
+      : await prisma.copilotApproval.findFirst({
+          where: { workspaceId: ctx.workspace.id, workflowId: workflow.id },
+          select: { inactiveReason: true },
+        });
+  const approved = approval != null && approval.inactiveReason == null;
   const shotCount = items.filter((it) => it.screenshotUrl).length;
 
   // P3-M0 — duplicates involving THIS workflow. A founder who navigates straight here (from a
@@ -190,7 +195,7 @@ export default async function KbWorkflowPage({
           <div className="min-w-0 space-y-5">
             <WorkflowDuplicates overlaps={myOverlaps} />
 
-            {workflow?.description && (
+            {workflow && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">What this workflow is</CardTitle>
@@ -200,9 +205,20 @@ export default async function KbWorkflowPage({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-[13.5px] leading-relaxed text-secondary-foreground">
-                    {workflow.description}
-                  </p>
+                  {workflow.description ? (
+                    <p className="text-[13.5px] leading-relaxed text-secondary-foreground">
+                      {workflow.description}
+                    </p>
+                  ) : (
+                    /* Absence is a REAL state, not an empty slot: the narration said nothing beyond
+                       the clicks. Rendering nothing here would let a founder assume they had read
+                       everything the copilot will say, and hides the one thing that would fix it. */
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      No description — your narration didn’t say anything about this task beyond the
+                      actions themselves, so the copilot answers from the steps alone. Re-recording
+                      while saying what the task is for, and what’s optional, is what produces one.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -285,6 +301,27 @@ export default async function KbWorkflowPage({
           </div>
 
           <aside className="min-w-0 space-y-5 lg:sticky lg:top-20 lg:self-start">
+            {workflow && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Copilot approval</CardTitle>
+                  <CardDescription className="text-xs">
+                    Approving puts this workflow — its steps and its description — in front of your
+                    customers.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <WorkflowApprovalControl
+                    workflowId={workflow.id}
+                    segmentTitle={workflowTitle}
+                    approved={approved}
+                    inactiveReason={approval?.inactiveReason ?? null}
+                    ready={ready}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Used by the copilot</CardTitle>
@@ -322,9 +359,10 @@ export default async function KbWorkflowPage({
                     .
                   </div>
                 ) : ready ? (
+                  /* Says what is true, not where to go: the switch is on this page now, so an
+                     instruction to approve elsewhere would send the founder away from it. */
                   <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-                    Not approved yet — the copilot won’t cite this workflow until you approve it
-                    in the Knowledge Base.
+                    Not citable yet — the copilot only answers from approved workflows.
                   </div>
                 ) : (
                   <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">

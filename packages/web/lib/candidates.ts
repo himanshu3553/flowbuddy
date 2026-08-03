@@ -13,6 +13,13 @@ export interface Candidate {
   segmentIndex: number;
   segmentTitle: string;
   itemCount: number;
+  /** P3-M1 — the workflow's PLAN in prose. Carried here because this is what feeds the APPROVAL
+   *  surfaces, and the description is model output entering approved knowledge: steps are anchored to
+   *  captured events, this is not, and the copilot reads it in both answer modes. A founder who
+   *  cannot see it where the switch is has not approved everything the copilot may say. `null` is a
+   *  real state (the narration revealed nothing beyond the steps) and must be SHOWN as one, not
+   *  rendered as blank — it tells the founder this workflow answers from steps alone. */
+  description: string | null;
   copilotApproved: boolean;
   /** P3-M0/M1 — why this workflow stopped answering, if it did. Distinct from "never approved": it
    *  WAS approved. `"superseded"` = the founder replaced it; `"needs_review"` = a reprocess could
@@ -56,10 +63,18 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
     select: { id: true, appBaseUrl: true },
   });
   const appById = new Map(sources.map((s) => [s.id, s.appBaseUrl]));
-  const [approved, inactive] = await Promise.all([
+  // The description lives on `Workflow`, not `KnowledgeItem` — which is why the approval surfaces
+  // never had it. Scoped by workspaceId as well as id: the ids come from this workspace's items, so
+  // it is redundant, but every tenant read in here states its own scope rather than inheriting one.
+  const [approved, inactive, described] = await Promise.all([
     approvedSegmentKeys(workspaceId),
     inactiveWorkflows(workspaceId),
+    prisma.workflow.findMany({
+      where: { workspaceId, id: { in: [...new Set([...grouped.values()].map((c) => c.workflowId))] } },
+      select: { id: true, description: true },
+    }),
   ]);
+  const descriptionById = new Map(described.map((w) => [w.id, w.description]));
 
   return [...grouped.values()]
     .sort((a, b) => a.sourceId.localeCompare(b.sourceId) || a.segmentIndex - b.segmentIndex)
@@ -69,6 +84,7 @@ export async function listCandidates(workspaceId: string, sourceId?: string): Pr
       return {
         ...c,
         appBaseUrl: appById.get(c.sourceId) ?? null,
+        description: descriptionById.get(c.workflowId) ?? null,
         copilotApproved: approved.has(key),
         inactiveReason: retired?.reason ?? null,
         supersededByTitle: retired?.replacedByTitle ?? null,

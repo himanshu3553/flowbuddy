@@ -163,6 +163,18 @@ This is **Cut 1, client half**. The [KB build](knowledge-base.md) adds a *server
 (`redactText`) that scrubs structured PII (email/phone/card/SSN) from the text the copilot reads.
 Screenshot/OCR redaction is Cut 2, deferred to the Version-2 portal track.
 
+**Masking is by field TYPE, not by content** — so a real name typed into a plain `type="text"` field
+is stored verbatim, and `redactText` will not catch it either (a name matches no pattern). The KB
+build's answer is not to redact harder but to never reproduce a recorded value at all: see
+`valueHint` in [knowledge-base.md](knowledge-base.md) §Stage 5.
+
+**A checkbox's real state is NOT captured.** `maskValue` reads `el.value`, and for a checkbox or
+radio that is the value *attribute* — the literal string `"on"` whether the box was ticked or
+cleared. Nothing else records `checked`, so **the pipeline cannot know whether a toggle was turned on
+or off**, and any instruction that states a position for one came from the narration. Capturing it
+would need an extension change, which means a Web Store resubmission
+([extension-releases.md](../ops/extension-releases.md)).
+
 ### 4.5 The post-action settle watcher
 
 A single screenshot at click-time would miss the *result* of the action. So after a click/submit/

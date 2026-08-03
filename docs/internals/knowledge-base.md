@@ -84,8 +84,19 @@ flowchart LR
 The audio artifact is fetched via the `ArtifactReader` and sent to **Whisper** (`whisper-1`,
 configurable) with `response_format: 'verbose_json'`, which returns **segment-level timestamps**. The
 result is normalized to `{ text, segments: [{ start, end, text }] }` with times **in milliseconds**.
-No audio → `{ text:'', segments:[] }` (silent recordings still produce a step list, just without
-narration).
+
+**No narration is reported, not returned empty.** Three paths produce no words without anything
+throwing — no audio in the manifest, an audio file the reader cannot fetch, and audio that
+transcribed to nothing — and each returns a distinct `gap` alongside the empty transcript. They are
+kept apart because the founder's next move differs: grant the microphone · check whether the
+recording uploaded (re-processing will not help) · re-record and actually narrate.
+
+Why it is worth three cases rather than one flag: **a recording with no narration lands `ready`
+looking perfectly healthy**, while everything downstream of narration is silently absent — workflow
+descriptions, the recording summary, product-knowledge pages. The founder's only symptom is a copilot
+that answers thinly, with nothing anywhere connecting that to a microphone. Note the deliberate
+non-case: text that arrives *without* segment timings is NOT a gap — the describer falls back to the
+whole transcript, so that narration is still used.
 
 The transcript is then run through **`redactTranscript`** *before* anything else uses it, so every
 narration span derived from it is already PII-clean (see §5).
@@ -94,7 +105,10 @@ narration span derived from it is already PII-clean (see §5).
 > 25 MB — roughly 25–40 min of narration — or a transient API error) no longer kills the job.
 `buildWorkflowKB` catches it, builds **transcript-less** (steps from captured actions, no narration
 attribution), and returns a `warning` string; the worker persists it on the source (see §6) so the
-recording lands `ready` with a visible notice instead of `error` discarding good capture.
+recording lands `ready` with a visible notice instead of `error` discarding good capture. **The three
+`gap` cases above take the same route** — same `warning` field, same banner — so a build with no
+narration is as visible as one whose transcription threw. Each carries wording that names what was
+lost as well as what failed, because the loss is the half the founder cannot see.
 
 ### Stage 2 — Align narration ([`align.ts`](../../packages/synthesis/src/align.ts))
 
@@ -163,6 +177,27 @@ produces the **minimal sequence of user-facing steps**. The model is instructed 
   submits a form = one step).
 - Write each `instruction` imperatively and concretely; put extra context in `detail`.
 
+**The recorder's own data never becomes the reader's instruction.** The timeline the model sees
+describes what was done to each element, never what was typed into it: a free-text value is reduced
+to its shape (`entered: <text>`, `<a .pdf file>`, `<a web address>`), while a value the PRODUCT
+offered — a `select` option, a slider position — is passed through, because naming it is not
+inventing. Unrecognised controls fail safe to "content".
+
+Why it is structural rather than a prompt rule: values used to be passed verbatim beside an
+instruction reading *"NEVER invent values"*, so the model dutifully baked the recorder's sample data
+into the steps — *Enter "Test 123" in the project name field* — and the copilot read it to the
+customer as the task. Client masking is by field type ([recorder-capture.md](recorder-capture.md)
+§4.4), so a real person's name in a plain text field reached the KB.
+
+Two consequences that look like bugs and are not. **Checkboxes report `toggled` with no position**,
+because their state is genuinely not captured (§4.4) — a step that states one took it from the
+narration, and where the narration marks the setting as the reader's own choice the step must present
+the DECISION, not the recorder's position. And **a placeholder is labelled as a placeholder**
+(`input placeholder "My Website Chatbot"`), never rendered as if it were the field's name: two
+adjacent fields whose only DOM text is example content are otherwise indistinguishable, and the
+distiller merged them — losing a required field's step entirely — the moment the sample values that
+had been telling them apart were removed.
+
 **Anti-hallucination is structural, not hoped-for.** The schema forces every step to list
 `sourceEventIds` (the real events it's built from) and a `keyEventId` (the representative event). After
 the call, the code **validates** that those ids are real:
@@ -197,9 +232,39 @@ exists solely in what the founder SAID. (Live symptom before this: a workflow wh
 steps were alternatives answered as ten mandatory steps in order.)
 
 **Why a separate call, after distillation.** It sees the FINAL steps, so it cannot describe a step
-that was dropped or drift from settled wording; and it still gets the full transcript, because that
+that was dropped or drift from settled wording; and it gets narration rather than steps, because that
 is where the plan is. Running it inside the distiller would also divide that call's attention on the
 thing it is already good at.
+
+**Why the narration is windowed, not the whole tape.** This stage reads a fixed slice of whatever
+transcript it is handed. Given the whole recording's, workflow 1 is described from workflow 1's
+narration and so is every workflow after it — the plans for a long tour get written from its opening
+minutes. The prompt forbids inventing, so the model's only remaining move is a bland one-line
+summary: **the failure reads as vagueness, never as an error, and it deepens the more a founder
+invests in one long recording.**
+
+**The rule: narration belongs to the workflow that owns the NEXT event after it.** Talking without
+clicking is set-up for what is about to happen, so a workflow's material is its whole *run-up* — from
+the previous workflow's last event to its own — not a pad around its clicks. A fixed lead cannot
+express this: founders routinely explain for minutes before acting ("a chatbot is…, you'll need your
+site URL handy, and you can either upload a doc or point it at a URL"), and prerequisites and choices
+are precisely what a plan is made of. Anything short enough to be safe at a boundary is far too short
+for a real preamble. Consequences: the talk before the first click of a recording belongs to the first
+workflow however long it ran; a workflow the founder RETURNS to counts from the intervening
+workflow's last event, never before it, which is what keeps an interleaved recording safe (segments
+are not guaranteed contiguous — see stage 3); and each workflow keeps a few seconds past its own last
+click for its outcome line, which is the one direction two workflows may overlap.
+
+**The run-up is trimmed from the FRONT.** It can exceed what this stage reads, and the front of it is
+the oldest set-up talk while the back is what was said closest to the clicks. Trimming the other end
+would feed the describer a concept preamble and cut the task's own narration — the whole-tape bug,
+recreated inside a single workflow.
+
+Falls back to the whole transcript when there are no segments to window (a degraded transcription),
+which is the pre-window behaviour. Only this stage is windowed: segmentation and the two
+recording-level reads are about the tour as a whole and legitimately take all of it — so the concept
+explanation in a long preamble is not lost when it lands on a workflow, it is *also* read by the
+recording description and the product-page extractor, which is where product knowledge belongs.
 
 **The one rule that matters:** the description must never restate a click target. No overlap is what
 makes it impossible for the plan and the steps to contradict each other — which is why there is no
