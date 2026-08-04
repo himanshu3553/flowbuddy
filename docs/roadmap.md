@@ -246,6 +246,17 @@ and Sense preferring an ancestor-route step over the exactly-placed one.
   Size it from that distribution, and watch `engine: "floor"` beside it.**
 - **Step editing** (audit §3.8, effort L) — the biggest gap versus Scribe/Tango/Guidde. **Trigger: a
   design partner asking for it**, which the KB-depth work will answer for free.
+- **Storing the answer text** (audit §3.10) — founder decision 2026-08-04. `CopilotQuery` records the
+  question, whether it was answered, what was cited, how it was produced and what it cost, but **not
+  what the copilot said**, so a 👎 is a complaint with its evidence discarded and no answer can be
+  reproduced. Note the asymmetry: a DECLINE does persist the assistant's words (`CoverageGap.reason`),
+  so the failures already visible are recorded and the invisible ones are the ones lost. Not storing
+  less of the customer's end-users' data is a defensible default, which is why this was a choice
+  rather than an oversight. **Trigger: the first 👎 worth diagnosing, or any answer-quality work that
+  needs measuring — the grounding item below cannot be sized without it.** Two constraints when it
+  happens: a migration, and `redactText` on the write — the model sees the RAW question, so an answer
+  echoing a card number back lands it in the founder's database unless it is scrubbed on the same
+  write.
 
 **Known-open, named so they are not rediscovered:**
 
