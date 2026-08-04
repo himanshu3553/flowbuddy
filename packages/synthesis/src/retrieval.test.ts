@@ -225,3 +225,70 @@ describe('coldStartScore — can a user begin here?', () => {
     expect(coldStartScore('/')).toBeGreaterThanOrEqual(coldStartScore('/dashboard'));
   });
 });
+
+describe('the relevance reserve — a bias must not become a filter', () => {
+  /**
+   * THE BUG THIS PINS, measured on a real workspace 2026-08-04. Standing on a hub page where 23 of
+   * 46 approved items had been recorded, against a 24-item window, the route boost could occupy the
+   * whole window and evict the ONE item that answered the question — "how do I log out" lost the
+   * Sign out step, which was ranked #1 by relevance and recorded on another page. The copilot then
+   * declined, correctly, on evidence it had never been shown.
+   *
+   * Route/sense/continuity are documented as biases the answer model may overrule. They are applied
+   * in retrieval, which decides what the model ever sees; nothing bounded how many items could claim
+   * one. These tests state the invariant: context orders the window, the question keeps a share of it.
+   */
+  const crowdedPage = '/dashboard/projects/6a70ab21ea39cf8ce7066f81';
+
+  it('THE REGRESSION: the one relevant item survives a page full of boosted ones', () => {
+    const onPage = Array.from({ length: 23 }, () => item('Click Save Voice Settings.', { route: crowdedPage }));
+    const answer = item('Click Sign out. Sign out of the application.', {
+      route: '/dashboard/billing',
+      sourceId: 'src-signout',
+    });
+    const filler = Array.from({ length: 22 }, () => item('Unrelated step.', { route: '/elsewhere' }));
+
+    const got = shortlistItems([...onPage, answer, ...filler], 'how do I sign out of the account?', {
+      contextPath: crowdedPage,
+      limit: 24,
+    });
+    expect(ids(got)).toContain(answer.id);
+  });
+
+  it('still spends most of the window on where the user IS', () => {
+    const onPage = Array.from({ length: 23 }, () => item('Click Save Voice Settings.', { route: crowdedPage }));
+    const answer = item('Click Sign out.', { route: '/dashboard/billing', sourceId: 'src-signout' });
+    const got = shortlistItems([...onPage, answer], 'how do I sign out?', {
+      contextPath: crowdedPage,
+      limit: 24,
+    });
+    // 23 on-page items + the relevant one: context keeps everything it had, nothing was evicted.
+    expect(got).toHaveLength(24);
+    expect(ids(got)).toContain(answer.id);
+  });
+
+  it('a POSITIONAL question still gets the page, not keyword noise', () => {
+    // "what do I do next?" carries no real search terms — context is the entire answer. The word
+    // "next" appears in an unrelated off-page step, which must not claim the window.
+    const onPage = Array.from({ length: 12 }, () => item('A step on this screen.', { route: crowdedPage }));
+    const noise = Array.from({ length: 12 }, () =>
+      item('Click Next: Add Knowledge Sources.', { route: '/elsewhere', sourceId: 'src-noise' }),
+    );
+    const got = shortlistItems([...onPage, ...noise], 'what do I do next?', {
+      contextPath: crowdedPage,
+      limit: 12,
+    });
+    const onPageIds = new Set(onPage.map((i) => i.id));
+    // The reserve caps keyword noise at 8 of 12 — the page keeps the rest and, critically, the
+    // reserve never REMOVES a signal, so a page with fewer competitors keeps all of them.
+    expect(ids(got).filter((id) => onPageIds.has(id)).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('items with no relevance at all never claim a reserved slot', () => {
+    const onPage = Array.from({ length: 30 }, () => item('On-screen step.', { route: crowdedPage }));
+    const nothing = Array.from({ length: 30 }, () => item('Nothing to do with it.', { route: '/elsewhere' }));
+    const got = shortlistItems([...onPage, ...nothing], 'zzzq unmatchable', { contextPath: crowdedPage, limit: 10 });
+    const onPageIds = new Set(onPage.map((i) => i.id));
+    expect(ids(got).every((id) => onPageIds.has(id))).toBe(true);
+  });
+});

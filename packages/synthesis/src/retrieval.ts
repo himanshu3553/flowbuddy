@@ -1,4 +1,5 @@
 import { createLogger } from '@flowbuddy/logger';
+import { isIdSegment, normalizePath, routeMatchStrength } from '@flowbuddy/shared/route-pattern';
 import type { CopilotKBItem, CopilotTurn } from './copilot';
 import { embedTexts, toVectorLiteral, type EmbedOpts } from './embeddings';
 
@@ -197,36 +198,23 @@ function termOverlap(text: string, terms: string[]): number {
  */
 export function coldStartScore(route: string): number {
   const r = normalizePath(route);
-  if (!r || r === '/') return 3; // the root: nothing more startable than this
+  if (r === '/') return 3; // the root: nothing more startable than this
   const segments = r.split('/').filter(Boolean);
-  const hasOpaqueId = segments.some(
-    (s) => /^[0-9a-f]{16,}$/i.test(s) || /^\d+$/.test(s) || /^[0-9a-f-]{32,}$/i.test(s),
-  );
-  if (hasOpaqueId) return 0; // you can only be here if you were already somewhere specific
+  // One definition of "an id segment", shared with route matching — see `route-pattern.ts`.
+  if (segments.some(isIdSegment)) return 0; // you can only be here if you were already somewhere specific
   return Math.max(0, 3 - segments.length);
-}
-
-/** Trim trailing slashes; '' → '/'. */
-function normalizePath(p: string): string {
-  const s = p.trim().replace(/\/+$/, '');
-  return s === '' ? '/' : s;
 }
 
 // P1-M8: items captured on the route the end-user is currently on ("answer for this screen").
 // Distilled steps carry `data.route`; the `event.route.path` fallback covers pre-distillation rows.
-// Matching is exact or segment-boundary prefix (either direction) — NOT raw substring, which made
-// a root contextPath "/" match every item and turned the signal into uniform noise (review
-// hardening 2026-07-07). A root path carries no screen information, so it never matches.
+// Matching is PATTERN-based (`route-pattern.ts`): exact or segment-boundary prefix, with record ids
+// standing in for each other — never raw substring, which made a root contextPath "/" match every
+// item and turned the signal into uniform noise (review hardening 2026-07-07).
 function routeMatches(item: RetrievableKBItem, contextPath: string): boolean {
   if (!contextPath) return false;
-  const ctx = normalizePath(contextPath);
-  if (ctx === '/') return false;
   const d = (item.data ?? {}) as { route?: string; event?: { route?: { path?: string } } };
   const raw = d.route ?? d.event?.route?.path ?? '';
-  if (!raw) return false;
-  const route = normalizePath(raw);
-  if (route === '/') return false;
-  return route === ctx || route.startsWith(ctx + '/') || ctx.startsWith(route + '/');
+  return routeMatchStrength(raw, contextPath) > 0;
 }
 
 /**
@@ -348,6 +336,65 @@ function topK(
 }
 
 /**
+ * How many of the `limit` slots the QUESTION always keeps, whatever the context signals say.
+ *
+ * WHY THIS EXISTS. Route, sense and continuity are documented as biases the answer model may
+ * overrule — but they are applied in RETRIEVAL, and retrieval decides what the model is ever shown.
+ * A bias it cannot see past is a filter. Measured on a real workspace: standing on a hub page where
+ * 23 of 46 items had been recorded, against a 24-item window, the route boost alone could evict the
+ * single item that answered the question ("how do I log out" → the Sign out step, ranked #1 by
+ * relevance, did not survive). The signal is not wrong; nothing bounded how many items could claim
+ * it.
+ *
+ * WHY A RESERVE AND NOT A SMALLER BOOST. The weights are individually right — "answer for this
+ * screen" SHOULD outrank a single lucky keyword, and a positional question ("what do I do next?")
+ * carries no searchable terms at all, so context is the entire answer there. Capping the boost's
+ * REACH instead (only lift the top N route matches) was considered and rejected: ranking on-page
+ * items by relevance is meaningless for exactly those term-less positional questions, so it would
+ * risk the flagship case to protect the rare one. A reserve removes nothing and adds no ordering
+ * rule — it only guarantees the question's own best matches are in the room.
+ *
+ * 8 of 24: enough that a directly-named workflow can never be squeezed out, small enough that a
+ * positional answer keeps two thirds of the window for where the user actually is.
+ */
+const RELEVANCE_RESERVE = 8;
+
+/**
+ * Choose `limit` items by fused score, but never at the cost of the top few by RELEVANCE alone.
+ *
+ * Ordering is deliberately left to the fused score — the reserve decides MEMBERSHIP, not position.
+ * Promoting reserved items would put keyword noise ("Click **Next**: Add Knowledge Sources" for a
+ * question containing "next") above the items a positional question actually needs.
+ */
+export function selectWithRelevanceReserve<T>(
+  scored: Array<{ item: T; fused: number; relevance: number }>,
+  limit: number,
+): T[] {
+  if (scored.length <= limit) return [...scored].sort((a, b) => b.fused - a.fused).map((s) => s.item);
+
+  const byFused = [...scored].sort((a, b) => b.fused - a.fused);
+  const chosen = new Set(byFused.slice(0, limit));
+
+  // Items with NO relevance signal at all are not "the question's best matches" — a reserve made of
+  // them would evict context for nothing.
+  const wanted = [...scored]
+    .filter((s) => s.relevance > 0)
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, Math.min(RELEVANCE_RESERVE, limit));
+
+  // Swap out the weakest fused entries — never one that is itself reserved.
+  const missing = wanted.filter((s) => !chosen.has(s));
+  for (let i = byFused.length - 1, m = 0; i >= 0 && m < missing.length; i--) {
+    const candidate = byFused[i]!;
+    if (!chosen.has(candidate) || wanted.includes(candidate)) continue;
+    chosen.delete(candidate);
+    chosen.add(missing[m]!);
+    m++;
+  }
+  return byFused.filter((s) => chosen.has(s)).map((s) => s.item);
+}
+
+/**
  * Keyword shortlist — the P1-M3 FALLBACK path (and the pre-upgrade behavior, unchanged): top
  * `limit` items by question-term overlap, with a +3 route boost for the screen the end-user is on.
  * Ties keep KB order; always returns up to `limit` even on 0 matches so the LLM judges coverage
@@ -366,17 +413,23 @@ export function shortlistItems(
   const senseKeys = new Set(opts.senseKeys ?? []);
   const continuityKeys = new Set(opts.continuityKeys ?? []);
   const terms = questionTerms(question);
-  const scored = items.map((i) => ({
-    i,
-    score:
-      termOverlap(i.text, terms) +
-      (routeMatches(i, contextPath) ? 3 : 0) +
-      (senseKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 3 : 0) +
-      // Below both measured signals (P5-M0 cut 2) — enough to carry a term-less follow-up, not
-      // enough to hold the thread against a question that genuinely moved on.
-      (continuityKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 2 : 0),
-  }));
-  return topK(scored, limit, descriptions);
+  const scored = items.map((i) => {
+    const relevance = termOverlap(i.text, terms);
+    return {
+      item: i,
+      relevance,
+      fused:
+        relevance +
+        (routeMatches(i, contextPath) ? 3 : 0) +
+        (senseKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 3 : 0) +
+        // Below both measured signals (P5-M0 cut 2) — enough to carry a term-less follow-up, not
+        // enough to hold the thread against a question that genuinely moved on.
+        (continuityKeys.has(`${i.sourceId}:${i.segmentIndex}`) ? 2 : 0),
+    };
+  });
+  // The same reserve as the hybrid path — this fallback runs whenever the vector half fails, which
+  // is exactly when a paraphrased question most needs its keyword matches to survive.
+  return selectWithRelevanceReserve(scored, limit).map((i) => toCopilotItem(i, descriptions));
 }
 
 /**
@@ -537,19 +590,22 @@ export async function retrieveApprovedKBItems(
   for (const id of vecIds) if (poolIds.has(id)) vecRank.set(id, vecRank.size + 1);
 
   const fused = pool.map((i) => {
-    let score = 0;
+    // Relevance = what the QUESTION found, before any context signal. Kept separate so the reserve
+    // below can guarantee it a share of the window.
+    let relevance = 0;
     const kr = kwRank.get(i.id);
-    if (kr) score += 1 / (RRF_K + kr);
+    if (kr) relevance += 1 / (RRF_K + kr);
     const vr = vecRank.get(i.id);
-    if (vr) score += 1 / (RRF_K + vr);
+    if (vr) relevance += 1 / (RRF_K + vr);
+    let score = relevance;
     if (routeMatches(i, contextPath)) score += ROUTE_RRF_WEIGHT / (RRF_K + 1);
     if (senseKeySet.has(`${i.sourceId}:${i.segmentIndex}`)) score += SENSE_RRF_WEIGHT / (RRF_K + 1);
     if (continuityKeySet.has(`${i.sourceId}:${i.segmentIndex}`)) {
       score += CONTINUITY_RRF_WEIGHT / (RRF_K + 1);
     }
-    return { i, score };
+    return { item: i, fused: score, relevance };
   });
-  return topK(fused, limit, descriptionByWorkflow);
+  return selectWithRelevanceReserve(fused, limit).map((i) => toCopilotItem(i, descriptionByWorkflow));
 }
 
 /** Accept only well-formed user/assistant turns from an untrusted body (cap count + length). */

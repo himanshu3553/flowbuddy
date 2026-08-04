@@ -464,6 +464,70 @@ reads forward with no special case.)*
 
 ---
 
+## 11b. Where the user is standing — route patterns + structural screen identification (P2-M6)
+
+**Why this leg needs its own harness.** Both changes are invisible on a product whose URLs already
+name its screens — which every app tested here so far has been. `demo/serve.mjs` is a fake product
+served at **every** path, so one recording can be asked about from a different URL:
+
+```bash
+pnpm --filter @flowbuddy/widget build
+FLOWBUDDY_KEY=pk_xxx FLOWBUDDY_DEBUG=1 node packages/widget/demo/serve.mjs   # → :8080, any path
+```
+
+Add `http://localhost:8080` to the workspace's origin allowlist (§9). Two screens, `?screen=team`
+and `?screen=billing`, deliberately share their chrome and differ in their content — that is the
+discrimination a fingerprint has to make.
+
+**Record at least three labelled things per screen.** Anchors come from what the founder *touched*,
+so a two-click recording produces no fingerprint at all and the structural half silently tests
+nothing. Click the nav, the fields, and the buttons.
+
+**A. Routes are patterns.** Record a workflow at `/projects/111/settings` (fill the form, submit) →
+process → approve. Now open **`/projects/222/settings`** and ask *"what do I do next?"*.
+
+✅ **PASS:** a positional answer naming your real step, `senseUsed='used'`. Before this change the
+shard came back empty and you got a generic answer. Check the wire too — `window.FlowBuddyLastAsk`
+in the console shows what Sense decided, and DevTools → Network shows the `sense-plan` request
+carrying the **pattern** rather than `222` (one fetch for every record, not one per record).
+And the fastest server-side proof, which needs no browser at all:
+
+```bash
+curl -s -H "X-FlowBuddy-Key: pk_xxx" \
+  "http://localhost:8787/v1/copilot/sense-plan?route=/projects/999/settings" | jq '.workflows[].title'
+```
+
+A workflow recorded on a *different* record id must come back. `jq '.workflows[0].screens'` shows
+the fingerprints; a workflow whose steps carry no `screenKey` was recorded too sparsely to identify.
+
+**B. The walkthrough never shows a foreign id.** Start a walkthrough, then navigate somewhere the
+step doesn't live (`/somewhere-else`). The card must read *"This step happens on /projects/…/settings"*
+— an elided path. **A real id there is the leak this closed**, and it is the founder's own record.
+
+**C. Structure as the way in (slice 1).** Record a workflow at **`/`** — the root carries no screen
+information by design, so nothing but the page itself can place it. Approve, reload `/`, ask a
+positional question.
+
+✅ **PASS:** it still localizes. This is the case that was previously blind no matter how
+recognisable the page was. Server-side: `?route=/` must now return workflows rather than an empty
+shard.
+
+**D. Structure as a tiebreaker (slice 2).** Record one workflow on `/app?screen=team` and another on
+`/app?screen=billing`. The query is stripped, so **both live at exactly the same route** and only the
+page can tell them apart. Ask a positional question on each.
+
+✅ **PASS:** each gets the workflow belonging to the screen actually showing. A tie ("are you doing X
+or Y?") means the fingerprints didn't separate — check both recordings touched ≥3 labelled things.
+
+**E. The guard: well-routed apps must not get chattier.** Re-run §11's Sense leg against the
+originally recorded app. Nothing may change — no new "X or Y?" questions, same answers, same speed.
+Structure is only allowed to speak where the URL doesn't; a workflow the route never mentioned is
+dropped as soon as another matches the URL exactly.
+
+**What this leg cannot tell you.** The matching halves have unit coverage (`pnpm test`); the widget's
+scorer has no runner at all, so its behaviour is only ever observed here. Treat a surprise as the
+scorer's, not the fingerprint's.
+
 ## 12. Analytics & coverage gaps (the feedback loop)
 
 1. Studio → **Copilot** page → **Copilot activity**: shows total questions, % answered, 👍/👎 counts, and the recent Q&A list (each tagged answered/declined). Confirm your Part-10 questions appear with correct tags + feedback.

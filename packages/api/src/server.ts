@@ -393,7 +393,13 @@ async function copilotGate(
 // CopilotApproval (no-leak: an unapproved key is dropped) and the TITLE comes from the approval
 // snapshot — never the wire — so the only host-page text that ever reaches the prompt is the
 // masked error snippet, which is delimited + de-angled here.
-const MAX_SENSE_HYPOTHESES = 3;
+// Matches the widget's own cap: on a hub page many workflows tie on DOM evidence alone, and only
+// the question can separate them, so the candidate list travels whole and the answer model chooses.
+const MAX_SENSE_HYPOTHESES = 6;
+// …but only the leaders BIAS RETRIEVAL. A candidate list is for choosing from; a boost applied to
+// six workflows would flood the evidence window it exists to nudge (the eviction this same day's
+// `RELEVANCE_RESERVE` had to be added to stop).
+const MAX_SENSE_BOOST_KEYS = 2;
 const MAX_SENSE_ERROR_CHARS = 200;
 
 interface WireSenseHypothesis {
@@ -861,7 +867,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     // carries almost no retrievable terms of its own; this keeps it in the workflow discussed.
     resolveContinuityKeys(workspaceId, body.context?.lastCited),
   ]);
-  const senseKeys = sense?.hypotheses.map((h) => `${h.sourceId}:${h.segmentIndex}`);
+  const senseKeys = sense?.hypotheses
+    .slice(0, MAX_SENSE_BOOST_KEYS)
+    .map((h) => `${h.sourceId}:${h.segmentIndex}`);
   // P1-M3 — hybrid keyword+vector retrieval; the embedding config is best-effort (retrieval
   // degrades to the keyword shortlist on any vector-path failure — never errors here).
   const items = await retrieveApprovedKBItems(prisma, workspaceId, question, {
@@ -1024,11 +1032,16 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         history: sanitizeHistory(body.history),
         items,
         context: { path: contextPath, sense: sense ?? undefined },
+        // NO context signals here, deliberately. The first retrieval answers "what is around this
+        // user?", so route/sense/continuity belong to it. `search_knowledge` answers "find me X" —
+        // the agent has already read the page context and decided what it wants, in its own words,
+        // and biasing that query back toward the current screen overrides the one judgment in the
+        // loop that is made WITH the question in hand. Measured: on a hub page, "log out" returned
+        // only on-screen items and the agent (which sees just the top 12) declined on a workflow the
+        // KB plainly held. Nothing positional is lost — round one's items stay in the prompt and
+        // tool results accumulate rather than replace.
         searchKb: (query) =>
           retrieveApprovedKBItems(prisma, workspaceId, query, {
-            contextPath,
-            senseKeys,
-            continuityKeys,
             embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
           }),
         loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),

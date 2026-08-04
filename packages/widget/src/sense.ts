@@ -6,6 +6,18 @@
 // never input values, never continuous monitoring: the probe is an instantaneous glance at ask
 // time, and everything here degrades silently (Sense failing must never break an answer).
 
+import {
+  displayRoute,
+  normalizePath,
+  routeMatchStrength,
+  routePattern,
+} from '@flowbuddy/shared/route-pattern';
+import {
+  SCREEN_MATCH_MIN,
+  screenMatchScore,
+  type LiveScreen,
+  type ScreenFingerprint,
+} from '@flowbuddy/shared/screen-fingerprint';
 import { log } from './log.js';
 
 // ── Plan wire shapes (mirror packages/api/src/sense-plan.ts) ────────────────────────────────────
@@ -21,12 +33,14 @@ export interface SenseStep {
   kind: 'input' | 'action';
   locators: SenseLocator[];
   postRoute?: string;
+  screenKey?: string;
 }
 export interface SenseWorkflow {
   sourceId: string;
   segmentIndex: number;
   title: string;
   steps: SenseStep[];
+  screens?: Record<string, ScreenFingerprint>;
 }
 
 /** One hypothesis as sent to /answer (server re-validates every field against approvals). */
@@ -60,20 +74,11 @@ export function maskText(s: string): string {
     .replace(/\+?\d{1,3}[ .-]?\(?\d{2,4}\)?[ .-]\d{3,4}[ .-]?\d{2,4}/g, '[redacted-phone]');
 }
 
-// ── Route matching (mirrors the server/retrieval rules: segment-boundary, root matches nothing) ─
-export function normalizePath(p: string): string {
-  const s = (p || '').trim().replace(/\/+$/, '');
-  return s === '' ? '/' : s;
-}
-/** 2 = exact, 1 = segment-boundary prefix (either direction), 0 = no match. */
-export function matchStrength(stepRoute: string, ctx: string): number {
-  if (!stepRoute || ctx === '/') return 0;
-  const route = normalizePath(stepRoute);
-  if (route === '/') return 0;
-  if (route === ctx) return 2;
-  if (route.startsWith(ctx + '/') || ctx.startsWith(route + '/')) return 1;
-  return 0;
-}
+// ── Route matching ─────────────────────────────────────────────────────────────────────────────
+// ONE rule, shared with the sense shard and retrieval (`@flowbuddy/shared/route-pattern`): routes
+// are compared as PATTERNS, so a step recorded inside one record localizes on every record of that
+// shape. Re-exported here because the walkthrough and the probe both aim with it.
+export { displayRoute, normalizePath, routePattern, routeMatchStrength as matchStrength };
 
 // ── Locator resolution (read-only; every strategy but text/xpath is a ready-to-run selector) ───
 const TEXT_CANDIDATE_SELECTOR = 'button, a, [role="button"], [role="menuitem"], [role="tab"], summary, label';
@@ -211,25 +216,95 @@ function findError(el: Element): string | undefined {
   return clean ? maskText(clean).slice(0, 200) : undefined;
 }
 
+// ── Reading the live screen (structural identification) ────────────────────────────────────────
+// The counterpart of the recorded fingerprint: the short visible labels this page is showing right
+// now. Deliberately the SAME kinds of thing the recorder captured — headings, buttons, links, tabs,
+// field labels — so the two sets are comparable.
+//
+// Read-only, bounded, and computed ONCE per probe: everything here is a text read, with no layout
+// measurement and no visibility test. Visibility would cost a forced reflow per element, and it buys
+// little — extra labels can only ever ADD to what the live page recalls, and the recorded set is
+// what a screen is scored against.
+const SCREEN_ANCHOR_SELECTOR =
+  'h1, h2, h3, [role="heading"], button, a, [role="button"], [role="tab"], [role="menuitem"], label, legend, summary';
+const MAX_SCREEN_ANCHORS = 300;
+
+export function readLiveScreen(): LiveScreen {
+  const anchors: string[] = [];
+  try {
+    const nodes = document.querySelectorAll(SCREEN_ANCHOR_SELECTOR);
+    const n = Math.min(nodes.length, MAX_SCREEN_ANCHORS);
+    for (let i = 0; i < n; i++) {
+      const el = nodes[i]!;
+      const label = el.getAttribute('aria-label') || (el.textContent ?? '');
+      if (label) anchors.push(label);
+    }
+    // Field affordances the label list misses: a placeholder is often the only visible name a form
+    // control has.
+    const fields = document.querySelectorAll('input[placeholder], textarea[placeholder]');
+    const fn = Math.min(fields.length, MAX_SCREEN_ANCHORS);
+    for (let i = 0; i < fn; i++) {
+      const ph = fields[i]!.getAttribute('placeholder');
+      if (ph) anchors.push(ph);
+    }
+  } catch {
+    // a hostile or exotic document must never break the probe
+  }
+  return { title: document.title || '', anchors };
+}
+
 // ── The scorer (deterministic; the answer LLM makes the final call with the question in hand) ──
 const MIN_SCORE = 0.2; // below this a workflow isn't worth sending as a hypothesis
 const TIE_DELTA = 0.15; // top two closer than this = "ask X or Y?" territory
+/**
+ * How many hypotheses may ride to the server — and why it is not 2.
+ *
+ * A HUB PAGE BREAKS THE TIEBREAK, measured 2026-08-04. On a project page where eight approved
+ * workflows had steps, every one of them scored ~0.80: exact route, plus a resolvable, visible,
+ * uncompleted step. Shipping the top two made the choice between them arbitrary, and the arbitrary
+ * winner was a workflow with 1 of its 11 steps on that screen, beating the one with 4 of 6. The
+ * answer then correctly ignored a position about a workflow the user hadn't asked about, and
+ * replayed the whole thing from step 1 while the user stood on step 3's screen.
+ *
+ * The page does not contain the answer to "which of these is the user in" — the QUESTION does, and
+ * this architecture already says so: hypotheses are shipped precisely so the answer model decides
+ * with the question in hand. Pre-filtering eight candidates down to two before the question is
+ * consulted defeats that. So: everything within TIE_DELTA of the leader travels (still at least the
+ * top two, exactly as before), and the model picks.
+ *
+ * The cost is one prompt line each, and the server boosts retrieval on only the first two — a
+ * candidate list is for CHOOSING from, while a retrieval boost applied to six workflows would flood
+ * the evidence window it is meant to bias.
+ */
+const MAX_HYPOTHESES = 6;
 
 /** Probe the live DOM against a shard and score top-k hypotheses. Read-only; ~ms. */
 export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeResult {
   const ctx = normalizePath(path);
   const elements = new Map<string, Element>();
-  const scored: Array<{ h: SenseHypothesisWire; score: number; el: Element | null }> = [];
+  const scored: Array<{
+    h: SenseHypothesisWire;
+    score: number;
+    el: Element | null;
+    routed: boolean; // the URL had something to say about this workflow
+    exactRoute: boolean; // …and for one of its steps it was the exact screen
+  }> = [];
+
+  // Read the page once, and only if some workflow can actually use it. A plan compiled before
+  // fingerprints existed — or from a recording too sparse to identify anything — costs nothing here
+  // and behaves exactly as it did before.
+  const live = workflows.some((wf) => wf.screens) ? readLiveScreen() : undefined;
 
   for (const wf of workflows) {
     if (wf.steps.length === 0) continue;
     let exact = false;
     let anyMatch = false;
+    let bestScreen = 0;
     // Candidates are kept SEPARATE by how well their route matched, because "is this workflow
     // relevant here" and "where in it am I" are different questions and only the first one is served
     // by a loose match.
     //
-    // THE BUG THIS ENDS. `matchStrength` matches segment-boundary prefixes in EITHER direction, so a
+    // THE BUG THIS ENDS. `routeMatchStrength` matches segment-boundary prefixes in EITHER direction, so a
     // step recorded at /dashboard/projects is "on route" for every /dashboard/projects/<id> page. Its
     // element is typically a SIDE-NAV link — visible on every screen in the product — so it resolved,
     // was visible, and won the first-match race before any exactly-matching step was considered. A
@@ -240,14 +315,28 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
     // (0.45 vs 0.3) while having no say in which step was picked. That asymmetry was the whole defect.
     // Prefix candidates still win when nothing matches exactly, which is the ancestor-route case the
     // bidirectional rule was written for.
+    //
+    // STRUCTURE SITS BETWEEN THEM (slices 1–2), and that ordering is the point. An exact URL is the
+    // strongest claim available. But "the page in front of me looks like the page this step was
+    // recorded on" is BETTER evidence than "some ancestor of my URL was mentioned once" — which is
+    // precisely the loose match that produced the sidebar bug above. So: exact route → recognised
+    // screen → ancestor route.
     let exactCandidate: { step: SenseStep; el: Element } | null = null;
+    let screenCandidate: { step: SenseStep; el: Element } | null = null;
     let prefixCandidate: { step: SenseStep; el: Element } | null = null;
     let exactLast: { step: SenseStep; el: Element } | null = null;
+    let screenLast: { step: SenseStep; el: Element } | null = null;
     let prefixLast: { step: SenseStep; el: Element } | null = null;
     const filled: number[] = [];
 
+    const screenScore = (step: SenseStep): number =>
+      step.screenKey ? screenMatchScore(wf.screens?.[step.screenKey], live) : 0;
+
     for (const step of wf.steps) {
-      const m = matchStrength(step.route, ctx);
+      const m = routeMatchStrength(step.route, ctx);
+      const sc = screenScore(step);
+      if (sc > bestScreen) bestScreen = sc;
+      const recognised = sc >= SCREEN_MATCH_MIN;
       if (m > 0) anyMatch = true;
       if (m === 2) exact = true;
       if (step.locators.length === 0) continue;
@@ -258,40 +347,52 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       elements.set(`${wf.sourceId}:${wf.segmentIndex}:${step.index}`, el);
       const stepFilled = step.kind === 'input' && isFilled(el);
       if (stepFilled) filled.push(step.index);
-      if (m > 0 && isVisible(el)) {
-        // The current step = the FIRST on-route, on-screen step NOT already completed (a filled
-        // input is behind the user, not in front of them). A disabled target still localizes —
-        // a disabled Send button IS the user's current wall. "First" is now resolved within each
-        // match strength, so an exactly-placed step is never beaten by an ancestor-route one.
+      if ((m > 0 || recognised) && isVisible(el)) {
+        // The current step = the FIRST on-screen step NOT already completed (a filled input is
+        // behind the user, not in front of them). A disabled target still localizes — a disabled
+        // Send button IS the user's current wall. "First" is resolved within each tier, so an
+        // exactly-placed step is never beaten by a merely-recognised or ancestor-route one.
         if (m === 2) {
           exactLast = { step, el };
           if (!exactCandidate && !stepFilled) exactCandidate = { step, el };
+        } else if (recognised) {
+          screenLast = { step, el };
+          if (!screenCandidate && !stepFilled) screenCandidate = { step, el };
         } else {
           prefixLast = { step, el };
           if (!prefixCandidate && !stepFilled) prefixCandidate = { step, el };
         }
       }
     }
-    if (!anyMatch) continue;
+    // A workflow the URL never mentioned stays in play if the PAGE recognised it — this is the whole
+    // of slice 1. Before it, `!anyMatch` discarded a workflow even when every element of it had just
+    // been found on screen.
+    const recognisedHere = bestScreen >= SCREEN_MATCH_MIN;
+    if (!anyMatch && !recognisedHere) continue;
 
-    // Exact placement beats an ancestor route at every stage, including the fallback: a step whose
-    // recorded route IS the user's URL is better evidence of where they stand than one that merely
-    // contains it.
-    const candidate = exactCandidate ?? prefixCandidate;
-    const lastFound = exactLast ?? prefixLast;
+    // Exact placement beats recognition beats an ancestor route, at every stage including the
+    // fallback: a step whose recorded route IS the user's URL is better evidence of where they stand
+    // than one that merely contains it.
+    const candidate = exactCandidate ?? screenCandidate ?? prefixCandidate;
+    const lastFound = exactLast ?? screenLast ?? prefixLast;
     const cur = candidate ?? lastFound;
     const inputsBefore = cur ? wf.steps.filter((s) => s.kind === 'input' && s.index < cur.step.index).length : 0;
     const filledBefore = cur ? filled.filter((i) => i < cur.step.index).length : 0;
     const doneFrac = inputsBefore > 0 ? filledBefore / inputsBefore : 0;
-    const score = Math.min(1, (exact ? 0.45 : 0.3) + (cur ? 0.35 : 0) + 0.2 * doneFrac);
+    // Base confidence by the strongest claim available; `+0.1 × screen` is slice 2 — among workflows
+    // the URL rates identically (the normal case now that `/projects/:id` matches several), the one
+    // whose screen the page actually shows wins, and TIE_DELTA stops that being a coin toss.
+    const base = exact ? 0.45 : recognisedHere ? 0.4 : 0.3;
+    const score = Math.min(1, base + (cur ? 0.35 : 0) + 0.2 * doneFrac + 0.1 * bestScreen);
     if (score < MIN_SCORE) continue;
 
-    // Last resort — nothing resolved on screen, so fall back to route alone. Same precedence: an
-    // exactly-matching step first, an ancestor-route one only if there is none.
+    // Last resort — nothing resolved on screen, so fall back to placement alone. Same precedence:
+    // an exactly-matching step, then a recognised screen, then an ancestor route.
     const stepIndex =
       cur?.step.index ??
-      wf.steps.find((s) => matchStrength(s.route, ctx) === 2)?.index ??
-      wf.steps.find((s) => matchStrength(s.route, ctx) > 0)?.index ??
+      wf.steps.find((s) => routeMatchStrength(s.route, ctx) === 2)?.index ??
+      wf.steps.find((s) => screenScore(s) >= SCREEN_MATCH_MIN)?.index ??
+      wf.steps.find((s) => routeMatchStrength(s.route, ctx) > 0)?.index ??
       1;
     const h: SenseHypothesisWire = {
       sourceId: wf.sourceId,
@@ -303,13 +404,26 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       ...(cur ? { error: findError(cur.el) } : {}),
     };
     if (h.error === undefined) delete h.error;
-    scored.push({ h, score, el: cur?.el ?? null });
+    scored.push({ h, score, el: cur?.el ?? null, routed: anyMatch, exactRoute: exact });
   }
 
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, 2);
+  // STRUCTURE SPEAKS WHEN THE URL DOESN'T. A workflow the route never mentioned is dropped as soon
+  // as some workflow matched this URL exactly — otherwise a recognised screen lands ~0.05 below an
+  // exact-route match, which is inside TIE_DELTA, and the copilot would start asking "X or Y?" on
+  // pages that used to answer. Slice 1 exists for the pages the URL cannot describe, not to
+  // second-guess the ones it describes precisely.
+  const eligible = scored.some((s) => s.exactRoute) ? scored.filter((s) => s.routed) : scored;
+
+  eligible.sort((a, b) => b.score - a.score);
+  // The top two always travel (unchanged), plus anything else too close to the leader to separate
+  // deterministically — those are exactly the candidates only the question can choose between.
+  const leader = eligible[0]?.score ?? 0;
+  const contenders = eligible.filter((s) => leader - s.score < TIE_DELTA).length;
+  const top = eligible.slice(0, Math.min(Math.max(2, contenders), MAX_HYPOTHESES));
   return {
-    tie: top.length === 2 && top[0]!.score - top[1]!.score < TIE_DELTA,
+    // Still "the top two are too close to call" — the flag drives the copilot's "X or Y?" question,
+    // which is about the leaders, not about how many candidates came along.
+    tie: top.length >= 2 && top[0]!.score - top[1]!.score < TIE_DELTA,
     hypotheses: top.map((s) => s.h),
     elements,
   };
@@ -332,7 +446,10 @@ export async function ensureShard(
   timeoutMs: number,
 ): Promise<SenseWorkflow[] | null> {
   if (serverDisabled) return null;
-  const k = normalizePath(path);
+  // Keyed by PATTERN, and the pattern is what goes on the wire: every record of one shape shares a
+  // single shard (an app whose URLs carry ids used to re-fetch on every row), and the end-user's own
+  // record id never leaves their page. Patterning is idempotent, so the server shards it identically.
+  const k = routePattern(path);
   const cached = shardCache.get(k);
   if (cached && Date.now() - cached.at < (cached.workflows ? SHARD_TTL_MS : FAIL_RETRY_MS)) {
     return cached.workflows;
@@ -364,9 +481,9 @@ export async function ensureShard(
 
 /**
  * The ask-time probe: shard (usually already cached from panel open) → probe → hypotheses.
- * Returns null when Sense has nothing to say (disabled, fetch failed, or no workflows near this
- * route) — the caller then simply omits the sense context, and the copilot behaves exactly as
- * before (route bias only).
+ * Returns null when Sense has nothing to say (disabled, fetch failed, or nothing this page can be
+ * placed against) — the caller then simply omits the sense context, and the copilot behaves exactly
+ * as before (route bias only).
  */
 export async function probeForAsk(
   apiBase: string,

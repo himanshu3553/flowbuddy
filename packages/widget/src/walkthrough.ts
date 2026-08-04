@@ -22,6 +22,7 @@
 import { log } from './log.js';
 import {
   clearSpotlight,
+  displayRoute,
   ensureShard,
   isFilled,
   isVisible,
@@ -656,7 +657,9 @@ async function showStep(): Promise<void> {
 
     if (step.route && matchStrength(step.route, path) === 0) {
       clearSpotlight(true);
-      setStatus(`This step happens on ${step.route} — head there and I'll pick it up.`);
+      // `displayRoute`, never the raw route: this is the FOUNDER's recorded URL being shown to a
+      // stranger, and an id segment in it is a real record out of the founder's own account.
+      setStatus(`This step happens on ${displayRoute(step.route)} — head there and I'll pick it up.`);
       return;
     }
     if (step.locators.length === 0) {

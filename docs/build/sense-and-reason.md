@@ -108,6 +108,54 @@ The alternative architecture — capture the page's HTML element fingerprints (r
 
 **The deciding asymmetry:** the founder's recordings already provide **exact** fingerprints, pre-computed. The hybrid ships that founder-derived data *down* and compares on the user's machine; the alternative re-derives at runtime over **end-user data**, on the server, per message, what the sense plan knows statically for free. The drift-tolerant-reasoning value of the alternative grew into a full module instead — **Reason** (Part B). When the probe matches nothing (probe-zero), that's logged as a **passive drift signal** (P2-M4 → Phase 3) and the answer degrades to plain route bias.
 
+### Hub pages: ship the candidates, let the question choose
+
+The probe scores workflows on DOM evidence alone, which is deterministic and question-blind by
+design — the answer model is supposed to make the final call with the question in hand. On a **hub
+page** that design was being defeated before it got the chance. Measured 2026-08-04: a project page
+where **eight** approved workflows had steps scored every one of them identically (exact route, plus
+a resolvable, visible, uncompleted step), and only the top two travelled. The arbitrary winner had 1
+of its 11 steps on that screen; the workflow the user was actually asking about had 4 of 6. The
+answer then correctly ignored a position about a workflow nobody had asked about and replayed the
+whole thing from step 1 — while the user stood on step 3's screen with the button in front of them.
+
+**The page does not contain the answer to "which of these is the user in." The question does.** So
+everything within the tie threshold of the leader now travels (still at least the top two), capped at
+six, and the model picks. Verified end-to-end: with the right candidate placed *fourth* in the list,
+the answer became "On the project details page, click **Add Source**" — anchored at step 3, logged
+`senseUsed='used'`, and therefore also the step the walkthrough offer starts from.
+
+One deliberate asymmetry: **the candidate list is not the retrieval boost.** Only the top two
+hypotheses bias retrieval. A list is for choosing from; a boost applied to six workflows would flood
+the evidence window it exists to nudge.
+
+A tempting tiebreak was measured and rejected: ranking candidates by how much of the workflow is
+visible here (4-of-6 beats 1-of-11). On that same page five workflows are *entirely* contained on the
+screen, so it ranks the right answer sixth — it demotes the wrong winner without promoting the right
+one, which is worse than not filtering at all.
+
+### Recognising a screen the URL can't describe (structural identification)
+
+The hybrid above localizes a user by **where they are** and then confirms it with **what's on the page**. That order has a hard floor: the route decides which workflows are even considered, so a product that doesn't put its screens in the URL gets nothing to consider. Three ordinary shapes hit it — an app that lives at one path, a tab/modal/drawer that changes the view without changing the address, and (since routes became patterns) several workflows legitimately sharing `/projects/:id`. The page could be unmistakable and the probe would never see it.
+
+**A screen fingerprint** closes that: the screen's title plus the short visible labels of the things the founder actually touched there — button captions, field labels, accessible names — derived from the recording's own manifest, so it costs no new capture, no DOM-snapshot fetch, and no model call.
+
+**This is the hybrid decision applied again, not reversed.** What was rejected above is scraping the END-USER's page and shipping it UP; fingerprints are **founder-derived data shipped DOWN**, compared on the user's machine, with only the same booleans coming back. The privacy posture is unchanged: no page content leaves the page.
+
+Three properties are load-bearing, and each has a cheaper version that fails:
+
+- **Overlap, never equality.** The founder recorded inside their own account, so their page says "Acme Corp — Team" and their customer's says "Globex — Team". We score the *recall* of the recorded anchors — how much of what the founder saw is here — so record-specific words simply don't match and screen-specific words do. Extra labels on the live page cost nothing, which is the right asymmetry: apps add chrome, they rarely remove labels. (The same lesson routes learned when they stopped being compared as strings.)
+- **The title multiplies, it never adds.** A shared title ("MyApp") is the cheapest thing in a web app to have on every screen. Added, it could carry a half-match over the line; multiplied, it can only amplify evidence the page actually gave.
+- **A floor on how little counts.** Below three anchors a fingerprint refuses to score at all. Two labels are a coincidence, not an identification, and the consumer treats anything above the threshold as "this is the screen".
+
+**A screen is keyed by WHEN, not WHERE** — a run of consecutive events sharing a route pattern. Keying by route would have defeated the purpose: on a one-path app every screen of the recording would land in a single bucket. The known limit is the reverse case — two screens with no route change between them (a wizard advancing in place) merge into one run — and it fails softly: the merged fingerprint still recognises a screen inside the run, and the widget must still resolve an element that is actually on the page before it will place anyone on a step.
+
+**Built in two slices.** *Slice 1 — structure as a way IN:* workflows the route didn't match ride along in the spare slots of a shard and stay in play if the page recognises them. Before it, a workflow was discarded for having no route match even when every one of its elements had just been found on screen. *Slice 2 — structure as a tiebreaker:* among workflows the URL rates identically, the one whose screen is actually showing wins, and it slots into the existing precedence as **exact route → recognised screen → ancestor route**. That middle rung is deliberate: "the page in front of me is the page this step was recorded on" is better evidence than "some ancestor of my URL was mentioned once", which is exactly the loose match that once had the copilot pointing users at a sidebar link.
+
+**Two guards keep it from making well-routed apps worse.** The server only spends spare shard slots on structural candidates, capped, and only on workflows with a screen worth recognising — so a page the route already describes ships what it always shipped. And the widget drops route-less workflows entirely as soon as some workflow matches this URL exactly, because a recognised screen otherwise lands close enough to an exact match to read as a tie, and the copilot would start asking "X or Y?" on pages that used to just answer.
+
+**Where it is still weak.** A recording too sparse to yield three anchors on any screen produces no fingerprint at all and behaves exactly as before — which is the correct floor, but it means thin recordings get nothing. The anchors are also what the founder *touched*, not everything the screen shows, so a screen whose distinguishing content is text nobody clicked is under-described. Both are addressable from DOM snapshots later; neither was worth fetching object storage on every plan compile to fix now.
+
 ## A3. Modules (P2-M0…M4)
 
 | Module | What it is |

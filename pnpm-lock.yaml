@@ -251,6 +251,9 @@ importers:
 
   packages/widget:
     dependencies:
+      '@flowbuddy/shared':
+        specifier: workspace:*
+        version: link:../shared
       html2canvas:
         specifier: ^1.4.1
         version: 1.4.1

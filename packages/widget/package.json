@@ -14,6 +14,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@flowbuddy/shared": "workspace:*",
     "html2canvas": "^1.4.1"
   }
 }

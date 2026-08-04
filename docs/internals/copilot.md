@@ -77,7 +77,14 @@ Paths are in `CLAUDE.md` and the source; what matters here is the contract each 
   rate bucket); read-only — writes nothing.
 - **`GET /v1/copilot/sense-plan?route=…`** (P2-M0) — the ROUTE-SHARDED compiled sense
   plan (approved workflows → steps × ranked locators + routes), gated by `Workspace.senseEnabled`;
-  the widget caches per route. Mechanics: [`sense-and-reason.md`](../build/sense-and-reason.md) Part A.
+  the widget caches per route — and both the cache key and the `route` it sends are the **pattern**,
+  so every record of one shape shares a single shard and no end-user record id reaches the server.
+  Each workflow also carries **screen fingerprints** (title + the short visible labels of what the
+  founder touched, keyed by a run of consecutive events sharing a route pattern — by WHEN, not
+  WHERE, or a one-path app would collapse into a single screen). Workflows the route missed fill the
+  shard's **spare slots** so the widget can place a user structurally where the URL says nothing;
+  they are dropped again, in the widget, the moment some workflow matches the URL exactly.
+  Mechanics: [`sense-and-reason.md`](../build/sense-and-reason.md) Part A.
 - **`POST /v1/copilot/walkthrough`** (P4-M0) — guided-walkthrough run analytics:
   `started` (key re-verified against `CopilotApproval` — no-leak; returns `runId`) then
   `step_advanced`/`completed`/`aborted`/`stalled` update the one `CopilotWalkthrough` row per run
@@ -166,9 +173,27 @@ Prisma client injected so `@flowbuddy/synthesis` stays DB-free:
    Route and sense are double-weighted — each outranks any single rank-1 signal and ties a
    keyword+vector double-#1. **Continuity is deliberately half that:** route and sense are measured
    *now*, continuity only recalls what was being discussed a turn ago, and the gap is what lets a
-   user change subject mid-thread. All three are **biases, never filters**. Route matching is exact
-   or segment-boundary prefix, never raw substring — a root `contextPath` of `/` carries no screen
-   signal and never matches (pre-hardening it matched everything).
+   user change subject mid-thread. All three are **biases, never filters** — and since 2026-08-04
+   that is enforced rather than intended. **8 of the 24 slots are reserved for pure relevance**
+   (`RELEVANCE_RESERVE`): the top items by keyword/vector alone cannot be evicted by any context
+   signal. Without it a bias applied to enough items IS a filter, because the answer model can only
+   overrule context it was still shown — measured on a real workspace, a hub page holding 23 of 46
+   items evicted the single step that answered the question, and the copilot declined honestly on
+   evidence it never saw. The reserve changes membership only, never ORDER: promoting reserved items
+   would put keyword noise above what a positional question needs.
+
+   **Routes are compared as PATTERNS, not strings** — one rule in `shared/route-pattern.ts`, used
+   here, by the sense shard, and by the widget's probe + walkthrough. Segments that identify a
+   *record* (digits · UUID · long hex · long separator-free mixed token) stand in for each other, so
+   a workflow recorded inside one record localizes on every record of that shape; everything else is
+   compared exactly, at segment boundaries, never as a raw substring, and a root path carries no
+   screen signal and matches nothing. The classifier is deliberately narrow because the two failure
+   directions differ in cost: a missed id is only a signal that doesn't fire, while a false positive
+   would declare two different screens identical — so slug-shaped segments (anything carrying `-` or
+   `_`) are never ids, at the price of missing separator-carrying tokens. The same rule decides
+   `coldStartScore`'s "you must already be inside something" and, in the widget, what an end-user is
+   allowed to be SHOWN: the recorded route is the founder's own URL, so any id in it is elided
+   before it reaches a stranger.
 7. **Top-K.** Sort by fused score and return up to **24** items as `CopilotKBItem`s
    (`id, sourceId, segmentIndex, segmentTitle, text, narration`). It **always returns up to the
    limit, even on zero matches** (unmatched items fill the tail in KB order), so the *LLM* judges
@@ -235,6 +260,24 @@ was reverted. The model did not lack the rule.
 > 0/8 → 8/8 with **no text change at all**. A real second lever, deliberately not stacked on the
 > first so each stays measurable. (Reordering is safe for the wire: `shapeAnswer` reads named fields
 > only, so a model-facing field cannot reach the widget by moving.)
+
+**Sense ships a CANDIDATE LIST, and only its leaders bias retrieval** (2026-08-04). Up to
+`MAX_SENSE_HYPOTHESES` = 6 hypotheses travel — everything within the widget's tie threshold of the
+leader — because on a hub page many workflows tie on DOM evidence alone and only the question can
+separate them. Order is the widget's and survives validation, so the first `MAX_SENSE_BOOST_KEYS` =
+2 are the ones that become `senseKeys` for retrieval. Sending two of eight tied candidates used to
+make the choice arbitrary; boosting all six would flood the window the boost exists to nudge.
+`senseLogFields` already matched the model's chosen `position` against the list, so a correct pick
+logs `senseUsed='used'` with the workflow and step the answer actually anchored on.
+
+**`search_knowledge` carries NO context signals** (2026-08-04). The first retrieval answers "what is
+around this user?", so route/sense/continuity belong to it; the agent's own search answers "find me
+X", after it has read the page context and decided what it wants in its own words. Biasing that query
+back toward the current screen overrides the one judgment in the loop made WITH the question in
+hand — and the agent only ever sees the top `MAX_SEARCH_RESULTS` of what comes back, so on a crowded
+page every slot went to on-screen items and it declined on a workflow the KB plainly held. Nothing
+positional is lost: round one's items stay in the prompt and tool results **accumulate** rather than
+replace.
 
 **Tool de-duplication is keyed on name + arguments.** The loop used to remember tool
 NAMES only, so `search_knowledge("create a project")` and `search_knowledge("new project setup")`
