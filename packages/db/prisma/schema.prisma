@@ -528,6 +528,34 @@ model CopilotQuery {
   cachedInputTokens Int?
   outputTokens      Int?
   reasoningTokens   Int?
+  // WHAT THE MODEL WAS LOOKING AT (2026-08-04). The columns above say what the answer path did and
+  // what it spent; these say what it had in front of it — and that is the difference between
+  // reading a bad answer and explaining one.
+  //
+  // Both of the defects that prompted these were INVISIBLE in a row: a workflow evicted from the
+  // evidence window by a context boost, and a position chosen arbitrarily from among eight equally
+  // scored candidates. Reconstructing either meant re-running retrieval against a live database and
+  // trusting it had not changed since — which it had. A question's evidence is a fact about a
+  // moment, so it is written down at that moment.
+  //
+  //   senseCandidates — EVERY position the probe offered, not just the one the answer took:
+  //                     [{ key, title, step, conf }]. The whole list, because a wrong winner is
+  //                     only diagnosable when the alternatives can be seen. The chosen one (or
+  //                     none) is already in the `sense*` columns above.
+  //   evidence        — round one's retrieval: { ids, workflows }. Ids join back to KnowledgeItem
+  //                     for exactness; the distinct workflow titles ride along because ids DO NOT
+  //                     SURVIVE A REPROCESS (the worker delete+recreates items), and a row whose
+  //                     ids have all dangled would otherwise say nothing at all.
+  //   searches        — the agent's own `search_knowledge` calls WITH what came back:
+  //                     [{ q, workflows, ids }]. `toolCalls` counts them and the log line records
+  //                     the query; only this says whether the search found the thing. The query is
+  //                     model-written from the user's words, so it is scrubbed like `question`.
+  //
+  // Nullable and never back-filled, like their neighbours. Capped on write — an answer path that
+  // searched ten times must not write ten times the row.
+  senseCandidates   Json?
+  evidence          Json?
+  searches          Json?
   reasonTrigger     String?
   reasonImage       Boolean?
   createdAt   DateTime @default(now())

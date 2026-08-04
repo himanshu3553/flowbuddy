@@ -372,6 +372,22 @@ shipped page state, else `answerAsAgent`; `answerAsFloor` if either fails) → *
   Every engine hands the loop's result back through the same `onLoop` hook, so the floor's
   `rounds: 1, toolCalls: 0` is a recorded fact rather than a claim and one query compares them all.
   `floor` is the value with no matching mode — a run of those rows means something upstream is failing.
+- **The row and the log line both carry the EVIDENCE, not just the counts** (2026-08-04).
+  `senseCandidates` (every Sense hypothesis with its step and confidence — *the whole list*, because
+  a wrong winner is only diagnosable when the alternatives can be seen; which one the answer took is
+  already in the `sense*` columns) · `evidence` (round one's item ids for joining back to
+  `KnowledgeItem`, **plus the distinct workflow titles, because ids do not survive a reprocess** and
+  a row whose ids have all dangled would otherwise say nothing) · `searches` (each
+  `search_knowledge` query **with what it returned** — `toolCalls` counts them and the loop's `tools`
+  field records the query; only this says whether the search found the thing). **One shape, built
+  once and written to both**, so a grepped line and a stored row can never disagree about the same
+  question. Capped on write (4 searches, 12 ids each) and the query is `redactText`-scrubbed like
+  `question` — it is the model's wording of the user's words, so it carries the same risk.
+  Added after two real defects — a workflow evicted from the window by a context boost, and a
+  position picked arbitrarily from eight tied candidates — were invisible in a row, and
+  reconstructing each meant re-running retrieval against a live database and trusting it hadn't
+  changed since. *(What is still NOT stored is the answer TEXT — a separate, deliberate deferral;
+  roadmap §9.)*
 - **A decline** additionally logs a `CoverageGap(source: 'copilot')` — **deduped**: at most one *open*
   gap per distinct question per workspace. This is the "record this next" feed Studio surfaces.
 - **A decline from the AGENT is no longer swapped for a diagnostic one.** The P2-M5

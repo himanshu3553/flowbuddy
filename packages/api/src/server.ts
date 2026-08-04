@@ -916,6 +916,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     stats: null,
     spent: { input: 0, cachedInput: 0, output: 0, reasoning: 0 },
   };
+  // What the agent's own searches returned, in the order it asked. Filled by the `searchKb` closure
+  // below — the only place that sees a search's RESULTS rather than just its query.
+  const searches: Array<{ q: string; workflows: string[]; ids: string[] }> = [];
   /**
    * Every loop this question ran reports through here.
    *
@@ -1032,6 +1035,9 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         history: sanitizeHistory(body.history),
         items,
         context: { path: contextPath, sense: sense ?? undefined },
+        // Recorded on the way past (see the `searched` field on the answer log line): the loop
+        // reports the QUERY it asked for, and this is the only place that sees what came back.
+        //
         // NO context signals here, deliberately. The first retrieval answers "what is around this
         // user?", so route/sense/continuity belong to it. `search_knowledge` answers "find me X" —
         // the agent has already read the page context and decided what it wants, in its own words,
@@ -1040,10 +1046,21 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         // only on-screen items and the agent (which sees just the top 12) declined on a workflow the
         // KB plainly held. Nothing positional is lost — round one's items stay in the prompt and
         // tool results accumulate rather than replace.
-        searchKb: (query) =>
-          retrieveApprovedKBItems(prisma, workspaceId, query, {
+        searchKb: async (query) => {
+          const found = await retrieveApprovedKBItems(prisma, workspaceId, query, {
             embedding: { apiKey: config.openaiApiKey, model: config.embedModel || undefined },
-          }),
+          });
+          searches.push({
+            // The query is the MODEL's wording of the user's question, so it carries the same PII
+            // risk the question does and gets the same scrub — neither a log file nor this row may
+            // become a new place for a card number to land.
+            q: redactText(query),
+            workflows: [...new Set(found.map((i) => i.segmentTitle).filter((t): t is string => !!t))],
+            // What the agent actually READS — the loop shows it only the first MAX_SEARCH_RESULTS.
+            ids: found.slice(0, 12).map((i) => i.id),
+          });
+          return found;
+        },
         loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
         onLoop: recordLoop,
         apiKey: config.openaiApiKey,
@@ -1076,6 +1093,26 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     }
   }
 
+  // WHAT THE MODEL HAD IN FRONT OF IT — built once, and written to BOTH the log line and the row.
+  // One shape, so a grepped line and a stored row can never disagree about the same question.
+  // Capped here rather than at the call sites: an answer path that searched ten times must not
+  // write ten times the row.
+  const senseCandidates = sense
+    ? sense.hypotheses.map((h) => ({
+        key: `${h.sourceId}:${h.segmentIndex}`,
+        title: h.title,
+        step: h.step,
+        conf: h.confidence,
+      }))
+    : null;
+  const evidence = {
+    ids: items.map((i) => i.id),
+    // Workflow titles ride beside the ids because ids DO NOT SURVIVE A REPROCESS (the worker
+    // delete+recreates items), and a row whose ids have all dangled would otherwise say nothing.
+    workflows: [...new Set(items.map((i) => i.segmentTitle).filter((t): t is string => !!t))],
+  };
+  const searchRecord = searches.slice(0, 4);
+
   // WHAT THE ANSWER PATH ACTUALLY DID — one line per question, emitted before anything downstream
   // can transform, escalate, or discard the result.
   //
@@ -1100,6 +1137,14 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       items: items.length,
       contextPath,
       sensed: sense?.hypotheses.length ?? 0,
+      // WHAT THE MODEL WAS LOOKING AT — the same three values the row stores (built above). The
+      // counts say how much evidence there was; these say WHICH, and that is the whole of a
+      // diagnosis. `candidates` is deliberately the entire list: a wrong winner is only diagnosable
+      // when the alternatives can be seen. `searched` records what each query RETURNED — the `tools`
+      // field below records only what was asked for.
+      ...(senseCandidates ? { candidates: senseCandidates } : {}),
+      evidence,
+      ...(searchRecord.length > 0 ? { searched: searchRecord } : {}),
       // What the end user waited, end to end. The one number the answer path's timeouts must be set
       // from: `ANSWER_TIMEOUT_MS` is currently a ceiling picked to be unreachable, because there was
       // no distribution to pick it from. Read this together with `engine` — a rise in `floor` rows
@@ -1241,6 +1286,13 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
           }
         : {}),
       ...senseLogFields(sense, probed, position),
+      // What it was LOOKING AT (2026-08-04) — the same values the log line carries, so a grepped
+      // line and a stored row can never disagree. Written only when there is something to say: a
+      // question with no probe stores no candidates, and `evidence` is omitted rather than stored
+      // empty when retrieval found nothing at all.
+      ...(senseCandidates ? { senseCandidates } : {}),
+      ...(evidence.ids.length > 0 ? { evidence } : {}),
+      ...(searchRecord.length > 0 ? { searches: searchRecord } : {}),
       ...(reasonPayload
         ? { reasonTrigger: reasonPayload.trigger, reasonImage: Boolean(reasonPayload.image) }
         : {}),
