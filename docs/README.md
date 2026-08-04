@@ -74,4 +74,5 @@ A doc does not move when it ships, and `roadmap.md` is the only thing that track
 |---|---|
 | [`internals/`](internals/README.md) | How it runs — seams, contracts, invariants, failure modes. Start at `connections.md`. |
 | [`design_system/`](design_system/README.md) | Tokens, components, and the UI kit. The source of truth for all UI. |
+| [`audit/`](audit) | Full-product audits — evidence and argument, never status. What was done about one: [`roadmap.md`](roadmap.md) §9. |
 | [`archive/`](archive) | Dated records kept for their findings. Everything else is in `git log`. |

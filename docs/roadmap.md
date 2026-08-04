@@ -215,6 +215,55 @@ The residual open items from the Phase-1 end-to-end review — nothing release-b
 - **Capture quality** — type-aware distill labels (`typed`/`pressed`/`scrolled to`), inner-container scroll capture, `Enter`+`submit` merge in `clean.ts`, the multi-tab screenshot wrong-tab case, and the **full-page-nav capture gap** (late `change`/post-action loss — candidate fix: flush field values on `submit` + a `pagehide` flush).
 - **Studio/widget polish** — range-window the coverage-gap "asked N×" count (+ fuzzy gap matching), per-workspace timezone for analytics day-bucketing, client-side history slicing + widget `maxlength`, widget a11y (dialog role, focus management, thumb labels), a real deflection metric, and a CORS-scope note.
 
+### Product audit (2026-08-03) — status
+
+The audit itself lives in [`audit/`](audit/product-audit-2026-08-03.md) (technical · plain-English ·
+a 180-finding appendix) and is a **snapshot, deliberately never edited** — including its §7 record of
+six findings that were adversarially overturned, which exists so nobody re-raises them. It carries no
+status; this section is the only place that does.
+
+**⚠️ Read its §2 before acting on anything.** ~150 of the 180 findings were written by one reviewer
+and never challenged; of the 18 that *were* challenged, 17 were downgraded or corrected. Its top
+twelve are trustworthy (six were spot-checked against source and all six held); the appendix is
+leads, not a work queue.
+
+**Actioned 2026-08-04** — nine findings, in one pass (`git log` has the detail; restating it here
+would be the second copy this file exists to prevent): the transcript run-up window · the workflow
+description on every approval surface + the switch on the workflow page · coverage gaps no longer
+recording our own truncations · answer-path model timeouts + `ms` latency logging · a no-narration
+build reporting which of three causes · email canonicalised at every auth entry point. Three more
+came from reading the produced KB rather than the audit, and were not in it at all: the recorder's
+sample data reaching customers as instructions, a placeholder rendered as if it were a field name,
+and Sense preferring an ancestor-route step over the exactly-placed one.
+
+**Deferred, each with the trigger that reopens it:**
+
+- **CI** — founder decision 2026-08-04. Note `pnpm lint` currently examines zero files (no package
+  defines a lint script), so lint in CI would be a green check verifying nothing until that changes.
+- **A per-ANSWER deadline.** What shipped bounds a per-CALL 60 s; the loop still runs up to four
+  rounds, so the worst case is minutes. The proper fix threads a deadline through `engine.ts`. It was
+  not done because nothing measured latency — **trigger: the `ms` field now on every answer log line.
+  Size it from that distribution, and watch `engine: "floor"` beside it.**
+- **Step editing** (audit §3.8, effort L) — the biggest gap versus Scribe/Tango/Guidde. **Trigger: a
+  design partner asking for it**, which the KB-depth work will answer for free.
+
+**Known-open, named so they are not rediscovered:**
+
+- **The answer path can state things no source contains.** Observed once: prose about what to write
+  in a field, plus a claim about what the product does *not* require. The build path is anchored
+  structurally (steps cite real event ids; page quotes must appear verbatim in the transcript) — the
+  answer path anchors only *which* item was cited, never that the sentences follow from it. Two shapes
+  leak: advice, which the prompt's ban on "UI, steps, features, or facts" does not name; and
+  **negative claims, which a corpus of recordings can never ground** — silence is not evidence of
+  absence. Frequency unknown, and **unmeasurable until `CopilotQuery` stores the answer text**
+  (audit §3.10) — that is the prerequisite, not the fix.
+- **Routes are matched as literal strings**, so a workflow recorded on one record does not localize a
+  user standing on another. The audit's sharpest consequence: `walkthrough.ts` can print another
+  customer's record id to an end user.
+- **A merged workflow inherits one parent's approval.** Seen locally during a reprocess: a workflow
+  carrying materially expanded content stayed live under an approval granted for the narrower one.
+- **~150 findings remain single-source.** Unchanged since the audit was written.
+
 ---
 
 ## 10. Doc map
