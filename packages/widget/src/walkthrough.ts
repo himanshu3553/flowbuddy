@@ -5,6 +5,13 @@
 // the user's Next click (manual-only advancement, user decision 2026-07-15). The user performs
 // every action themselves; FlowBuddy never clicks, fills, or navigates.
 //
+// SINCE 2026-08-05 this file is the GUIDED ACTOR on the shared step engine (`step-engine.ts`,
+// agent.md §A2.10): the page-machinery — settle, element-state verdicts, the retry ladder, the
+// pointer's evidence scan, completion evidence, the observation harness — lives there, shared with
+// the acting driver; THIS file owns everything guided-specific: the session, the card, the copy,
+// manual-only advancement, the offer, analytics, and the Reason escalation. D4's law is this
+// actor's, not the engine's: detection acknowledges, only Next moves.
+//
 // POSTURE — user-initiated, zero-acting, session-scoped observation. Observation starts only on
 // the user's explicit click and is torn down on done/exit/stall-exit/TTL: (a) read-only
 // re-resolution of the current step's element (the same checks Sense runs at ask time), (b) a
@@ -36,17 +43,27 @@ import {
 // P2-M5 Reason — ONE element-state vocabulary: the same reading Reason ships to the diagnostic
 // model gates the walkthrough locally (disabled/checked/filled/valid + the failed-constraint name).
 import { readElementState, type ReasonElementWire } from './reason.js';
+// The shared step engine (P4-M2): settle · state verdicts · pointer evidence · retry ladder ·
+// completion evidence · observation wiring. Read-only by construction — see its header.
+import {
+  actionCompletionEvidence,
+  AWAIT_NAV_TIMEOUT_MS,
+  awaitSettle,
+  earliestPendingInput,
+  firstUnfinishedEarlierInput,
+  inputDone,
+  invalidHint,
+  observeRun,
+  resolveStepWithRetries,
+  stateDone,
+  watchInputState,
+} from './step-engine.js';
 // Cross-page state lives in the shared store — this file's original inline implementation, promoted
 // so the chat thread (and later the agent run) inherit the same posture instead of copying it.
 import { clearSession, peekSession, readSession, writeSession, type SessionSpec } from './session.js';
 
 // ── Session (the stored shape — versioned; foreign/expired/corrupt = discarded) ─────────────────
 const WALK_TTL_MS = 30 * 60_000; // an abandoned tab stops observing within the half hour
-const AWAIT_NAV_TIMEOUT_MS = 10_000; // a click that never navigates goes back to waiting
-const SETTLE_QUIET_MS = 500; // mutation-quiet window = "the page finished reacting" (recorder R2)
-const SETTLE_MAX_MS = 3000;
-const RESOLVE_RETRIES_MS = [0, 750, 2000]; // SPAs hydrate late — retry before declaring a stall
-const ROUTE_POLL_MS = 400; // SPA route watcher (no history monkey-patching — guest-script hygiene)
 
 interface AwaitingNav {
   fromStep: number;
@@ -175,66 +192,7 @@ function emit(event: WalkEvent, mode?: 'auto' | 'manual'): void {
   }
 }
 
-// ── Settle helper (mutation-quiet, mirroring the recorder's post-action semantics) ─────────────
-function awaitSettle(quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS): Promise<void> {
-  return new Promise((resolve) => {
-    let quiet: number;
-    const obs = new MutationObserver(() => {
-      clearTimeout(quiet);
-      quiet = window.setTimeout(finish, quietMs);
-    });
-    const cap = window.setTimeout(finish, maxMs);
-    function finish(): void {
-      clearTimeout(quiet);
-      clearTimeout(cap);
-      obs.disconnect();
-      resolve();
-    }
-    try {
-      obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-    } catch {
-      finish();
-      return;
-    }
-    quiet = window.setTimeout(finish, quietMs);
-  });
-}
-
-// ── Element-state verdicts (Reason's vocabulary, consulted locally — added after the first E2E:
-//    a walkthrough must never say "click it" at a disabled button or advance past an invalid or
-//    unchecked field) ────────────────────────────────────────────────────────────────────────────
-
-/** Is this input step genuinely behind the user? Checkbox/radio = checked; fields = filled AND not
- *  provably invalid (constraint API / aria-invalid — `valid` absent means nothing machine-checkable,
- *  which honestly passes; purely-visual custom validation is the Explain escalation's job). */
-function stateDone(st: ReasonElementWire): boolean {
-  if (st.checked !== undefined) return st.checked;
-  if (st.filled !== undefined) return st.filled && st.valid !== false;
-  return false;
-}
-function inputDone(el: Element): boolean {
-  const st = readElementState(el);
-  if (st.checked === undefined && st.filled === undefined) return isFilled(el); // non-standard control
-  return stateDone(st);
-}
-
-/** The failed HTML5 constraint, in words a user can act on. */
-const INVALID_HINTS: Record<string, string> = {
-  valueMissing: 'it looks required and empty',
-  typeMismatch: "the format doesn't look right",
-  patternMismatch: "it doesn't match the required format",
-  tooShort: 'it looks too short',
-  tooLong: 'it looks too long',
-  rangeUnderflow: 'the value looks too low',
-  rangeOverflow: 'the value looks too high',
-  stepMismatch: "the value doesn't fit the allowed increments",
-  badInput: "the value doesn't parse",
-  customError: 'the app flagged it as invalid',
-  ariaInvalid: 'the app flagged it as invalid',
-};
-function invalidHint(reason: string | undefined): string {
-  return (reason && INVALID_HINTS[reason]) || 'the app flagged it as invalid';
-}
+// ── Guided wording over the engine's verdicts ──────────────────────────────────────────────────
 
 /** The right status line for an input step's current state (invalid ⇒ show the Explain escalation). */
 function inputStatus(st: ReasonElementWire): { text: string; explain: boolean } {
@@ -248,15 +206,10 @@ function inputStatus(st: ReasonElementWire): { text: string; explain: boolean } 
 /** Why a disabled button is disabled, as far as the plan can tell: name the first earlier input
  *  step that isn't genuinely done (unchecked box, empty or invalid field). */
 function blockedText(current: SenseStep): string {
-  if (session) {
-    for (const s of session.workflow.steps) {
-      if (s.index >= current.index || s.kind !== 'input' || s.locators.length === 0) continue;
-      const el = resolveStep(s);
-      if (el && !inputDone(el)) {
-        const what = s.instruction.length > 48 ? `${s.instruction.slice(0, 45)}…` : s.instruction;
-        return `This button is disabled — check step ${s.index} (“${what}”) first.`;
-      }
-    }
+  const s = session ? firstUnfinishedEarlierInput(session.workflow.steps, current.index) : null;
+  if (s) {
+    const what = s.instruction.length > 48 ? `${s.instruction.slice(0, 45)}…` : s.instruction;
+    return `This button is disabled — check step ${s.index} (“${what}”) first.`;
   }
   return 'This button is disabled — an earlier requirement may be unfinished.';
 }
@@ -329,6 +282,8 @@ function setStatus(text: string, opts?: { stall?: boolean; explain?: boolean }):
 
 // ── Observers (attached only while a walkthrough is active) ────────────────────────────────────
 function attachObservers(): void {
+  // The click/keydown listeners are GUIDED-specific: they exist to notice the USER performing the
+  // step. The route watcher + state tick are the engine's shared harness.
   const onClick = (e: MouseEvent): void => {
     if (!session || stalled || !currentEl) return;
     const step = curStep();
@@ -348,27 +303,10 @@ function attachObservers(): void {
   document.addEventListener('keydown', onKeydown, true);
   cleanups.push(() => document.removeEventListener('click', onClick, true));
   cleanups.push(() => document.removeEventListener('keydown', onKeydown, true));
-
-  // Route watcher: popstate/hashchange for the eager cases + a light poll for pushState SPAs.
-  let lastPath = normalizePath(location.pathname);
-  const onRoute = (): void => {
-    const now = normalizePath(location.pathname);
-    if (now === lastPath) return;
-    lastPath = now;
-    handleRouteChange(now);
-  };
-  window.addEventListener('popstate', onRoute);
-  window.addEventListener('hashchange', onRoute);
-  const poll = window.setInterval(() => {
-    onRoute();
-    onStateTick();
-  }, ROUTE_POLL_MS);
-  cleanups.push(() => window.removeEventListener('popstate', onRoute));
-  cleanups.push(() => window.removeEventListener('hashchange', onRoute));
-  cleanups.push(() => clearInterval(poll));
+  cleanups.push(observeRun({ onRouteChange: handleRouteChange, onTick: onStateTick }));
 }
 
-/** The live state check (every ROUTE_POLL_MS while active): keeps the card HONEST between events —
+/** The live state check (every engine tick while active): keeps the card HONEST between events —
  *  the pointer self-corrects to the earliest pending input, a button enabling/disabling, a field
  *  turning valid, a programmatic fill, or an SPA re-render swapping the element out from under the
  *  spotlight all surface within a tick. Read-only. */
@@ -424,13 +362,13 @@ function detachObservers(): void {
     }
   }
 }
-/** Per-step input listener (input steps only) — replaced every time the aim moves. Advances only
- *  on a genuinely-done state (filled AND not invalid / checked); a filled-but-invalid field gets
- *  the explanatory status instead of a false advance. */
+/** Per-step input listener (input steps only) — replaced every time the aim moves; the wiring
+ *  (debounce, commit events) is the engine's, the verdict-to-copy mapping is this actor's.
+ *  Advances only on a genuinely-done state (filled AND not invalid / checked); a filled-but-invalid
+ *  field gets the explanatory status instead of a false advance. */
 let inputCleanup: (() => void) | null = null;
 function watchInput(el: Element, stepIndex: number): void {
   inputCleanup?.();
-  let debounce = 0;
   const check = (): void => {
     // The debounce can outlive a pointer move — never let a stale check touch another step's card.
     if (!session || stalled || session.step !== stepIndex) return;
@@ -442,25 +380,9 @@ function watchInput(el: Element, stepIndex: number): void {
     const s = inputStatus(st);
     setStatus(s.text, { explain: s.explain });
   };
-  const onInput = (): void => {
-    clearTimeout(debounce);
-    debounce = window.setTimeout(check, 800);
-  };
-  const onCommit = (e: Event): void => {
-    if (e instanceof KeyboardEvent && e.key !== 'Enter') return;
-    clearTimeout(debounce);
-    check();
-  };
-  el.addEventListener('input', onInput);
-  el.addEventListener('change', onInput); // checkbox/select toggles in engines that skip `input`
-  el.addEventListener('blur', onCommit);
-  el.addEventListener('keydown', onCommit);
+  const cleanup = watchInputState(el, check);
   inputCleanup = () => {
-    clearTimeout(debounce);
-    el.removeEventListener('input', onInput);
-    el.removeEventListener('change', onInput);
-    el.removeEventListener('blur', onCommit);
-    el.removeEventListener('keydown', onCommit);
+    cleanup();
     inputCleanup = null;
   };
 }
@@ -468,25 +390,6 @@ function watchInput(el: Element, stepIndex: number): void {
 // ── The state machine ───────────────────────────────────────────────────────────────────────────
 function curStep(): SenseStep | null {
   return session?.workflow.steps.find((s) => s.index === session!.step) ?? null;
-}
-
-/** The earliest ON-THIS-ROUTE input step before `before` that is verifiably NOT done (empty /
- *  invalid / unchecked). Only INPUT steps count — their state is readable; a completed click
- *  leaves no evidence, so action steps can never cause a false pullback. Steps the user
- *  explicitly skipped via Next are respected. */
-function earliestPendingInput(before: number): number | null {
-  if (!session) return null;
-  const path = normalizePath(location.pathname);
-  const skipped = session.skipped ?? [];
-  for (const s of session.workflow.steps) {
-    if (s.index >= before) return null;
-    if (s.kind !== 'input' || s.locators.length === 0) continue;
-    if (skipped.includes(s.index)) continue; // the user's explicit override wins
-    if (!s.route || matchStrength(s.route, path) === 0) continue;
-    const el = resolveStep(s);
-    if (el && isVisible(el) && !inputDone(el)) return s.index;
-  }
-  return null;
 }
 
 // ── Detection = acknowledgment, never motion (manual-only advancement, user decision 2026-07-15).
@@ -513,12 +416,17 @@ function markDetected(i: number): void {
 /** THE POINTER IS SELF-CORRECTING (post-E2E redesign): it always means "the first thing you
  *  haven't done yet." Page evidence beats stored position, beats forward momentum — no matter how
  *  the pointer got ahead (stale resume, hydration race, a manual skip elsewhere), every tick and
- *  every advance converges it back to the earliest verifiably-pending input step on this route.
- *  Returns true when the pointer moved (caller re-renders). A correction, not progress — no
- *  analytics event. */
+ *  every advance converges it back to the earliest verifiably-pending input step on this route
+ *  (the engine's evidence scan). Returns true when the pointer moved (caller re-renders). A
+ *  correction, not progress — no analytics event. */
 function correctPointer(): boolean {
   if (!session) return false;
-  const pending = earliestPendingInput(session.step);
+  const pending = earliestPendingInput(
+    session.workflow.steps,
+    session.step,
+    normalizePath(location.pathname),
+    session.skipped ?? [],
+  );
   if (pending === null) return false;
   log.debug('walkthrough: pointer corrected to earliest pending input', { from: session.step, to: pending });
   session.step = pending;
@@ -546,22 +454,21 @@ function onActionTriggered(step: SenseStep): void {
     }, AWAIT_NAV_TIMEOUT_MS + 50);
     return;
   }
-  // Same-page action: let the page react, then look for evidence the click did its job. Evidence
-  // only ACKNOWLEDGES (markDetected) — the pointer moves when the user hits Next.
+  // Same-page action: let the page react, then look for evidence the click did its job (the
+  // engine's completion-evidence rule). Evidence only ACKNOWLEDGES (markDetected) — the pointer
+  // moves when the user hits Next. No evidence either way = keep waiting; Next stays one click away.
   void awaitSettle().then(() => {
     if (!session || session.step !== step.index) return;
-    const nextStep = session.workflow.steps.find((s) => s.index > step.index) ?? null;
-    const nextEl = nextStep && nextStep.locators.length > 0 ? resolveStep(nextStep) : null;
-    const nextOffRoute = nextStep ? matchStrength(nextStep.route, normalizePath(location.pathname)) === 0 : false;
     if (
-      !nextStep || // that was the last step
-      nextOffRoute || // what follows lives elsewhere — this page has nothing left to prove
-      (nextEl !== null && isVisible(nextEl)) || // the next step appeared — the page moved on
-      (currentEl !== null && !currentEl.isConnected) // the clicked control left the DOM
+      actionCompletionEvidence({
+        steps: session.workflow.steps,
+        stepIndex: step.index,
+        currentEl,
+        path: normalizePath(location.pathname),
+      })
     ) {
       markDetected(step.index);
     }
-    // No evidence either way — keep waiting; Next stays one click away.
   });
 }
 
@@ -606,7 +513,12 @@ function advanceNext(): void {
   let nxt = session.workflow.steps.find((s) => s.index > from)?.index ?? null;
   // The pointer never leapfrogs an earlier verifiably-pending input on this route — and completion
   // is never declared over one.
-  const pending = earliestPendingInput(nxt ?? Number.MAX_SAFE_INTEGER);
+  const pending = earliestPendingInput(
+    session.workflow.steps,
+    nxt ?? Number.MAX_SAFE_INTEGER,
+    normalizePath(location.pathname),
+    session.skipped ?? [],
+  );
   if (pending !== null) nxt = nxt === null ? pending : Math.min(nxt, pending);
   if (mode === 'auto') session.auto += 1;
   else session.manual += 1;
@@ -668,29 +580,26 @@ async function showStep(): Promise<void> {
       return;
     }
     setStatus('Looking for this step on your page…');
-    for (let i = 0; i < RESOLVE_RETRIES_MS.length; i++) {
-      if (RESOLVE_RETRIES_MS[i]! > 0) await new Promise((r) => setTimeout(r, RESOLVE_RETRIES_MS[i]));
-      if (!session || session.step !== step.index) return; // the world moved while we waited
-      const el = resolveStep(step);
-      if (el && isVisible(el)) {
-        currentEl = el;
-        spotlight(rootRef, el, { sticky: true });
-        const st = readElementState(el);
-        if (step.kind === 'input') {
-          watchInput(el, step.index); // keeps the ack honest if the state regresses
-          if (stateDone(st)) {
-            setStatus(ackText(step.index)); // already done — acknowledged; Next moves on
-          } else {
-            const s = inputStatus(st);
-            setStatus(s.text, { explain: s.explain });
-          }
-        } else if (st.disabled) {
-          setStatus(blockedText(step), { explain: true }); // the tick flips this live on enable
+    const el = await resolveStepWithRetries(step, () => session !== null && session.step === step.index);
+    if (!session || session.step !== step.index) return; // the world moved while we waited
+    if (el) {
+      currentEl = el;
+      spotlight(rootRef, el, { sticky: true });
+      const st = readElementState(el);
+      if (step.kind === 'input') {
+        watchInput(el, step.index); // keeps the ack honest if the state regresses
+        if (stateDone(st)) {
+          setStatus(ackText(step.index)); // already done — acknowledged; Next moves on
         } else {
-          setStatus('Waiting for you — click the highlighted element.');
+          const s = inputStatus(st);
+          setStatus(s.text, { explain: s.explain });
         }
-        return;
+      } else if (st.disabled) {
+        setStatus(blockedText(step), { explain: true }); // the tick flips this live on enable
+      } else {
+        setStatus('Waiting for you — click the highlighted element.');
       }
+      return;
     }
     // SAFE-STOP: on the right page but the element won't resolve — say so, never guess forward.
     stalled = true;

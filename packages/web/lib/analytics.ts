@@ -568,3 +568,69 @@ export async function getAnswerPathStats(
           },
   };
 }
+
+// ── P4-M3 — the acting audit, readable (Analytics → Agent runs) ────────────────────────────────
+
+export interface AgentRunRow {
+  id: string;
+  title: string;
+  outcome: string; // active | completed | aborted | safe_stop
+  lastStep: number;
+  totalSteps: number;
+  safeStopReason: string | null;
+  consentAt: Date;
+}
+
+export interface AgentRunStats {
+  recent: AgentRunRow[];
+  counts: { total: number; completed: number; safeStop: number; aborted: number; active: number };
+}
+
+/**
+ * The audit rows behind AI Agent mode, summarized for the founder. `safe_stop` is the row to
+ * watch: it is a run saying "I could not verify a step on a real user's page" — the production
+ * half of drift detection, arriving before Phase 3 builds the sandbox half (agent.md §A3).
+ */
+export async function getAgentRuns(workspaceId: string, days: number): Promise<AgentRunStats> {
+  const since = windowStart(days);
+  const [recent, grouped] = await Promise.all([
+    prisma.executionRun.findMany({
+      where: { workspaceId, consentAt: { gte: since } },
+      orderBy: { consentAt: 'desc' },
+      take: 15,
+      select: {
+        id: true,
+        segmentTitle: true,
+        outcome: true,
+        lastStep: true,
+        totalSteps: true,
+        safeStopReason: true,
+        consentAt: true,
+      },
+    }),
+    prisma.executionRun.groupBy({
+      by: ['outcome'],
+      where: { workspaceId, consentAt: { gte: since } },
+      _count: { _all: true },
+    }),
+  ]);
+  const count = (o: string): number => grouped.find((g) => g.outcome === o)?._count._all ?? 0;
+  return {
+    recent: recent.map((r) => ({
+      id: r.id,
+      title: r.segmentTitle ?? 'Workflow',
+      outcome: r.outcome,
+      lastStep: r.lastStep,
+      totalSteps: r.totalSteps,
+      safeStopReason: r.safeStopReason,
+      consentAt: r.consentAt,
+    })),
+    counts: {
+      total: grouped.reduce((n, g) => n + g._count._all, 0),
+      completed: count('completed'),
+      safeStop: count('safe_stop'),
+      aborted: count('aborted'),
+      active: count('active'),
+    },
+  };
+}

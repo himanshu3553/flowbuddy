@@ -7,8 +7,8 @@
 // it is THE transport problem for every mode of the product (docs/build/agent.md §7 Q1):
 //
 //   'walkthrough'  P4-M0 guided-run state ..................... modes 1 + 2   (built)
-//   'chat'         P5-M0 the conversation thread .............. modes 1 + 2   (built — this cut)
-//   'agent-run'    the unified agent's resumable run state .... modes 2 + 3   (planned)
+//   'chat'         P5-M0 the conversation thread .............. modes 1 + 2   (built)
+//   'agent-run'    the acting run's resumable state ........... mode 2        (built — P4-M2 slice 3)
 //
 // So the mechanics live here once and each consumer brings only its own domain shape. A new
 // consumer adds a slot and a version; it never re-implements TTL, scoping, or corrupt-discard,
@@ -24,7 +24,7 @@
 // accept. The store guarantees the envelope; the consumer guarantees its own payload.
 
 /** One storage slot per independent piece of cross-page state. */
-export type SessionSlot = 'walkthrough' | 'chat';
+export type SessionSlot = 'walkthrough' | 'chat' | 'agent-run';
 
 export interface SessionSpec<T> {
   slot: SessionSlot;

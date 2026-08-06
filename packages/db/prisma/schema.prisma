@@ -172,6 +172,9 @@ model Workspace {
   overlapDismissals WorkflowOverlapDismissal[]
   workflows        Workflow[]
   productPages     ProductPage[]
+  executionPlans   ExecutionPlan[]
+  executionRuns    ExecutionRun[]
+  agentAcceptances AgentAcceptance[]
 }
 
 model ApiToken {
@@ -267,10 +270,11 @@ model Workflow {
   taskId       String?
   createdAt    DateTime @default(now())
 
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  source    KnowledgeSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  items     KnowledgeItem[]
-  approval  CopilotApproval?
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source        KnowledgeSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  items         KnowledgeItem[]
+  approval      CopilotApproval?
+  executionPlan ExecutionPlan?
 
   @@unique([sourceId, segmentIndex])
   @@index([workspaceId])
@@ -411,6 +415,22 @@ model CopilotApproval {
   // Set only when `inactiveReason = "superseded"`. `onDelete: SetNull` is deliberate: un-approving
   // the replacement must not leave the workspace with neither approved (a silent coverage hole).
   supersededById String?
+  // ── P4-M1: may the AGENT run this workflow for end-users? ───────────────────────────────────
+  // The acting flag RIDES the approval row (agent.md §A2.8): acting presupposes approval, and
+  // living here means liveness comes with it — every acting reader filters `inactiveReason: null`
+  // AND `executeState: "enabled"`, so retiring a workflow stops it acting through the same single
+  // column that stops it answering. Note this is a SECOND question, not a second liveness flag:
+  // `inactiveReason` says whether the workflow may ANSWER; this says whether it may also be RUN.
+  //   null           — never enabled (the overwhelmingly common state). Absence = never runnable.
+  //   "enabled"      — the founder enabled acting; a compiled `ExecutionPlan` row exists (the
+  //                    enable action refuses to set this without one).
+  //   "needs_review" — a reprocess changed the steps and the new content is no longer eligible to
+  //                    run (or the workflow lost its content). Fails closed until a human looks.
+  // A STRING for the same reason `inactiveReason` is: a new way to be not-runnable is a new VALUE,
+  // and an unrecognised value reads as "not runnable" — the safe direction.
+  executeState       String?
+  executeEnabledAt   DateTime?
+  executeEnabledById String?
   // P3-M1 — the durable workflow this approval is FOR. REQUIRED: approving nothing is not a state.
   // Once stage 3 moves readers over, this (not the `sourceId`/`segmentIndex` above) is what
   // "approved" means, and a reprocess can no longer walk an approval onto content nobody reviewed.
@@ -425,6 +445,89 @@ model CopilotApproval {
   @@index([workspaceId])
   @@index([supersededById])
   @@index([inactiveReason])
+}
+
+model ExecutionPlan {
+  // P4-M1 — the compiled, replay-ready artifact for ONE actable workflow (agent.md §A2.2): ordered
+  // steps { verb, instruction, route, locators, postRoute?, inputSlot?, destructive? }, compiled
+  // from the recording's manifest when the founder ENABLES acting, and re-verified on reprocess.
+  //
+  // `planHash` is the CONSENT PIN: a run stores the hash it was consented against, so "the run
+  // executed the plan the user agreed to" is checkable equality. It is derived from the steps
+  // alone (key-sorted), never from timestamps.
+  //
+  // Lifecycle: created/replaced by the Studio enable action; refreshed by the worker when a
+  // reprocess re-matches the workflow BY CONTENT and the new steps are still eligible; left in
+  // place (stale, inert) when the approval's `executeState` blocks acting. Readers key on the
+  // approval's `executeState`, NEVER on this row's existence — an orphaned plan (un-approve wipes
+  // the approval row and its flag with it) is dead data, not a capability.
+  id          String   @id @default(cuid())
+  workspaceId String
+  workflowId  String   @unique
+  planHash    String
+  stepCount   Int
+  steps       Json
+  createdAt   DateTime @default(now())
+  compiledAt  DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow  Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model AgentAcceptance {
+  // P4-M3 (slice 5) — the CONTRACTUAL record behind AI Agent mode (agent.md §7 Q4: acceptance is
+  // a ROW, never a toggle state): who accepted which terms version, when. Written in the same
+  // transaction that first sets `copilotMode` to `agent`; NEVER updated or deleted — switching
+  // back to Copilot leaves the record (the mode is the switch, this is the history), and a new
+  // terms version simply requires a new row. The Studio asks for acceptance only when no row
+  // exists for the CURRENT `AGENT_TERMS_VERSION` (shared/copilot-mode.ts owns the version).
+  id           String   @id @default(cuid())
+  workspaceId  String
+  userId       String
+  termsVersion String
+  acceptedAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, termsVersion])
+}
+
+model ExecutionRun {
+  // P4-M2 slice 4 — the acting run's AUDIT row (agent.md §A2.8): the consent moment, the plan pin,
+  // per-step outcomes with their input SOURCES (never values), and the final state. Created at run
+  // start — which IS the consent click — after the server re-verified mode, liveness, the acting
+  // flag and the plan hash live; per-step and terminal events are appended by the widget as the
+  // run proceeds, clamped and untrusted like the walkthrough's analytics. "Did this user authorize
+  // this run, and what did it do?" is answered from this row, never from model output (D8).
+  //
+  // `workflowId` carries NO relation on purpose (the QueryCitation precedent): an audit row must
+  // survive the workflow, the recording, and any reprocess. `segmentTitle` is the display snapshot
+  // for the same reason. A row still `active` past the widget's run TTL reads as abandoned — no
+  // sweeper, same posture as CopilotWalkthrough.
+  id             String   @id @default(cuid())
+  workspaceId    String
+  workflowId     String
+  segmentTitle   String?
+  planHash       String
+  queryId        String? // the question whose answer carried the offer, when known
+  consentAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  totalSteps     Int
+  lastStep       Int      @default(0)
+  // [{ i, o: "acted" | "user", in?: "prefill" | "typed" | "chat", c?: true }] — what happened at
+  // each step (the agent acted vs. the user did it), where an input's value came from (an offer
+  // prefill · typed into the field · asked-and-answered in the chat), and whether a destructive
+  // confirm preceded it. NEVER values — those ride the page, not the wire (§A2.4).
+  steps          Json     @default("[]")
+  outcome        String   @default("active") // active | completed | aborted | safe_stop
+  safeStopReason String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([workflowId])
 }
 
 model WorkflowOverlapDismissal {

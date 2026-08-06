@@ -97,11 +97,16 @@ describe('routeMatchStrength', () => {
     expect(routeMatchStrength('/projects', '/projects-archive')).toBe(0);
   });
 
-  it('a root or empty path carries no screen information and matches NOTHING', () => {
+  it('the root never prefix-matches — but two parties both AT the root are the same screen', () => {
     expect(routeMatchStrength('/', '/dashboard')).toBe(0);
     expect(routeMatchStrength('/dashboard', '/')).toBe(0);
+    // Landing-page steps must be reachable by someone standing on the landing page (2026-08-05):
+    // without the exact-root case, "Click Start Free" recorded at `/` told a user AT `/` to head
+    // to `/` forever — in the walkthrough and the acting run alike.
+    expect(routeMatchStrength('/', '/')).toBe(2);
     expect(routeMatchStrength('', '/dashboard')).toBe(0);
     expect(routeMatchStrength('/dashboard', '')).toBe(0);
+    expect(routeMatchStrength('', '')).toBe(0); // unknown is not the root
   });
 });
 

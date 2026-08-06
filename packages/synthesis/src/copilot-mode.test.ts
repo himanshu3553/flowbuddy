@@ -111,9 +111,13 @@ describe('the ladder', () => {
     expect(Object.keys(MODE_LABELS)).not.toContain('chatbot');
   });
 
-  it('keeps acting behind the top rung, which is not selectable yet', () => {
+  it('keeps acting behind the top rung — selectable since slice 5, but ONLY via acceptance', () => {
     expect(COPILOT_MODES.filter(modeCanAct)).toEqual(['agent']);
-    expect(SELECTABLE_MODES).not.toContain('agent');
+    // `agent` entered SELECTABLE_MODES with the contractual shell (2026-08-05). Selectability is
+    // not the safety boundary — the boundary is the acceptance the server action requires, plus
+    // the floor below, which must NEVER follow: an unrecognised value still lands read-only.
+    expect(SELECTABLE_MODES).toContain('agent');
+    expect(modeCanAct(DEFAULT_COPILOT_MODE)).toBe(false);
   });
 
   it('never leaks a founder-facing label into a stored key', () => {

@@ -138,6 +138,44 @@ export const CSS = `
   transition: opacity .15s ease;
 }
 .fb-walk-offer:hover { opacity: .9; }
+
+/* P4 slice 4 — the run-offer consent sheet (the typed affordance; "Run it" IS the consent). */
+.fb-run-consent {
+  margin-top: 8px; padding: 10px 12px; border: 1px solid #e3e6f0; border-radius: 10px;
+  background: #fafbff; font-size: 12px; line-height: 1.55; color: #344054;
+}
+.fb-run-consent-title { font-weight: 600; margin-bottom: 3px; color: #1d2433; }
+.fb-run-consent-meta { color: #667085; }
+.fb-run-consent-val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #1d2433; }
+.fb-run-consent-actions { display: flex; gap: 8px; margin-top: 9px; }
+/* Slice 6 — the "answering the agent" chip above the composer while a run awaits a value. */
+.fb-value-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 0 12px; padding: 5px 10px; border: 1px solid #dfe3f2; border-radius: 8px 8px 0 0;
+  border-bottom: none; background: #f6f7fe; font-size: 11px; color: #4a5578;
+}
+.fb-value-chip-label { font-weight: 600; }
+.fb-value-chip-x {
+  border: none; background: none; cursor: pointer; color: #667085; font-size: 12px;
+  padding: 0 2px; line-height: 1;
+}
+.fb-value-chip-x:hover { color: #1d2433; }
+/* Slice 6 — the docked run strip: the run's control surface while the chat panel is open.
+   Docked at the BOTTOM, above the composer — beside where the user replies. */
+.fb-run-strip {
+  flex-shrink: 0; margin: 6px 12px; padding: 8px 10px; border: 1px solid #dfe3f2;
+  border-radius: 10px; background: #f6f7fe; font-size: 12px; color: #344054;
+}
+.fb-run-strip-top { display: flex; align-items: center; gap: 8px; }
+.fb-run-strip-chip {
+  flex-shrink: 0; padding: 1px 7px; border-radius: 999px; background: var(--fb-accent, #3b50e0);
+  color: #fff; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.fb-run-strip-instr { flex: 1; min-width: 0; font-weight: 600; color: #1d2433; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-run-strip-x { border: none; background: none; cursor: pointer; color: #667085; font-size: 12px; padding: 0 2px; }
+.fb-run-strip-x:hover { color: #1d2433; }
+.fb-run-strip-status { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #667085; }
+.fb-run-strip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .fb-walk-card {
   /* Below the panel (2147483000): an open chat — e.g. the Explain escalation's diagnosis — covers
      the card; closing the chat reveals it again. Above everything else on the host page. */

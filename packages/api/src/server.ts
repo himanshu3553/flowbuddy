@@ -43,7 +43,10 @@ import {
   type CopilotCitation,
   type AnswerLoopResult,
   type TokenUsage,
+  type ExecutionStep,
 } from '@flowbuddy/synthesis';
+import { modeCanAct } from '@flowbuddy/shared/copilot-mode';
+import { displayRoute } from '@flowbuddy/shared/route-pattern';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
 import { getSenseShard } from './sense-plan';
 
@@ -361,7 +364,7 @@ const MAX_QUESTION_CHARS = 2000;
 async function copilotGate(
   req: FastifyRequest,
   reply: FastifyReply,
-  route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense' | 'walkthrough',
+  route: 'answer' | 'feedback' | 'seen' | 'config' | 'sense' | 'walkthrough' | 'plan' | 'run',
 ): Promise<{
   workspaceId: string;
   showCitations: boolean;
@@ -735,6 +738,71 @@ async function loadApprovedWorkflow(workspaceId: string, key: string): Promise<A
   };
 }
 
+/** What the consent sheet needs to know about one runnable workflow (P4 slice 4). */
+interface RunnableWorkflow {
+  key: string; // sourceId:segmentIndex — the wire's workflow vocabulary
+  workflowId: string;
+  title: string;
+  planHash: string;
+  stepCount: number;
+  /** ASKABLE slots only — user-only steps (file pickers) are counted in `manual`, not here. */
+  inputs: Array<{ index: number; label: string; sensitive: boolean }>;
+  destructive: number;
+  manual: number;
+  /** Where the workflow STARTS, display-safe (ids elided — a recorded route is the founder's own
+   *  URL). The consent sheet's "Starts on…" line (Part 2). */
+  entryRoute: string;
+  /** The workflow's description — the founder's narrated "what this does / what has to happen
+   *  first", scrubbed and capped for the consent sheet. Already-approved content. */
+  about: string | null;
+}
+
+/**
+ * P4 slice 4 — the workspace's RUNNABLE set: LIVE approvals (`inactiveReason: null` — the acting
+ * readers' rule) whose founder enabled acting, joined to their compiled plans. Resolved once per
+ * question and ONLY when the workspace's mode may act, so a Copilot-mode question pays nothing.
+ * Keys speak the wire's position vocabulary; the gate underneath stays identity-keyed.
+ */
+async function resolveRunnableWorkflows(workspaceId: string): Promise<Map<string, RunnableWorkflow>> {
+  const rows = await prisma.copilotApproval.findMany({
+    where: { workspaceId, inactiveReason: null, executeState: 'enabled' },
+    select: {
+      workflowId: true,
+      segmentTitle: true,
+      workflow: {
+        select: {
+          sourceId: true,
+          segmentIndex: true,
+          description: true,
+          executionPlan: { select: { planHash: true, stepCount: true, steps: true } },
+        },
+      },
+    },
+  });
+  const map = new Map<string, RunnableWorkflow>();
+  for (const r of rows) {
+    const plan = r.workflow.executionPlan;
+    if (!plan || r.workflow.segmentIndex === null) continue; // enabled ⇒ plan exists; stay defensive
+    const steps = (plan.steps as unknown as ExecutionStep[] | null) ?? [];
+    const key = `${r.workflow.sourceId}:${r.workflow.segmentIndex}`;
+    map.set(key, {
+      key,
+      workflowId: r.workflowId,
+      title: r.segmentTitle ?? 'this workflow',
+      planHash: plan.planHash,
+      stepCount: plan.stepCount,
+      inputs: steps
+        .filter((s) => s.inputSlot && !s.userOnly)
+        .map((s) => ({ index: s.index, label: s.inputSlot!.label, sensitive: s.inputSlot!.sensitive })),
+      destructive: steps.filter((s) => s.destructive).length,
+      manual: steps.filter((s) => s.userOnly).length,
+      entryRoute: displayRoute(steps[0]?.route ?? ''),
+      about: r.workflow.description ? redactText(r.workflow.description).slice(0, 240) : null,
+    });
+  }
+  return map;
+}
+
 /**
  * The founder's side of expected-vs-actual (§3 #3/#6): the FULL localized workflow recipe (every
  * step, not just the retrieval shortlist) + lazy accessors for the current step's expected-state
@@ -901,6 +969,14 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     reasonPayload = null;
   }
 
+  // P4 slice 4 — ACTING (agent.md §A2.3). Resolved only when the workspace's mode may act, so a
+  // Copilot-mode question never touches this. The holder captures the agent's explicit offer; the
+  // deterministic positional rule below is the fallback (D11: predictable where a rule can be).
+  const runnable = modeCanAct(gate.mode) ? await resolveRunnableWorkflows(workspaceId) : null;
+  const offered: { current: { info: RunnableWorkflow; prefills: Record<number, string> } | null } = {
+    current: null,
+  };
+
   let result: CopilotAnswer;
   // WHICH ENGINE ACTUALLY ANSWERED — not which mode the workspace is configured for. The two come
   // apart in both directions: the diagnostic path preempts the agent whenever the widget shipped
@@ -1062,6 +1138,35 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
           return found;
         },
         loadWorkflow: (key) => loadApprovedWorkflow(workspaceId, key),
+        // ACTING (slice 4): the offer tool, bound only when the mode permits and something is
+        // runnable. Validation happens HERE — the model picks from the set, never defines it — and
+        // prefills are accepted only for NON-sensitive input slots the plan actually has, so a
+        // password can never arrive by this door regardless of what the model was asked to do.
+        ...(runnable && runnable.size > 0
+          ? {
+              offerRun: {
+                runnable: [...runnable.values()]
+                  .slice(0, 10)
+                  .map((r) => `${r.key} — ${r.title}`)
+                  .join('\n'),
+                offer: async (workflowKey: string, inputs: Record<string, string>) => {
+                  const info = runnable.get(workflowKey);
+                  if (!info) return `No runnable workflow with key ${workflowKey}.`;
+                  const prefills: Record<number, string> = {};
+                  for (const [k, v] of Object.entries(inputs)) {
+                    const idx = Number(k);
+                    const slot = info.inputs.find((s) => s.index === idx);
+                    if (slot && !slot.sensitive && v.trim()) prefills[idx] = v.trim().slice(0, 200);
+                  }
+                  offered.current = { info, prefills };
+                  const used = Object.keys(prefills).length;
+                  return `Offer attached for "${info.title}" (${info.stepCount} steps${
+                    used ? `, using ${used} value${used === 1 ? '' : 's'} from the conversation` : ''
+                  }). Tell the user the button below starts the run.`;
+                },
+              },
+            }
+          : {}),
         onLoop: recordLoop,
         apiKey: config.openaiApiKey,
         model: config.synthModel,
@@ -1187,6 +1292,34 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   // P2-M3 "show me" — where the answer positioned the user (null when position wasn't used).
   const position = result.covered ? result.position : null;
 
+  // P4 slice 4 — the RUN OFFER riding a covered answer. The agent's explicit tool call wins (it
+  // heard "do it for me" and may carry conversation values); otherwise D11's deterministic rule —
+  // a positional answer on a runnable workflow always carries the affordance, so the founder can
+  // demo it and the user can find it. The offer is a typed payload; the click is the consent (D8).
+  const runOffer = (() => {
+    if (!runnable || runnable.size === 0 || !result.covered) return null;
+    if (offered.current && engineUsed === 'agent') {
+      const { info, prefills } = offered.current;
+      return { info, prefills };
+    }
+    const det = position ? runnable.get(`${position.sourceId}:${position.segmentIndex}`) : undefined;
+    return det ? { info: det, prefills: {} as Record<number, string> } : null;
+  })();
+  const runOfferWire = runOffer
+    ? {
+        key: runOffer.info.key,
+        title: runOffer.info.title,
+        planHash: runOffer.info.planHash,
+        steps: runOffer.info.stepCount,
+        inputs: runOffer.info.inputs,
+        destructive: runOffer.info.destructive,
+        manual: runOffer.info.manual,
+        entryRoute: runOffer.info.entryRoute,
+        about: runOffer.info.about,
+        prefills: runOffer.prefills,
+      }
+    : null;
+
   // The workspace's citation trust setting is a PRESENTATION gate, applied here at the response
   // boundary rather than inside the answer engines: it hides the visible workflow TITLES from the
   // end-user while the keys still reach the widget (for P5-M0 cut 2's `lastCited` continuity) and
@@ -1254,7 +1387,14 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
       ...(reasonPayload ? { blockers: blockerList(reasonPayload.snapshot) } : {}),
     };
     return result.covered
-      ? { covered: true, answer: result.answer, citations: forClient(result.citations), position, ...previewLoop }
+      ? {
+          covered: true,
+          answer: result.answer,
+          citations: forClient(result.citations),
+          position,
+          ...(runOfferWire ? { runOffer: runOfferWire } : {}),
+          ...previewLoop,
+        }
       : { covered: false, answer: null, citations: [], reason: result.reason, ...previewLoop };
   }
 
@@ -1352,6 +1492,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
     answer: result.answer,
     citations: forClient(result.citations),
     position,
+    ...(runOfferWire ? { runOffer: runOfferWire } : {}),
     queryId: logged.id,
   };
 });
@@ -1378,6 +1519,168 @@ app.get('/v1/copilot/sense-plan', async (req, reply) => {
   const route = typeof q.route === 'string' ? q.route.slice(0, 512) : '';
   const shard = await getSenseShard(gate.workspaceId, route);
   return { enabled: true, version: shard.version, workflows: shard.workflows };
+});
+
+/**
+ * P4-M2 — the EXECUTION PLAN for one actable workflow (docs/build/agent.md §A2.2). Key-authed like
+ * every copilot route, and gated on the ACTING readers' rule: a LIVE approval
+ * (`inactiveReason: null`) whose founder enabled acting (`executeState: 'enabled'`). Any rung
+ * missing is the same 404 — absence, not refusal (D8): the wire never explains what the founder
+ * has not enabled.
+ *
+ * MODE-GATED since slice 4: the plan is served only to a workspace whose mode may act — for a
+ * read-only workspace the whole acting surface is the same 404, so nothing embedable can even
+ * enumerate it. (Slice 3's debug trigger now also requires the workspace to be in AI Agent mode.)
+ */
+app.get('/v1/copilot/execution-plan', async (req, reply) => {
+  const gate = await copilotGate(req, reply, 'plan');
+  if (!gate) return reply;
+  if (!modeCanAct(gate.mode)) return reply.code(404).send({ error: 'not available' });
+  reply.header('cache-control', 'no-store');
+
+  const q = req.query as { workflow?: unknown };
+  const m = typeof q.workflow === 'string' ? /^([a-z0-9-]{1,40}):(\d{1,3})$/i.exec(q.workflow) : null;
+  if (!m) return reply.code(400).send({ error: 'workflow (sourceId:segmentIndex) required' });
+
+  const workflow = await prisma.workflow.findFirst({
+    where: { workspaceId: gate.workspaceId, sourceId: m[1]!, segmentIndex: Number(m[2]) },
+    select: { id: true, title: true },
+  });
+  const approval = workflow
+    ? await prisma.copilotApproval.findFirst({
+        where: { workflowId: workflow.id, inactiveReason: null, executeState: 'enabled' },
+        select: { id: true },
+      })
+    : null;
+  const plan = approval
+    ? await prisma.executionPlan.findUnique({
+        where: { workflowId: workflow!.id },
+        select: { planHash: true, steps: true },
+      })
+    : null;
+  if (!workflow || !approval || !plan) return reply.code(404).send({ error: 'not available' });
+  return {
+    workflowId: workflow.id,
+    title: workflow.title ?? 'Workflow',
+    planHash: plan.planHash,
+    steps: plan.steps,
+  };
+});
+
+/**
+ * P4-M2 slice 4 — the acting run LIFECYCLE. `start` is the CONSENT moment (agent.md §A2.3, §A2.8):
+ * it re-verifies everything live — the mode may act, the approval is LIVE, acting is enabled, and
+ * the plan's hash still equals the one the user consented to — then writes the `ExecutionRun`
+ * audit row and returns its id. Anything un-actable is the same 404 (absence, not refusal); a hash
+ * mismatch is a 409 so the widget can say "this just changed — ask again". Progress and terminal
+ * events append per-step outcomes and input SOURCES (never values), every field clamped and
+ * untrusted like the walkthrough's analytics; a 4xx never affects the run client-side.
+ */
+app.post('/v1/copilot/run', async (req, reply) => {
+  const gate = await copilotGate(req, reply, 'run');
+  if (!gate) return reply;
+  if (!modeCanAct(gate.mode)) return reply.code(404).send({ error: 'not available' });
+
+  const body = (req.body ?? {}) as {
+    event?: unknown; workflow?: unknown; planHash?: unknown; queryId?: unknown;
+    runId?: unknown; step?: unknown; outcome?: unknown; input?: unknown; confirmed?: unknown; reason?: unknown;
+  };
+  const event = typeof body.event === 'string' ? body.event : '';
+
+  if (event === 'start') {
+    const m = typeof body.workflow === 'string' ? /^([a-z0-9-]{1,40}):(\d{1,3})$/i.exec(body.workflow) : null;
+    const planHash = typeof body.planHash === 'string' ? body.planHash.slice(0, 64) : '';
+    if (!m || !planHash) return reply.code(400).send({ error: 'workflow and planHash required' });
+    const approval = await prisma.copilotApproval.findFirst({
+      where: {
+        workspaceId: gate.workspaceId,
+        inactiveReason: null, // the acting readers' liveness rule — retirement stops runs too
+        executeState: 'enabled',
+        workflow: { sourceId: m[1]!, segmentIndex: Number(m[2]) },
+      },
+      select: {
+        workflowId: true,
+        segmentTitle: true,
+        workflow: { select: { executionPlan: { select: { planHash: true, stepCount: true } } } },
+      },
+    });
+    const plan = approval?.workflow.executionPlan;
+    if (!approval || !plan) return reply.code(404).send({ error: 'not available' });
+    if (plan.planHash !== planHash) return reply.code(409).send({ error: 'plan changed' });
+    // queryId is stored only when it names THIS workspace's query (the walkthrough's rule).
+    let queryId: string | null = null;
+    if (typeof body.queryId === 'string' && body.queryId.length <= 64) {
+      const q = await prisma.copilotQuery.findFirst({
+        where: { id: body.queryId, workspaceId: gate.workspaceId },
+        select: { id: true },
+      });
+      queryId = q?.id ?? null;
+    }
+    const run = await prisma.executionRun.create({
+      data: {
+        workspaceId: gate.workspaceId,
+        workflowId: approval.workflowId,
+        segmentTitle: approval.segmentTitle,
+        planHash,
+        totalSteps: plan.stepCount,
+        ...(queryId ? { queryId } : {}),
+      },
+      select: { id: true },
+    });
+    req.log.info(
+      { workspaceId: gate.workspaceId, runId: run.id, workflowId: approval.workflowId },
+      'acting run consented',
+    );
+    return { runId: run.id };
+  }
+
+  const runId = typeof body.runId === 'string' ? body.runId.slice(0, 64) : '';
+  if (!runId) return reply.code(400).send({ error: 'runId required' });
+
+  if (event === 'step') {
+    const step = Number(body.step);
+    if (!Number.isInteger(step) || step < 1 || step > 400) return reply.code(400).send({ error: 'bad step' });
+    const outcome = body.outcome === 'acted' || body.outcome === 'user' ? body.outcome : null;
+    if (!outcome) return reply.code(400).send({ error: 'bad outcome' });
+    const run = await prisma.executionRun.findFirst({
+      where: { id: runId, workspaceId: gate.workspaceId, outcome: 'active' },
+      select: { id: true, steps: true },
+    });
+    if (!run) return reply.code(404).send({ error: 'run not found' });
+    const steps = Array.isArray(run.steps) ? (run.steps as unknown[]).slice(0, 399) : [];
+    const entry = {
+      i: step,
+      o: outcome,
+      ...(body.input === 'prefill' || body.input === 'typed' || body.input === 'chat'
+        ? { in: body.input }
+        : {}),
+      ...(body.confirmed === true ? { c: true } : {}),
+    };
+    await prisma.executionRun.update({
+      where: { id: run.id },
+      data: { steps: [...steps, entry] as object, lastStep: step },
+    });
+    return { ok: true };
+  }
+
+  if (event === 'completed' || event === 'aborted' || event === 'safe_stop') {
+    const stepNum = Number(body.step);
+    const step = Number.isInteger(stepNum) ? Math.max(0, Math.min(400, stepNum)) : undefined;
+    const updated = await prisma.executionRun.updateMany({
+      where: { id: runId, workspaceId: gate.workspaceId, outcome: 'active' },
+      data: {
+        outcome: event,
+        ...(step !== undefined ? { lastStep: step } : {}),
+        ...(event === 'safe_stop' && typeof body.reason === 'string'
+          ? { safeStopReason: body.reason.slice(0, 300) }
+          : {}),
+      },
+    });
+    if (updated.count === 0) return reply.code(404).send({ error: 'run not found' });
+    return { ok: true };
+  }
+
+  return reply.code(400).send({ error: 'unknown event' });
 });
 
 /** P1-M10 — thumbs feedback on a copilot answer (by the queryId returned from /answer). */

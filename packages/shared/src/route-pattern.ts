@@ -85,15 +85,18 @@ export function routePattern(path: string): string {
  * How well two routes describe the same screen: 2 = same, 1 = segment-boundary prefix (either
  * direction), 0 = unrelated.
  *
- * A root or empty path carries no screen information and matches NOTHING — without that, a `/`
- * context matched every item and turned the signal into uniform noise (review hardening
- * 2026-07-07).
+ * The root never PREFIX-matches anything — without that, a `/` context matched every item and
+ * turned the signal into uniform noise (review hardening 2026-07-07). But two parties BOTH at `/`
+ * are on the same screen (added 2026-08-05): a workflow whose first step was recorded on the
+ * landing page could never match even a user standing exactly there, which left the walkthrough
+ * and the acting run saying "head to /" forever on the very page they meant. An EMPTY path stays
+ * unmatched either way — '' means the route is unknown, not that it was recorded at the root.
  */
 export function routeMatchStrength(a: string, b: string): number {
   if (!a || !b) return 0;
   const pa = routePattern(a);
   const pb = routePattern(b);
-  if (pa === '/' || pb === '/') return 0;
+  if (pa === '/' || pb === '/') return pa === pb ? 2 : 0;
   if (pa === pb) return 2;
   if (pa.startsWith(pb + '/') || pb.startsWith(pa + '/')) return 1;
   return 0;

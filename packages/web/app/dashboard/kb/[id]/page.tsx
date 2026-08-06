@@ -23,6 +23,8 @@ import {
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
+import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
+import { planSummary, type ExecutionStep } from '@flowbuddy/synthesis/execution-plan';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,9 +135,20 @@ export default async function KbWorkflowPage({
       ? null
       : await prisma.copilotApproval.findFirst({
           where: { workspaceId: ctx.workspace.id, workflowId: workflow.id },
-          select: { inactiveReason: true },
+          select: { inactiveReason: true, executeState: true },
         });
   const approved = approval != null && approval.inactiveReason == null;
+
+  // P4-M1 — the acting flag's compiled plan, when one exists. The summary is derived from the
+  // stored steps so the card states what a run would actually do, never a cached claim.
+  const plan =
+    workflow && approval?.executeState
+      ? await prisma.executionPlan.findUnique({
+          where: { workflowId: workflow.id },
+          select: { steps: true },
+        })
+      : null;
+  const runSummary = plan ? planSummary(plan.steps as unknown as ExecutionStep[]) : null;
   const shotCount = items.filter((it) => it.screenshotUrl).length;
 
   // P3-M0 — duplicates involving THIS workflow. A founder who navigates straight here (from a
@@ -316,6 +329,28 @@ export default async function KbWorkflowPage({
                     segmentTitle={workflowTitle}
                     approved={approved}
                     inactiveReason={approval?.inactiveReason ?? null}
+                    ready={ready}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {workflow && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">AI Agent</CardTitle>
+                  <CardDescription className="text-xs">
+                    Whether FlowBuddy may complete this workflow for a user — step by step, visibly,
+                    with their consent.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <WorkflowExecutionControl
+                    workflowId={workflow.id}
+                    segmentTitle={workflowTitle}
+                    approved={approved}
+                    executeState={approval?.executeState ?? null}
+                    summary={runSummary}
                     ready={ready}
                   />
                 </CardContent>

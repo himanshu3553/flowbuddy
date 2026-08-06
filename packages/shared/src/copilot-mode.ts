@@ -69,10 +69,19 @@ export const MODE_LABELS: Record<CopilotMode, { name: string; blurb: string }> =
   },
 };
 
-/** Modes a founder may actually select today. `agent` is defined (so the ladder is visible and the
- *  stored value is stable) but NOT yet buildable — its UI and safety model are deliberately
- *  deferred, and it must never become reachable by accident. */
-export const SELECTABLE_MODES: readonly CopilotMode[] = ['copilot'];
+/** Modes a founder may actually select. `agent` became selectable with the contractual shell
+ *  (P4 slice 5, 2026-08-05): selecting it REQUIRES a recorded acceptance of the current
+ *  `AGENT_TERMS_VERSION` — the Studio collects it, the server action refuses without it, and the
+ *  `AgentAcceptance` row is the durable answer to "who turned acting on, and when". */
+export const SELECTABLE_MODES: readonly CopilotMode[] = ['copilot', 'agent'];
+
+/**
+ * The version of the acting terms a founder must have accepted for `agent` mode (agent.md §7 Q4:
+ * acceptance is a ROW, never a toggle state). BUMP THIS when the acting terms materially change —
+ * every workspace then re-accepts before the mode can be (re-)selected; existing agent-mode
+ * workspaces keep running on the version they accepted, which the row records.
+ */
+export const AGENT_TERMS_VERSION = '2026-08-05';
 
 /** Normalise an untrusted/legacy value to a mode. Unknown → `copilot` (fail closed).
  *

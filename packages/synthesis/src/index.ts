@@ -60,6 +60,15 @@ export type {
 export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
 export type { EmbedOpts } from './embeddings';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
+export {
+  attachOutcomeMarkers,
+  compileExecutionPlan,
+  hashSteps,
+  markerSnapshotRefs,
+  planSummary,
+  SNAPSHOT_MAX_CHARS,
+} from './execution-plan'; // P4-M1/M2 — the acting substrate + outcome markers
+export type { ExecutionStep, ExecutionStepSource, EligibilityIssue, CompiledExecutionPlan } from './execution-plan';
 export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/build/kb-step-distillation.md
 // The two pure stages either side of segmentation. Exported so a harness can replay the pipeline
 // in memory over a stored recording without re-transcribing or writing anything —

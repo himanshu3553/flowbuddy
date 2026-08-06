@@ -1,5 +1,6 @@
 import { prisma } from '@flowbuddy/db';
 import type { CapturedEvent, Locator, SessionManifest } from '@flowbuddy/shared';
+import { eventLocators } from '@flowbuddy/shared/event-locators';
 import { routeMatchStrength, routePattern } from '@flowbuddy/shared/route-pattern';
 import {
   buildFingerprint,
@@ -106,16 +107,11 @@ function stepKind(ev: CapturedEvent | undefined): 'input' | 'action' {
   return ev.type === 'input' || INPUT_TAGS.has(tag) ? 'input' : 'action';
 }
 
-/** Ranked locators for a recovered event; positional css/xpath already ride at the tail (R13). */
+/** Ranked locators for a recovered event — the shared R13 recovery rule (`event-locators.ts`),
+ *  capped for the probe. The execution-plan compiler consumes the same rule, on purpose: what the
+ *  probe can find and what the executor can act on must never drift apart. */
 function stepLocators(ev: CapturedEvent | undefined): Locator[] {
-  if (!ev?.target) return [];
-  const ranked = ev.target.locators ?? [];
-  if (ranked.length > 0) return ranked.slice(0, MAX_LOCATORS_PER_STEP);
-  // Pre-R13 captures: fall back to the positional selectors so old recordings stay probeable.
-  const fallback: Locator[] = [];
-  if (ev.target.cssPath) fallback.push({ strategy: 'css', value: ev.target.cssPath });
-  if (ev.target.xpath) fallback.push({ strategy: 'xpath', value: ev.target.xpath });
-  return fallback;
+  return eventLocators(ev, MAX_LOCATORS_PER_STEP);
 }
 
 /**

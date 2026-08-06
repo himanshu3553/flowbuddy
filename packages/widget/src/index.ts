@@ -36,6 +36,22 @@ import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeRes
 // P4-M0 Guided walkthrough — "Walk me through it" on positional answers (zero-acting; the user
 // does everything, the widget highlights + observes). Resumes across full-page navigations.
 import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActive, walkthroughPending } from './walkthrough.js';
+import {
+  agentRunActive,
+  agentRunPending,
+  cancelRunValue,
+  pressRunContinue,
+  provideRunValue,
+  registerAgentRunDevTrigger,
+  resumeAgentRun,
+  runAwaitingValue,
+  runCardState,
+  setRunPanelOpen,
+  startConsentedRun,
+  stopRun,
+  takeoverRun,
+  toggleRunPause,
+} from './agent-run.js';
 // P2-M5 Reason — the selective diagnostic trigger + structured page-state capture (+ lazy image tier).
 import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
 // P5-M0 cut 1 — the conversation survives full-page navigations (see the chat-persistence section).
@@ -56,13 +72,38 @@ interface AnswerPosition { sourceId: string; segmentIndex: number; step: number 
  * allowlist — never by the message shape — so excluding chat-supplied sensitive values later means
  * declining to add one string to a set. No storage migration, no retrofit (docs/build/agent.md §6).
  */
-type MsgKind = 'user.question' | 'assistant.answer' | 'assistant.decline' | 'assistant.error';
+// `user.value` is D3's chat-supplied run input (agent.md §6): deliberately NEVER added to
+// PERSISTED_KINDS — the value exists for one fill and is gone on navigation, by the allowlist
+// that was designed for exactly this — and it never rides /answer or any log.
+type MsgKind = 'user.question' | 'assistant.answer' | 'assistant.decline' | 'assistant.error' | 'assistant.narration' | 'user.value';
+
+/** P4 slice 4 — the acting offer riding a covered answer (AI Agent workspaces only; the server
+ *  attaches it and is the authority). `prefills` are conversation-supplied values the CONSENT SHEET
+ *  shows for confirmation — never sensitive ones (the server refuses those slots). */
+interface RunOfferWire {
+  key: string;
+  title: string;
+  planHash: string;
+  steps: number;
+  inputs: Array<{ index: number; label: string; sensitive: boolean }>;
+  destructive: number;
+  /** Steps only the user can do (file pickers) — the run pauses for each. */
+  manual?: number;
+  /** Where the workflow starts, display-safe (Part 2) — the consent sheet's "Starts on…" line. */
+  entryRoute?: string;
+  /** The founder's narrated "what this does / what has to happen first", scrubbed + capped. */
+  about?: string | null;
+  prefills: Record<string, string>;
+}
 
 interface Msg {
   role: 'user' | 'assistant'; kind: MsgKind; content: string; citations?: Citation[];
   queryId?: string; feedback?: 'up' | 'down';
   // P4-M0 — a positional answer that maps to a walkable workflow carries the offer.
   walkOffer?: { workflow: SenseWorkflow; startStep: number };
+  // P4 slice 4 — the acting offer + the consent sheet's open/closed state (transient, never persisted).
+  runOffer?: RunOfferWire;
+  consentOpen?: boolean;
 }
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -255,14 +296,85 @@ form.appendChild(send);
 
 panel.appendChild(header);
 panel.appendChild(list);
+// P4 slice 6 — the DOCKED run strip: while the chat is open it is the run's control surface
+// (step counter · status · Continue/Confirm · Pause · Take over · Stop) and the floating card
+// stays hidden. Docked at the BOTTOM, right above the composer (user feedback 2026-08-05): the
+// run's controls sit where the user's attention already is — beside where they reply.
+const runStrip = el('div', 'fb-run-strip');
+runStrip.style.display = 'none';
+panel.appendChild(runStrip);
+// P4 slice 6 — the "answering the agent" chip: shown while a run awaits a value in the chat, so
+// the composer's changed job is visible and cancellable (✕ = type it into the page instead).
+const valueChip = el('div', 'fb-value-chip');
+valueChip.style.display = 'none';
+panel.appendChild(valueChip);
 panel.appendChild(form);
 root.appendChild(launcher);
 root.appendChild(panel);
+
+/** The docked run strip — rebuilt from the run's card model. Called on every run-state change and
+ *  every render; deliberately NOT part of the message-list rebuild, so 400ms status ticks repaint
+ *  a few spans instead of the whole thread. */
+function renderRunStrip(): void {
+  const showInPanel = open && agentRunActive();
+  setRunPanelOpen(showInPanel); // open panel ⇒ hide the floating card; closed ⇒ bring it back
+  const rc = showInPanel ? runCardState() : null;
+  runStrip.style.display = rc ? '' : 'none';
+  if (!rc) return;
+  runStrip.replaceChildren();
+  const top = el('div', 'fb-run-strip-top');
+  top.appendChild(el('span', 'fb-run-strip-chip', rc.chip));
+  top.appendChild(el('span', 'fb-run-strip-instr', rc.instr));
+  const x = el('button', 'fb-run-strip-x', '✕');
+  x.type = 'button';
+  x.setAttribute('aria-label', 'Stop the run');
+  x.addEventListener('click', () => stopRun());
+  top.appendChild(x);
+  runStrip.appendChild(top);
+  if (rc.status) {
+    runStrip.appendChild(el('div', `fb-run-strip-status${rc.stall ? ' fb-walk-stalled' : ''}`, rc.status));
+  }
+  const row = el('div', 'fb-run-strip-actions');
+  if (rc.cont) {
+    const b = el('button', 'fb-walk-btn fb-walk-next', rc.cont);
+    b.type = 'button';
+    b.addEventListener('click', () => pressRunContinue());
+    row.appendChild(b);
+  }
+  const p = el('button', 'fb-walk-btn', rc.paused ? 'Resume' : 'Pause');
+  p.type = 'button';
+  p.addEventListener('click', () => toggleRunPause());
+  row.appendChild(p);
+  const t = el('button', 'fb-walk-btn', "I'll take it from here");
+  t.type = 'button';
+  t.addEventListener('click', () => takeoverRun());
+  row.appendChild(t);
+  runStrip.appendChild(row);
+}
 
 function render(): void {
   panel.style.display = open ? 'flex' : 'none';
   // Real embeds swap launcher ↔ panel; the Studio preview shows BOTH (panel lifted above).
   launcher.style.display = open && !cfg.preview ? 'none' : 'flex';
+  renderRunStrip();
+  // P4 slice 6 — while the run awaits a value, the composer's job changes and must SAY so. Truth
+  // is read live from the run (never cached): the run ending or moving on instantly restores the
+  // normal composer, whatever this module thought was pending.
+  const awaitingValue = runAwaitingValue();
+  input.placeholder = awaitingValue ? `${awaitingValue.label} — type just the value…` : 'Ask anything…';
+  valueChip.style.display = awaitingValue ? '' : 'none';
+  if (awaitingValue) {
+    valueChip.replaceChildren();
+    valueChip.appendChild(el('span', 'fb-value-chip-label', `Answering: ${awaitingValue.label}`));
+    const x = el('button', 'fb-value-chip-x', '✕');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Cancel — type it into the page instead');
+    x.addEventListener('click', () => {
+      cancelRunValue();
+      render();
+    });
+    valueChip.appendChild(x);
+  }
   list.replaceChildren();
   if (messages.length === 0) list.appendChild(el('div', 'fb-greeting', cfg.greeting));
   for (const m of messages) {
@@ -305,6 +417,20 @@ function render(): void {
         persistChat(); // the panel closed for the run — remember that across the steps that navigate
       });
       row.appendChild(btn);
+    }
+    // P4 slice 4 — the acting offer (server-attached; AI Agent workspaces only). The pill opens
+    // the consent sheet; the sheet's "Run it" click is the consent (D8: typed, never words).
+    if (m.runOffer && !agentRunActive()) {
+      if (m.consentOpen) {
+        row.appendChild(consentSheet(m, m.runOffer));
+      } else {
+        const offerBtn = el('button', 'fb-walk-offer', 'Run it for me');
+        offerBtn.addEventListener('click', () => {
+          m.consentOpen = true;
+          render();
+        });
+        row.appendChild(offerBtn);
+      }
     }
     if (m.role === 'assistant' && m.kind !== 'assistant.error' && m.queryId) {
       const fb = el('div', 'fb-feedback');
@@ -350,6 +476,7 @@ interface AnswerResponse {
   // the HTTP status NAME — the useful half is `message`. Typed so it can be logged, never rendered.
   message?: string;
   position?: AnswerPosition | null; escalate?: boolean;
+  runOffer?: RunOfferWire; // P4 slice 4 — only ever sent to AI Agent workspaces
 }
 
 /**
@@ -536,6 +663,10 @@ async function ask(question: string): Promise<void> {
         if (offer) answered.walkOffer = offer;
         else log.debug('walkthrough: position has no walkable shard workflow');
       }
+      // P4 slice 4 — the acting offer (server-decided: only an AI Agent workspace with a runnable
+      // workflow ever receives one). The pill renders with the answer; its click opens the consent
+      // sheet, and the sheet's "Run it" click is the consent.
+      if (data.runOffer) answered.runOffer = data.runOffer as RunOfferWire;
     }
     else messages.push({ role: 'assistant', kind: 'assistant.decline', content: data.reason || "I don't have that in our help content yet.", queryId: data.queryId });
   } catch (e) {
@@ -546,6 +677,110 @@ async function ask(question: string): Promise<void> {
     render();
     persistChat();
   }
+}
+
+// ── P4 slice 4 — the acting run's chat plumbing ─────────────────────────────────────────────────
+// One hooks bundle for every way a run starts or resumes: exits re-open the panel, and narration
+// lands in the thread as its own message kind (persisted, so it survives the navigations the run
+// itself causes).
+const onOverlayExit = (): void => { open = true; render(); persistChat(); };
+function pushNarration(text: string): void {
+  messages.push({ role: 'assistant', kind: 'assistant.narration', content: text });
+  render();
+  persistChat();
+}
+const runHooks = () => ({
+  onExit: onOverlayExit,
+  onNarrate: pushNarration,
+  // Slice 6 — the run asks for a value IN the thread; the composer's routing follows the run's
+  // live state (render reads `runAwaitingValue()`), so this only renders the ask and repaints.
+  onNeedValue: (req: { ask: string }) => {
+    open = true; // the conversation is the run's surface — make sure it is on screen for the ask
+    pushNarration(req.ask);
+  },
+  // The run's control surface changed (step advanced, status line, pause) — repaint the strip only.
+  onState: renderRunStrip,
+});
+const runCfg = () => ({ apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason });
+
+/** The consent sheet's "Run it" click — the consent itself (D8: a typed affordance, never words). */
+async function startOfferedRun(offer: RunOfferWire, queryId: string | undefined): Promise<void> {
+  const outcome = await startConsentedRun(
+    root,
+    runCfg(),
+    runHooks(),
+    { key: offer.key, title: offer.title, planHash: offer.planHash, prefills: offer.prefills },
+    queryId,
+  );
+  if (outcome === 'started') {
+    // Slice 6: the panel STAYS OPEN — the conversation is the run's primary surface (narration
+    // streams in, value asks land here), with the card as the compact progress HUD beside it.
+    render();
+    persistChat();
+    return;
+  }
+  pushNarration(
+    outcome === 'changed'
+      ? 'That workflow just changed on the other side — ask me again and I’ll offer the current version.'
+      : 'I can’t run that right now — you can still do it yourself and I’ll guide you.',
+  );
+}
+
+/** The consent sheet: what will run, the values it will use, what it will ask for, what gets a
+ *  confirm — read before the one click that means "go". */
+function consentSheet(m: Msg, offer: RunOfferWire): HTMLElement {
+  const sheet = el('div', 'fb-run-consent');
+  sheet.appendChild(el('div', 'fb-run-consent-title', `Run “${offer.title}” — ${offer.steps} steps`));
+  // Part 2 — the "before" made visible: what this does (the founder's own words, where "what has
+  // to happen first" lives) and where it starts.
+  if (offer.about) sheet.appendChild(el('div', 'fb-run-consent-meta', offer.about));
+  if (offer.entryRoute) {
+    sheet.appendChild(
+      el('div', 'fb-run-consent-meta', `Starts on ${offer.entryRoute} — I’ll head there if needed.`),
+    );
+  }
+  const prefillKeys = Object.keys(offer.prefills);
+  for (const k of prefillKeys) {
+    const label = offer.inputs.find((s) => s.index === Number(k))?.label ?? `step ${k}`;
+    const line = el('div', 'fb-run-consent-meta');
+    line.appendChild(document.createTextNode(`Using from our chat: ${label} = `));
+    const val = el('span', 'fb-run-consent-val', `“${offer.prefills[k]}”`);
+    line.appendChild(val);
+    sheet.appendChild(line);
+  }
+  const typed = offer.inputs.filter((s) => !(String(s.index) in offer.prefills)).length;
+  if (typed > 0) {
+    sheet.appendChild(
+      el('div', 'fb-run-consent-meta', `I’ll pause for ${typed} field${typed === 1 ? '' : 's'} you type directly into the app.`),
+    );
+  }
+  if (offer.destructive > 0) {
+    sheet.appendChild(
+      el('div', 'fb-run-consent-meta', `${offer.destructive} step${offer.destructive === 1 ? '' : 's'} will ask you to confirm before it happens.`),
+    );
+  }
+  if ((offer.manual ?? 0) > 0) {
+    sheet.appendChild(
+      el('div', 'fb-run-consent-meta', `${offer.manual} step${offer.manual === 1 ? '' : 's'} you’ll do yourself (like choosing a file) — I’ll pause and wait.`),
+    );
+  }
+  const actions = el('div', 'fb-run-consent-actions');
+  const go = el('button', 'fb-walk-btn fb-walk-next', 'Run it');
+  const cancel = el('button', 'fb-walk-btn', 'Cancel');
+  go.addEventListener('click', () => {
+    go.disabled = true;
+    cancel.disabled = true;
+    m.consentOpen = false;
+    void startOfferedRun(offer, m.queryId);
+  });
+  cancel.addEventListener('click', () => {
+    m.consentOpen = false;
+    render();
+  });
+  actions.appendChild(go);
+  actions.appendChild(cancel);
+  sheet.appendChild(actions);
+  return sheet;
 }
 
 // P4-M0 → P2-M5 — the walkthrough's "Explain what's blocking me" escalation: open the chat and
@@ -592,6 +827,9 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
  *  way in AND on the way out, so D3's future 'user.value' is excluded by never being added. */
 const PERSISTED_KINDS: ReadonlySet<MsgKind> = new Set<MsgKind>([
   'user.question', 'assistant.answer', 'assistant.decline',
+  // The run's commentary is part of the conversation — it must survive the very navigations the
+  // run itself causes, or the thread reads as if nothing happened (P4 slice 4).
+  'assistant.narration',
 ]);
 // 'assistant.error' is deliberately absent — a transport failure is about a moment, not about the
 // conversation, and restoring "Request failed (503)" onto a fresh page is noise. The answer
@@ -685,8 +923,12 @@ function restoreChat(): void {
   // stays quiet otherwise. A resuming walkthrough owns the screen (starting one closes the panel),
   // so never fight it — resumeWalkthrough is async, which is why the peek is synchronous.
   const walkResuming = cfg.walkthrough && senseActive() && walkthroughPending(cfg.key);
-  if (stored.data.open === true && stored.ageMs <= CHAT_REOPEN_MS && !walkResuming) open = true;
-  log.debug('chat: restored', { messages: restored.length, ageMs: stored.ageMs, open, walkResuming });
+  // Slice 6: a RESUMING RUN now forces the panel OPEN — the conversation is the run's surface
+  // (narration + value asks land there), the exact opposite of the walkthrough's card-only rule.
+  const runResuming = agentRunPending(cfg.key);
+  if (runResuming) open = true;
+  else if (stored.data.open === true && stored.ageMs <= CHAT_REOPEN_MS && !walkResuming) open = true;
+  log.debug('chat: restored', { messages: restored.length, ageMs: stored.ageMs, open, walkResuming, runResuming });
 }
 // ------------------------------------------------------------------------------------------------
 
@@ -760,6 +1002,17 @@ form.addEventListener('submit', (e) => {
   e.preventDefault();
   const q = input.value.trim();
   if (!q || loading) return;
+  // P4 slice 6 — while the run awaits a value, the next message IS that value: routed to the run,
+  // rendered as `user.value` (excluded from persistence by the allowlist — the D3 exclusion built
+  // waiting for this), never sent to /answer, never logged anywhere. Checked LIVE so a run that
+  // ended between keystrokes gets a normal question, not a swallowed message.
+  if (runAwaitingValue()) {
+    input.value = '';
+    messages.push({ role: 'user', kind: 'user.value', content: q });
+    render();
+    void provideRunValue(q);
+    return;
+  }
   input.value = '';
   void ask(q);
 });
@@ -860,11 +1113,17 @@ async function boot(): Promise<void> {
   // flashes the empty greeting first. Needs the resolved config (preview + the walkthrough flag).
   restoreChat();
   mount();
+  // P4-M2 — an acting run resumes FIRST (one overlay at a time; storage-gated inside, so a page
+  // with no run in flight fetches nothing). Runs start from a chat offer's consent sheet (slice 4)
+  // or, on debug builds, the dev trigger; both share the same hooks, so narration and exits behave
+  // identically however the run began.
+  registerAgentRunDevTrigger(root, { ...runCfg(), debug: cfg.debug }, runHooks());
+  const runResumed = await resumeAgentRun(root, runCfg(), runHooks());
   // P4-M0 — pick a mid-workflow walkthrough back up after a full-page navigation. Storage-gated
   // inside (no session = no fetch, nothing runs) and best-effort like everything else at boot.
-  if (cfg.walkthrough && senseActive()) {
-    void resumeWalkthrough(root, { apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason }, {
-      onExit: () => { open = true; render(); persistChat(); },
+  if (!runResumed && cfg.walkthrough && senseActive()) {
+    void resumeWalkthrough(root, runCfg(), {
+      onExit: onOverlayExit,
       onExplain: explainBlocker,
     });
   }

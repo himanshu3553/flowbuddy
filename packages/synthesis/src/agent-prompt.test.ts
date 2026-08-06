@@ -104,3 +104,43 @@ describe('the Copilot configuration', () => {
     expect(copilot).not.toContain('nothing further to look up');
   });
 });
+
+/**
+ * The ACTING configuration (slice 4) — the same prompt with the offer section, present ONLY when
+ * `offer_run` is actually bound. The floor's lesson applied forward: a read-only workspace's
+ * prompt must not describe running (the model would offer what nothing can start), and the acting
+ * prompt must keep consent with the USER's click, never the model's words.
+ */
+describe('the acting configuration', () => {
+  const acting = agentSystem(true, true);
+
+  it('read-only configurations never mention running — including the illegal floor+acting combo', () => {
+    expect(agentSystem(true)).not.toContain('offer_run');
+    expect(agentSystem(false)).not.toContain('offer_run');
+    // canRun without tools is a caller bug; the prompt must fail SAFE by ignoring it.
+    expect(agentSystem(false, true)).toBe(agentSystem(false));
+  });
+
+  it('binds the offer to the user’s consent, never the model’s claim', () => {
+    expect(acting).toContain('offer_run');
+    expect(acting).toContain('The button is the user\'s consent');
+    expect(acting).toContain('NEVER claim you did');
+  });
+
+  it('keeps sensitive values out of the model’s hands entirely', () => {
+    expect(acting).toContain('NEVER pass passwords');
+  });
+
+  it('adds the acting section without touching the Copilot rules around it', () => {
+    expect(acting.length).toBeGreaterThan(agentSystem(true).length);
+    // The rules that carry every measurement must survive verbatim in the acting configuration.
+    for (const anchor of ['BEFORE YOU DECLINE', 'POSITION CONTEXT', 'ASKING THE USER A QUESTION', 'YOUR TOOLS']) {
+      expect(acting).toContain(anchor);
+    }
+    // Removing the acting block must reproduce the Copilot prompt EXACTLY — nothing else moved.
+    const start = acting.indexOf('\n\nRUNNING A WORKFLOW FOR THE USER');
+    const end = acting.indexOf('the shortcut on top.') + 'the shortcut on top.'.length;
+    expect(start).toBeGreaterThan(-1);
+    expect(acting.slice(0, start) + acting.slice(end)).toBe(agentSystem(true));
+  });
+});

@@ -4,7 +4,13 @@ import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 // Subpath import — the package barrel can't be VALUE-imported from web (see lib/copilot-settings.ts).
-import { MODE_LABELS, SELECTABLE_MODES, parseCopilotMode } from '@flowbuddy/shared/copilot-mode';
+import {
+  AGENT_TERMS_VERSION,
+  MODE_LABELS,
+  SELECTABLE_MODES,
+  modeCanAct,
+  parseCopilotMode,
+} from '@flowbuddy/shared/copilot-mode';
 import { getCurrentWorkspace } from '@/lib/session';
 
 export interface SaveOriginsResult {
@@ -84,23 +90,50 @@ export async function setCopilotAppearance(input: {
 /**
  * The operating mode — whether the assistant may ACT (Copilot · AI Agent).
  *
- * Only SELECTABLE modes may be set here. `agent` exists in the vocabulary so the ladder is stable
- * and the stored value never has to change, but it is not buildable yet and must not become
- * reachable through a hand-crafted form post — acting is a capability nobody should acquire by
- * accident. Anything unrecognised falls back to `copilot` — read-only — never upward.
+ * Only SELECTABLE modes may be set, and an ACTING mode is the contractual line (agent.md §7 Q4):
+ * it may only ever be set alongside a recorded acceptance of the CURRENT terms version. The check
+ * is server-side so a hand-crafted form post cannot acquire acting by accident; the acceptance is
+ * a durable `AgentAcceptance` row written in the SAME transaction that flips the mode, so "who
+ * turned acting on, and when, under which terms" is always answerable. A workspace that already
+ * accepted the current version switches freely both ways — the record is history, the mode is the
+ * switch. Anything unrecognised still falls back to `copilot` — read-only — never upward.
  */
-export async function setCopilotMode(mode: string): Promise<void> {
+export async function setCopilotMode(
+  mode: string,
+  opts: { acceptTerms?: boolean } = {},
+): Promise<{ needsAcceptance?: true }> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const parsed = parseCopilotMode(mode);
   if (!SELECTABLE_MODES.includes(parsed)) {
     throw new Error(`${MODE_LABELS[parsed].name} isn't available yet.`);
   }
+
+  if (modeCanAct(parsed)) {
+    const accepted = await prisma.agentAcceptance.findFirst({
+      where: { workspaceId: ctx.workspace.id, termsVersion: AGENT_TERMS_VERSION },
+      select: { id: true },
+    });
+    if (!accepted) {
+      // Not an error — the Studio opens the acceptance dialog and calls again with acceptTerms.
+      if (opts.acceptTerms !== true) return { needsAcceptance: true };
+      await prisma.$transaction([
+        prisma.agentAcceptance.create({
+          data: { workspaceId: ctx.workspace.id, userId: ctx.userId, termsVersion: AGENT_TERMS_VERSION },
+        }),
+        prisma.workspace.update({ where: { id: ctx.workspace.id }, data: { copilotMode: parsed } }),
+      ]);
+      revalidatePath('/dashboard/copilot');
+      return {};
+    }
+  }
+
   await prisma.workspace.update({
     where: { id: ctx.workspace.id },
     data: { copilotMode: parsed },
   });
   revalidatePath('/dashboard/copilot');
+  return {};
 }
 
 /** Trust setting — show/hide the "Source: <workflow>" citation chip on grounded answers. */

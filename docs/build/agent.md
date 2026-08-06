@@ -7,7 +7,7 @@
 
 > **One chat, one agent, one grounded tool surface.** Instead of a copilot that *routes* a user into one of three separate mechanisms — an answer (Phase 1), a walkthrough (P4-M0), an execution run (P4-M2) — FlowBuddy becomes a single agentic loop for which **Tell · Show · Do are tools it may call, turn by turn**. The user stays in one conversation; the agent moves up and down the intensity ladder as the task demands, narrating what it does and asking for what it needs. **The division of labor that survives: the agent deliberates, the grounded primitives act.**
 
-- **Status:** 🟩 **COPILOT MODE BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than the single-shot mode it replaced) **— and since 2026-08-02 the only selectable mode**, AI Chatbot having been retired (D10). D1–D8 locked 2026-07-25, D9 2026-07-26, D10 2026-08-02. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3 remains direction only. This doc records *what was decided and why*, not *how it is built*. The full design follows once the open questions in §7 are settled.
+- **Status:** 🟩 **COPILOT MODE BUILT + USER-VERIFIED E2E 2026-07-27** (founder's verdict: markedly more accurate than the single-shot mode it replaced) **— and since 2026-08-02 the only selectable mode**, AI Chatbot having been retired (D10). D1–D8 locked 2026-07-25, D9 2026-07-26, D10 2026-08-02. Migration steps 1–3 are done, and since 2026-07-29 every answer records **which engine actually produced it**, in how many rounds, using which tools; **§9 records the two gaps that remain**. Mode 3's **acting design is LOCKED (2026-08-04, D12 — the acting layer §A2)**; nothing of it is built (status: [`roadmap.md`](../roadmap.md) §5). This doc records *what was decided and why*, not *how it is built*.
 - **This doc is the reconciliation.** The Phase-4 / Phase-5 "hands vs. brain" split still holds as a *concept*; it no longer holds as a document boundary.
 - **Companion docs:** the substrate → [`copilot.md`](copilot.md) · position + diagnosis → [`sense-and-reason.md`](sense-and-reason.md) · the acting primitives → the acting layer below · goals/conversation → the goal layer below · status map → [`roadmap.md`](../roadmap.md) · outward-facing tools → [`interop.md`](interop.md)
 
@@ -81,7 +81,7 @@ The striking property of this direction is how little of it is new. The primitiv
 | `run_walkthrough` | Guided, user-paced stepping | ✅ same — switch-decided since D11 |
 | `ask_user` | Clarify · prompt for input · confirm | 🔄 **clarifying questions legalised in Copilot mode (2026-07-27)** — no longer the Sense tie only; input prompting + confirmation await the acting tier |
 | `product_profile` | Founder-authored product understanding | 📝 P5-M2 — **the top remaining gap (§9 Gap 1)** |
-| `execute_step` | Resolve locator → act → verify | 📝 **P4-M2 — to build (the critical path)** |
+| `execute_step` | Resolve locator → act → verify — **run-scoped since D12, not step-scoped**: the bound tool offers/starts a whole consented run and the widget's executor does the steps (§A2.1) | 📝 **P4-M2 — to build (the critical path)** |
 
 **Reason is already an agentic loop.** `diagnoseFromKB` runs a read-tool loop over expected-vs-actual — the phase docs call it "the skeleton Phase 4 inherits." The unified agent is not built from scratch; it is that loop **promoted to the main path** and given more tools.
 
@@ -102,6 +102,8 @@ The striking property of this direction is how little of it is new. The primitiv
 | **D10** | **Retire AI Chatbot entirely (2026-08-02).** The single-shot mode stops being a sellable tier and stops being a stored value. Its ENGINE survives, unsellable, as the floor beneath a failed agent loop — the agent's own prompt run for one round with nothing bound. | It was a **strictly worse Copilot that cost twice to maintain**: a second prompt and a second knowledge renderer, both of which had to be tuned in parallel forever, and every knowledge feature had to be built into both (the workflow plan and the Application Intelligence pages each paid that tax). CLAUDE.md carried a standing trap for the failure it invited — update one, forget the other, and the *safety floor* answers worse than the tier above it. Retiring it deletes the trap rather than documenting it. The founder's judgment (2026-08-02): *"I simply can't see any benefit of keeping AI Chatbot mode."* **This reverses D9's pricing corollary**, which had assumed a sold tier could not be un-sold; it could, because nobody was on it. |
 
 | **D11** | **The founder's switch decides when an on-page ability fires — not the assistant (2026-08-02).** `copilotShowMe` and `copilotWalkthrough` fire on EVERY positional answer when on, and never when off. This reverses D8's *offer* half; D8's consent half (a typed affordance, never free text) is untouched, and so is *absence, not refusal*. **The assistant's preference was removed entirely, not merely ignored** — see below. | **A "maybe" is a bad control.** Under judgment a founder cannot distinguish a switch that is OFF from one that is ON and being declined — which makes the feature undemonstrable to a prospect, undiscoverable to end-users, and unsupportable when someone asks why it didn't appear. **And the judgment was never measured:** §8's own regression list flagged the agent under-offering as a risk to watch across a cutover, and nobody watched it. Trading an unmeasured judgment for a predictable rule is the cheap direction, and reversible — the intents are still recorded, so "would judgment have won?" stays a query. **The noise D8 feared is bounded by structure, not by judgment:** only POSITIONAL answers reach the rule, a clarifying question sets `usedPosition` false so nothing fires, the highlight needs an element the probe actually resolved, and `walkthroughOffer` returns null on the last step. What remains is a user mid-workflow seeing one ring and one pill. **Given up:** the assistant can no longer stay quiet at a moment only it can see is wrong. **Why the telemetry went too:** the first cut kept the two intent fields as unobeyed telemetry, so a future reversal would have evidence. That does not survive contact with the prompt — the fields are only meaningful while the prompt keeps ~4 lines teaching the model *when* to set them, and that is reasoning spent on an answer nobody reads, competing for attention with instructions that are read. Keep the section and pay forever; drop it and the telemetry records noise. So both went, and reversal means re-adding four prompt lines and two schema fields. The schema collapse was the tell: without them the agent's "superset" schema was byte-identical to the base one, so `AGENT_ANSWER_SCHEMA` and the engine's `schema` override both disappeared with it. |
+
+| **D12** | **The acting design is locked (2026-08-04)** — brain/hands split · compiled-pinned `ExecutionPlan` · client-executes/server-deliberates transport · just-in-time inputs · navigation as an action · one step engine under guided AND acting · consent once + destructive confirms · single workflow per run. Full design: the acting layer **§A2**. | The founder's directive: build the most reliable acting agent, rewriting whatever needs rewriting — and **an agent is reliable in proportion to how little it improvises**. So the model deliberates only at run boundaries (offer · input · deviation · done); the founder's recorded plan decides every action; verification is recorded-evidence; every failed act hands back rather than guesses forward. The rewrite that followed is the step-engine extraction (§A2.10), accepted knowingly against the shipped walkthrough. |
 
 ### D9 + D10 in practice — the two modes (the build spec in miniature)
 
@@ -211,13 +213,13 @@ That posture was sound when questions were questions — incidental PII, backsto
 
 Stripe Elements, Plaid, hosted checkout: the widget cannot see inside them, so it can neither highlight the specific field nor read fill state. Degradation is honest rather than broken — highlight the iframe region, ask in chat, rely on the D4 Continue affordance. The feature survives; only auto-detection is lost, and D4 already discarded that. Same story for shadow DOM and canvas-rendered inputs.
 
-## 7. Open questions (blocking the design doc)
+## 7. Open questions — Q1–Q5 RESOLVED 2026-08-04 (D12 · §A2); only Q6, a measurement, remains open
 
-1. **Transport — the load-bearing one.** The deciding tools run on the server; `where_am_i`/`highlight_step`/`execute_step` run in the widget, and the page navigates mid-run. Options: (a) stateful server loop + persistent channel, (b) client-orchestrated loop, (c) **re-entrant/resumable — run state rides the wire, persisted in `sessionStorage`** (recommended: keeps the server stateless-ish, survives navigation for free, and is the pattern already proven twice by Sense hypotheses and the walkthrough's resume). **Update 2026-07-26 — option (c) now has a working implementation to design against**, not just a precedent: `widget/src/session.ts` (P5-M0 cut 1) is the generic slot store, with `walkthrough` and `chat` as live consumers and `agent-run` as the intended third. What is still open is the *wire* half — what the server sends back for the client to persist and replay — not the client-side substrate.
-2. **Mode-3 certification bar** — require Phase-3 green validation before any acting run, or accept interim signals (recent successful walkthroughs/runs) until P3 lands? *(= the goal layer below §5 Q10.)* **Leaning conservative** under D9's liability framing: if mode 3 is a contractual boundary, interim signals are a weak thing to have promised on.
-3. **Chaining scope for v1** — single-workflow goals first, chains later? *(= §5 Q5.)*
-4. **How mode 3 is accepted** — D9 makes it a contractual line, so the toggle is probably not just a Studio switch: explicit acceptance, versioned terms, and a record of who enabled it and when. What exactly gets stored? Far cheaper now than retrofitted.
-5. **Cross-origin iframe UX** — is "highlight the region + Continue" enough, or does the payment case want a bespoke affordance?
+1. ~~**Transport — the load-bearing one.**~~ — **RESOLVED 2026-08-04 (D12): option (c), as recommended.** Run state is client-held in the session store's reserved `agent-run` slot; the server stays stateless between **four boundary calls** — consent/start · input · deviation · completion — each of which carries the run state and re-verifies the gate live. The wire half that was open is now specified: consent returns the **pinned plan + run id**, and the executor runs steps locally between boundaries, so a full-page navigation costs a resume from storage, never a reconnection. Detail: §A2.3.
+2. ~~**Mode-3 certification bar**~~ — **RESOLVED 2026-08-04: interim signals, made honest by a mandatory floor.** Eligibility analysis at enable time is not optional (§A2.9); the walkthrough's auto:manual detection-quality ratio and completed runs are the interim signal; Phase-3 validation slots into the same pluggable input when it exists. The conservative instinct survives as what is NEVER waived: acceptance, the per-workflow flag, eligibility, and per-run consent. *(= the goal layer §5 Q10.)*
+3. ~~**Chaining scope for v1**~~ — **RESOLVED 2026-08-04 (D12): single workflow per run.** Chains are P5-M4's remaining scope. *(= §5 Q5.)*
+4. ~~**How mode 3 is accepted**~~ — **RESOLVED 2026-08-04: acceptance is a ROW, never a toggle state.** A durable record — who enabled, when, against which terms version — written before `agent` is ever selectable for the workspace, plus per-run consent on the `ExecutionRun` row (§A2.8). Exact columns at build; the decision is the shape.
+5. ~~**Cross-origin iframe UX**~~ — **RESOLVED for v1 2026-08-04: an acting run never reaches one.** A workflow with a cross-origin-frame step is ineligible for acting at enable time (§A2.9), so the question only arises in guided walkthroughs, where region-highlight + Continue stands (§6). Revisit if a payment-heavy design partner needs acting there.
 6. **Cost per mode (measurement, not a design choice)** — the real cost-per-question and p50/p95 of the agent loop on live traffic. **Sharper since D10**, not softer: the cheap single-shot tier it would have been compared against no longer exists, so every question now rides the loop and there is no lower rung to retreat to. Round one *is* the old fast path, so the expected delta is small — but "expected" is doing real work in that sentence and nothing has measured it. **Fully instrumented as of 2026-08-03:** every question records the engine that answered, its rounds, its tool calls (§9 Gap 2) **and what it consumed** — input, the cached share of it, output, and the reasoning share of that. Both halves are now answerable from live traffic. Two properties that make the numbers trustworthy rather than merely present: spend is summed across every loop a question ran (an agent failure caught by the floor paid for both), and the cached and reasoning figures are kept as SUBSETS of their parents, because ignoring the cache overstates spend on these long stable prompts while ignoring reasoning hides why an answer was expensive. Now a *margin* question rather than a consolidation one (D9 pricing), but it still sets tier prices and D7's spend caps.
 7. ~~**Where the five existing toggles land per mode**~~ — **RESOLVED, then re-resolved.** 2026-07-27 made the two on-page toggles a *permission* the agent's judgment refined ("you MAY do this when it helps"). **D11 reversed that on 2026-08-02:** the switch is the whole decision again — on fires every positional answer, off fires none — because a switch that might or might not do anything cannot be demonstrated or supported. Both stay defaulted **ON**, which is the combination deliberately never shipped before (rule-driven *and* on by default); it is accepted now because the noise is bounded by structure rather than by the assistant's restraint, and because a Copilot the picker describes as pointing and guiding must be able to. Still open for `reasonEnabled`/`reasonImageEnabled`, which wait on the un-merged diagnostic path (§9 gap 3).
 
@@ -363,11 +365,212 @@ for each step:  resolve locator (ranked list, first that resolves wins)
 ```
 
 - **Human-in-the-loop by construction.** Captured input values are **masked** at capture (P1-M12), so Autopilot can never blindly replay values — it **prompts the end-user for every input** (prefilled from their question where safe, always confirmable). Sensitive by design, not by policy.
-- **A second audience on the approval model** (`portal` joins with the V2 portal track, `agents` with Phase 6 — [`interop.md`](interop.md)): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag on the same `(sourceId, segmentIndex)` key. Founder opt-in per workflow, one click, reversible. Absence = never executable.
+- **A second audience on the approval model** (`portal` joins with the V2 portal track, `agents` with Phase 6 — [`interop.md`](interop.md)): `copilot | autopilot` — a per-workflow **"may be executed on end-users' behalf"** flag riding the **identity-keyed** approval (§A7 — the original `(sourceId, segmentIndex)` sketch predates workflow identity and is dead). Founder opt-in per workflow, one click, reversible. Absence = never executable.
 - **The guided walkthrough is the stepping stone.** Before acting *for* the user, the same machinery can **guide** them — Sense (Phase 2, P2-M3) already highlights the *current* step on demand; P4-M0 extends that into a sequential, progression-aware walkthrough of the whole remaining workflow. Zero side effects, same locator resolution; it ships first and is independently valuable.
 - **The user stays in charge:** consent to start, visible step-by-step execution, pause/abort at any moment, confirmation on destructive steps.
 
-**Done when (sketch):** an end-user asks → gets a grounded answer → consents → **watches the widget complete the workflow in their own session** — inputs prompted, destructive steps confirmed, any unverifiable step ending in a safe stop — and only workflows the founder approved for autopilot **and** Phase-3 validation currently certifies green are ever offered.
+**Done when (sketch):** an end-user asks → gets a grounded answer → consents → **watches the widget complete the workflow in their own session** — inputs prompted, destructive steps confirmed, any unverifiable step ending in a safe stop — and only workflows the founder approved for autopilot **and** certification currently holds for (eligibility + interim signals now; Phase-3 validation when it lands — §7 Q2) are ever offered.
+
+---
+
+## A2. The design — LOCKED 2026-08-04 (D12)
+
+> Planned in one sitting against the founder's directive: *build the most reliable acting agent, and
+> rewrite whatever needs rewriting.* Four decisions were the founder's, taken explicitly:
+> **navigation is an allowed action** · **consent once at start + always-confirm destructive steps** ·
+> **single workflow per run in v1** · **the step-engine rewrite may touch the shipped walkthrough.**
+> The input mechanism (§A2.4) was frozen in the same conversation. Everything below is design, not
+> status — build state lives in [`roadmap.md`](../roadmap.md) §5.
+
+### A2.1 Two layers: the brain deliberates at boundaries, the hands execute between them
+
+**An agent is reliable in proportion to how little it improvises.** So the acting mode is not "the
+LLM drives the page"; it is two layers with a hard line:
+
+- **The brain** — the same agent loop Copilot mode runs, with acting tools bound. It understands the
+  goal, picks the workflow, extracts values the user already said, asks for what's missing, narrates,
+  and diagnoses deviations. It is invoked at exactly **four run boundaries**: offer/plan · input
+  needed · deviation · completion.
+- **The hands** — a deterministic executor in the widget that runs the compiled plan: resolve locator
+  → act → verify → advance. **No model call per step.** A 12-step run is 12 DOM operations plus a
+  handful of boundary calls, not 12 model rounds.
+
+The model never chooses a selector, a button, or an action — it chooses among grounded primitives,
+and the acting tool is **run-scoped, deliberately coarser than even `execute_step`**: it offers and
+starts a consented run; the executor owns the steps. The §2 invariant is unchanged and gets its
+strongest enforcement yet — page content cannot alter an action set that the model never authors.
+
+### A2.2 The ExecutionPlan — compiled, versioned, pinned
+
+The replay-ready artifact A5 Q7 asked for, and the thing a future sandbox runner shares (§A3):
+
+- **Compiled when the founder enables acting for a workflow** — that is the moment eligibility must
+  be judged and shown (§A2.9), not at approval generally and never mid-run. Recovered from the same
+  captured evidence the sense plan reads (the ranked locators, routes, and post-action outcomes the
+  recorder already ships).
+- **Content:** ordered steps — verb (`click | fill | select | check`), instruction, route pattern,
+  ranked locators, post-route, outcome evidence, input slot (label + sensitive flag), destructive
+  flag. Navigation is a run-level move, not a step verb (§A2.5). *(Outcome evidence became real on
+  2026-08-07: for the last + destructive steps, the recorded before/after DOM snapshots are diffed
+  at enable time into scrubbed APPEARANCE MARKERS — `expect.appeared` — matched at run time by
+  recall; a marker-carrying step completes only when one is visible, which is what retired the
+  "last step ⇒ done" assumption.)*
+- **Content-hashed and PINNED AT CONSENT.** The run executes the exact plan version the user agreed
+  to, even across a recompile; staleness is bounded by the run TTL, and liveness is re-verified at
+  every boundary call — a workflow retired mid-run safe-stops at the next boundary.
+- **Persisted.** On a reprocess, workflow identity re-matches by content as everywhere else, and the
+  acting flag additionally **re-runs eligibility on the new content** — a content match that is no
+  longer eligible drops the flag to needs-review. Fail closed, same posture as identity itself.
+
+### A2.3 Offer → consent → run (the transport, §7 Q1 resolved)
+
+- **The offer is deterministic where D11 put it:** mode is `agent` + the workflow is actable + the
+  answer is positional/covered by it ⇒ the run affordance shows. It is **conversational where only
+  the brain can hear it** ("just do it for me" ⇒ the agent's offer tool). Both converge on the same
+  typed consent sheet. Absence, not refusal: for un-actable workflows no tool is bound and no
+  affordance renders.
+- **The consent sheet** shows what will run (title, step count), the values already known from the
+  conversation (confirmed once, here — A5 Q3's prefill confirmation), the inputs that will be asked
+  as-we-go, and every destructive step flagged. **Commitment is a click on a typed affordance** (D8's
+  consent half, untouched).
+- **Start re-verifies everything live, server-side:** mode · workspace acceptance · approval liveness
+  (`inactiveReason: null` — the SEVENTH liveness reader, chosen live-only on purpose) · the acting
+  flag · eligibility · plan hash. Then it writes the `ExecutionRun` row and returns the pinned plan.
+- **Run state is client-held** in the session store's reserved `agent-run` slot — the pattern already
+  proven twice by the walkthrough and the chat thread. The server is stateless between boundary
+  calls; a full-page navigation unloads the widget and the run **resumes from storage on remount**,
+  self-correcting against page evidence exactly as the walkthrough does. No persistent channel to
+  break.
+
+### A2.4 Inputs — just-in-time is the base; upfront and point-and-type are its two edges *(frozen 2026-08-04)*
+
+**Why not collect-everything-upfront:** the plan's slot list is a *hypothesis from one recording* —
+conditional fields the founder's path never showed, fields added since, and capture loss all mean
+mid-run asking must exist anyway. So mid-run asking is the base mechanism and upfront collection can
+only ever be a convenience, never the contract. Chat-as-a-questionnaire is also simply worse than
+the app's own form. **Why not point-and-type-everything:** it un-builds the autopilot — the user does
+all the labor — and it re-asks values the conversation already supplied, in physical form.
+
+The rules, one line each:
+
+- **Conversation-supplied values** are extracted at plan time (P5-M1's parameter capture), confirmed
+  once on the consent sheet, filled by the run, never re-asked.
+- **Everything else** is asked in chat when the run reaches it, validated against the live field
+  after the fill (D5), and repaired conversationally with the app's own error on rejection ("that
+  name's taken — try another?"). *(As built, v1 asks one field at a time — the reply IS the value,
+  deterministic, zero mid-run model calls. Batching a page's unknowns into one ask needs the model
+  to map a free-text reply onto slots — the input-needed boundary — and is the deferred
+  refinement.)*
+- **Sensitive fields** (D3's hard rule: `type=password`, `autocomplete cc-*`, cross-origin iframe)
+  are **always point-and-type**: highlight the app's own field, the user types there, the run
+  verifies booleans only. Not optional — a card number typed into chat lands in the founder's
+  database.
+- **A failed fill degrades that one step to point-and-type** and the run continues (§A2.6).
+- **Plumbing:** chat-supplied values ride a **distinct typed message kind** — never persisted to the
+  session store, never written to `CopilotQuery`, masked in the visible transcript once consumed
+  (§6). The input channel must not become a PII pipe.
+
+### A2.5 Navigation is an action *(founder decision 2026-08-04)*
+
+End-to-end means the run never stops to say "please go to the projects page." In preference order:
+**click the recorded navigation element** (grounded, always first); **navigate directly only to
+routes that are pattern-safe and cold-startable** — no record ids, the id classifier guards, because
+an end-user must never be sent to the founder's own record. A step whose route can be reached
+neither way is an **eligibility failure at enable time**, not a mid-run surprise.
+
+### A2.6 Verify-or-hand-back, on every act
+
+The widget is a page script: its synthetic events carry `isTrusted: false`, some frameworks ignore
+them, and controlled inputs need native-setter dispatch. The design treats this as physics, not as
+an error class to fight:
+
+- **Every act is verified against recorded evidence** — post-route pattern, next-step-resolves,
+  control-left-the-DOM, element state (`filled`/`valid`) — the walkthrough's detection vocabulary,
+  consulted after *our* act instead of the user's.
+- **An act that didn't take is a first-class outcome:** the run hands exactly that step back in
+  guided posture ("click this one yourself — I'll take it from there"), detection confirms, the run
+  resumes acting from the next step.
+- **Repeated failure or an unresolvable step = safe-stop:** what's done, what isn't, where the user
+  is standing, and a downgrade to guided from this exact step (Sense's mid-workflow entry). **Never
+  guess forward** — unchanged from the walkthrough, now with more to lose.
+
+### A2.7 Destructive steps, takeover, narration
+
+- **Destructive steps** are flagged at compile (submit/delete/payment heuristics), shown to the
+  founder at enable time and to the user on the consent sheet, and **each one pauses for a typed
+  confirm mid-run** — always, in v1 (founder-configurable automation later; goal layer §5 Q3
+  resolved).
+- **The run card** (the walkthrough card, grown up) always offers Pause · Stop · "I'll take it from
+  here" (→ guided from the current step).
+- **Every state change is narrated in chat** as it happens — narration is the visibility mechanism
+  that replaces watch-every-click, and it survives navigations because the thread does (P5-M0).
+
+### A2.8 The gate and the audit (the contractual line)
+
+- **Workspace level:** mode `agent` (selectable only at the END of the build — §A2.12) + a durable
+  **acceptance record**: who enabled, when, against which terms version (§7 Q4).
+- **Workflow level:** the acting flag rides the **identity-keyed approval** — liveness comes with the
+  row, and the two acting readers (plan compile, run start) filter `inactiveReason: null` like the
+  six before them.
+- **Run level:** `ExecutionRun` — the consent moment, the plan hash, per-step outcomes, which input
+  slots were filled and from which source (chat · point-and-type · confirmed prefill — **never the
+  values**), and the outcome (`completed | aborted | safe_stop` + reason + step). "Did this user
+  authorize this run, and what did it do?" is answered from rows, not from model output (D8).
+
+### A2.9 Eligibility is decided at enable time, never discovered mid-run (A5 Q5)
+
+Static analysis over the compiled plan, verdict shown to the founder the moment they try to enable
+acting: every step recovers at least one locator · no cross-origin-frame steps · no foreign-origin
+navigations (OAuth popups) · every verb supported. *(File-upload steps stopped disqualifying on
+2026-08-07 — they compile as the USER's own step instead: browsers open pickers only on trusted
+gestures, so the run pauses, the user chooses, and Continue verifies the chosen file. The enable
+summary counts them: "1 step the user does themselves.")* Ineligible ⇒ the flag cannot be
+enabled ⇒ absence downstream. Certification proper stays a **pluggable input** (§7 Q2): eligibility
+mandatory now, interim signals (the walkthrough's auto:manual ratio, completed runs) as the quality
+bar, Phase-3 validation slotting in when it exists.
+
+### A2.10 One step engine, two actors *(founder decision 2026-08-04 — the rewrite)*
+
+The walkthrough already contains the hardest half of execution: locator resolution with retries,
+route watching, settle detection, element-state verification, safe-stop, cross-nav resume. That
+machinery is **extracted into a shared step engine** with two actor policies:
+
+- **Guided** — the user acts; detection acknowledges; Next advances. D4's manual-only advancement is
+  untouched; the re-platform must be behavior-identical, verified against the existing E2E legs.
+- **Acting** — the widget acts; verification advances; input and destructive steps pause.
+
+The payoff is structural: **every guided walkthrough anyone runs, in production, continuously
+exercises the same resolution and verification path the autopilot trusts.** The read-only mode
+becomes the acting mode's standing test harness. The regression risk on a shipped, user-verified
+feature was accepted explicitly — it is the price of never having two verification codepaths that
+drift.
+
+### A2.11 Testing posture
+
+The widget gains its first test runner with this build — an acting engine in the one package with
+zero tests is the reliability risk. The step engine and the act verbs are born with DOM-fixture
+tests (including framework-controlled inputs); a scripted acted-run harness against the local test
+app becomes the acting counterpart of the copilot baseline; and the engine extraction lands only
+after the existing walkthrough E2E legs pass on the new core.
+
+### A2.12 Build order — risk added last
+
+**Substrate** (plan compiler · eligibility · identity-keyed flag · Studio surfaces) → **step-engine
+extraction** (zero-acting, behavior-identical) → **the hands** (act verbs + verify-or-hand-back +
+resume, dev-flagged runs against the test app) → **the brain wiring** (acting tools · consent sheet ·
+mid-run inputs · narration · deviation diagnosis) → **the contractual shell** (acceptance record ·
+destructive confirms · takeover · audit surfaces). **Only then does `agent` enter
+`SELECTABLE_MODES`.** Module mapping and status: [`roadmap.md`](../roadmap.md) §5.
+
+**Not in v1, on purpose:** chaining (§7 Q3 — single workflow per run) · upfront input *collection*
+beyond the consent sheet (the sheet lists, the run asks) · plan signing (§A5 Q9 — no-leak already
+holds because only live + actable workflows ever compile; revisit with real customer traffic) ·
+proactive offers (parked, unchanged).
+
+**One near-prerequisite outside this phase:** the recorder's known full-page-nav capture gap (late
+`change` events lost) now costs more than a worse answer — a plan missing fill steps is a form
+submitted half-empty. The flush-on-submit/`pagehide` fix graduates from backlog nicety to something
+this phase wants landed before its first real runs.
 
 ---
 
@@ -383,52 +586,102 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 | A failed replay is… | **The product working** — a drift flag | **A safety event** — safe-stop, explain, hand back |
 | Purpose | Keep the KB fresh | Complete the user's task |
 
-**Why the acting modules (M1…M3) wait for Phase 3's replay core** *(the phase itself opened ahead of Phase 3 — sequencing decision 2026-07-15; P4-M0 is zero-acting and never needed these rails)*:
-1. **The engine learns where failure is the deliverable.** Locator healing, step semantics, outcome verification get hardened in the sandbox — where a failed replay *is* drift detection — before ever touching a live user's data.
-2. **Validation is Autopilot's certification layer.** Eligibility = **approved for autopilot AND recently validated green**. A workflow Phase 3 can't replay cleanly is never offered for execution. This rail exists only once Phase 3 lands — until then, M1's eligibility gate takes pluggable interim signals (the 2026-07-15 sequencing decision).
-3. **The loop closes both ways.** An Autopilot safe-stop in production ("element not found at step 3") is a **live drift signal** feeding Phase 3's freshness dashboards — production telemetry complementing sandbox validation.
+**The acting modules no longer wait for Phase 3's replay core** *(founder decision 2026-08-04,
+reversing the 2026-07-15 sequencing; D12)*. The core does not exist and nothing else of Phase 3's
+replay track is planned, so waiting meant the acting agent stayed on paper — exactly the strategic
+risk [`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §5 names. What
+replaces the wait, without giving up what the wait was for:
 
-**Engineering seam:** one shared **replay core** (locator walk + healing, step semantics, outcome verification) with three drivers — Phase 3's sandbox runner, Phase 4's widget driver, and (when that track is built) V3's company-agent extension ([`company-agent.md`](company-agent.md)). The `retrieval.ts` single-seam pattern, applied to execution.
+1. **The widget driver is the replay engine's FIRST consumer.** The step engine (§A2.10) is born in
+   the widget because that is where the first real runs happen. The shared core is **extracted when
+   the second driver actually exists** (Phase 3's sandbox runner, then V3's extension) — extract at
+   the second consumer, never speculatively. The `retrieval.ts` single-seam pattern still ends up
+   applied to execution; it just arrives by extraction instead of by up-front construction.
+2. **Certification stays a pluggable input, with a mandatory floor** (§A2.9, §7 Q2): eligibility
+   analysis at enable time now, interim quality signals now, Phase-3 validation slotting into the
+   same socket when it lands. The sandbox's "learn where failure is the deliverable" hardening still
+   happens — it now hardens an engine that already runs, rather than gating its existence.
+3. **The loop still closes both ways.** An Autopilot safe-stop in production ("element not found at
+   step 3") is a **live drift signal** feeding Phase 3's freshness dashboards — production telemetry
+   arriving *before* sandbox validation instead of after it.
 
 **Phase 2 (Sense) feeds it too:** Autopilot's **mid-workflow entry** — "you're on step 3; want me to finish the rest?" — consumes Sense's workflow/step localization (the read-only locator probe), so the offer can start from where the user actually is instead of replaying from step 1. **And P2-M5 (Reason) hands it the agent loop:** the read-tool reasoning skeleton (gather evidence → think → gather more → conclude, [`sense-and-reason.md`](sense-and-reason.md) Part B) is the loop Autopilot extends with act-verbs — P4 adds hands to a brain that already exists.
 
 ---
 
-## A4. Candidate modules (draft — locked at phase planning)
+## A4. Modules (locked to the §A2 design; status: [`roadmap.md`](../roadmap.md) §5)
 
-| Module | What it is | Notes |
+| Module | What it is | Design |
 |:---|:---|:---|
-| **P4-M0** | **Guided walkthrough** — sequential, progression-aware step-through of the whole remaining workflow (highlight step k → detect completion → advance to k+1); no acting | ✅ **Built 2026-07-15** (§8 as-built). Builds on **Sense's P2-M3** (the config-gated single-step highlight) + Sense's localization. Same locator resolution, zero side effects. Shipped first. |
-| **P4-M1** | **Autopilot gate** — the `autopilot` audience flag + the validated-current certification check (offer execution only on approved **and** green-validated workflows) | Mirrors `CopilotApproval`; consumes the Phase-3 signal. |
-| **P4-M2** | **Widget execution driver** — consent UX, visible step-by-step run, per-input prompts, pause/abort/takeover, resume across full-page navigations | The end-user-facing heart of the phase. |
-| **P4-M3** | **Safety rails + telemetry** — destructive-step confirmation, safe-stop semantics, per-run audit log, drift feedback to Phase 3 | A bad action is worse than a bad answer — this module is why founders can trust the toggle. |
+| **P4-M0** | **Guided walkthrough** — sequential, progression-aware step-through of the whole remaining workflow (highlight step k → detect completion → advance to k+1); no acting | ✅ **Built 2026-07-15** (§A8 as-built). Builds on **Sense's P2-M3** + Sense's localization. Re-platforms onto the shared step engine in M2 (§A2.10), behavior-identical. |
+| **P4-M1** | **Gate + plan substrate** — the acting flag on the identity-keyed approval, the compiled/versioned/persisted `ExecutionPlan`, eligibility analysis at enable time, the acceptance record | §A2.2 · §A2.8 · §A2.9. Build slice 1 of §A2.12. |
+| **P4-M2** | **The run** — the shared step engine (guided + acting as two actor policies), act verbs with verify-or-hand-back, consent sheet, just-in-time inputs, narration, cross-nav resume | §A2.1 · §A2.3–A2.6 · §A2.10. Build slices 2–4. The end-user-facing heart of the phase, and the critical path. |
+| **P4-M3** | **Contractual shell** — destructive-step confirms, takeover/abort, `ExecutionRun` audit + Studio surfaces, the acceptance flow; gates `agent` entering `SELECTABLE_MODES` | §A2.7 · §A2.8. Build slice 5. A bad action is worse than a bad answer — this module is why founders can trust the toggle. |
 
-*(The **replay core** itself is a Phase-3 deliverable consumed here — not a Phase-4 module.)*
-
----
-
-## A5. Design questions to answer (carry into phase planning)
-
-> **Design input — steal their permissions UX wholesale for Phase 4.** Claude for Chrome ships a proven, user-tested control vocabulary that maps almost one-to-one onto Q1–Q4 below: **ask-before-acting vs. act-within-approved-boundaries** (two explicit modes), **per-action confirmation for irreversible steps** (forced even under "always allow"), **hard-blocked action categories** (payments, permanent deletions, credential entry — blocked regardless of permissions), **admin allowlists/blocklists**, and a **reviewable action history**. Adopt FlowBuddy analogues of each rather than inventing a new vocabulary — it shortens design, and citing the analogy borrows their published safety credibility. Full model + attack-success-rate numbers: [`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §3, §5.
-
-1. **Consent & visibility UX** — confirm once at the start, or before each step? Default posture: **visible guided execution** (highlight → act, the user watches each step) over invisible automation — slower, but it *builds* trust instead of asking for it. Where does "show me" end and "do it" begin in the UI?
-2. **Destructive steps** — submits / deletes / payments: always require a per-step confirmation? Founder-configurable per workflow? Are some step types (payment fields) excluded from autopilot outright?
-3. **Input values** — masked at capture → prompt per field at run time; when is prefilling from the user's question safe, and does the user confirm every prefill?
-4. **Abort / takeover / safe-stop semantics** — the user can stop at any moment; any verification failure = stop, explain what was and wasn't done, hand back control. **Never guess forward.** What does "what was already done" reporting look like mid-workflow?
-5. **Execution limits (the widget has no extension privileges)** — cross-origin iframes and OAuth popups **cannot be driven** from a page script; workflows containing such steps must be detected and marked ineligible (or downgraded to "show me") **at approval time, not discovered mid-run**. Full-page navigations unload the widget — the run plan must persist (e.g. sessionStorage) and **resume after re-mount** (the snippet is on every page). The recorder's R1/R8/R9 lessons map over almost one-to-one.
-6. **Eligibility & staleness** — how fresh must the green validation be (validated within N days? since the last detected app change?), and what happens when certification lapses mid-offer: hide the offer, or downgrade to "show me"?
-7. **The execution-plan source** — distilled `KnowledgeItem` steps deliberately **don't** carry locators/`expected_outcome` (those live in the raw `KnowledgeSource.manifest`). Compile a per-workflow **execution plan** (ordered steps: locators + route + expected outcome + input slots) at approval/validation time, rather than parsing the manifest at run time. Likely shared with Phase 3 (the validation runner needs the same artifact).
-8. **Per-user variance** — the founder records as an admin; an end-user's **role / plan / feature flags** may hide the very button the workflow clicks. Treat as a verification failure (safe-stop + explain), and consider surfacing "this action may need permission X" from repeated same-step failures.
-9. **Plan integrity & tenancy** — the widget fetches the plan over the public-key path: key-scoped, origin-checked, rate-limited like `/answer`; the plan must never contain steps from unapproved workflows (**no-leak, applied to execution**). Does the plan need server-side signing to prevent tampering in transit/storage?
-10. **Naming & positioning** — "Autopilot" vs "AI Agents mode" as the end-user-facing label; founder-facing toggle copy ("Allow FlowBuddy to perform this workflow for your users"); how the offer is phrased in-chat.
+*(The **replay core** is born inside M2 as the step engine and is extracted to a shared seam at the
+second consumer — §A3. It is no longer a Phase-3 deliverable consumed here.)*
 
 ---
 
-## A7. Data-model deltas (sketch, additive)
+## A5. Design questions — RESOLVED 2026-08-04 (each answer lives in §A2; this list is the index)
 
-- **`AutopilotApproval`** — the third audience flag, keyed `@@unique([sourceId, segmentIndex])` + `workspaceId` (mirrors `CopilotApproval`; survives reprocess). *(Or: generalize into one per-audience table alongside the V2 portal's `PortalPublication` (V2 · P0) — decide at build time.)*
-- **`ExecutionPlan`** — the compiled, replay-ready artifact per approved workflow: ordered steps `{ locators, route, expectedOutcome, inputSlots, destructive? }`; produced at approval/validation time; shared with the Phase-3 runner.
-- **`ExecutionRun`** — the audit log: workspace, workflow key, started/finished, steps completed, outcome (`completed | aborted | safe_stop` + reason), end-user feedback. Safe-stop reasons feed Phase-3 drift signals.
+> **Design input that shaped §A2 — their permissions UX, stolen as planned.** Claude for Chrome's
+> control vocabulary maps onto the design almost one-to-one: per-run consent + forced confirmation on
+> irreversible steps (§A2.3/§A2.7), hard-excluded categories via eligibility (§A2.9), admin control
+> via the per-workflow flag (§A2.8), and a reviewable action history via `ExecutionRun`. Citing the
+> analogy borrows their published safety credibility. Full model:
+> [`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §3, §5.
+
+1. ~~Consent & visibility UX~~ — **once at run start**, then a visible, narrated, watched run
+   (§A2.3, §A2.7). "Show me" ends and "do it" begins at the typed consent sheet.
+2. ~~Destructive steps~~ — **always a per-step typed confirm in v1**; founder-configurable automation
+   later; payment-iframe workflows are excluded outright by eligibility (§A2.7, §A2.9).
+3. ~~Input values~~ — the frozen mechanism (§A2.4): conversation values confirmed once at consent;
+   everything else asked just-in-time, batched per page; sensitive fields always point-and-type.
+4. ~~Abort / takeover / safe-stop~~ — Pause · Stop · take-over on the run card at all times; every
+   deviation verifies-or-hands-back; safe-stop reports what's done/what isn't and downgrades to
+   guided from the exact step (§A2.6, §A2.7). "What was already done" = the narration thread + the
+   `ExecutionRun` rows.
+5. ~~Execution limits~~ — **eligibility at enable time** (§A2.9): cross-origin frames, foreign-origin
+   navs, file inputs, unrecoverable locators all block the flag, never surprise a run. Full-page
+   navigations were already solved by the resume pattern (§A2.3).
+6. ~~Eligibility & staleness~~ — the plan is **pinned at consent** and TTL-bounded; liveness is
+   re-verified at every boundary call, so retirement mid-run safe-stops at the next boundary; a
+   lapsed certification hides the offer for NEW runs and never kills a consented run mid-step
+   (§A2.2, §A2.3).
+7. ~~The execution-plan source~~ — **compiled + persisted `ExecutionPlan` at enable time** (§A2.2);
+   never manifest-parsing at run time; shared with Phase 3 by extraction when its runner exists
+   (§A3).
+8. ~~Per-user variance~~ — a hidden button IS a verification failure: safe-stop + honest explanation
+   (§A2.6). Repeated same-step failures surface to the founder from `ExecutionRun` aggregation when
+   the drift loop lands (§A3.3).
+9. ~~Plan integrity & tenancy~~ — served key-scoped/origin-checked/rate-limited like everything else;
+   **no-leak holds structurally** (only live + actable workflows ever compile); the consent-time hash
+   pins content. Server-side signing deferred until real customer traffic — tampering in the user's
+   own browser harms only that user's own session, the same trust class as the sense plan (§A2.12).
+10. ~~Naming & positioning~~ — the founder-facing mode label stays **AI Agent** (the locked
+    vocabulary); end-user copy (offer pill, consent sheet, narration voice) is decided at build with
+    the consent sheet itself.
+
+---
+
+## A7. Data-model deltas (additive; exact columns at build — the schema owns them)
+
+*(Rewritten 2026-08-04: the original sketch keyed the flag on `(sourceId, segmentIndex)`, which
+predates workflow identity — positions are signals now, never keys.)*
+
+- **The acting flag rides the identity-keyed approval** — enabled/at/by beside the existing row, so
+  liveness (`inactiveReason: null`) comes with it and no eighth trust object exists. The eligibility
+  verdict is snapshotted with it (§A2.9).
+- **`ExecutionPlan`** — the compiled, replay-ready artifact per actable workflow (§A2.2): ordered
+  steps `{ verb, instruction, route pattern, locators, postRoute, outcome evidence, inputSlot?,
+  destructive? }` + a content hash; compiled at enable time, re-verified on reprocess, pinned at
+  consent.
+- **`ExecutionRun`** — the audit row (§A2.8): consent moment, plan hash, per-step outcomes, input
+  slots + their source (never values), outcome `completed | aborted | safe_stop` (+ reason, step).
+  Safe-stop reasons feed Phase-3 drift signals.
+- **The acceptance record** — workspace, who, when, terms version (§7 Q4); prerequisite to `agent`
+  becoming selectable.
 
 ---
 
@@ -437,6 +690,11 @@ Self-validation (Phase 3) and Autopilot are the **same core capability — workf
 **What shipped:** under a positional answer the widget offers **"Walk me through it"**; on the user's click the chat panel closes, a compact **step card** (shadow-root overlay, docked at the launcher corner) shows *instruction k/N*, the step's element gets a **sticky spotlight** (the P2-M3 highlight minus the 6s auto-clear), and the widget **observes** the user completing each step — through the whole remaining workflow, **surviving full-page navigations**. **Advancement is manual-only (user decision 2026-07-15): detection ACKNOWLEDGES — "Detected ✓ — hit Next to continue" — and the pointer moves forward exclusively on the user's Next click**, including after a recorded navigation (the card resumes on the new page with the step acknowledged, waiting for Next). The user performs every action; the widget never clicks, fills, or navigates. Config-gated per workspace (`copilotWalkthrough`, requires Sense), served via `GET /v1/copilot/config`. **Default flipped to ON for new workspaces 2026-07-27** alongside the Copilot-mode default: it was OFF because a fixed rule offered a walkthrough under *every* positional answer, but in Copilot mode the assistant decides per message whether the offer helps, so the switch became a permission rather than a rule. Still zero-acting; the founder switch still wins; existing workspaces untouched.
 
 **Posture — user-initiated, zero-acting, session-scoped observation.** Observers attach on the offer click and detach on done/exit/TTL: read-only re-resolution of the current step's element, a document capture-phase click listener used solely to test "was that the highlighted element?", and `location.pathname` (popstate/hashchange + a 400ms poll — no history monkey-patching). Nothing leaves the page except run analytics (workflow key + step numbers + auto/manual + outcome — never page content, values, or selectors). This deliberately extends Phase 2's ask-time-only glance into a **bounded session the user explicitly asked for**; outside an active walkthrough nothing observes and nothing is fetched at page load.
+
+**Re-platform note (D12, 2026-08-04):** the run machinery described here is being extracted into the
+shared step engine (§A2.10), with guided mode as one of its two actor policies. Everything
+user-visible above must survive **identically** — the E2E legs pin it — and D4's manual-only
+advancement remains guided mode's law regardless of what the acting policy does.
 
 **Completion detection (evidence or nothing — and detection only ever acknowledges; ALL forward
 motion is the user's Next). State-aware since the first E2E (2026-07-15): every verdict consults
@@ -581,6 +839,11 @@ goal; it is the agent picking a tool, turn by turn. The module's whole job is ab
 
 ### P5-M4 — Goal-driven execution orchestration (Tier 3's brain; consumes P4-M2)
 
+> **Its single-workflow v1 is absorbed by the acting layer** (§A2 — per-goal consent, mid-run input
+> prompting, narration and safe-stop all ship there, exactly as locked below). What remains of this
+> module is **chaining** — goal → multiple workflows, cross-workflow handoffs, partial-failure
+> semantics — deferred by D12's single-workflow-per-run scope.
+
 - **Per-goal consent:** the goal, the workflow chain, and every value already known from the conversation are confirmed ONCE before anything runs. Consent is about *what will happen*; it does not require every input upfront. (The one standing exception to hands-off: destructive steps — see Q3.)
 - **Inputs — mid-run prompting is the base mechanism (locked 2026-07-16):** when the driver reaches an input step whose value isn't known, it pauses and asks **in the chat** (the narration channel doubles as the prompt channel), then continues — no exhaustive upfront slot enumeration, and conditional fields the recording never showed are handled naturally. Values the conversation already supplied are **never re-asked**; known upcoming inputs may be *offered* at confirmation as a convenience ("give them now or as we go"). An unanswered mid-run prompt times out into a safe-stop with the honest what's-done/what's-left report.
 - **Chaining:** a goal may span multiple approved workflows ("get my chatbot live" = create project → add sources → build → embed). Still grounded — a chain of approved workflows is not free-form browsing — but chaining is new scope: goal→plan mapping, cross-workflow handoffs, partial-failure semantics.
@@ -608,14 +871,14 @@ goal; it is the agent picking a tool, turn by turn. The module's whole job is ab
 
 1. ~~**Condensation gating**~~ — **CLOSED 2026-07-26 by dropping the hop** (P5-M0 cut 3). Continuity bias took the common case deterministically and for free, and a topic-shifting follow-up is what the agent's own search covers. Reopen only if a measured case survives both.
 2. ~~**Panel reopen after navigation**~~ — **✅ RESOLVED 2026-07-26 (built):** the thread always restores; the panel re-opens itself only on a thread touched within the last 2 minutes, and never when a walkthrough is resuming. Continuity where it was clearly intentional; a half-hour-old session must not pop the copilot open on a page the user navigated to for their own reasons — on someone else's product.
-3. **Destructive steps under hands-off Tier 3** — always pause-and-confirm mid-run (recommended: the one exception to no-intervention) vs. founder-flagged fully-automatable workflows?
+3. ~~**Destructive steps under hands-off Tier 3**~~ — **RESOLVED 2026-08-04 (D12): always pause-and-confirm in v1**; founder-configurable automation later. §A2.7.
 4. **Tier recommendation** — copilot recommends one tier, user picks (recommended) vs. user always chooses unprompted?
-5. **Chaining scope for Tier 3 v1** — single-workflow goals first, chains later (recommended) vs. chains from day one?
+5. ~~**Chaining scope for Tier 3 v1**~~ — **RESOLVED 2026-08-04 (D12): single-workflow goals first**; chaining is this module's remaining scope. §A2.12.
 6. **`CopilotQuery.goal` analytics column** — now (recommended) or defer?
 7. **Profile authoring shape** — structured fields + free text (recommended) vs. one free-text box?
 8. **Profile retrieval slot** — overview item always ships as background + rest compete (recommended) vs. pure competition?
 9. **Clarifying questions** — max one at a time, only when the KB supports both readings (recommended)?
-10. **Tier-3 certification bar** — require Phase-3 green validation before any hands-off run (safest) vs. interim signals (recent successful walkthroughs/runs) until P3 lands?
+10. ~~**Tier-3 certification bar**~~ — **RESOLVED 2026-08-04: interim signals with a mandatory eligibility floor** (= §7 Q2); Phase-3 validation slots into the same pluggable input when it lands. §A2.9.
 
 ## G6. Risks
 

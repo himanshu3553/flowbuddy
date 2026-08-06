@@ -3,8 +3,13 @@ import { SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
+  attachOutcomeMarkers,
   buildWorkflowKB,
+  compileExecutionPlan,
   distilledStepText,
+  hashSteps,
+  markerSnapshotRefs,
+  SNAPSHOT_MAX_CHARS,
   embedTexts,
   matchPageIdentities,
   matchWorkflowIdentities,
@@ -455,6 +460,76 @@ const worker = new Worker(
           { sessionId, component: 'pages', err: e instanceof Error ? e.message : String(e) },
           'product page sync failed — recording proceeds without page updates',
         );
+      }
+
+      // ── P4-M1: keep compiled execution plans honest across the reprocess ────────────────────
+      // Only workflows the founder enabled acting for are touched. Identity was settled by content
+      // above; this asks the SECOND question — is the surviving content still ELIGIBLE to run?
+      // Fail-closed like everything else here: a workflow that lost its content, or whose new
+      // steps no longer compile clean, drops to `needs_review` and stops being runnable until a
+      // human looks. One that recompiles clean gets its plan (and consent-pin hash) refreshed
+      // silently — the same contract as the approval itself surviving a content match. A parked
+      // (`needs_review`) flag is NEVER silently re-enabled by a clean compile: the founder's gate
+      // stands until they flip it, and the enable action recompiles for itself anyway.
+      const flagged = await prisma.copilotApproval.findMany({
+        where: { workflowId: { in: existingWorkflowIds }, executeState: { not: null } },
+        select: { workflowId: true },
+      });
+      if (flagged.length > 0) {
+        const distilledById = new Map(identified.map((x) => [x.workflowId, x.wf]));
+        for (const appr of flagged) {
+          const wf = distilledById.get(appr.workflowId);
+          const srcSteps = wf
+            ? wf.steps.map((s) => ({
+                instruction: s.instruction,
+                route: s.route,
+                keyEventId: s.keyEventId,
+                screenshotFile: s.screenshotFile,
+              }))
+            : [];
+          const compiled = wf ? compileExecutionPlan({ steps: srcSteps, events: manifest.events }) : null;
+          if (compiled?.eligible) {
+            // Part 2 — refresh the outcome markers from the NEW recording's snapshots (same
+            // best-effort rule as the enable action: unreadable snapshot ⇒ step compiles bare).
+            const snapshots = new Map<number, { pre: string; post: string }>();
+            for (const ref of markerSnapshotRefs(compiled.steps, srcSteps, manifest.events)) {
+              if (!ref.pre || !ref.post) continue;
+              const [pre, post] = await Promise.all([getArtifact(ref.pre), getArtifact(ref.post)]);
+              if (!pre || !post || pre.length > SNAPSHOT_MAX_CHARS || post.length > SNAPSHOT_MAX_CHARS) continue;
+              snapshots.set(ref.index, { pre: pre.toString('utf8'), post: post.toString('utf8') });
+            }
+            const finalSteps = attachOutcomeMarkers(compiled.steps, snapshots);
+            const finalHash = hashSteps(finalSteps);
+            await prisma.executionPlan.upsert({
+              where: { workflowId: appr.workflowId },
+              create: {
+                workspaceId: rec.workspaceId,
+                workflowId: appr.workflowId,
+                planHash: finalHash,
+                stepCount: finalSteps.length,
+                steps: finalSteps as object,
+              },
+              update: {
+                planHash: finalHash,
+                stepCount: finalSteps.length,
+                steps: finalSteps as object,
+              },
+            });
+          } else {
+            await prisma.copilotApproval.update({
+              where: { workflowId: appr.workflowId },
+              data: { executeState: 'needs_review' },
+            });
+            log.warn(
+              {
+                sessionId,
+                workflowId: appr.workflowId,
+                issues: compiled ? compiled.issues.map((i) => i.code) : ['workflow-detached'],
+              },
+              'workflow no longer eligible to run after reprocess — acting parked for re-review',
+            );
+          }
+        }
       }
 
       // A degraded-but-successful build (e.g. narration too long to transcribe, or an embedding

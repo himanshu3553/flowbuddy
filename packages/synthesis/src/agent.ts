@@ -59,6 +59,18 @@ export interface AgentInput {
    *  Optional: the engine has no logger, and reporting is not the answer path's job. Without it
    *  a decline is indistinguishable from a decline that searched three times and found nothing. */
   onLoop?: (stats: AnswerLoopResult) => void;
+  /**
+   * ACTING (mode 3, agent.md §A2.3) — present ONLY when the workspace's mode may act AND runnable
+   * workflows exist; absent everywhere else, so a read-only workspace has no tool to be talked out
+   * of (D8: absence, not refusal). The caller validates the key against the runnable set and
+   * captures the offer server-side; the model only ever ATTACHES an offer — the user's click on
+   * the typed affordance is the consent, never the model's words. The floor never receives this.
+   */
+  offerRun?: {
+    /** "key — Title" lines for the tool description, so the model offers only what is real. */
+    runnable: string;
+    offer: (workflowKey: string, inputs: Record<string, string>) => Promise<string>;
+  };
   apiKey: string;
   model: string;
 }
@@ -80,7 +92,7 @@ export interface AgentInput {
  * that prompt spent months solving precisely this problem — how to describe background knowledge and
  * related workflows to a model that cannot go and fetch them.
  */
-const agentSystem = (hasTools: boolean): string => `You are an in-app support copilot embedded inside a SaaS product. You help the user with what they are doing RIGHT NOW, in one continuous conversation.
+const agentSystem = (hasTools: boolean, canRun = false): string => `You are an in-app support copilot embedded inside a SaaS product. You help the user with what they are doing RIGHT NOW, in one continuous conversation.
 
 Answer using ONLY the KNOWLEDGE ITEMS you are given${hasTools ? ' or that your tools return' : ''} — they were captured from THIS product's own recordings and human-approved for you to use.
 
@@ -98,7 +110,17 @@ Strict rules:
 ${hasTools ? `YOUR TOOLS — reach for them only when they would change your answer (each call costs the workspace owner money and makes the user wait):
 - search_knowledge: search the approved knowledge with YOUR OWN wording. Use it when the items you were given don't cover the question but the product plausibly does — especially on follow-ups that shift topic ("what about annual plans?"), where the user's literal words are a poor search query. Re-search with different words rather than declining on the first miss.
 - get_workflow: the FULL ordered steps of one workflow. Use it when you need the whole procedure — where a step sits, what comes after, what the user still has left — rather than the loose fragments retrieval returned.
-Do not call a tool to confirm something you already know from the items in front of you. If two calls have not helped, answer with what you have or decline honestly.` : `WHAT YOU HAVE THIS TURN is exactly the knowledge items below — there is nothing further to look up. Answer from them or decline honestly; never say you will go and check.`}
+Do not call a tool to confirm something you already know from the items in front of you. If two calls have not helped, answer with what you have or decline honestly.` : `WHAT YOU HAVE THIS TURN is exactly the knowledge items below — there is nothing further to look up. Answer from them or decline honestly; never say you will go and check.`}${
+  hasTools && canRun
+    ? `
+
+RUNNING A WORKFLOW FOR THE USER: this workspace allows you to COMPLETE some workflows on the user's behalf, with their consent.
+- offer_run attaches a "run it for me" button for ONE runnable workflow. Call it when the user asks you to do the task ("do it for me", "can you set this up?"), when they accept your suggestion — or, briefly, when what they want is the OUTCOME of a runnable workflow. Only the keys listed in the tool are runnable; for anything else, guide as usual and never mention that running exists.
+- The button is the user's consent. NEVER claim you did, will do, or are doing anything yourself — after calling the tool, answer as usual and say the button below starts it, step by step, with them watching.
+- If the conversation already contains values the workflow will need (a name, a website), pass them as inputs keyed by step index — the user confirms them before anything runs. NEVER pass passwords, card numbers, or anything sensitive: those are always typed by the user directly into the app, never through you.
+- Offering never replaces answering: give the grounded answer or guidance as usual; the offer is the shortcut on top.`
+    : ''
+}
 
 ASKING THE USER A QUESTION is a legitimate move, not a failure:
 - When the question is genuinely ambiguous AND the approved knowledge supports more than one reading, ask ONE short clarifying question instead of guessing ("Did you mean cancelling your subscription, or a pending invite?").
@@ -254,9 +276,62 @@ async function runAgent(input: AgentInput, withTools: boolean): Promise<CopilotA
         };
       },
     },
+    // ACTING — bound only when the caller injected `offerRun` (workspace mode permits acting AND
+    // runnable workflows exist). Everywhere else this tool does not exist, which is the D8 rule
+    // made structural: a read-only workspace's model cannot be talked into an offer it cannot see.
+    ...(input.offerRun
+      ? [
+          {
+            name: 'offer_run',
+            spec: {
+              type: 'function' as const,
+              name: 'offer_run',
+              description: `Attach a "run it for me" offer for ONE workflow — the user's click on the offered button is their consent to run it step by step. Runnable right now:\n${input.offerRun.runnable}`,
+              parameters: {
+                type: 'object',
+                properties: {
+                  workflowKey: {
+                    type: 'string',
+                    description: 'The runnable workflow key (sourceId:segmentIndex) from the list above.',
+                  },
+                  inputs: {
+                    type: 'object',
+                    description:
+                      'Values the conversation already supplied, keyed by step index, e.g. {"3": "Acme"}. Optional. Never sensitive values.',
+                    additionalProperties: { type: 'string' },
+                  },
+                },
+                required: ['workflowKey'],
+                additionalProperties: false,
+              },
+              strict: false,
+            },
+            run: async (rawArgs: string) => {
+              const key = readStringArg(rawArgs, 'workflowKey');
+              if (!key) return { reply: 'No workflowKey supplied.' };
+              const inputs: Record<string, string> = {};
+              try {
+                const parsed = JSON.parse(rawArgs || '{}') as { inputs?: unknown };
+                if (parsed.inputs && typeof parsed.inputs === 'object') {
+                  for (const [k, v] of Object.entries(parsed.inputs as Record<string, unknown>)) {
+                    if (typeof v === 'string' && Object.keys(inputs).length < 12) inputs[k] = v.slice(0, 200);
+                  }
+                }
+              } catch {
+                /* malformed inputs — offer with none */
+              }
+              return { reply: await input.offerRun!.offer(key, inputs) };
+            },
+          } satisfies EngineTool,
+        ]
+      : []),
   ];
 
-  const messages: OpenAI.Responses.ResponseInput = [{ role: 'system', content: agentSystem(withTools) }];
+  const messages: OpenAI.Responses.ResponseInput = [
+    // The acting section exists only when the tool does (the floor's lesson, applied forward: a
+    // prompt must never describe a capability that is not bound this request).
+    { role: 'system', content: agentSystem(withTools, withTools && Boolean(input.offerRun)) },
+  ];
   for (const t of input.history ?? []) {
     if (t.role === 'user' || t.role === 'assistant') messages.push({ role: t.role, content: t.content });
   }

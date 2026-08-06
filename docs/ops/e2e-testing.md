@@ -528,6 +528,36 @@ dropped as soon as another matches the URL exactly.
 scorer has no runner at all, so its behaviour is only ever observed here. Treat a surprise as the
 scorer's, not the fingerprint's.
 
+## 11c. The acting run — AI Agent mode (P4)
+
+**Prerequisites.** Studio → Copilot → Settings: switch the workspace to **AI Agent** (the acceptance
+dialog appears once per terms version; accepting writes the `AgentAcceptance` row). On the target
+workflow's page, flip **"Agent may run it"** — enabling compiles the `ExecutionPlan` (with outcome
+markers for the last + destructive steps) or refuses with per-step reasons. Rebuild + re-copy BOTH
+widget bundles into the test app after widget changes.
+
+**The happy path.** In the embedded chat, ask for the outcome in your own words ("create an account
+for me — use the name John"). Expect, in order: a grounded answer + a **Run it for me** pill → the
+consent sheet (what it does · where it starts · the values it will use from the chat · what it will
+ask · confirm-first and do-it-yourself counts) → on **Run it**, the panel stays open and narrates
+while the agent clicks and navigates; missing values are asked in the chat one field at a time (your
+reply IS the value — the "Answering:" chip shows above the composer); **sensitive fields are always
+typed by you into the app's own field**; destructive steps pause for **Confirm**; file steps pause
+for you. "Done" appears only after the final step's outcome verifies.
+
+**The honesty legs — each must FAIL to complete:**
+- **Rejection:** run signup with an already-registered email. The press happens, the app's banner
+  appears, and the run must NOT say Done — it reads the banner's own words into the chat and waits.
+- **Login wall:** start a dashboard workflow while signed out. ONE navigation attempt, then "you may
+  need to sign in first — I'll pick it up when you arrive"; signing in and visiting the page resumes
+  the run by itself. No redirect loop.
+- **Takeover / Stop:** always available (docked strip while the chat is open; floating card when
+  closed). Takeover converts the rest into a guided walkthrough at the same step.
+
+**The record.** Every consented run = one `ExecutionRun` row (per-step outcomes + input SOURCES,
+never values) — visible in Analytics → **Agent runs**, with safe-stops styled as the alarm they are.
+A Copilot-mode workspace must see NONE of this: no pill, 404s on the acting endpoints, no section.
+
 ## 12. Analytics & coverage gaps (the feedback loop)
 
 1. Studio → **Copilot** page → **Copilot activity**: shows total questions, % answered, 👍/👎 counts, and the recent Q&A list (each tagged answered/declined). Confirm your Part-10 questions appear with correct tags + feedback.

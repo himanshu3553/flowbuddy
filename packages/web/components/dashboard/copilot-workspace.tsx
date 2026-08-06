@@ -25,6 +25,7 @@ import {
 } from '@/lib/copilot-appearance';
 // Subpath import — the package barrel can't be VALUE-imported from web (see lib/copilot-settings.ts).
 import {
+  AGENT_TERMS_VERSION,
   MODE_LABELS,
   SELECTABLE_MODES,
   COPILOT_MODES,
@@ -175,17 +176,43 @@ export function CopilotWorkspace({
   }
   /** Switch operating mode. Optimistic like the other settings, and reverted on failure so the
    *  radio can never show a capability the workspace doesn't actually have. */
+  // P4-M3 — the acceptance dialog's target: which mode is waiting on the founder's explicit accept.
+  const [acceptMode, setAcceptMode] = useState<CopilotMode | null>(null);
+
   function chooseMode(next: CopilotMode) {
     if (next === modeValue) return;
     const previous = modeValue;
     setModeValue(next);
     start(async () => {
       try {
-        await setCopilotMode(next);
+        const result = await setCopilotMode(next);
+        if (result.needsAcceptance) {
+          // Nothing changed server-side — the dialog now carries the decision (agent.md §7 Q4:
+          // acting is the contractual line, and acceptance must be explicit, never a side effect).
+          setModeValue(previous);
+          setAcceptMode(next);
+          return;
+        }
         toast.success(`Switched to ${MODE_LABELS[next].name}. Reload any embedded pages to pick it up.`);
         router.refresh();
       } catch {
         setModeValue(previous);
+        toast.error('Could not switch mode.');
+      }
+    });
+  }
+
+  function acceptAndSwitch() {
+    const next = acceptMode;
+    if (!next) return;
+    start(async () => {
+      try {
+        await setCopilotMode(next, { acceptTerms: true });
+        setAcceptMode(null);
+        setModeValue(next);
+        toast.success(`${MODE_LABELS[next].name} is on. Reload any embedded pages to pick it up.`);
+        router.refresh();
+      } catch {
         toast.error('Could not switch mode.');
       }
     });
@@ -697,6 +724,54 @@ export function CopilotWorkspace({
               })}
             </div>
           </section>
+
+          {/* P4-M3 — the acceptance dialog: acting is the contractual line, so turning it on is an
+              explicit, versioned, recorded decision — never a side effect of clicking a mode row.
+              The accept click writes the AgentAcceptance row and flips the mode in one transaction. */}
+          <Dialog open={acceptMode !== null} onOpenChange={(o) => !o && setAcceptMode(null)}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Turn on {acceptMode ? MODE_LABELS[acceptMode].name : 'AI Agent'} mode</DialogTitle>
+                <DialogDescription>
+                  This lets FlowBuddy complete workflows for your users. Read what that means, then
+                  accept to turn it on.
+                </DialogDescription>
+              </DialogHeader>
+              <ul className="list-disc space-y-1.5 pl-5 text-[12.5px] leading-relaxed text-secondary-foreground">
+                <li>
+                  It only ever runs workflows you approved <em>and</em> marked{' '}
+                  <span className="font-medium">“Agent may run it”</span> — nothing else, and never
+                  free-form browsing.
+                </li>
+                <li>
+                  Every run starts with the user’s own consent, happens visibly step by step, pauses
+                  for every input (sensitive values are typed straight into your app, never through
+                  FlowBuddy), and asks again before any step that commits something.
+                </li>
+                <li>
+                  Anything it cannot verify it hands back to the user and says so — it never guesses
+                  forward. Every run is recorded in your audit log (Analytics → Agent runs).
+                </li>
+                <li>
+                  You choose — and can change at any time — which workflows are runnable, and you
+                  can switch the whole workspace back to Copilot whenever you want.
+                </li>
+              </ul>
+              <p className="text-[11px] text-muted-foreground">
+                By accepting, you authorize FlowBuddy to act in your product on your users’ behalf
+                under these controls. Your acceptance (who, when, terms {AGENT_TERMS_VERSION}) is
+                recorded.
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" disabled={pending} onClick={() => setAcceptMode(null)}>
+                  Cancel
+                </Button>
+                <Button disabled={pending} onClick={acceptAndSwitch}>
+                  I accept — turn it on
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <section className="rounded-card border bg-card p-5 shadow-card">
             <h3 className="text-[13.5px] font-bold text-ink">Grounding &amp; trust</h3>

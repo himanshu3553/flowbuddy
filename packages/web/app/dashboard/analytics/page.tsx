@@ -14,7 +14,9 @@ import {
   getRecentDeclines,
   getStepFriction,
   getAnswerPathStats,
+  getAgentRuns,
 } from '@/lib/analytics';
+import { relativeTime } from '@/lib/recordings';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { MiniBarChart, ChartLegend } from '@/components/dashboard/mini-bar-chart';
@@ -37,13 +39,14 @@ export default async function AnalyticsPage({
   const days = parseRange((await searchParams).range);
   const label = rangeLabel(days).toLowerCase();
 
-  const [metrics, topWorkflows, gaps, declines, friction, answerPath] = await Promise.all([
+  const [metrics, topWorkflows, gaps, declines, friction, answerPath, agentRuns] = await Promise.all([
     getCopilotMetrics(wsId, days),
     getTopWorkflowsByCitations(wsId, days),
     getCoverageGapsRanked(wsId),
     getRecentDeclines(wsId),
     getStepFriction(wsId, days),
     getAnswerPathStats(wsId, days),
+    getAgentRuns(wsId, days),
   ]);
 
   const rangeControl = <AnalyticsRange value={days} options={RANGE_OPTIONS} />;
@@ -239,6 +242,66 @@ export default async function AnalyticsPage({
               the aside because of one row: `floor` only appears when something upstream FAILED, and
               nothing else in the product — or in any log a founder reads — reports that. */}
           <AnswerPath stats={answerPath} label={label} />
+
+          {/* P4-M3 — the acting audit, readable. Rendered only once a run exists: a Copilot-mode
+              workspace never sees an empty promise of a feature it hasn't turned on. `safe_stop`
+              is the alarm-shaped row — a run that could not verify a step on a real user's page,
+              which is production drift telemetry arriving ahead of Phase 3's sandbox half. */}
+          {agentRuns.counts.total > 0 && (
+            <section className="rounded-card border bg-card p-5 shadow-card">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <div>
+                  <h3 className="text-[13.5px] font-bold text-ink">Agent runs</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Workflows completed for your users in the {label} — every run consented and
+                    audited.
+                  </p>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {agentRuns.counts.total} run{agentRuns.counts.total === 1 ? '' : 's'} ·{' '}
+                  {agentRuns.counts.completed} completed
+                  {agentRuns.counts.safeStop > 0 && (
+                    <span className="font-medium text-danger-text">
+                      {' '}
+                      · {agentRuns.counts.safeStop} safe-stopped
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="mt-3 divide-y">
+                {agentRuns.recent.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{r.title}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        step {r.lastStep}/{r.totalSteps} · {relativeTime(r.consentAt)}
+                        {r.safeStopReason ? ` — ${r.safeStopReason}` : ''}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      tone={
+                        r.outcome === 'completed'
+                          ? 'success'
+                          : r.outcome === 'safe_stop'
+                            ? 'danger'
+                            : r.outcome === 'active'
+                              ? 'pending'
+                              : 'neutral'
+                      }
+                    >
+                      {r.outcome === 'completed'
+                        ? 'Completed'
+                        : r.outcome === 'safe_stop'
+                          ? 'Safe stop'
+                          : r.outcome === 'active'
+                            ? 'In progress'
+                            : 'Stopped'}
+                    </StatusBadge>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           </div>
 
           <aside className="min-w-0 space-y-6">
