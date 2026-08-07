@@ -33,18 +33,23 @@ empty / loading / error states.
 |---|---|---|
 | **Home** | Steady-state dashboard: approved-workflow count, recent answer metrics, open coverage gaps ("record this next"). | `getCopilotMetrics` + `listApprovedWorkflows` + coverage gaps |
 | **Recordings** | List of `KnowledgeSource`s with status (`recording`/`uploaded`/`processing`/`ready`/`error`). `recording` = artifacts still arriving (the row exists from the first upload, before Stop) and renders as a pending **"Recording"** badge inside the in-flight filter bucket — it has its own branch in `recordingStatusBadge` precisely so a live capture is never shown as a red "Failed". | reads `KnowledgeSource` |
-| **Knowledge Base** | The workflows of a recording (distilled steps grouped by `segmentIndex`) **with the approve toggle** — the trust gate. | `listCandidates` + `setCopilotApproval` |
+| **Knowledge Base** | The workflows of a recording (distilled steps grouped by `segmentIndex`) **with the approve toggle** (the trust gate) and, on a workflow's own page, the **AI Agent** card that decides whether the agent may RUN it. | `listCandidates` + `setCopilotApproval` + the acting enable/disable action |
 | **Copilot** | The embed snippet (with the public key), allowed-origins config, and a live widget preview. | `getOrCreateCopilotKey` + settings actions |
-| **Analytics** | Answered/declined trend, helpful %, coverage gaps, step friction, top workflows — plus **Questions**, the full searchable log at `analytics/questions`. | `getCopilotMetrics` + `analytics.ts` |
+| **Analytics** | Answered/declined trend, helpful %, coverage gaps, step friction, top workflows, **Agent runs** (outcomes and safe-stops) — plus **Questions**, the full searchable log at `analytics/questions`. | `getCopilotMetrics` + `analytics.ts` + the run-audit reads |
 | **Settings** | Account / workspace / token management. | `auth`, `tokens` |
 
 **Copilot → Settings** opens with **How your assistant works** — the operating-mode
-selector (Copilot · AI Agent, the second shown but locked). Below it the five ability
-switches (Sense · show-me · guided walkthrough · Reason · image tier) sit inside a folded
+selector (Copilot · AI Agent). **Selecting AI Agent opens an acceptance dialog**: acting is the
+contractual line, so the founder's explicit accept of the current terms version is what turns it on,
+and the accept writes an acceptance row and flips the mode in one transaction. Below it the five
+ability switches (Sense · show-me · guided walkthrough · Reason · image tier) sit inside a folded
 `<details>` **"What it may do on your page / Advanced"**. The split is deliberate: the mode says WHO
-decides how users get helped, the switches say WHAT the assistant is permitted to touch. Selecting
-an unbuilt mode is blocked in the UI **and** re-checked in the server action — acting must never be
-reachable by a hand-crafted form post.
+decides how users get helped, the switches say WHAT the assistant is permitted to touch. The
+acceptance is enforced **server-side**, not just in the dialog: with no row for the current terms
+version the action returns *needs acceptance* rather than switching, and the founder's accept writes
+the row and flips the mode in one transaction (a workspace that already accepted moves both ways
+freely) — so acting can never be acquired by a hand-crafted form post, and "who turned this on,
+when, against which terms" is answered by a row rather than by a toggle's state.
 
 A **new workspace arrives on Copilot** with show-me and guided walkthrough already permitted, so this
 screen is a place to *change* the assistant rather than to switch it on. The picker badges the stored
@@ -111,18 +116,21 @@ file: this same unit becomes a portal help article under workflows-as-articles �
 
 ### 4.4 The approval gate ([`copilot-actions.ts`](../../packages/web/lib/copilot-actions.ts)) ⭐
 
-`setCopilotApproval({ sourceId, segmentIndex, segmentTitle?, approved })`:
+`setCopilotApproval({ workflowId, segmentTitle?, approved })`:
 
 1. resolves the workspace (auth),
-2. **ownership check** — the workflow's recording must belong to this workspace (else throw),
-3. **approve** → `upsert` a `CopilotApproval` row keyed by `(sourceId, segmentIndex)` (recording who
-   approved + the title snapshot); **un-approve** → `deleteMany` that row,
+2. **ownership and identity resolve in ONE read** — the `Workflow` row *is* the thing being approved
+   and it carries the workspace, so there is nothing left to resolve from a position (a foreign or
+   unknown workflow throws),
+3. **approve** → `upsert` by that identity, recording who approved, the title snapshot, and
+   **clearing any retirement** — re-approving IS the founder saying it should answer again;
+   **un-approve** → `deleteMany` that row,
 4. `revalidatePath` the KB + dashboard pages.
 
 This is the **producer** of the trust-gate contract the [copilot retrieval](copilot.md) enforces.
-It's keyed by the **workflow coordinate, not item ids**, precisely so it survives the worker's
-delete-and-recreate of items — the rationale is in [knowledge-base.md](knowledge-base.md) §6 and
-[connections.md](connections.md) §5.
+It names a **durable workflow — not item ids, and not a position**, precisely so it survives the
+worker's delete-and-recreate of items and cannot be walked onto content nobody reviewed; the
+rationale is in [knowledge-base.md](knowledge-base.md) §6 and [connections.md](connections.md) §5.
 
 The read side, [`copilot-approvals.ts`](../../packages/web/lib/copilot-approvals.ts), provides
 `approvedSegmentKeys` / `listApprovedWorkflows` — Studio-UI bookkeeping only (candidate lists,
@@ -130,7 +138,22 @@ counts). The retrieval-side enforcement moved to the shared
 [`synthesis/retrieval.ts`](../../packages/synthesis/src/retrieval.ts); the old
 `listApprovedItems` mirror was retired, and the Studio copilot tester now IS the real widget (Approach B) — it exercises the exact public `/answer` route end-users hit.
 
-### 4.5 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
+### 4.5 Letting the agent run a workflow
+
+A workflow's page carries an **AI Agent** card, and its switch is the second, narrower gate: approval
+lets the copilot ANSWER from this workflow, this lets the agent RUN it. Flipping it on **compiles the
+execution plan and judges eligibility on the spot**.
+
+**A refusal is a RESULT, not an error** — the issues are the content of the card, in plain words: a
+step with no recoverable anchor, a cross-origin frame, a foreign-origin navigation, an unsupported
+verb, or navigation into a specific record. **File-upload steps do not disqualify a workflow**: a
+browser opens a picker only on a trusted gesture, so they compile as the user's own step and the
+enable summary simply counts them.
+
+Enabling writes the flag **and** the plan in one transaction, so *"enabled ⇒ a plan exists"* holds by
+construction; disabling deletes the plan. The card also carries that workflow's run summary.
+
+### 4.6 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 
 `getOrCreateCopilotKey(workspaceId)` returns the workspace's **public** embed key, minting one
 (`pk_<48 hex>`) on first use, plus the `allowedOrigins` list. The Copilot page renders the
@@ -144,7 +167,7 @@ The settings actions let the operator edit the origin allowlist (enforced server
 [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts); the Studio origin itself is exempt via
 `FLOWBUDDY_STUDIO_URL` so the tester survives a locked-down allowlist).
 
-### 4.6 Analytics ([`copilot-metrics.ts`](../../packages/web/lib/copilot-metrics.ts))
+### 4.7 Analytics ([`copilot-metrics.ts`](../../packages/web/lib/copilot-metrics.ts))
 
 `getCopilotMetrics(workspaceId)` reads `CopilotQuery` and computes, over the **last 7 days** (+ an
 all-time total to pick first-run vs. populated states): answered/declined counts and %, thumbs
@@ -171,6 +194,11 @@ would understate every engine on the one surface whose job is to be believed. Ro
 2026-08-02 carry `chatbot` for what is now `floor`; they are folded together at read time rather
 than back-filled, because they are the old name for the same engine, not wrong data.
 
+**Agent runs.** Recent consented runs with their outcomes, and **safe-stops rendered as the alarm
+they are** rather than as a row in a distribution — the same discipline as a run of floor-engine
+answers: a safe-stop means the agent refused to guess in front of a customer, and nothing else in the
+product surfaces that.
+
 **The question log (`/dashboard/analytics/questions`).** Every aggregate above answers
 *"how is the copilot doing?"*; this answers *"what did people actually ask?"* — the raw
 `CopilotQuery` list, newest first, 25 a page. Search matches the question text **or** the page path
@@ -185,7 +213,7 @@ change.** No export yet; the in-UI search was the actual need.
 > **Counting rule for anything reading `QueryCitation`: count distinct `queryId`, never rows.**
 > See [data.md §15](data.md).
 
-### 4.7 Coverage gaps ("record this next")
+### 4.8 Coverage gaps ("record this next")
 
 When the copilot declines, the API logs a `CoverageGap(source: 'copilot')`. Studio surfaces open gaps
 on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions.ts) marks one
@@ -198,8 +226,8 @@ on Home/Analytics; [`resolveCoverageGap`](../../packages/web/lib/copilot-actions
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `CopilotApproval`, `CopilotQuery`, `QueryCitation`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status`, **`KnowledgeSource`** (recording **rename `title` / delete / re-process** → status) |
-| **Object storage (R2/MinIO)** | — | **deletes** a recording's artifact prefix on delete (`lib/storage` `deleteSessionPrefix`) |
+| **Postgres** | `User`/`Session` (auth), `Workspace`, `KnowledgeSource`, `KnowledgeItem`, `Workflow`, `CopilotApproval`, `ExecutionPlan`, `ExecutionRun`, `CopilotQuery`, `QueryCitation`, `CoverageGap` | `User`+`Workspace` (signup), `ApiToken` (mint), `CopilotApproval` (approve/un-approve), the approval's **acting flag + the compiled `ExecutionPlan`** (enable/disable acting, one transaction), **`AgentAcceptance`** (turning on AI Agent mode), `Workspace.copilotPublicKey`/`copilotAllowedOrigins`, `CoverageGap.status`, **`KnowledgeSource`** (recording **rename `title` / delete / re-process** → status) |
+| **Object storage (R2/MinIO)** | **reads** a recording's before/after DOM snapshots when compiling an execution plan (appearance markers) | **deletes** a recording's artifact prefix on delete (`lib/storage` `deleteSessionPrefix`) |
 | **Redis / BullMQ** | — | **enqueues re-process jobs** onto the same synthesis queue the worker consumes (`lib/queue.ts` — lazy, best-effort, no API hop) |
 | **API service** | — | — (Studio is a privileged server — it talks to Postgres/Redis/storage **directly**, never through the API) |
 

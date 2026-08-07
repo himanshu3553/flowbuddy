@@ -95,9 +95,10 @@ change faster than docs" problem directly. **Not built yet.**
 **3 · It gets better the more it's used.** Every question your users ask, every thumbs-down, every
 honest "I don't know" tells you exactly what to record next. The product improves by being used.
 
-**4 · Doing things, not just explaining them.** Eventually the assistant can complete a task in the
-user's session — but only workflows you recorded and approved. That's a guarantee no general-purpose
-browser agent can make. **Not built yet.**
+**4 · Doing things, not just explaining them.** The assistant can complete a task in the user's own
+session — but only workflows you recorded, approved, and separately switched on for it, and only
+after the user agrees to that specific run. That's a guarantee no general-purpose browser agent can
+make.
 
 ---
 
@@ -119,7 +120,7 @@ different promise.
 more capable than them — it's to be the version a company can put in front of *its own customers*
 and be accountable for.
 
-Full head-to-head, including their published safety numbers: `../competitive-claude-chrome.md`.
+Full head-to-head, including their published safety numbers: `../product/competitive-claude-chrome.md`.
 
 ---
 

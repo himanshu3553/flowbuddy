@@ -1,6 +1,6 @@
 # KB Step Distillation — design & build plan
 
-**Status:** ✅ **Built, verified end-to-end & committed (2026-06-27)** — Phases 1–6 done (distillation pipeline built 2026-06-26; segmenter finalized + E2E-verified + committed `e5f81d8` on 2026-06-27) · **Owner:** copilot KB pipeline
+**Status:** [`roadmap.md`](../roadmap.md) §2 (P1-M2) · **Owner:** copilot KB pipeline
 
 Turn the noisy, raw, 1:1 event dump that the KB currently stores into a clean, deduplicated, user-facing **step list** per workflow — so the copilot is grounded on real steps, not DOM telemetry. *(How many workflows* a recording splits into is the **segmenter's** job, separate from this doc. The segmenter ([`segment.ts`](../../packages/synthesis/src/segment.ts)) is a single **event-aware** LLM pass driven primarily by **goal-completion / terminal states** (redirects, route resets, dashboards, sign-outs, success toasts), with narration + user markers as supporting signals; it emits a per-boundary `confidence` to flag splits an editor should review, and a carry-forward guard ensures no event is ever silently dropped. It went through a few iterations on 2026-06-27 — an initial single-task bias over-merged a 4-task recording, a narration-only two-stage attempt over-anchored, and the terminal-state pass landed it.)* This doc is the next layer down: the steps *inside* a workflow.
 
@@ -95,7 +95,7 @@ Built in six phases over 2026-06-26/27 (deterministic cleanup → LLM distillati
 | Route-boost (P1-M8) regresses | Carry `route` onto every distilled step |
 | Wrong/empty step screenshot | Frame rule C is deterministic; fallback chain (keyEventId → last sourceEventId → null); result-frame falls back to action-frame if no post-shot |
 | Future citations need a source | Citations (if ever) reference the **published/approved workflow**, not raw events — no raw log to preserve |
-| Reprocess churn | Worker already deletes+recreates items idempotently; approval keyed by `segmentIndex` survives; the `manifest` remains the reprocess record |
+| Reprocess churn | Worker already deletes+recreates items idempotently; the approval is identity-keyed and re-matched **by content**, so it survives where the content still agrees and fails closed where it does not ([`workflow-identity.md`](workflow-identity.md)); the `manifest` remains the reprocess record |
 
 ---
 

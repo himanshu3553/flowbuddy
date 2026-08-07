@@ -2,8 +2,7 @@
 
 > **Phase 1 is the copilot, end-to-end — and it ships as the Version 1 release.** A SaaS records its product, **approves workflows for the copilot**, drops a `<script>` into its app, and its end-users get a chat widget that answers **grounded only in approved Knowledge Base content**, with citations and honest declines. **Decoupled** from the human-facing portal/articles (those are a [Version 2 by-product](portal.md)). This doc is the build plan, the acceptance spec, and the as-built record in one place.
 
-- **Status:** **Built, verified locally, and deployed** — foundation **P1-M0…P1-M3** + copilot **P1-M5…P1-M12** built/core-done (per-module table in §5). **P1-M4 cloud deploy is done — and Version 1 is LIVE IN PRODUCTION at flowbuddyai.com since 2026-07-23** ([`deploy.md`](../ops/deploy.md): paid two-blueprint stack, worker folded into the api; dev stays at `https://flowbuddy-dev-web.onrender.com`, reset/test guide → [`e2e-testing.md`](../ops/e2e-testing.md) **Level 2**). Remaining Phase-1 work: only **P1-M12 PII Cut 2** (deferred to the V2 portal track) — **P1-M3 shipped 2026-07-07** as hybrid keyword+pgvector retrieval (§5 / §11). The **P1-M11 capture-reliability backlog is complete** (§8 — **R13 ranked locators shipped 2026-07-06** closing the original list; **R14 — idempotent upload identity + direct artifact streaming — landed 2026-07-27 and completed 2026-07-28** (§8·A — narration goes direct too, abandoned recordings are cleaned up, R2 + CORS proven on dev/Render; shipping to production with recorder **v0.7.0**); **R5** + the recorder UX parking lot → **V2·D3**).
-- **Last updated:** 2026-07-27 · **Branch:** `dev`
+- **Status:** [`roadmap.md`](../roadmap.md) §2.
 - **Companion docs:** why copilot-first → [`product.md`](../product/product.md) §5 · roadmap/status → [`roadmap.md`](../roadmap.md) · technical model → [`architecture.md`](../product/architecture.md) · KB step distillation → [`kb-step-distillation.md`](kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · deploy → [`deploy.md`](../ops/deploy.md) · V2 portal by-products → [`portal.md`](portal.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md) *(the Phase-1 visual map is §1.1 above)*
 - **Grounding (Stage A):** the copilot grounds on **approved-KB** (`KnowledgeItem`s behind a per-workflow approval flag), **not** published articles. **Stage B** (also cite a published article when one exists) is **deferred**. *(These grounding "Stages" are within Phase 1 — not the product Phases 1/2/3.)*
 
@@ -32,7 +31,7 @@ How it runs, surface by surface: [`internals/`](../internals/README.md) — star
 **Out (other phases / deferred):**
 - **Help portal + article authoring/publishing** → **Version 2** ([`portal.md`](portal.md)) — decoupled by-products over the same KB.
 - **Grounding Stage B** (also cite a published article) — deferred (a grounding stage, distinct from the product phases).
-- **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight (P2-M3, ✅) and the guided walkthrough (P4-M0, ✅); executing workflows on the end-user's behalf → **Phase 4's acting modules** ([`agent.md`](agent.md)); the data exists.
+- **In-app actionability** — since delivered in later phases from this phase's captured data: the "show me" element highlight, the guided walkthrough, and executing workflows on the end-user's behalf ([`agent.md`](agent.md)); the data exists.
 - **Self-validation / sandbox / drift** → **Phase 3**.
 - **Narration-only & video capture** → **Version 2**.
 - Integrations & public API; i18n; multi-seat/roles; billing (free open-signup beta).
@@ -151,9 +150,10 @@ without any type error:
 - **`@@unique([workspaceId, uploadId])` is the idempotency guarantee.** The recorder mints `uploadId`
   at Record, so both ingestion routes resolve to the same row and **a retry can never create a second
   recording**. Drop that constraint and the duplicate-recording bug returns.
-- **`CopilotApproval` is keyed by `(sourceId, segmentIndex)`, not by item id** — which is precisely why
-  approval **survives the worker's item delete-and-recreate on reprocess**. Re-keying it to items would
-  silently un-approve every workflow on the next reprocess.
+- **`CopilotApproval` names a workflow's durable identity, never a position** — which is why approval
+  survives the worker's item delete-and-recreate, and why a re-split can no longer walk it onto content
+  nobody reviewed. Re-keying it to items, or back onto a position, reopens that hole
+  ([`workflow-identity.md`](workflow-identity.md)).
 - **`KnowledgeItem.embedding` is nullable on purpose.** A row without a vector stays keyword-retrievable,
   so a failed embed degrades retrieval instead of hiding knowledge.
 - **The copilot retrieves over `KnowledgeItem`s, never articles.** Approval is the only gate between the
@@ -179,22 +179,15 @@ Brought into Phase 1 because **copilot answer quality = capture quality**, and P
 
 ### P1-M11 — Capture reliability (recorder backlog R1–R14)
 
-**Shipped.** One line each; the mechanics live in [`internals/recorder-capture.md`](../internals/recorder-capture.md), and `git log -- packages/extension` carries the full fix stories.
+**Shipped:** R1–R4 · R6–R10 · R12 · R13 · the Stop→upload pipeline. The mechanics live in
+[`internals/recorder-capture.md`](../internals/recorder-capture.md), and
+`git log -- packages/extension` carries the full fix stories.
 
-| R | Problem | Outcome |
-|---|---|---|
-| **R1** | A hard navigation lost every event after it | Re-arm flipped **push → pull**: each freshly loaded page self-arms via a `hello` handshake, any origin |
-| **R2** | Upload failure wiped the buffer | Clear only on success; otherwise keep the buffer and offer Retry |
-| **R3** | Long recordings dropped narration | Bounded 30–60 s finalize wait instead of a fixed 5 s |
-| **R4** | MV3 worker eviction during quiet narration | 20 s keepalive from the top frame + an outbox that reconnects and retries in the same call |
-| **R6** | Users record blind; a dead mic is found too late | Live WebAudio mic meter + pre-record permission flow |
-| **R7** | Stop/marker/status needed the popup | Draggable shadow-DOM control bar in the top frame |
-| **R8** | iframe UIs captured nothing | `all_frames:true`; bbox translated to top-document coords (cross-origin frames omit bbox rather than crop wrong) |
-| **R9** | OAuth popups / new tabs lost capture | `Rec.tabIds` set; tabs opened **from** a recording tab are adopted via `openerTabId` |
-| **R10** | Only click/change/submit/Enter captured | Debounced page-level scroll, dwell-gated hover on `aria-haspopup`, and modifier-combo keydowns |
-| **R12** | Screenshots landed after the click's side effect | Pre-capture on `pointerdown`, awaited by the click; JPEG instead of PNG; bbox re-validated against scroll delta |
-| **R13** | Only brittle positional selectors | Ranked multi-signal `locators`, uniqueness-verified at capture time — framework-generated ids rejected |
-| **Stop→upload** | Silent, deadline-less upload pipeline | Persisted `phase` + alarms-backed recovery + a status pill on the page. **That pill deliberately reverses the 2026-07-01 "outcomes never render on the page" decision, for the stop moment only.** |
+One of them belongs here rather than there, because it is a **reversal** and not a mechanism: **the
+on-page status pill after Stop deliberately reverses the 2026-07-01 "outcomes never render on the
+page" decision — for the stop moment only.** Everything else the recorder reports goes to the popup;
+the stop moment is the one time the user's attention is on the page rather than the toolbar, and a
+silent, deadline-less upload was exactly what read as *stuck forever*.
 
 **R14 — idempotent upload identity + direct artifact streaming** *(✅ 2026-07-28, recorder v0.7.0)*. Worth keeping the root cause: a ~10-minute recording stalled at "Finishing…", the watchdog aborted on a flat 120 s deadline, the api committed the recording anyway, and the Retry the user was told to click produced a **second identical recording**. Two causes — `/v1/sessions` minted a fresh server-side id per request (nothing could collapse a retry), and the api awaited one object-storage round-trip **per file, serially, inside the multipart parse loop**, before creating the row or responding. The fix is an `uploadId` minted at Record (`@@unique([workspaceId, uploadId])`) plus presigned direct-to-storage artifact uploads. **The R2 checksum trap that nearly sank it is recorded in [`deploy.md`](../ops/deploy.md) §2.2** — it passes local dev and fails only in production.
 

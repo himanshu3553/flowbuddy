@@ -1,16 +1,17 @@
 # FlowBuddy — System Architecture (the 3 modules)
 
-> **Canonical model.** FlowBuddy is three modules: **(1) Capture** raw data, **(2)** turn it into an explicit **Knowledge Base**, **(3)** create **Articles** from the KB. Capture *modality* and article-creation *mode* are **orthogonal** — connected only through the KB. Every other doc ([`product.md`](product.md), [`roadmap.md`](../roadmap.md), the phase docs) refers here for the module structure; the **per-phase data-model deltas** live in [`copilot.md`](../build/copilot.md) §7 (copilot), the as-builts of [`sense-and-reason.md`](../build/sense-and-reason.md) (Sense/Reason fields) and [`agent.md`](../build/agent.md) §A8 (`CopilotWalkthrough`), and [`portal.md`](../build/portal.md) §3 (the V2 portal track).
+> **Canonical model.** FlowBuddy is three modules: **(1) Capture** raw data, **(2)** turn it into an explicit **Knowledge Base**, **(3)** create **Articles** from the KB. Capture *modality* and article-creation *mode* are **orthogonal** — connected only through the KB. Every other doc ([`product.md`](product.md), [`roadmap.md`](../roadmap.md), the phase docs) refers here for the module structure; the **per-phase data-model deltas** live in [`copilot.md`](../build/copilot.md) §7 (copilot), [`sense-and-reason.md`](../build/sense-and-reason.md) §A6 (Sense/Reason fields) and [`agent.md`](../build/agent.md) §A7 (the acting plan/run/acceptance rows and the acting columns on the approval), and [`portal.md`](../build/portal.md) §3 (the V2 portal track); the table-by-table walkthrough of all of them is [`internals/data.md`](../internals/data.md).
 
-- **Status:** Frozen v1.0 — 2026-06-19. Segmentation placement **locked: Option B → C** (§Decisions). Product-version scope **locked 2026-06-21** (below). **UPDATED 2026-06-22 — copilot-first pivot:** the copilot grounds on **approved-KB** (not published articles) and copilot/portal are **decoupled** targets; the 3-module model is unchanged. See [`product.md`](product.md) §5. *(Supersedes §Decisions "copilot grounds on PUBLISHED articles".)*
+- **Locked:** segmentation placement Option B → C (§Decisions) · product-version scope (below) · the copilot grounds on **approved-KB**, and copilot/portal are decoupled targets — the 3-module model is unchanged ([`product.md`](product.md) §5). Status: [`roadmap.md`](../roadmap.md). *(Supersedes §Decisions "copilot grounds on PUBLISHED articles".)*
 - **Key principle preserved:** *grounded authorship* — AI writes **only** from the customer's own recordings, never the model's general knowledge.
 
 ### Product versions & phases (scope — copilot-first)
 - **Version 1** = the **workflow-capture** product (**capture is workflow-only, 1.1**), released in **four phases — a pure copilot arc (answer → locate → stay fresh → act)** — authoritative roadmap: [`roadmap.md`](../roadmap.md):
   - **Phase 1 — Copilot** ⭐ (the Version 1 release, ships first): the foundation we've built (capture → KB → retrieval/grounding) + the embeddable copilot. Modules **P1-M0…P1-M12** ([`copilot.md`](../build/copilot.md)).
-  - **Phase 2 — Sense (in-context help)**: the copilot localizes the end-user to **workflow + step** (an ask-time read-only probe of approved workflows' captured locators against the live page; **hybrid** — client scores, the answer LLM disambiguates with the question) and answers **positionally** ("you're on step 3 of X — here's how to get unstuck, then the path to done"). No acting, no end-user recording. Modules **P2-M0…M4 ✅ built** + **P2-M5 Reason** — diagnostic reasoning over ask-time page-state capture + the founder's expected state, **✅ built** ([`sense-and-reason.md`](../build/sense-and-reason.md)).
-  - **Phase 3 — Self-validation & freshness** (the moat; to be planned).
-  - **Phase 4 — Autopilot** (agentic execution; opened ahead of Phase 3, sequencing decision 2026-07-15): the copilot executes approved workflows in the end-user's live session — **grounded actions** over the same replay core Phase 3 builds, entering mid-workflow via Sense's localization. **P4-M0 guided walkthrough ✅ built 2026-07-15** (zero-acting); the acting modules **P4-M1…M3** to plan ([`agent.md`](../build/agent.md)). **Phase 5 — Converse** (the goal-based agent: Tell → Guide → Do; P5 = brain, P4 = hands) is designed in draft ([`agent.md`](../build/agent.md)).
+  - **Phase 2 — Sense (in-context help)**: the copilot localizes the end-user to **workflow + step** (an ask-time read-only probe of approved workflows' captured locators against the live page; **hybrid** — client scores, the answer LLM disambiguates with the question) and answers **positionally** ("you're on step 3 of X — here's how to get unstuck, then the path to done"). No acting, no end-user recording. Modules **P2-M0…M5** — including **Reason**, diagnostic reasoning over ask-time page-state capture + the founder's expected state ([`sense-and-reason.md`](../build/sense-and-reason.md)).
+  - **Phase 3 — Self-validation & freshness** (the moat).
+  - **Phase 4 — Autopilot** (agentic execution; opened ahead of Phase 3, sequencing decision 2026-07-15): the copilot executes approved workflows in the end-user's live session — **grounded actions**, entering mid-workflow via Sense's localization. The widget driver is the replay engine's **first** consumer; a shared core is extracted when Phase 3's sandbox runner becomes the second ([`agent.md`](../build/agent.md) §A3).
+- **Beyond the Version-1 arc, two more phases are open:** **Phase 5 — Converse** (the goal layer — the brain over Phase 4's hands; design in [`agent.md`](../build/agent.md)) and **Phase 6 — Interop** (the approved KB exposed to third-party agents; direction in [`interop.md`](../build/interop.md)). What is built in either is asserted only by the roadmap — [`roadmap.md`](../roadmap.md) §11 and §12.
 - **Version 2** = the **Help Portal & Articles track** (the human-facing by-products, **moved out of V1 2026-07-08**: render approved workflows as articles + per-audience approval + presentation overlay + productization — modules **V2 · P0…P6**, [`portal.md`](../build/portal.md)) + additional **capture modalities** — **narration-only (1.2)** and **video (1.3)** — plus the narration-derived `static` explainer-article path, + product depth.
 
 *(The 3-module model below has never changed; only the phase grouping and the copilot's grounding — **approved-KB**, not published articles — did. Module IDs are per-phase, `P{phase}-M{n}`. See [`product.md`](product.md) §5.)*
@@ -107,25 +108,27 @@ Module 2 — KNOWLEDGE BASE  (extract → clean → segment+tag → distill step
         │
         ├──► approved-for-copilot (per-workflow flag)
         │       └──► In-app COPILOT   ◄── PRIMARY product; grounds on APPROVED-KB (Stage A)
-        │            └── + Sense (Phase 2): read-only locator probe → workflow/step
-        │                localization → positional answers ("you're on step 3 of X")
+        │            ├── + Sense (Phase 2): read-only locator probe → workflow/step
+        │            │   localization → positional answers ("you're on step 3 of X")
+        │            └──► acting enabled (a SECOND, narrower per-workflow flag on the
+        │                 same approval — never the other way round)
+        │                  └──► widget EXECUTES the approved workflow in the end-user's
+        │                       live session (grounded actions; enabling requires
+        │                       eligibility analysis to pass — agent.md §A2.9)
         │
         ├──► approved-for-portal (per-audience flag)
         │       └──► render approved workflow + presentation overlay
         │               └──► Help PORTAL (public/SEO)  ◄── BY-PRODUCT (decoupled target)
         │                    [Version 2 — to build]
         │
-        ├──► Self-validation (Phase 3)  grounds on the selector-bearing KB
-        │       └──► sandbox replay → drift flags + "validated-current" certification
-        │
-        └──► approved-for-autopilot (per-audience flag)   [Phase 4 — M0 walkthrough ✅; acting modules to plan]
-                └──► widget EXECUTES the approved workflow in the end-user's live session
-                     (grounded actions; eligibility = approved AND validated-current)
+        └──► Self-validation (Phase 3)  grounds on the selector-bearing KB
+                └──► sandbox replay → drift flags + "validated-current" certification
 ```
 
 **One KB, decoupled publish targets (UPDATED 2026-06-22 — copilot-first pivot):**
 - **The KB (Module 2)** is the single substrate; access is gated **per target**:
   - **Copilot (primary product)** grounds on **approved-KB** — `KnowledgeItem`s behind a lightweight **per-workflow "approve for copilot"** flag. Richer than prose (selectors/routes/expected-outcomes) → context-aware + actionable, and it's the substrate Phase-3 freshness needs.
+  - **Acting is a second, narrower gate INSIDE that one** — a per-workflow flag on the same approval, so a workflow may be answerable without being runnable and never the reverse. It is not a fourth publish target ([`agent.md`](../build/agent.md) §A2.8).
   - **Help Portal (by-product — Version 2, to build)** renders **approved workflows as articles** (per-audience approval + a presentation overlay) for public/SEO readers ([`portal.md`](../build/portal.md)).
 - **Copilot and portal are decoupled** — different audiences (in-app authenticated end-users vs. public/SEO), potentially different visibility; approving a workflow for the copilot and publishing an article are **independent** actions over the same KB.
 - **No-leak preserved:** the copilot answers **only** from approved-KB — never raw/un-approved items, never draft articles. **Approval ≠ article authoring** (one click on a workflow).
@@ -185,27 +188,24 @@ answer decisions over a fixed question set and is the tool for it — but the KB
 workflows deep, so a comparison run today measures the model on ground too thin to show its
 advantage. Record more first.
 
-**A trap this created.** Approval is keyed on `(sourceId, segmentIndex)` so it deliberately survives
-the worker's item delete-and-recreate. That was safe while boundaries were stable. It is not now: a
-reprocess that splits differently makes `segmentIndex 0` a *different* workflow, and the founder's
-approval silently follows the index onto content nobody reviewed. Approval is the product's trust
-boundary. **Not yet fixed** — the options are re-keying approval to something stable or forcing
-re-approval when the workflow count changes, and that is a design decision.
+**The trap this created is closed.** Drifting boundaries are precisely why an approval names a
+durable workflow identity that a reprocess re-matches **by content**, rather than a position a
+re-split can walk it off — [`workflow-identity.md`](../build/workflow-identity.md).
 
 ---
 
 ### Segmentation placement — Option C (B → C, finalized in M6.1, 2026-06-21)
-**Segmentation** (splitting one recording into distinct workflows) runs at **KB build** (the worker, after extracting items) and its **output is persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`). These persisted titles are the per-workflow units the **KB browser lists** and the **copilot approval gate** keys on `(sourceId, segmentIndex)`. *(They also fed the removed "Auto Generate Articles" picker — now historical; see the §Decisions note below.)*
+**Segmentation** (splitting one recording into distinct workflows) runs at **KB build** (the worker, after extracting items) and its **output is persisted** onto each `KnowledgeItem` (`segmentIndex` + `segmentTitle`). These persisted titles are the per-workflow units the **KB browser lists**. The approval gate keys on a durable workflow **identity**, never on the position ([`workflow-identity.md`](../build/workflow-identity.md)). *(They also fed the removed "Auto Generate Articles" picker — now historical; see the §Decisions note below.)*
 
-> **History:** B (segment at article creation) → promoted to C when the KB-browser UI needed grouping → **finalized as C in M6.1**, where segmentation moved **earlier**, to KB build: it must run before any article exists, because candidate titles are now proposed *before* the user chooses what to generate. (Full Option A — first-class Workflow entities — remains a future step if needed.)
+> **History:** B (segment at article creation) → promoted to C when the KB-browser UI needed grouping → **finalized as C in M6.1**, where segmentation moved **earlier**, to KB build: it must run before any article exists, because candidate titles are now proposed *before* the user chooses what to generate. (Option A later arrived — as an identity, not as an article structure; see the table below.)
 
-Three options were considered. **All three remain valid future promotion paths** — choosing flat items first made promotion purely **additive** (items never change; we layer structure on top):
+Three options were considered — choosing flat items first made promotion purely **additive** (items never change; we layer structure on top):
 
 | | What the KB stores | Status |
 |---|---|---|
 | **B** | flat ordered items; segmentation at article creation | superseded by C |
-| **C** | + persisted segmentation **output** on items (`segmentIndex`/`segmentTitle`), computed at **KB build** → KB groups by workflow + keys the copilot approval gate | ✅ **adopted (M6.1, 2026-06-21).** Further C step if needed: also store boundary *hints* for stable/inspectable re-gen |
-| **A (future)** | first-class **Workflow** objects, as a *derived/cached retrieval layer* (not the authoritative article structure) | if the **copilot** needs whole workflows, or for cross-recording **dedupe/supersession** |
+| **C** | + persisted segmentation **output** on items (`segmentIndex`/`segmentTitle`), computed at **KB build** → KB groups by workflow (the gate itself keys on workflow identity, not on the position) | ✅ **adopted (M6.1, 2026-06-21).** Further C step if needed: also store boundary *hints* for stable/inspectable re-gen |
+| **A** | first-class **Workflow** objects — a durable identity a reprocess re-matches by content | **arrived for IDENTITY** (dedupe/supersession + the approval gate) — [`workflow-identity.md`](../build/workflow-identity.md). Items remain the authoritative structure; this is not a second article model |
 
 The **marker hotkey** ("new workflow") is the main segmentation-quality lever, independent of B/C/A.
 
@@ -215,7 +215,7 @@ Retrieval over `KnowledgeItem.text` started keyword/LLM-only; the **pgvector upg
 ### Article publishing — LOCKED: curated, not auto-pushed (2026-06-21)
 > **Principle (carries into the V2 portal).** Nothing is auto-published — the founder chooses what goes to the portal. In the V2 portal track this is the **per-audience approval** gate (copilot | portal) over approved workflows, not a generation button. See [`portal.md`](../build/portal.md).
 
-Articles are **not auto-generated** on capture. Segmentation runs at **KB build** and persists candidate **titles** (`segmentTitle`, Option C) grouped into distilled workflows. In the V2 portal track the founder **approves** which workflows go to the portal; approved workflows are **rendered** as articles (with a presentation overlay) — nothing is auto-published. Stays on Option C (no first-class `Workflow` entity). See [`portal.md`](../build/portal.md).
+Articles are **not auto-generated** on capture. Segmentation runs at **KB build** and persists candidate **titles** (`segmentTitle`, Option C) grouped into distilled workflows. In the V2 portal track the founder **approves** which workflows go to the portal; approved workflows are **rendered** as articles (with a presentation overlay) — nothing is auto-published. Article structure stays on Option C. See [`portal.md`](../build/portal.md).
 
 ### Copilot grounding — SUPERSEDED 2026-06-22 (was: "grounds on PUBLISHED articles")
 > **⚠️ Superseded by the copilot-first pivot ([`product.md`](product.md) §5).** **New (locked 2026-06-22):** separate **substrate** from **trust gate** — the copilot grounds on the **KB** (substrate) behind a **per-workflow "approve for copilot"** flag (trust gate = *approved-KB*). The no-leak intent is preserved (only human-approved knowledge reaches end-users), but approval is **one click on a workflow, not full article authoring**, and the **copilot and portal are decoupled publish targets**. The portal still serves published articles; the copilot does **not** depend on them (grounding **Stage A**). *(Hybrid "also cite a published article when present" = grounding **Stage B**, deferred — distinct from the V2 portal track.)*

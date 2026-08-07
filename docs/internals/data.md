@@ -60,7 +60,8 @@ erDiagram
 ```mermaid
 erDiagram
     KnowledgeSource ||--o{ KnowledgeItem : "distilled steps"
-    KnowledgeSource ||--o{ CopilotApproval : "approved workflows"
+    KnowledgeSource ||--o{ Workflow : "the workflows it currently carries"
+    Workflow ||--o| CopilotApproval : "the trust gate — one row = approved"
     KnowledgeSource {
         string uploadId "client-minted recording id, nullable; unique with workspaceId"
         string status "recording→uploaded→processing→ready|error"
@@ -73,7 +74,7 @@ erDiagram
         int orderIndex "order WITHIN the workflow"
         string text "searchable (instruction+detail+narration)"
         json data "DistilledStep payload"
-        int segmentIndex "the workflow this belongs to (approval key part)"
+        int segmentIndex "the workflow this belongs to (a denormalized copy, never a key)"
         string segmentTitle "the workflow's goal title"
     }
 ```
@@ -88,22 +89,31 @@ erDiagram
   `transcript` is added by the worker; `status` is the lifecycle state machine; `title` is the
   founder's optional rename (null falls back to `appBaseUrl`), settable from the Recordings page.
 - **`KnowledgeItem`** = one **distilled step**. `data` holds the
-  [`DistilledStep`](../../packages/synthesis/src/distill.ts)
-  (`instruction, detail, route, narration, screenshotFile, bbox` + `keyEventId` since 2026-07-08). `segmentIndex`/`segmentTitle` group
-  items into workflows. The schema comment still mentions the old `{ event, narration }` shape — that's
-  the **legacy pre-distillation** shape (old rows only); the live worker writes the distilled shape. Indexed on `workspaceId` and
-  `sourceId`.
+  [`DistilledStep`](../../packages/synthesis/src/distill.ts) — defined there, not re-listed here.
+  `segmentIndex`/`segmentTitle` group items into workflows. Indexed on `workspaceId` and `sourceId`.
 
 ### 2.4 Copilot — gate, analytics, gaps
 
-| Table | Purpose | Key detail |
-|---|---|---|
-| **`CopilotApproval`** | The trust gate — one row = one approved workflow. | **`@@unique([sourceId, segmentIndex])`** — keyed by the workflow *coordinate*, not item ids, so it **survives the worker's delete+recreate of items**. Absence = not approved. |
-| **`CopilotQuery`** | Every end-user question (analytics + feedback target). | `answered` (covered vs. declined), `feedback` (`up`/`down`/null); P2 added the `sense*` localization-outcome columns + `reasonTrigger`/`reasonImage`. **2026-07-29 added how the answer was produced:** `mode` (the workspace setting) · `engine` (what actually ran — `agent`/`reason`/`floor`; NOT always what `mode` predicts, since the diagnostic path preempts the agent and the floor answers without tools while the mode is unchanged) · `rounds` · `toolCalls`. All nullable, nothing back-filled — an older row honestly reads "unknown", and rows written before 2026-08-02 may read `chatbot` for what is now called `floor`: the same engine under the name it had while it was still a sellable mode. |
-| **`CopilotWalkthrough`** (P4-M0) | One row per guided-walkthrough RUN (a session, not a query; optional `queryId` joins the originating question). | `startStep`/`lastStep`/`totalSteps`, `autoAdvances` (detection-confirmed Nexts) vs `manualAdvances` (override Nexts), `outcome` `active\|completed\|aborted\|stalled` (+`stalledAtStep`); `active` past the widget's 30-min session TTL reads as abandoned — no sweeper by design. |
-| **`CoverageGap`** | A question the KB couldn't cover → "record this next". | `source` = `copilot` (live) or `prompt` (historical — written by the removed article path; old rows only); `status` `open`/`resolved`. |
+| Table | What it is |
+|---|---|
+| **`CopilotApproval`** | The trust gate — one row = one approved workflow, named by a durable **workflow identity**. Two state columns ride it: the retirement column (may it ANSWER?) and the acting flag (may it also RUN?). Why that is a second question rather than a second liveness flag, and who reads it: [knowledge-base.md](knowledge-base.md) §6. |
+| **`CopilotQuery`** | Every end-user question — the analytics row and the feedback target. It records not just the outcome but **how the answer was produced** and what the model was looking at. |
+| **`CopilotWalkthrough`** (P4-M0) | One row per guided-walkthrough RUN (a session, not a query; optional `queryId` joins the originating question). One behaviour the column list doesn't imply: a run that advances past a stall **recovers** to `active`. |
+| **`CoverageGap`** | A question the KB couldn't cover → "record this next". Note `source = "prompt"` is **historical** — it was written by the removed article path, and nothing writes it today. |
 
-### 2.5 Phase-2 articles — REMOVED
+### 2.5 Acting — plan, run, acceptance
+
+| Table | What it is |
+|---|---|
+| **`ExecutionPlan`** | One replay-ready artifact per actable workflow — the founder's recorded steps compiled into something an executor can drive. Its content hash is the **consent pin**. |
+| **`ExecutionRun`** | The audit row for one consented run: per-step outcomes and each input's **SOURCE, never the value**. |
+| **`AgentAcceptance`** | Who accepted which terms version, and when. |
+
+> Every column, its legal values and the reasoning behind each is in
+> [`schema.prisma`](../../packages/db/prisma/schema.prisma), which owns them. What is above is the
+> orientation you need to find the right model; the schema is where the argument lives.
+
+### 2.6 Phase-2 articles — REMOVED
 
 The `Article` + `Step` tables (the retired article model) were **dropped** with the
 workflows-as-articles decision: the **Version-2 portal track** renders **approved
@@ -206,15 +216,9 @@ All three converge on a `workspaceId`, which scopes every query. This is the who
 
 ## 7. Migrations (the schema's history)
 
-Prisma migrations in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations) — the
-early milestones, in order: `init` → `add_step_highlight` → `kb_layer` (the `KnowledgeSource`/`KnowledgeItem` split) →
-`kb_item_segment` (segmentation tags) → `article_segment_link` → `coverage_gap` →
-`copilot_approval` (the trust gate) → `copilot_embed_key` (public key + allowlist) →
-`copilot_query` (analytics); later waves include `pgvector_hybrid_retrieval` (P1-M3),
-`drop_phase2_article_step_tables` (workflows-as-articles), `sense_in_context_help` (P2),
-`reason_diagnostic` + `reason_image_default_on` (P2-M5), `walkthrough_guided` (P4-M0), and
-`upload_identity` (2026-07-27 — `RecSession.uploadId` + `@@unique([workspaceId, uploadId])`,
-`manifest` made nullable) — **see the migrations folder for the full history**. Each migration name maps cleanly to a module milestone.
+Prisma migrations live in [`packages/db/prisma/migrations/`](../../packages/db/prisma/migrations) —
+**that folder is the history; do not mirror it here.** Names map to module milestones, so `git log`
+on the folder reads as a build order.
 
 Commands: `pnpm db:migrate` (apply), `pnpm db:generate` (regen client), `pnpm db:validate`,
 `pnpm --filter @flowbuddy/db exec prisma studio` (browse). See [`dev-setup.md`](../ops/dev-setup.md).
@@ -234,7 +238,7 @@ The moments below are the ones where the write path is non-obvious. The rest are
 | Verify email / reset password | One token row consumed and deleted. Single-use by construction. |
 | Sign in | **Nothing.** A session cookie is minted; no row is written. |
 | Connect the recorder | One `ApiToken` row per click. Only the **hash** is stored; the plaintext is shown once and never again. |
-| Configure the copilot | `Workspace` columns only — no new tables. Appearance, mode, the ability switches, the embed key and its origin allowlist all live there. |
+| Configure the copilot | `Workspace` columns only — appearance, mode, the ability switches, the embed key and its origin allowlist all live there — with one exception: turning on **AI Agent** mode also writes an `AgentAcceptance` row (who, when, which terms version) in the same transaction, because acting is the contractual line and a toggle state is not a record. |
 | Drop the `<script>` on a site | **Nothing**, until someone actually loads the page. |
 | The widget loads | One column — a throttled `widgetLastSeenAt`/`Origin` heartbeat. This is what makes "is it embedded?" a real answer rather than a guess from query counts. |
 | Thumbs up / down | One column on the existing `CopilotQuery` row. |
@@ -242,80 +246,69 @@ The moments below are the ones where the write path is non-obvious. The rest are
 
 ## 5. Recording a workflow → **a row + artifacts start landing while you record**
 
-While the founder records, most of the recording is **already on its way to us**. After every captured
-step the recorder asks the API to sign short-lived (900 s) PUT URLs (`POST /v1/uploads/sign`) and
-pushes that step's screenshot + page HTML **straight to object storage** — the API never touches those
-bytes. The first signing call also creates the recording's row in Postgres with `status: "recording"`,
-so Studio shows the capture while it is still being made. Everything is still buffered in Chrome as
-well, and anything storage never confirmed simply rides the Stop bundle exactly as it used to:
+While the founder records, most of the recording is **already on its way to us** — the recorder pushes
+each step's screenshot and page HTML straight to object storage over signed URLs, and the API never
+touches those bytes.
 
-| Browser store | What's in it |
-|---|---|
-| `chrome.storage.local` | The API token, the backend URL, connected email/org, the recorder `phase`, a coarse upload marker (in flight / accepted — there is no percentage any more), last upload result |
-| `chrome.storage.session` | The active recording's live state |
-| **IndexedDB** (`flowbuddy-recorder`) | **The recording itself** — every captured event, every screenshot, every page HTML snapshot, the audio. Buffered here so a crash or a tab close doesn't lose the session. |
+| # | Store | What's written, and when |
+|---|---|---|
+| 1 | **The browser** | Everything is buffered locally as it happens, across three stores — what is in each, and why a crash or a tab close must not lose it: [recorder-capture.md](recorder-capture.md) §5. |
+| 2 | **Object storage** | Each artifact as it is captured, PUT by the recorder itself under the session prefix (§4). |
+| 3 | **`KnowledgeSource`** | Created by the **first signing call**, not at Stop — `status: "recording"`, `manifest: null`. That is what makes a capture visible in Studio while it is still being made. |
 
-**What gets captured per user action** ([`shared/src/capture.ts`](../../packages/shared/src/capture.ts)):
-the event type (click/input/submit/nav/scroll/hover), a timestamp, the target element's
-role/name/text/tag/attributes + a **ranked list of ways to find it again** (test-id → id → aria →
-name → placeholder → text → css → xpath), its on-screen box, the page URL/path/title, a JPEG
-screenshot, and a snapshot of the page HTML (scripts and styles stripped, capped at 400 KB).
+**What is captured per user action** — the event, its timestamp, the target's fingerprint and a
+ranked list of ways to find it again, the on-screen box, the route, a screenshot and a page-HTML
+snapshot — is the capture contract: [recorder-capture.md](recorder-capture.md) §4.2 and
+[`shared/src/capture.ts`](../../packages/shared/src/capture.ts).
 
-**The first privacy line is here, before anything leaves the browser:** typed values in password
-fields, fields matching sensitive patterns, and anything the host app marks `data-flowbuddy-redact`
-are replaced with `••••••` at capture time
-([`extension/src/content.ts:428`](../../packages/extension/src/content.ts#L428)).
+**The first privacy line is in the browser, before anything leaves it** — password fields,
+sensitive-pattern fields and anything the host app marks `data-flowbuddy-redact` are masked at
+capture time ([recorder-capture.md](recorder-capture.md) §4.4).
 
-**What if the recording is never finished?** Writing before Stop means a row and its objects can
-outlive a capture nobody wanted, so both are removed again. The recorder asks the server to **discard**
-them (`DELETE /v1/uploads/:uploadId`) whenever a capture is thrown away — "Start fresh", or simply
-starting a new recording while an old unsent one is still buffered. Anything that never gets that call
-(browser closed for good) is caught by a **server-side sweep of `recording` rows idle more than 12
-hours**, which runs fire-and-forget whenever some other recording in the workspace finalizes. The
-threshold is deliberately generous: a *paused* capture looks identical from the server's side, and a
-false positive costs only a re-upload — the recorder's local buffer is never cleared until an upload
-actually succeeds. Only rows still at `status: "recording"` are eligible; once a recording finalizes,
-deleting it is the founder's decision in Studio.
+**If the recording is never finished**, the row and its objects are removed again — by the recorder's
+own discard call, or by the server's sweep of idle `recording` rows. Both, and why the sweep
+threshold is deliberately generous, are in [ingestion-api.md](ingestion-api.md) §4.6. The write-path
+fact that matters here is the one in §3: `recording` is the **only** status a row can be removed
+from behind the founder's back.
 
 ---
 
 ## 6. Stop → finalize → **3 stores written, in this order**
 
-The founder hits stop. The extension does one last artifact flush — **which now includes the narration
-audio**, over the same signed-URL path as everything else — then POSTs to `/v1/sessions`
-([`api/src/server.ts`](../../packages/api/src/server.ts)) **only what storage has not already
-confirmed**, which on a healthy connection is **nothing: the manifest and no files at all**. It
-carries the recording's stable identity in an `X-FlowBuddy-Upload-Id` header (the request is rejected
-with `400` without it), and that header is what makes a retry land on the same recording instead of
-creating a second one. The old all-in-one multipart bundle still works and is still the fallback: a
-browser that can't reach object storage directly sends every artifact here, exactly as before.
+The founder hits stop. The extension flushes the last artifacts (the narration audio included) over
+the same signed-URL path, then POSTs to `/v1/sessions` **only what storage has not already
+confirmed** — on a healthy connection, the manifest and no files at all. The route itself, its caps,
+its fallback multipart path and its idempotency header are in [ingestion-api.md](ingestion-api.md)
+§4.2.
 
-**Order matters** — each step only happens if the one before it succeeded:
+**Order matters** — each write only happens if the one before it succeeded:
 
 | # | Store | What's written |
 |---|---|---|
-| 1 | **Object storage** | Whatever did **not** already upload directly — normally nothing — **streamed** (never held in memory) under the key `workspaces/<workspaceId>/sessions/<sessionId>/…`. Caps: 300 MB per file, 500 MB per finalize request; note these caps cover only the leftovers, not the artifacts that came in over signed URLs. |
-| 2 | **`KnowledgeSource`** (table name in the DB is still `RecSession`) | The row already exists (created at the first signed artifact with `uploadId`, `status: "recording"`, `manifest: null`). Finalize **updates** it: `status: "uploaded"`, `appBaseUrl`, `error: null`, and **`manifest`** — the entire raw capture JSON: every event, every target fingerprint, every file reference, the markers, the browser/viewport metadata |
-| 3 | **Redis** | One BullMQ job: `{ sessionId, workspaceId }` — **best-effort**, given 5 seconds and then stepped over. The recording is already safe in the two stores above, so an unreachable Redis must not turn a delivered recording into a failed upload; the job is recovered from Studio's "Stalled → Re-process". |
+| 1 | **Object storage** | Whatever did **not** already upload directly — normally nothing — streamed under the session prefix (§4). |
+| 2 | **`KnowledgeSource`** (the table is still `RecSession`) | The row already exists, so finalize **updates** it: `status: "uploaded"`, `appBaseUrl`, `error: null`, and **`manifest`** — the entire raw capture JSON. |
+| 3 | **Redis** | One BullMQ job: `{ sessionId, workspaceId }` — **best-effort**. The recording is already safe in the two stores above, so an unreachable Redis must not turn a delivered recording into a failed upload; the job is recovered from Studio's "Stalled → Re-process" (Part 1 §5). |
 
-**If finalize fails, nothing is deleted** — and that reversal is deliberate. Artifacts uploaded during
-recording live under that prefix and the recorder cannot re-send them, so wiping the prefix on a bad
-manifest would destroy the recording. The retry re-uses the same `uploadId`, overwrites the same keys,
-and updates the same row.
+**If finalize fails, nothing is deleted** — a deliberate reversal, because the artifacts that already
+uploaded live under that prefix and the recorder cannot re-send them. The retry re-uses the same
+`uploadId`, overwrites the same keys and updates the same row. Reasoning:
+[ingestion-api.md](ingestion-api.md) §4.2.
 
 📌 **The `manifest` column is the biggest single thing we store, and it is permanent.** It holds the
-complete raw capture forever — not just what the KB later distills from it. That's deliberate (it's
-what makes re-processing possible, and it's the raw material Phase 3 replay and the acting agent will
-need), but it means a recording's full event trail lives in Postgres indefinitely.
+complete raw capture forever — not just what the KB later distills from it. That's deliberate (it is
+what makes re-processing possible, and it is the raw material the acting agent's plan compiler reads
+at enable time — ranked locators, routes, post-action outcomes, and the before/after DOM snapshots
+the appearance markers are diffed from), but it means a recording's full event trail lives in
+Postgres indefinitely.
 
 ---
 
-## 7. The worker builds the knowledge base → **2 tables, 4 writes**
+## 7. The worker builds the knowledge base → **two tables, written in a fixed order**
 
-The worker picks up the job ([`api/src/worker.ts`](../../packages/api/src/worker.ts)) and runs:
-transcribe the audio → align narration to events → clean → segment into workflows → distill each step.
-
-The writes, in order:
+The worker picks up the job and runs the pipeline — transcribe → align → clean → segment → distill →
+describe. The pipeline itself, and the write mechanics around it (the retry rule, identity matching,
+the plan refresh), are [knowledge-base.md](knowledge-base.md) §6's. What belongs here is the shape of
+the writes, in order:
 
 | # | When | Table | What's written |
 |---|---|---|---|
@@ -340,9 +333,8 @@ structured PII — emails, US SSNs, Luhn-valid card numbers, phone numbers — r
 placeholders like `[redacted-email]` ([`synthesis/src/redact.ts`](../../packages/synthesis/src/redact.ts)).
 Prices, dates, order IDs and version numbers are deliberately left alone.
 
-⚠️ **What is *not* scrubbed:** the screenshots and the DOM HTML in object storage. Those are raw. If
-the founder's product showed a real customer's email on screen during recording, that pixel and that
-HTML are stored as-is. (Screenshot/DOM redaction is a known deferred item.)
+⚠️ **What is *not* scrubbed:** the screenshots and the DOM HTML in object storage — see §19, which
+owns the open gaps.
 
 **Two behaviours worth internalising:**
 - **Re-processing is destructive and idempotent.** Step 3 deletes and recreates. Anything attached to
@@ -355,30 +347,28 @@ HTML are stored as-is. (Screenshot/DOM redaction is a known deferred item.)
 
 ## 8. Review and approve in Studio → **1 tiny table, and it's the whole trust model**
 
-The founder browses the built workflows and flips **Approve**
-([`web/lib/copilot-actions.ts:30`](../../packages/web/lib/copilot-actions.ts#L30)).
-
-| Table | What's stored |
-|---|---|
-| **`CopilotApproval`** | `workspaceId`, `sourceId`, `segmentIndex`, `segmentTitle` (a snapshot at approval time), `approvedById`, `createdAt` |
-
-**This is the single most important row in the product.** Four things about it:
-
-1. **Absence = not approved.** There is no `approved: false`. Un-approving **deletes** the row.
-2. **It is keyed by `(recording, workflow)` — not by step.** That's why it survives the delete-and-
-   recreate of step 7. A founder's approvals don't evaporate when they reprocess a recording.
-3. **Every read path filters through it.** Retrieval, the sense plan, walkthrough logging — all of
-   them re-check approval server-side. Nothing the browser claims is trusted.
-4. **The stored `segmentTitle` is the display truth.** When the widget sends a workflow title over the
-   wire, the server ignores it and uses this snapshot instead.
-
-**Other Studio actions on this screen:**
+The founder browses the built workflows and flips **Approve**. The screen and its actions are
+[studio.md](studio.md)'s; what it *writes* is this:
 
 | Action | Table | What changes |
 |---|---|---|
-| Rename a recording | `KnowledgeSource` | `title` (capped at 120 chars; empty clears it) |
+| **Approve** / un-approve | `CopilotApproval` | One row per approved workflow — the durable workflow identity, a `segmentTitle` snapshot, who and when, plus the liveness columns and the acting flag. **Absence = not approved: there is no `approved: false`, and un-approving DELETES the row.** |
+| Rename a recording | `KnowledgeSource` | `title` (empty clears it) |
 | Re-process | `KnowledgeSource` | `status → "uploaded"`, `error → null`, then a new Redis job |
-| Delete a recording | Object storage **first**, then `KnowledgeSource` | The row delete **cascades** to all its `KnowledgeItem` and `CopilotApproval` rows |
+| Delete a recording | Object storage **first**, then `KnowledgeSource` | The row delete **cascades** to its `KnowledgeItem` and `CopilotApproval` rows |
+| Let the agent **run** a workflow | `CopilotApproval` + `ExecutionPlan` | The acting flag **and** a freshly compiled plan, in **one transaction**, so "enabled ⇒ a plan exists" holds by construction; disabling deletes the plan row |
+| Turn on **AI Agent** mode | `Workspace` + `AgentAcceptance` | The mode flip and the acceptance row in one transaction; rows are never updated, never deleted |
+
+**`CopilotApproval` is the single most important row in the product**, and two things about it are
+easy to get wrong from the write side:
+
+- **It names a durable WORKFLOW, not a position and not a step** — which is why it survives §7's
+  delete-and-recreate, and why every read path re-checks it server-side rather than trusting
+  anything the browser claims. Identity matching, the readers and the liveness rule:
+  [knowledge-base.md](knowledge-base.md) §6.
+- **The stored `segmentTitle` is the DISPLAY TRUTH.** When the widget sends a workflow title over the
+  wire, the server ignores it and uses this snapshot instead — the title a founder sees in an audit
+  row is never one a page supplied.
 
 ---
 
@@ -414,7 +404,7 @@ The founder browses the built workflows and flips **Approve**
 | `question` | The end-user's question, **PII-scrubbed before it is written** (§19) |
 | `answered` | `true` = grounded answer given, `false` = declined |
 | `contextPath` | The page they were on |
-| `feedback` | `null` for now — filled in by step 13 |
+| `feedback` | `null` for now — filled in later, if the end-user thumbs the answer |
 | `senseSourceId` / `senseSegmentIndex` / `senseStep` / `senseConfidence` | **Where we located the user** — workflow, step number, confidence |
 | `senseUsed` | `used` (the answer was about that position) \| `ignored` (we located them, answered about something else) \| `none` (we looked, found nothing) \| `null` (never looked) |
 | `reasonTrigger` | Why diagnosis fired: `intent` (they used diagnostic words) \| `blocked` (the step's button was disabled) \| `escalation` (the fast path declined, the widget retried with evidence) |
@@ -448,8 +438,27 @@ The founder browses the built workflows and flips **Approve**
 **In the end-user's browser**, meanwhile: the conversation is written to `sessionStorage` so it
 survives a full-page navigation — **max 20 messages, 30-minute TTL, tab-scoped, gone when the tab
 closes** ([`widget/src/session.ts`](../../packages/widget/src/session.ts)). An **allowlist of message
-kinds** decides what may be persisted; anything not on the list (future sensitive-value messages) is
-never written, by construction.
+kinds** decides what may be persisted: run narration IS stored (the narrative has to survive the page
+loads the run itself causes), while a value supplied in the chat rides a kind that was never added to
+the list and is therefore never written, by construction.
+
+---
+
+## 14. An end-user consents to a run → **one audit row, and never a value**
+
+Clicking **Run it** on the consent sheet is the write. The server re-verifies the workspace's mode,
+the workflow's liveness, the acting flag and the plan hash *before* the row exists at all — the
+refusal shapes are in [copilot.md](copilot.md) §3.
+
+| # | Table | When | What |
+|---|---|---|---|
+| 1 | **`ExecutionRun`** | At the consent click | The consent moment and the **pinned plan hash** — the version of the steps the user actually agreed to |
+| 2 | `ExecutionRun` | As the run proceeds | Per-step outcomes, and each input's **SOURCE** (`prefill` \| `typed` \| `chat`) |
+| 3 | `ExecutionRun` | At the end | A terminal outcome — `completed` \| `aborted` \| `safe_stop` — with its reason and the step it stopped on |
+
+**The values themselves ride the page, never the wire.** A value the user gave in the chat is typed
+into their own form and is gone; a sensitive one is never typed by us at all. The audit answers
+*what did it do* and *where did each value come from* without ever answering *what was it*.
 
 ---
 
@@ -457,7 +466,7 @@ never written, by construction.
 
 Everything in step 12 exists **for this moment**. Storing the questions isn't bookkeeping — *"what are
 my users actually stuck on?"* is one of the things the founder is buying. Analytics is entirely reads
-over `CopilotQuery`, `QueryCitation`, `CoverageGap`, and `CopilotWalkthrough`. The one write:
+over `CopilotQuery`, `QueryCitation`, `CoverageGap`, `CopilotWalkthrough` and `ExecutionRun`. The one write:
 dismissing a gap sets `CoverageGap.status = "resolved"` (the row is kept, never deleted).
 
 **What the founder actually sees, and which stored data it comes from:**
@@ -473,6 +482,7 @@ dismissing a gap sets `CoverageGap.status = "resolved"` (the row is kept, never 
 | **Analytics** → *Recent declines* | The last 5 questions we couldn't answer **+ the page they were asked on** | `CopilotQuery` where `answered = false` |
 | **Analytics** → **Where users get stuck** | Ranked *(workflow, step)* pairs — the exact step people ask for help at, with that step's instruction | `CopilotQuery.senseSourceId/senseSegmentIndex/senseStep` where `senseUsed = 'used'` |
 | **Analytics** → *Top workflows by citations* | Which approved recordings are carrying the answers | `QueryCitation` grouped by workflow |
+| **Analytics** → **Agent runs** | Recent runs with their outcomes; safe-stops called out as an alarm rather than a row in a distribution — a safe-stop is the agent refusing to guess in front of a customer, which is the signal a founder must not have to look for | the run audit rows |
 | **KB** → a workflow's detail page | That workflow's all-time cited count, last-cited date, and 👍/👎 tally | `QueryCitation` + the parent query's `feedback` |
 
 **The two "record this next" signals are the product's feedback loop**, and they're different questions:
@@ -519,10 +529,16 @@ The fix has two halves, because a writer fix alone would leave every existing ro
 | **`ApiToken`** | Every click of "Connect extension" | Studio | 1 per click (never revoked) |
 | **`KnowledgeSource`** | Upload; then 4 status updates during the build; rename/reprocess | API + worker | 1 per recording |
 | **`KnowledgeItem`** | KB build — **wiped and recreated** every process | Worker | 1 per step of every workflow |
+| **`Workflow`** | KB build — created when new content appears, re-matched by content on every reprocess | Worker | 1 per workflow, for as long as it exists |
+| **`ProductPage`** | KB build — derived knowledge pages, re-matched by content like `Workflow` | Worker | 1 per derived page |
+| **`WorkflowOverlapDismissal`** | The founder says "these are NOT duplicates" | Studio | 1 per dismissed pair |
 | **`CopilotApproval`** | Founder approves (deleted on un-approve) | Studio | 1 per approved workflow |
+| **`ExecutionPlan`** | The founder enables acting for a workflow; refreshed by the worker when a reprocess still compiles clean | Studio + worker | 1 per actable workflow |
+| **`ExecutionRun`** | A run is consented to, then updated per step | API | 1 per run |
+| **`AgentAcceptance`** | AI Agent mode is turned on (never updated, never deleted) | Studio | 1 per workspace per terms version |
 | **`CopilotQuery`** | Every end-user question (except Studio preview) | API | 1 per question |
 | **`QueryCitation`** | Alongside a grounded answer | API | 1 per cited workflow per answer |
-| **`CoverageGap`** | A decline (deduped) or a Studio prompt-to-article miss | API + Studio | 1 per distinct unanswered question |
+| **`CoverageGap`** | A decline (deduped). The `prompt` source is historical — nothing writes it today | API | 1 per distinct unanswered question |
 | **`CopilotWalkthrough`** | A guided run starts, then updated per step | API | 1 per run |
 
 ---
@@ -541,6 +557,8 @@ Worth knowing as clearly as what we do:
 | The diagnostic page-state capture | Sent at ask time, used in the prompt, dropped — only a trigger label survives |
 | The rendered page image | Same — only a `true`/`false` survives |
 | Sensitive typed values from recordings | Masked to `••••••` in the founder's browser before upload |
+| The values an acting run types into a form | The end-user's own page. The audit records only each input's **SOURCE**, never the value — and a value supplied in the chat rides a message kind that is never persisted, never sent to the answer endpoint, and never logged |
+| Sensitive values during a run (passwords, card fields, cross-origin frames) | Typed by the user straight into the app's own field. They never enter FlowBuddy at all — not the chat, not the wire, not the database |
 | Rate-limit counters, heartbeat throttles, sense-plan cache | In memory in the API process; reset on restart |
 
 ---

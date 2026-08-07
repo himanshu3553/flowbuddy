@@ -81,8 +81,12 @@ you were still making would be far worse than keeping a few stray files for a da
 actually finished can be removed this way; a finished recording is yours to keep or delete in Studio.
 
 One rough edge remains, and it's a deliberate decision rather than an oversight: **there's no size
-limit on those as-you-go uploads** — see [where we are](09-where-we-are.md) for why that was left
-alone for now.
+limit on those as-you-go uploads.** It isn't a way in for a stranger — you need an account's own
+recorder key to upload at all — but a runaway recording would show up as a storage bill rather than
+an error, and a leaked recorder key does more damage than it used to. The fix is to state each file's
+exact size when the permission slip is issued, so storage itself rejects anything else; that means
+the recorder has to prepare each file *before* asking permission, which reorders a hot path and isn't
+something to rush into a batch of small hardening fixes.
 
 **Two other ways to record are planned, not built:** just narrating with no clicking (for explaining
 concepts), and uploading a video.
@@ -171,12 +175,17 @@ per workflow, in Studio.
 
 Approval is **per consumer**. A workflow approved for the in-app assistant isn't automatically
 published to a public help site or exposed to outside AI agents — those are separate switches, and
-only the first one exists today.
+neither of those two exists today.
+
+And the assistant's own approval now has two levels: approving a workflow lets the assistant *answer*
+from it; a second switch on that workflow says the agent may *run* it. Approving never implies
+running.
 
 ```
    ONE knowledge base
      │
      ├── approved for the assistant   ✅ this is the one that exists
+     │     └── and, separately: the agent may run it
      ├── approved for the help portal    not built
      └── approved for other AI agents    not built
 ```
@@ -191,13 +200,16 @@ and you get a replay player that steps through the screenshots in sync with your
 rename, delete, or reprocess a recording.
 
 **Knowledge Base** — your workflows and their steps, as the assistant sees them. Click a step's
-screenshot and it opens full-size with the clicked element highlighted.
+screenshot and it opens full-size with the clicked element highlighted. A workflow also carries an
+**AI Agent** card — whether the agent may run this one, and, when it can't, the reason in plain
+words.
 
 **Copilot** — approvals, the embed snippet, appearance, which websites are allowed, and the mode
 selector. The preview on this page **is the real widget**, not a mock-up.
 
 **Analytics** — what users asked, how often it answered versus declined, thumbs up and down, which
-workflows get cited most, and where users get stuck.
+workflows get cited most, where users get stuck, and, once acting is on, every run the agent made:
+what it finished, what it abandoned, and every time it stopped itself safely.
 
 ---
 

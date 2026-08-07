@@ -1,23 +1,26 @@
-// P4-M2 THE ACTING RUN (slice 3 — docs/build/agent.md §A2) — the second actor policy on the shared
-// step engine: the WIDGET performs the founder's recorded steps; verification advances; input and
+// P4-M2 THE ACTING RUN (docs/build/agent.md §A2) — the second actor policy on the shared step
+// engine: the WIDGET performs the founder's recorded steps; verification advances; input and
 // destructive steps pause. The guided walkthrough remains the first policy (the user acts, Next
 // advances) and both consult the same engine verdicts, which is the whole point of §A2.10.
 //
-// WHAT THIS SLICE DELIBERATELY IS NOT. There is NO product surface here: no offer, no consent
-// sheet, no chat narration, no server run lifecycle, no analytics row — those are slice 4/5. The
-// ONLY way to start a run is the debug-build trigger (`window.FlowBuddyRun`, registered when the
-// embed carries `data-flowbuddy-debug="true"`), and the plan itself is served only for workflows
-// whose founder enabled acting (live approval + `executeState: 'enabled'`, checked server-side).
+// THE SHAPE OF A RUN. The answer carries a typed run OFFER; the user opens a consent sheet and
+// clicks "Run it" — THAT is the consent moment, and `POST /v1/copilot/run { start }` records it and
+// pins the plan hash. The run then narrates into the chat, asks for what it needs there, and
+// appends per-step and terminal outcomes to its `ExecutionRun`. `window.FlowBuddyRun` survives only
+// as a DEBUG-BUILD shortcut past the conversation (registered when the embed carries
+// `data-flowbuddy-debug="true"`); the plan itself is served only for workflows whose founder
+// enabled acting (live approval + `executeState: 'enabled'`, checked server-side).
 //
 // THE POSTURE, from the design:
 //  - Act-verify-or-hand-back (§A2.6): every act is judged against recorded evidence (the engine's
 //    vocabulary). An act the page ignored is a first-class outcome — that one step is handed to
 //    the user in guided posture and the run continues acting afterward. Never act-and-hope.
-//  - Inputs are POINT-AND-TYPE in this slice (§A2.4's sensitive-field channel used for every
-//    field): the run pauses, highlights the app's own field, the user types THERE, and an explicit
-//    Continue advances (D4 — `filled ≠ done`; D5 — state is read ON the Continue click). Dev-
-//    supplied values (the trigger's second argument) exercise fill/select/check, are validated the
-//    same way, and are NEVER persisted — a resume falls back to point-and-type for what remains.
+//  - Inputs (§A2.4): a missing non-sensitive value is asked IN THE CHAT, one field at a time, and
+//    the reply IS the value — no mid-run model call. Sensitive fields are always POINT-AND-TYPE:
+//    the run pauses, highlights the app's own field, the user types THERE, and an explicit Continue
+//    advances (D4 — `filled ≠ done`; D5 — state is read ON the Continue click). Chat-supplied and
+//    dev-supplied values are NEVER persisted — a resume falls back to point-and-type for what
+//    remains, and the audit stores only the SOURCE.
 //  - Destructive steps pause for a typed Confirm BEFORE acting (§A2.7). Take over / Stop are
 //    always visible; Take over converts the rest of the run into a guided walkthrough from the
 //    exact current step.

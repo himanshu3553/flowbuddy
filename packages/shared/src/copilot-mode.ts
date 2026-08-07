@@ -99,8 +99,8 @@ export function modeAtLeast(mode: CopilotMode, floor: CopilotMode): boolean {
   return MODE_RANK[mode] >= MODE_RANK[floor];
 }
 
-/** Does this mode permit acting on the page? Always false until mode 3 is built — the check
- *  exists now so the acting path has a single gate to consult rather than inventing one later.
+/** Does this mode permit acting on the page? Every acting path consults this one gate rather than
+ *  inventing its own idea of "may I".
  *
  *  This is now the ONLY capability gate in the vocabulary. Its sibling `modeUsesAgentLoop` went with
  *  mode 1: every mode uses the agent loop, so a function asking "does it?" could only ever return

@@ -58,9 +58,13 @@ Three consequences for a deploy:
   host permissions, so there is nothing to configure on the bucket beyond what §3.3 already creates.
   *(This was the one part of the upload rework that could not be proven locally — MinIO is more
   permissive than R2 on both checksums and cross-origin PUTs.)*
-- **The R2 token needs delete, not just write.** Cleanup of abandoned recordings (§8.5) removes the
-  objects under a session prefix; the **Object Read & Write** token in §3.3 already covers it, but a
-  read-only or write-only token would leave storage growing silently.
+- **The R2 token needs delete, not just write.** Cleanup of abandoned recordings removes the objects
+  under a session prefix; the **Object Read & Write** token in §3.3 already covers it, but a
+  read-only or write-only token would leave storage growing silently. That cleanup rides
+  fire-and-forget on the next finalize **by design, so there is no cron service in either blueprint**
+  to pay for or to monitor — which is why nothing scheduled appears in the YAML. Route semantics, the
+  sweep and why its threshold is what it is:
+  [`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6.
 - **The presigner runs with `requestChecksumCalculation: 'WHEN_REQUIRED'`**
   ([`packages/api/src/storage.ts`](../../packages/api/src/storage.ts)). With the SDK default the signer
   bakes an empty-body CRC32 into the signed URL; **MinIO ignores it and R2 rejects it** — i.e. the
@@ -382,22 +386,13 @@ zipping, re-run a plain build so your local `dist/` goes back to the localhost-p
 
 ## 6. End-to-end test
 
-1. **Record** a narrated workflow → it uploads to the deployed API → the embedded worker synthesizes it.
-   Success log (JSON): `{"level":"info","service":"worker","sessionId":"<id>","workflows":N,"steps":M,…,"msg":"ready"}`.
-2. In Studio → **Knowledge Base** → **approve** the workflow (the copilot only answers from approved content).
-3. **Test the widget:** Studio → **Copilot** → copy the embed `<script>` (pre-filled with the API URL,
-   widget URL, and public key). Set the **origin allowlist** (or leave empty = allow any). Drop the
-   snippet into an HTML page **served over HTTP** (not `file://`):
-   ```bash
-   mkdir /tmp/widget-test && cd /tmp/widget-test
-   # create index.html containing the snippet, then:
-   python3 -m http.server 8080      # open http://localhost:8080
-   ```
-   The indigo launcher appears → ask about the approved workflow → expect a **grounded answer with
-   citations**; ask off-topic → expect an **honest decline** (logged as a coverage gap). On the dev
-   free tier the **first** question may take ~1 min (API cold start); prod is always-on.
+Proving a fresh deploy is the same flow in every environment: **record** a narrated workflow →
+**approve** it in Studio → embed the snippet on a page **served over HTTP** (never `file://`) → a
+covered question answers with citations, an uncovered one declines honestly.
 
-Full manual test plan (3 levels — local · dev · prod): [`e2e-testing.md`](e2e-testing.md).
+The steps, the log lines to watch and the per-environment gotchas belong to
+[`e2e-testing.md`](e2e-testing.md), which owns how to test anything — **Level 1** local, **Level 2**
+this dev deploy, **Level 3** production. Run the level that matches what you just deployed.
 
 ---
 
@@ -405,142 +400,31 @@ Full manual test plan (3 levels — local · dev · prod): [`e2e-testing.md`](e2
 
 1. Work lands on `dev`; the dev cloud env auto-deploys it for cloud E2E.
 2. On an explicit go: FF-sync `main` → Render auto-deploys the prod services.
-3. Migrations run automatically on the api boot. Additive columns and **widening** changes (e.g. dropping a NOT NULL) are safe to roll forward; a new UNIQUE index is safe only while the column is nullable and unpopulated (which is how `20260727230000_upload_identity` ships). Anything narrowing still needs a plan.
+3. Migrations run automatically on the api boot. Additive columns and **widening** changes (e.g. dropping a NOT NULL) are safe to roll forward; a new UNIQUE index is safe only while the column is nullable and unpopulated (which is how `20260727230000_upload_identity` ships). A **column-default flip** is safe *and* completely reversible, and for the same reason: there is no back-fill, so nothing was overwritten — flipping the default back is a full revert, and every existing row keeps whatever it already had, because a column default only ever applies to rows created afterwards. Anything narrowing still needs a plan.
+   **⚠️ The build must run `prisma generate`** — Render's does, via `pnpm build`. The client bakes scalar defaults in at generate time and sends them explicitly, so **the client, not the column, is what a create applies**: a deploy that migrates without regenerating keeps handing new rows the *old* defaults while the database claims otherwise. The failure is silent and reads as "the migration didn't take". Why, in full: [`schema.prisma`](../../packages/db/prisma/schema.prisma).
 4. Both widget bundles republish automatically (they're one static build).
 5. The landing page redeploys only when `packages/landing` changes.
 6. Extension releases run on the store review cycle — and they are **no longer independent of the API**. **Standing ordering rule (since the upload-identity change): a recorder build that a new API requires must be LIVE ON THE STORE BEFORE that API reaches prod.** `/v1/sessions` rejects any upload without the `X-FlowBuddy-Upload-Id` header, and store build **v0.6.0 does not send it** — deploying the API first breaks recording for every installed user. **v0.7.0 is the build that satisfies this** (cut with the upload rework; it sends the header, uploads narration directly, and calls the discard route). Check its live status in [`extension-releases.md`](extension-releases.md) before the FF to `main`.
+7. **After a deploy, run the part of [`e2e-testing.md`](e2e-testing.md) that covers what changed.** It is organised by leg — recording, approval, the widget answer, positional/diagnostic/walkthrough, the acting run — so a targeted drop needs one leg, not the whole matrix; a change to ingestion or the answer path needs the whole flow.
+8. **If the copilot misbehaves in production, every lever is per workspace and needs no deploy** — turn the on-page abilities off, turn diagnostics off, put the workspace back to Copilot, turn acting off for the one workflow, or un-approve it (the sharpest instrument: it stops being answerable at all). The full list, including the one lever that no longer exists: [running and shipping it](../plain-english/07-running-and-shipping-it.md#if-something-goes-wrong-with-the-assistant-in-production), in plain English.
+9. **If recording uploads misbehave, there is no runtime toggle** — but the recorder degrades to the all-in-one bundle by itself whenever signing fails, so **disabling `/v1/uploads/sign` is a usable stopgap**. It does nothing for an *older* recorder: the identity-header requirement on `/v1/sessions` stands either way, so rolling the API back is the only way to serve one (item 6).
 
 ---
 
 ## 8. Upgrading an existing deploy
 
-### 8.1 The Phase 2 drop (Sense + Reason)
+There is no separate upgrade procedure. An upgrade **is** §7 — push, migrations run on boot, both
+widget bundles republish, and you run the leg of the test guide that covers what changed. Everything
+an upgrade has ever needed to know that is still true next time has been folded into the standing
+rules: migration safety and `prisma generate` in §7 item 3, the store-before-API ordering in item 6,
+the rollback levers in items 8–9, the R2 delete permission in §2.2, and the health-check / heap-cap /
+concurrency guards in §2.6 and §2.3.
 
-Taking a running deploy from Phase 1 to the Phase-2 code (Sense `8187af5` + Reason `cb143ca`):
+**Per-drop history — which migrations shipped with which change, and in what order — is in
+`git log`.** It is not maintained here.
 
-1. **Merge to the deploy branch & push** → Render rebuilds the Docker services.
-2. **Migrations run automatically** on api boot (`prisma migrate deploy`): `20260708121649_sense_in_context_help` + `20260713090000_reason_diagnostic`. Both additive (new `Workspace` / `CopilotQuery` columns, defaults included) — no backfill, no downtime concern.
-3. **Set `FLOWBUDDY_STUDIO_URL`** on the api (the real Studio URL) if not set — without it the real-widget tester 403s once a workspace restricts origins (§3.7).
-4. **Publish BOTH widget bundles** from one `pnpm --filter @flowbuddy/widget build`: `flowbuddy-copilot.js` **and** `flowbuddy-copilot-render.js`, side by side. A missing renderer never breaks answers — diagnostics silently degrade to structure-only.
-5. `REASON_MODEL` sets the diagnostic path's model (must be vision-capable). Both blueprints now set it explicitly, so changing `SYNTH_MODEL` never silently moves diagnosis with it.
-6. **No other new env vars.** Behavior toggles are per-workspace in Studio → Copilot → Settings, with safe defaults: Sense **ON** · show-me OFF · Reason **ON** (masked, structure-only) · page image **ON** (new workspaces, since 2026-07-16) · typed values OFF. *(Defaults as of this drop — show-me and walkthrough later flipped ON for new workspaces; see §8.3.)*
-7. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 11 — a positional "what do I do next?" and a "why is this button disabled?" diagnosis; verify `CopilotQuery.reasonTrigger` is populated on the diagnostic row.
-
-### 8.2 The walkthrough drop (P4-M0)
-
-On top of the Phase-2 steps:
-
-1. **Migrations run automatically**: `20260715155642_walkthrough_guided` (`Workspace.copilotWalkthrough` + the `CopilotWalkthrough` run table) and `20260715183302_reason_image_default_on` (a column-default flip only — **existing workspaces keep their current image-tier setting**; new workspaces default ON). Both additive, no backfill.
-2. **Publish BOTH widget bundles again** — the base bundle grew (walkthrough module + alert-surface detection).
-3. **No new env vars.** New per-workspace toggle: Studio → Copilot → Settings → **Guided walkthrough** (default OFF at this drop — flipped ON for new workspaces in §8.3; requires Sense).
-4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) §11 — the walkthrough leg (offer → manual Next-driven steps → one `CopilotWalkthrough` row) and the rejected-action diagnosis.
-
-### 8.3 The Copilot-mode drop (D9 mode 2) + the default flip
-
-Two commits, one deploy story. **The headline for an existing deploy: nothing changes for any
-workspace that already exists.** Every migration below is additive or a column-default change, and
-column defaults apply only to rows created afterwards.
-
-1. **Migrations run automatically** on api boot (`prisma migrate deploy`):
-   - `20260726143125_copilot_mode` — adds `Workspace.copilotMode` (one `TEXT NOT NULL DEFAULT`).
-   - `20260727012603_copilot_mode_default_copilot` — default → `'copilot'`, **no back-fill**.
-   - `20260727013457_copilot_abilities_default_on` — `copilotShowMe` + `copilotWalkthrough` defaults → `true`, **no back-fill**.
-
-   No downtime concern, and each is reversible by flipping the default back (the *absence* of a
-   back-fill is what makes them safe to revert — nothing was overwritten).
-2. **⚠️ `prisma generate` must run in the build.** Prisma Client bakes scalar defaults in at
-   generate time and sends them explicitly, so **the client — not the column default — is what a
-   create actually applies.** A deploy that migrates without regenerating will keep handing new
-   workspaces the old defaults while the database claims otherwise. Render's build already runs it
-   via `pnpm build`; worth knowing because the failure is silent and looks like the migration didn't
-   take.
-3. **Publish BOTH widget bundles again** — the base bundle carries the on-page ability gate and
-   the chat-persistence store. *(That gate was the assistant's judgment when this drop shipped;
-   D11 made it the founder's switch alone on 2026-08-02 — [`agent.md`](../build/agent.md).)*
-4. **No new env vars.** New per-workspace control: Studio → Copilot → Settings → **How your
-   assistant works** (Copilot · AI Agent-locked). Workspaces land on **Copilot** with show-me and
-   guided walkthrough permitted; every mode stays switchable both ways.
-5. **New defaults for new workspaces:** mode **Copilot** · Sense **ON** · show-me **ON** ·
-   walkthrough **ON** · Reason **ON** · page image **ON** · typed values **OFF**.
-6. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) — the Copilot-mode leg. Confirm the API logs
-   `agent path engaged` on a question, and that a *new* signup shows Copilot pre-selected in
-   Settings without touching anything.
-7. **If the loop misbehaves in production**, note the simplest lever is gone: dropping a workspace
-   to the single-shot **AI Chatbot** mode was retired with that mode on 2026-08-02, and there is no
-   "make it simpler" switch any more. What remains, per workspace and without a deploy: turn off the
-   on-page abilities (show-me / walkthrough), turn off Reason so every question takes the plain
-   answering path, or un-approve the offending workflow — the sharpest instrument, since it stops
-   being answerable at all. Individual loop failures still degrade to a single no-tools answer on
-   their own, and log `agent path failed — falling back to the floor`.
-
-### 8.4 The upload-identity drop (recording uploads)
-
-Fixes the duplicate-recording bug: a slow upload timed out client-side while the server committed it
-anyway, and the Retry the user was then told to press minted a *second* recording. Recordings now
-carry a client-minted `uploadId`, and artifacts stream to object storage **during** the capture.
-
-*(This drop and §8.5 ship together as one deploy — §8.4 is the identity + direct-upload half, §8.5
-the completion of it.)*
-
-**⚠️ ORDER MATTERS — this is the first drop where the API and the extension are coupled.**
-`POST /v1/sessions` returns `400` without an `X-FlowBuddy-Upload-Id` header, and the previous store
-build **v0.6.0 does not send it**. The rule is that the newer recorder must be **live on the Chrome
-Web Store before this API reaches production**, or every installed recorder stops being able to
-upload. **That is not what happened here:** the API shipped first on 2026-07-28 by explicit decision
-(no customers on prod), leaving a window where the published recorder could not upload at all, and
-v0.7.0 going live closed it. It cost nothing because nobody was using the product — which is exactly
-the condition that will not hold next time ([`extension-releases.md`](extension-releases.md)).
-
-1. **Migration runs automatically** on api boot: `20260727230000_upload_identity` — adds
-   `RecSession.uploadId` (nullable) + `UNIQUE (workspaceId, uploadId)`, and drops `NOT NULL` on
-   `RecSession.manifest`. No back-fill; existing rows keep `uploadId = NULL` and stay valid (the
-   unique index tolerates many NULLs).
-2. **New status value `recording`** — a row exists from the first uploaded artifact, before Stop.
-   Studio renders it as a pending **Recording** badge; the worker skips a row with no manifest.
-3. **No new env vars, no widget rebuild.** The only infra requirement is that R2 accepts presigned
-   PUTs directly from the recorder — **proven on the dev deploy 2026-07-28** (§2.2).
-4. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 6 — a **Recording** badge appears in Studio
-   *while* capturing, Stop finishes in seconds, and a **retry produces no second recording**.
-5. **If it misbehaves:** there is no runtime toggle. The recorder degrades to the all-in-one bundle on
-   its own whenever signing fails, so disabling `/v1/uploads/sign` is a usable stopgap — but the
-   identity-header requirement on `/v1/sessions` remains, so rolling the API back is the only way to
-   serve an old recorder.
-
-### 8.5 Completing the upload rework + ops hardening (2026-07-28)
-
-Ships in the same deploy as §8.4. Three independent pieces: narration joins the direct-upload path,
-abandoned recordings finally get cleaned up, and the shared api/worker instance gets the guards it
-should always have had.
-
-1. **Narration uploads directly too** — same signed-URL path, at **Stop** rather than during capture.
-   The result: on a healthy connection the finalize request carries the **manifest and nothing else**.
-   **The multipart bundle path stays** as the fallback for a browser that cannot reach object storage
-   directly — that is deliberate and load-bearing, not leftover code.
-2. **Abandoned recordings are cleaned up** — an explicit discard route the recorder calls, plus a
-   server-side sweep riding fire-and-forget on finalize (no cron service to pay for or monitor).
-   **The R2 token must permit delete, not just write** — a write-only token leaves storage growing
-   silently. Route semantics, the sweep, and why the threshold is what it is:
-   [`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6.
-3. **Health checks + memory limits + worker concurrency** — see **§2.6** and **§2.3**. All three are
-   blueprint changes only, so they land with the normal deploy; nothing to click.
-4. **The api's BullMQ producer got its own connection** with `connectTimeout` /
-   `maxRetriesPerRequest` / a backing-off `retryStrategy`, and the enqueue itself is now a **bounded
-   5s race that logs and continues**. Rationale: by the time a job is enqueued the recording is
-   already safe in Postgres and object storage, so a sick Redis must not turn a *delivered* recording
-   into a failed upload that sends the user back to Retry. Recovery for a dropped enqueue is Studio →
-   **Stalled → Re-process**.
-   **⚠️ Subtlety worth keeping:** the *shared* `connection` object in
-   [`queue.ts`](../../packages/api/src/queue.ts) must stay **bare** — the worker needs BullMQ to own
-   `maxRetriesPerRequest: null`, and a blocking consumer that gives up on a request instead of
-   blocking stops consuming jobs. Studio's producer gets away with fail-fast options only because it
-   is never a consumer. Do not "unify" the two connection objects.
-5. **No migration, no new env vars, no widget rebuild.** The only new blueprint values are
-   `healthCheckPath` and `NODE_OPTIONS` (§2.6, §2.3).
-6. **Smoke test:** [`e2e-testing.md`](e2e-testing.md) Part 6 — Stop finishes in seconds with the log
-   line reporting the audio as `uploaded` rather than `in bundle`; **6c** covers discard (start a
-   capture, throw it away, confirm the row *and* its objects are gone).
-7. **Still open by decision:** the presigned URLs carry **no size ceiling** — deferred deliberately,
-   with the full reasoning and the eventual fix recorded in [`roadmap.md`](../roadmap.md) §9.
+<!-- §8 keeps its number deliberately: §9 is cited as "§9" from e2e-testing.md, and renumbering
+     would leave that link valid while making it point at the wrong thing. -->
 
 ---
 
@@ -581,8 +465,8 @@ custom domains make every underlying swap invisible to customers.
 | `[worker] failed …: 401 You didn't provide an API key` | `OPENAI_API_KEY` unset on the api | Set it on the api; **re-record** (failed jobs don't auto-retry — `attempts=1`) |
 | `400 missing or malformed X-FlowBuddy-Upload-Id` on `/v1/sessions` | A recorder older than the upload-identity change (incl. store v0.6.0) uploading to a new API — the deploy-ordering rule in §7.6 was violated | Ship the newer recorder first, or roll the API back; a local rebuild fixes it for developers only |
 | Presigned artifact `PUT` rejected by R2 (`400`/`403`) while it worked on MinIO | The signer emitted checksum params (the SDK default bakes an empty-body CRC32 into the URL) — R2 enforces them, MinIO ignores them | Keep the dedicated presigning client at `requestChecksumCalculation: 'WHEN_REQUIRED'` (§2.2); this class of bug is invisible locally |
-| `could not enqueue synthesis — recording is stored; re-process from Studio` | Redis unreachable or slow at the moment the recording finalized; the enqueue is a bounded 5s race by design (§8.5) so the upload still succeeded | Fix/restart the Key Value instance, then Studio → the recording → **Re-process**. The recording itself is safe — do **not** ask the user to re-record |
-| Recordings pile up with a **Recording** badge and never process | Captures that were started and abandoned. Expected on a testing environment; they are swept after 12h idle on the next finalize (§8.5) | Nothing to do — or force it by finishing any recording in that workspace. Deleting the row by hand also works |
+| `could not enqueue synthesis — recording is stored; re-process from Studio` | Redis unreachable or slow at the moment the recording finalized; the enqueue is a bounded 5s race by design ([`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.5) so the upload still succeeded | Fix/restart the Key Value instance, then Studio → the recording → **Re-process**. The recording itself is safe — do **not** ask the user to re-record |
+| Recordings pile up with a **Recording** badge and never process | Captures that were started and abandoned. Expected on a testing environment; they are swept after 12h idle on the next finalize ([`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6) | Nothing to do — or force it by finishing any recording in that workspace. Deleting the row by hand also works |
 | Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via the **api** `/v1/copilot/answer`. Cause is on the api: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real Studio URL) on the api; the web service needs **no** OpenAI key |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash (dev only — prod is always-on) |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
@@ -607,6 +491,5 @@ embed attrs `data-sync-*` → `data-flowbuddy-*`, key header `x-sync-key` → `x
 
 - **`FLOWBUDDY_EXTENSION_URL`** to be set on **both** `flowbuddy-web` and `flowbuddy-dev-web` (the store listing URL) so the Home checklist CTA reads "Add to Chrome".
 - **Presigned uploads have no size ceiling — ⏸ deferred by decision (2026-07-28).** `MAX_BUNDLE_BYTES` and the multipart `fileSize` limit only guard `/v1/sessions`, which artifacts now bypass. Full reasoning + the eventual fix: [`roadmap.md`](../roadmap.md) §9.
-- **`packages/landing` is still the minimal "coming soon + sign in" card.** The full marketing page remains to build ([`landing-page.md`](../product/landing-page.md)).
 
 > **Standing ordering rule** (learned the hard way, §7.6): a recorder build that a new API *requires* must be **live on the Chrome Web Store before that API reaches prod**. It was overridden once, on 2026-07-28, and only survived because nobody was using the product.

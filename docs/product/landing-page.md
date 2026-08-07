@@ -1,6 +1,6 @@
 # FlowBuddy — Landing Page (positioning & structure)
 
-> The working doc for the **flowbuddyai.com** marketing landing page: the positioning decision, the page structure as built, and what remains open. **Current state:** the full marketing page is built (`packages/landing`, Astro static build); it goes live on the next `main` sync.
+> The working doc for the **flowbuddyai.com** marketing landing page: the positioning decision, the page structure as built, and what remains open. **Current state:** the full marketing page is live at [flowbuddyai.com](https://flowbuddyai.com) (`packages/landing`, Astro static build).
 
 - **Deploy mechanics:** [`deploy.md`](../ops/deploy.md) §4 — prod-only static service, no staging URL, preview is local.
 - **Companion docs:** product narrative → [`product.md`](product.md) · the phases the page describes → [`roadmap.md`](../roadmap.md) · competitive framing → [`competitive-claude-chrome.md`](competitive-claude-chrome.md) · brand tokens & voice → [`design_system/`](../design_system/README.md).
@@ -12,8 +12,8 @@
 The old "copilot-first vs. agent-ready" fork is resolved: **both, in order.**
 
 - **Version 1 (the live page):** *the in-app, context-aware AI assistant for your SaaS.* The hero stacks the positioning ("In-App / Context-Aware / AI Assistant / for your SaaS", with "AI Assistant" as the gradient-shimmer focal line); the promise line is "Show FlowBuddy your product once and let it help your users by giving the right answers at the right moment," with "Go live in 30 minutes · No credit card required" pinned at the bottom of the first viewport. Outcomes: in-app assistance · faster onboarding · higher activation · fewer support tickets. Context-awareness (it knows which page the user is on) leads because it is the moat a generic RAG chatbot can't claim.
-- **Version 2 (the future positioning):** *make your product AI-agent ready — the AI interface layer for SaaS.* Lives today only as a placeholder page at **`/future`** ("one knowledge base, many consumers": assistant live · portal coming · agent access in development · documents planned). It is promoted to the hero when Phase 6 ships.
-- **Copy guardrail** (owned by [`interop.md`](../build/interop.md)): third-party agent access is presented as *direction*, never as available, until Phase 6 ships. The `/future` page is written inside that rule.
+- **Version 2 (the future positioning):** *make your product AI-agent ready — the AI interface layer for SaaS.* Lives today only as a placeholder page at **`/future`** ("one knowledge base, many consumers": assistant live · portal coming · agent access in development · documents planned). It is promoted to the hero when Phase 6 ships — whether it has is [`roadmap.md`](../roadmap.md) §12's to say, never this page's.
+- **Copy guardrail:** third-party agent access is presented as *direction*, never as available, until Phase 6 ships. The rule is the phase's own ([`interop.md`](../build/interop.md) states it; the roadmap says whether it still binds), and the `/future` page is written inside it.
 - **Scope of address:** version 1 deliberately says "your SaaS product" (that's the buyer). The "your product / your web app, never your SaaS" rule applies to the *version-2* positioning, whose scope is any web app.
 
 ---
@@ -41,3 +41,4 @@ The old "copilot-first vs. agent-ready" fork is resolved: **both, in order.**
 1. **Sign-up block (section 5) final copy** — placeholder-quality copy shipped; the founder decides the real content.
 2. **Live-widget dogfood prerequisites:** record + approve a FlowBuddy-on-FlowBuddy KB in Studio, allowlist `flowbuddyai.com`, and set the widget key on the Render landing service.
 3. **Off-page SEO/GEO** (content, articles, listings, Search Console/Bing submission) — untouched; a separate work stream.
+4. **The capability story predates acting.** §2's three tiers end at guided walkthroughs. Whether version-1 positioning claims the acting mode — and with what caveat, given it is opt-in behind a terms acceptance and never a default — is open ([`roadmap.md`](../roadmap.md) for what has shipped).

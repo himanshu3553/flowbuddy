@@ -19,7 +19,8 @@ with the host page's styles or globals.
 ## 2. Where it lives
 
 Paths are in `CLAUDE.md` and the source tree. This doc covers what those files *guarantee*, not where
-they sit.
+they sit. One split is itself a guarantee rather than a convention — which module may touch the host
+page's controls: §4.9.
 
 ---
 
@@ -47,8 +48,11 @@ they sit.
     Never used in customer embeds.
 - **Input (runtime):** the end-user's typed questions; `location.pathname` + `document.title` as
   context.
-- **Output:** `GET /v1/copilot/config` at mount; `POST`s to `/v1/copilot/answer` and
-  `/v1/copilot/feedback`; renders answers in the panel.
+- **Output:** the config fetch at mount; posts to the answer and feedback endpoints; the sense-plan
+  fetch on panel open; walkthrough analytics for guided runs; and, in AI Agent mode, the
+  execution-plan fetch and the run lifecycle ([copilot.md](copilot.md) §3). It renders answers in the
+  panel — and, inside a consented run, **performs the founder's recorded steps on the host page**:
+  the one output that is not a network call.
 
 ---
 
@@ -82,7 +86,9 @@ fetch failure/timeout mounts with attrs/defaults — the widget always appears.
 The widget keeps three pieces of conversation state: `messages[]` (the conversation), `open` (panel
 visibility), and `loading` — plus the panel-geometry pair `dragPos`/`expanded` (below).
 `messages[]` and `open` **survive full-page navigations** since P5-M0 cut 1; `loading`
-and the geometry pair are deliberately per-page-view. There's no framework — a single `render()`
+and the geometry pair are deliberately per-page-view. A fourth piece of state exists only during a
+run: the run's own position and outcomes, held in the `agent-run` session slot rather than in memory,
+because the run causes the navigations that would otherwise erase it. There's no framework — a single `render()`
 function **rebuilds the message list** from `messages[]` on every change
 (`list.replaceChildren(...)`). It's a tiny immediate-mode UI:
 
@@ -149,21 +155,30 @@ document is still loading, else mounts immediately. The launcher toggles `open`;
 trims the input, guards against empty/loading, and calls `ask`.
 
 **Boot order matters (P5-M0 cut 1).** `boot()` runs: fetch `/config` → apply it → **`restoreChat()`**
-→ `mount()` → `resumeWalkthrough()`. The restore sits *before* `mount()` so a restored thread never
-flashes the empty greeting, and *after* the config so it can see `preview` and the walkthrough flag.
+→ `mount()` → **`resumeAgentRun()`** → `resumeWalkthrough()`. The restore sits *before* `mount()` so a
+restored thread never flashes the empty greeting, and *after* the config so it can see `preview` and
+the walkthrough flag. **The acting run resumes first and wins** — one overlay at a time — and both
+resumes are storage-gated inside: the stored session is read **before** any fetch, so a page with
+nothing in flight fetches nothing, and a page with something in flight then *reconciles* it against
+freshly-served plan data rather than trusting what it stored (§4.9).
 
 ### 4.7 Message kinds & chat persistence
 
 Every message carries a `kind` — `user.question` · `assistant.answer` · `assistant.decline` ·
-`assistant.error` — which replaced the older `decline`/`error` booleans (one fact, one field). It is
-an **open vocabulary**: later modes append rather than reshape (`assistant.narration`,
-`agent.tool_call`, and D3's `user.value` for a value typed into the chat).
+`assistant.error` · `assistant.narration` (a run's own commentary) · `user.value` (a value supplied
+in the chat for a run to type) — which replaced the older `decline`/`error` booleans (one fact, one
+field). It stays an **open vocabulary**: later modes append rather than reshape.
 
 **The `PERSISTED_KINDS` allowlist — not the message shape — decides what is stored**, and it filters
 on the way *in* and on the way *out*, so an older bundle or the host page cannot reintroduce a kind
 that has since been excluded. `assistant.error` is deliberately absent: a transport failure is about
-a moment, not the conversation. This is the mechanism that lets D3's chat-supplied sensitive values
-be excluded later by *declining to add a string* rather than migrating storage
+a moment, not the conversation.
+
+**The allowlist is the whole enforcement, and the two acting kinds land on opposite sides of it.**
+Run narration IS persisted — the narrative has to survive the very page loads the run causes. A
+chat-supplied input value rides a kind that was **never added to the allowlist**, so it is never
+written to storage, never sent to the answer endpoint, and never logged: it exists for one fill and
+is gone on navigation. Excluding it cost a decision not to add a string, not a storage migration
 ([`agent.md`](../build/agent.md) §6).
 
 Writes map fields one by one, so `walkOffer` (a full founder-derived plan copy) structurally cannot
@@ -172,7 +187,11 @@ citation count/title length, because the host page shares this origin and can wr
 
 The panel **re-opens itself** only when the stored thread was touched within the last 2 minutes and
 no walkthrough is about to resume (a synchronous `walkthroughPending()` peek, since
-`resumeWalkthrough` is async and would otherwise flash the panel before the step card takes over).
+`resumeWalkthrough` is async and would otherwise flash the panel before the step card takes over) —
+**and it re-opens unconditionally when an acting run is resuming**, the deliberate inverse of the
+walkthrough rule: a walkthrough owns the screen with its card, whereas the conversation IS the run's
+surface (narration streams into it and missing values are asked there), with the run card as a
+compact progress HUD beside it.
 Restoring only ever repopulates the transcript — never a spotlight, never a position; Sense
 re-measures those on every message. Persistence is skipped entirely in Studio preview mode, along
 with the heartbeat and analytics.
@@ -183,8 +202,11 @@ now **spans navigations**.
 ### 4.8 Operating mode & the on-page gate
 
 `/v1/copilot/config` also serves the workspace's **mode** (`copilot` · `agent`), which the widget
-stores in `cfg.mode`. Since AI Chatbot's retirement it changes nothing about on-page behaviour — it
-is there for the acting tier.
+stores in `cfg.mode`. **Nothing on the page branches on it, and that is the design.** The acting
+affordance arrives as a typed run offer on the answer itself — the server resolves the runnable set,
+the server decides the offer, and the server re-verifies the mode on every acting call. The widget's
+copy is a convenience; a page holding the public key cannot talk itself into a higher mode by editing
+it.
 
 **The founder's switch is the whole rule (2026-08-02).** An on-page ability runs on EVERY positional
 answer when its switch is on, and never when it is off. D8 made the assistant's own judgment the
@@ -200,8 +222,7 @@ element this question's probe resolved, and `walkthroughOffer` returns null on t
 Two properties this preserves: the founder's switches remain the only thing that grants a
 capability — nothing the model returns can turn something on — and an ability the workspace has
 switched off simply doesn't happen, so the end-user is never told that a feature exists but is
-disabled. The widget's copy of the mode is a convenience; **the server re-resolves it on every
-call**, so a page holding the public key cannot talk itself into a higher mode.
+disabled.
 
 **Topic memory (P5-M0 cut 2).** `Citation` carries `sourceId`/`segmentIndex` alongside the title
 (the server always sent them; the widget just ignored them). `lastCitedKeys()` walks back to the
@@ -212,6 +233,109 @@ entirely when empty so a first question is byte-identical to before. The restore
 these keys deliberately: continuity matters most right after a navigation, which is exactly when
 citations come from storage rather than a live response.
 
+### 4.9 One step engine, two actors
+
+The machinery for *"is this element ready, did that act take, what do I do when the locator misses"*
+lives in a **step engine**, extracted from the walkthrough and actor-independent: settle,
+element-state verdicts, the pointer's evidence scan, the resolve retry ladder, completion evidence,
+and the observation harness. It is **read-only by contract** — which is what keeps guided mode
+structurally incapable of clicking anything.
+
+- **`walkthrough.ts` is now the guided actor** on that engine — behaviour-identical, with D4's
+  manual-only advancement unchanged.
+- **`act.ts` is the only code in the product that touches a host page's controls** (native-setter
+  fills, full pointer sequences), and the acting actor is its only importer. **The guided path never
+  imports it**, so "a walkthrough cannot act" is enforced by the module graph rather than by a
+  convention someone has to remember.
+- **`agent-run.ts` is the acting actor** — the run loop that drives the founder's compiled plan.
+
+The payoff — and the reason there must never be two verification codepaths — is stated once, in
+[`CLAUDE.md`](../../CLAUDE.md)'s traps.
+
+**Every completion verdict reads the page through `readElementState`** — the same
+`disabled`/`checked`/`filled`/`valid` reading, failed-constraint name included, that the diagnostic
+model is sent ([copilot.md](copilot.md)). One vocabulary, two consumers: it is why a card never says
+"click it" at a disabled button and never counts an invalid or unchecked field as done.
+
+#### What counts as done (the guided actor)
+
+| Step kind | Completion evidence | Without it |
+|---|---|---|
+| `input` | `input`/`change`/blur/Enter on a debounce, **plus genuinely done**: a checkbox/radio must be `checked`; a field must be `filled` AND not provably invalid (constraint API / `aria-invalid`) — re-verified LIVE at Next-click time. Filled-but-invalid names the failed constraint in plain words, never the flag. | Next = an explicit skip |
+| `action` **with** a `postRoute` | an observed click (**a disabled target never counts**) → *awaiting-nav*, **persisted synchronously before unload** → confirmed by the route watcher (SPA) or by the resume handshake (hard nav). A matching route with **no** observed click also counts: **outcome over mechanism**. Persisting the evidence is what lets an acknowledgment survive the very page load the click causes. | Next = an override |
+| `action`, no `postRoute` | click → mutation-quiet settle → either the next step resolves and is visible, or the clicked control left the DOM. | Next = an override |
+| `locators: []` | none — an instruction-only card, honest about having no detection at all. | Next only |
+
+Because guided detection only ever ACKNOWLEDGES, the run row's auto/manual split measures
+**detection quality** rather than progress: a Next taken over verified evidence logs `auto`, a Next
+taken over an unverified step logs `manual`.
+
+**The plan guided mode verifies against is deliberately the poorer one.** The sense plan carries no
+per-step outcome markers, so detection runs on filled-state / click / `postRoute` /
+next-step-resolves. The richer appearance markers arrived with the compiled `ExecutionPlan` and are
+**acting-side only** ([`agent.md`](../build/agent.md) §A2.2). Two actors on one engine verifying
+differently is the design, not an inconsistency waiting to be unified.
+
+#### Statuses stay live, and an acknowledgment can roll back
+
+A **state tick** — active-session only, read-only, sharing the route poll's timer — re-reads the
+current step continuously, so a card is never stale: a button that enables flips to "click it", a
+field that turns valid flips to acknowledged, a programmatic fill is caught, and an acknowledgment
+**rolls back if the state regresses**. The same tick **re-resolves the element when an SPA re-render
+replaces it**, and clears an *awaiting-nav* whose timer died with a reload. A **disabled action
+target** is explained rather than demanded — *"this button is disabled — check step k first"*,
+naming the first EARLIER input step that is not genuinely done.
+
+#### The pointer self-corrects BACKWARDS
+
+Forward motion is only ever the user's Next. But every tick, every Next and every resume converges
+the pointer **back** to the earliest on-this-route input step that is verifiably not done — **page
+evidence beats stored position**, so a stale resumed session or a hydration race snaps back within a
+tick.
+
+**Only INPUT steps may pull the pointer back, and the asymmetry is the point.** An input's state is
+readable; a completed click leaves nothing behind it, so letting action steps pull back would drag
+users backwards forever over work they had already finished. Completion is never declared over a
+pending step. **Next on a still-pending step is an explicit user override** — that step is
+remembered as skipped and the pointer never drags them back to it, while pressing Back onto it
+re-engages the gate. Every pointer decision (mode, from→to, corrections) logs under
+`data-flowbuddy-debug`.
+
+#### When it cannot resolve, it stops
+
+An unresolvable step **on this route**, after the resolve retry ladder, is a **safe-stop**: the card
+stalls with Retry/Back/Exit, a `stalled` analytics event fires, and it never guesses forward. A step
+on **another** route gets text only — *"head there and I'll pick it up"* — because navigating for
+the user would be ACTING. That sentence is the concrete edge of guided mode's zero-acting boundary,
+and the one place a future "helpful" change would breach it.
+
+#### Escalating to the diagnostic path
+
+On blocked / invalid / stalled states, and only when the founder's Reason toggle is on, the card
+offers **"Explain what's blocking me"**: it reopens the chat and asks *"Why can't I proceed with
+this step?"* on the user's behalf, through the exact pipeline a typed question takes — **zero new
+server surface** — while the walkthrough keeps observing underneath (the open panel simply covers
+the card by z-order).
+
+**The division of labour is deliberate.** Local state checks *gate*: instant, free, every tick. The
+diagnostic loop *explains*: seconds and tokens, user-invoked. Nothing should ever make the tick call
+a model. It is also the honest answer to DOM-only checking's ceiling — purely-visual custom
+validation that never sets `aria-invalid` or a native constraint is invisible to the gate, yet well
+within diagnosis's reach, because that compares the page against the founder's TRUE recorded
+evidence for the step.
+
+#### Resuming across a full-page navigation
+
+A stored walkthrough session is read **before any fetch** (§4.6), then reconciled against the
+route's shard: a fresh copy is swapped in when the shard is served, and a fetch failure proceeds on
+the persisted copy bounded by its TTL. **A workflow ABSENT from a shard whose route it belongs to is
+treated as REVOKED and the run ends silently** — absence means "not approved", applied to
+resumption, and it is how a founder's retirement reaches a walkthrough already in flight. The stored
+pointer is **never trusted blindly**: a resume runs the same backwards self-correction as every
+tick, so a reload that reset the form resumes at the first unfinished step rather than the stale
+one, while a true mid-workflow resume (earlier steps live on previous routes and don't resolve here)
+picks up exactly where the user left off.
+
 ---
 
 ## 5. Data it reads / writes
@@ -219,16 +343,35 @@ citations come from storage rather than a live response.
 - **Reads:** its own `data-*` config; `location.pathname` + `document.title` per question; at ask
   time, a READ-ONLY glance at the host DOM (Sense locator probe; Reason's structured capture on
   diagnostic questions — values masked, `[alert]` surfaces tagged).
-- **Writes locally:** two `sessionStorage` slots, both tab-scoped, workspace-key-scoped, 30-min TTL
-  and both managed by [`src/session.ts`](../../packages/widget/src/session.ts) — no cookies, no
+  - **During a guided walkthrough that glance becomes a bounded session.** Observers attach on the
+    user's own offer click and detach on done/exit/TTL: read-only re-resolution of the current
+    step's element, a document capture-phase click listener used **solely** to test "was that the
+    highlighted element?", and `location.pathname` via popstate/hashchange plus a poll. **No
+    history monkey-patching** — deliberate, and the opposite of what the RECORDER does on the
+    founder's own page ([recorder-capture.md](recorder-capture.md) §4.2), because the widget is a
+    guest on someone else's product. Outside an active walkthrough nothing observes and nothing is
+    fetched at page load.
+  - **Nothing leaves the page during a walkthrough except the run analytics below** — workflow key,
+    step numbers, auto/manual, outcome. Never page content, never values, never selectors. That
+    negative guarantee is what justifies observing continuously at all: it extends the ask-time-only
+    glance into a session the user explicitly asked for, without widening what travels.
+- **Writes locally:** three `sessionStorage` slots, all tab-scoped, workspace-key-scoped, 30-min TTL
+  and all managed by [`src/session.ts`](../../packages/widget/src/session.ts) — no cookies, no
   `localStorage`, nothing that outlives the tab:
   - `flowbuddy.walkthrough.v2` — an active guided-walkthrough session (founder-derived plan data),
     so the walkthrough survives full-page navigations.
   - `flowbuddy.chat.v1` — the conversation thread (P5-M0 cut 1): up to 20 messages plus the
     panel's open state, so the chat survives them too. Only kinds on the `PERSISTED_KINDS`
-    allowlist are stored — transport errors and (in future) chat-supplied input values are not —
-    and `walkOffer` plan copies are dropped on the way in.
-- **Server-side** it causes `CopilotQuery` / `CoverageGap` / `CopilotWalkthrough` rows via the API.
+    allowlist are stored — transport errors and chat-supplied input values are not — and
+    `walkOffer` plan copies are dropped on the way in.
+  - `flowbuddy.agent-run.v1` — the acting run's resumable state. It is what makes the server
+    stateless between boundary calls:
+    a full-page navigation the run itself caused unloads the widget, and the run picks itself back up
+    on remount, re-fetching the plan and ending quietly if the pinned hash moved or the workflow was
+    retired. **The values a run types are never in it** — a value supplied in the chat rides a kind
+    the allowlist omits, and it is gone the moment the page reloads.
+- **Server-side** it causes `CopilotQuery` / `CoverageGap` / `CopilotWalkthrough` rows via the API —
+  and, for a consented run, an `ExecutionRun`.
 - **Third-party deps:** none in the base bundle; `html2canvas` lives ONLY in the lazy sibling
   bundle `flowbuddy-copilot-render.js` (loaded on the first diagnostic question with the image tier on).
 
@@ -243,6 +386,21 @@ citations come from storage rather than a live response.
   breaks client-side.
 - **Host page has aggressive CSS** → shadow DOM isolates the widget, so it's unaffected.
 - **Local testing over `file://`** → won't behave (no proper origin); serve the demo over HTTP.
+- **An act the page ignored** → not an error class to fight (a page script's events carry
+  `isTrusted: false`). Every act is verified against recorded evidence; an unverified one hands that
+  single step back to the user in guided posture and the run resumes acting afterward — never
+  act-and-hope.
+- **The app rejected the act** → a rejection surface that APPEARED since the act beats ANY completion
+  evidence, using the same alert-surface detector the diagnostic path diagnoses with. The run repairs
+  conversationally, in the app's own words.
+- **A step that navigates** → tried ONCE, then it waits patiently. A login wall resumes by itself
+  when the user arrives; a retry loop would hammer a page nobody is on.
+- **An unresolvable step** → safe-stop in place: the run stops where it stands, says the element
+  can't be found (it may have moved, or may not exist for this account), and offers Retry · Take
+  over · Stop. Taking over converts the remaining steps into a guided walkthrough at that exact step;
+  the terminal audit row records `safe_stop`. Never guess forward.
+- **The plan changed, or the workflow was retired, mid-run** → the resume ends the run quietly rather
+  than continuing onto steps nobody consented to.
 
 ---
 

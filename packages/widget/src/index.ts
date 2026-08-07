@@ -824,7 +824,7 @@ async function sendFeedback(m: Msg, fb: 'up' | 'down'): Promise<void> {
 // offer, never a position; Sense re-measures those every message, by design.
 
 /** What survives a navigation. Absence is the mechanism: a kind not listed here is dropped on the
- *  way in AND on the way out, so D3's future 'user.value' is excluded by never being added. */
+ *  way in AND on the way out, so D3's 'user.value' is excluded by never being added. */
 const PERSISTED_KINDS: ReadonlySet<MsgKind> = new Set<MsgKind>([
   'user.question', 'assistant.answer', 'assistant.decline',
   // The run's commentary is part of the conversation — it must survive the very navigations the

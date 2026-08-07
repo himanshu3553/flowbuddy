@@ -15,9 +15,8 @@ import { StatusBadge } from '@/components/dashboard/status-badge';
  * control lives here: enabling acting must happen where the founder can READ what they are
  * enabling — the description, every step, and (on refusal) every reason the run is impossible.
  *
- * The switch is honest about the mode: AI Agent mode is not selectable yet, so this PREPARES a
- * workflow rather than exposing it. Absence downstream is structural — a workflow without the flag
- * has no acting tool bound for it at all (agent.md §A2.3, "absence, not refusal").
+ * Absence downstream is structural — a workflow without the flag has no acting tool bound for it
+ * at all (agent.md §A2.3, "absence, not refusal").
  */
 export function WorkflowExecutionControl({
   workflowId,

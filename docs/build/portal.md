@@ -2,7 +2,7 @@
 
 > **The portal track is the human-facing help center built over the same Knowledge Base the copilot uses — a decoupled, second publish target, scheduled in Version 2.** Version 1 is the pure copilot arc (Copilot → Sense → Self-validation → Autopilot); the portal + articles ship after it. This doc is the forward build plan — the features to develop, aligned to what Phase 1 already produces (distilled workflows + the approval gate + hybrid retrieval). Roadmap/status: [`roadmap.md`](../roadmap.md) §6. Technical model: [`architecture.md`](../product/architecture.md). Why it's a by-product: [`product.md`](../product/product.md) §5.
 
-- **Status:** **Version 2 — all 7 modules (V2 · P0…P6) to build; no investment until scheduled.** · **Branch:** `dev` · **Last updated:** 2026-07-17 (rename sweep; feature list locked 2026-07-08)
+- **Status:** [`roadmap.md`](../roadmap.md) §6.
 - **Decoupling guardrail:** the copilot path must **never** require article authoring or portal publishing. Approving a workflow for the copilot and publishing it to the portal are **independent** actions over the same KB. Mental model: `ONE KB → per-audience approval → { Copilot, Portal }`.
 
 ---
@@ -29,7 +29,7 @@ The same recordings that power the copilot also feed a **public help portal** �
 
 ### V2 · P0 — Publish foundation (per-audience approval + presentation overlay)
 The two structural pieces every other module sits on:
-- **Per-audience approval.** Generalize the copilot approval gate into per-audience approval (`copilot | portal`) over the same `(sourceId, segmentIndex)` workflow key — a workflow can be approved for the copilot, the portal, both, or neither. A `PortalPublication` row mirrors `CopilotApproval` (survives the worker's item delete+recreate on reprocess). Realizes the guardrail: `ONE KB → per-audience approval → { Copilot, Portal }`.
+- **Per-audience approval.** Generalize the copilot approval gate into per-audience approval (`copilot | portal`) over the same durable workflow identity — a workflow can be approved for the copilot, the portal, both, or neither. A `PortalPublication` row mirrors `CopilotApproval` (survives the worker's item delete+recreate on reprocess). Realizes the guardrail: `ONE KB → per-audience approval → { Copilot, Portal }`.
 - **Presentation overlay.** Portal-only prose and edits (title override, intro, per-step tweaks, reorder/hide steps, callouts) layered **at render time** over the read-only workflow — never by mutating KB items, so the copilot and portal can't drift. One source of truth.
 - **Done when:** a workflow can be approved specifically for the portal, and portal-only edits render on top of it without changing the underlying KB.
 
@@ -77,11 +77,11 @@ The lowest-leverage items for an invite-only beta, so they close the phase.
 
 ## 3. Data-model deltas (additive)
 
-All new tables hang off the workflow key `(sourceId, segmentIndex)` (the key `CopilotApproval` uses) or off `KnowledgeItem`. Every migration is **additive** — nothing in the current schema changes.
+All new tables hang off the durable **workflow identity** (the key `CopilotApproval` uses) or off `KnowledgeItem`. Every migration is **additive** — nothing in the current schema changes.
 
 - **V2 · P0:**
-  - `PortalPublication` — the portal half of per-audience approval, keyed `@@unique([sourceId, segmentIndex])` + `workspaceId` (mirrors `CopilotApproval`, so it survives the worker's item delete+recreate on reprocess). Absence = not portal-visible. Optional `visibility` (public | gated) folds in here (V2 · P5).
-  - `WorkflowOverlay` — the presentation overlay, keyed `(sourceId, segmentIndex)`: portal-only `titleOverride`, `intro`/`body` prose, per-step edits (instruction/detail overrides, hidden/reordered steps as a `steps Json`), callout/warning fields, highlight `kind` (rectangle | arrow), related-workflow links. Rendered on top of the read-only workflow; **never** written back to `KnowledgeItem`.
+  - `PortalPublication` — the portal half of per-audience approval, keyed on the same durable **workflow identity** `CopilotApproval` uses — never a position, which lets a re-split walk a publication onto content nobody reviewed ([`workflow-identity.md`](workflow-identity.md)) — plus `workspaceId`. Absence = not portal-visible. Optional `visibility` (public | gated) folds in here (V2 · P5).
+  - `WorkflowOverlay` — the presentation overlay, keyed by workflow identity: portal-only `titleOverride`, `intro`/`body` prose, per-step edits (instruction/detail overrides, hidden/reordered steps as a `steps Json`), callout/warning fields, highlight `kind` (rectangle | arrow), related-workflow links. Rendered on top of the read-only workflow; **never** written back to `KnowledgeItem`.
 - **V2 · P3:** `KnowledgeItem.embedding` + the **pgvector** extension already exist — **no new retrieval migration**. Add only a `SearchQuery` log (workspace, query, result-count, ts) so portal no-result queries become coverage signals.
 - **V2 · P4:** `StaticPage` (workspace, title, markdown `body`) for prose pages not backed by a workflow; `PublishVersion` (a snapshot of the render at publish); `Collection` (+ a workflow/page ↔ Collection join).
 - **V2 · P5:** `Workspace` theme fields (logo key, colors), `customDomain`, gated-access secret; `WorkflowFeedback` (article ref, helpful bool, optional note); a `redactions Json` on `KnowledgeItem` (persisted blur regions) and/or redacted-image artifacts so published screenshots are scrubbed.

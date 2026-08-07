@@ -48,6 +48,11 @@ they sit.
     hybrid retrieval until the next (re)process (delete+recreate ⇒ automatic re-embed).
   - `Workflow.description` — the workflow's PLAN in prose (§4 stage 6). Best-effort: `null` leaves
     behaviour exactly as it was before the stage existed.
+  - the compiled **execution plan** (refresh only, for workflows with acting enabled) — the step list
+    and its consent-pin hash re-derived from the new content, with **appearance markers** re-diffed
+    from the recording's before/after DOM snapshots for the last step and every destructive step.
+    Best-effort per step: an unreadable snapshot compiles that step bare, and absence changes nothing
+    — presence tightens verification.
   - `KnowledgeSource.status = ready` (or `error`).
 
 The shape persisted into each `KnowledgeItem.data` is a
@@ -86,15 +91,10 @@ configurable) with `response_format: 'verbose_json'`, which returns **segment-le
 result is normalized to `{ text, segments: [{ start, end, text }] }` with times **in milliseconds**.
 
 **No narration is reported, not returned empty.** Three paths produce no words without anything
-throwing — no audio in the manifest, an audio file the reader cannot fetch, and audio that
-transcribed to nothing — and each returns a distinct `gap` alongside the empty transcript. They are
-kept apart because the founder's next move differs: grant the microphone · check whether the
-recording uploaded (re-processing will not help) · re-record and actually narrate.
-
-Why it is worth three cases rather than one flag: **a recording with no narration lands `ready`
-looking perfectly healthy**, while everything downstream of narration is silently absent — workflow
-descriptions, the recording summary, product-knowledge pages. The founder's only symptom is a copilot
-that answers thinly, with nothing anywhere connecting that to a microphone. Note the deliberate
+throwing, and each returns a distinct `gap` alongside the empty transcript rather than one "no
+narration" flag — because **a recording with no narration lands `ready` looking perfectly healthy**
+while everything downstream of it goes quiet at once, and the founder's next move differs per case.
+The three cases and their three moves are enumerated in `transcribe.ts`. Note the deliberate
 non-case: text that arrives *without* segment timings is NOT a gap — the describer falls back to the
 whole transcript, so that narration is still used.
 
@@ -216,9 +216,9 @@ Then each model step is *resolved* into the persisted `DistilledStep`:
 | `bbox` | the key event's element rect — powers the element highlight on the screenshot (**rendered in Studio's KB detail page** as a lightbox overlay). The overlay is expressed as **viewport fractions** (`bbox / manifest.app.viewport`), which makes it **DPR-independent and needs no coordinate calibration**. That fraction math is implemented once, in the KB page's own render layer — the only implementation in the tree. |
 
 **Fallbacks & guards:** if the model returns zero steps, distillation falls back to **one step per
-cleaned event** (never lose a workflow). Observability logs warn when a workflow sheds most of its
-events (`≥10 events → <30% kept` ⇒ a possibly mis-scoped segment), so quality regressions are visible
-in the worker log rather than silent.
+cleaned event** (never lose a workflow). The worker also **warns when a workflow sheds most of its
+events** — a possibly mis-scoped segment — so quality regressions are visible in the log rather than
+silent; the thresholds are in `distill.ts`.
 
 ### Stage 6 — Describe ([`describe.ts`](../../packages/synthesis/src/describe.ts)) — LLM, per workflow
 
@@ -241,24 +241,13 @@ transcript it is handed. Given the whole recording's, workflow 1 is described fr
 narration and so is every workflow after it — the plans for a long tour get written from its opening
 minutes. The prompt forbids inventing, so the model's only remaining move is a bland one-line
 summary: **the failure reads as vagueness, never as an error, and it deepens the more a founder
-invests in one long recording.**
+invests in one long recording.** That is a failure mode with no alarm attached, which is the reason
+to know it exists.
 
-**The rule: narration belongs to the workflow that owns the NEXT event after it.** Talking without
-clicking is set-up for what is about to happen, so a workflow's material is its whole *run-up* — from
-the previous workflow's last event to its own — not a pad around its clicks. A fixed lead cannot
-express this: founders routinely explain for minutes before acting ("a chatbot is…, you'll need your
-site URL handy, and you can either upload a doc or point it at a URL"), and prerequisites and choices
-are precisely what a plan is made of. Anything short enough to be safe at a boundary is far too short
-for a real preamble. Consequences: the talk before the first click of a recording belongs to the first
-workflow however long it ran; a workflow the founder RETURNS to counts from the intervening
-workflow's last event, never before it, which is what keeps an interleaved recording safe (segments
-are not guaranteed contiguous — see stage 3); and each workflow keeps a few seconds past its own last
-click for its outcome line, which is the one direction two workflows may overlap.
-
-**The run-up is trimmed from the FRONT.** It can exceed what this stage reads, and the front of it is
-the oldest set-up talk while the back is what was said closest to the clicks. Trimming the other end
-would feed the describer a concept preamble and cut the task's own narration — the whole-tape bug,
-recreated inside a single workflow.
+**The rule: narration belongs to the workflow that owns the NEXT event after it** — a workflow's
+material is its whole *run-up*, because talking without clicking is set-up for what is about to
+happen. The rule, the three cases that fall out of it, and why the run-up is trimmed from the FRONT
+rather than the back all live with the windowing code in `align.ts` and `describe.ts`.
 
 Falls back to the whole transcript when there are no segments to window (a degraded transcription),
 which is the pre-window behaviour. Only this stage is windowed: segmentation and the two
@@ -266,9 +255,10 @@ recording-level reads are about the tour as a whole and legitimately take all of
 explanation in a long preamble is not lost when it lands on a workflow, it is *also* read by the
 recording description and the product-page extractor, which is where product knowledge belongs.
 
-**The one rule that matters:** the description must never restate a click target. No overlap is what
-makes it impossible for the plan and the steps to contradict each other — which is why there is no
-precedence rule anywhere downstream. It is enforced in the prompt, not at runtime.
+**The one rule that matters:** the description must never restate a click target — no overlap is what
+makes it impossible for the plan and the steps to contradict each other, which is why there is no
+precedence rule anywhere downstream. Enforced in the prompt, not at runtime; stated on the column in
+`schema.prisma` and in the describer's own header.
 
 **Best-effort, unlike the rest of the pipeline.** Every failure path returns `null`, and a workflow
 without a description behaves exactly as it did before this stage existed. That is the opposite of
@@ -369,6 +359,14 @@ Both kinds of no-match are meaningful, and both fail closed:
 | incoming unmatched | genuinely new | new identity, **born unapproved** |
 | existing unmatched | its content is gone | **detached** (`segmentIndex` → NULL), approval → `needs_review` |
 
+**A second question on the same pass — is it still eligible to RUN?** Only workflows the founder
+enabled acting for are touched. One whose new content recompiles clean gets its plan and consent-pin
+hash refreshed silently, and its appearance markers re-diffed from the new recording's snapshots. One
+that no longer compiles clean — or that lost its content entirely — drops to needs-review and stops
+being runnable until a human looks. Fail closed, the same posture as identity itself, with one
+asymmetry worth knowing: a parked flag is **never** silently re-enabled by a later clean compile. The
+founder's gate stands until they flip it, and the enable action recompiles for itself anyway.
+
 **An embedding failure during a reprocess is fatal, on purpose.** Without vectors identity cannot be
 verified, and both alternatives are worse: guessing by position is the bug this replaced, and
 detaching everything would unapprove an entire KB over a transient API blip. Throwing leaves the
@@ -383,19 +381,41 @@ the content is still what they approved). Nothing is deleted, so the recording, 
 analytics history all survive and every decision is reversible.
 
 **`inactiveReason IS NULL` is the single test for "may this answer?"** — everywhere, without
-exception. Anything new that takes a workflow out of service becomes another *value*, never another
-column.
+exception. Anything new that takes a workflow out of *answering* service becomes another *value*,
+never another column. `executeState` is not a counterexample: it answers a different question — *may
+it also RUN?* — on top of a liveness test it never replaces.
 
-**The enforcement is a filter, and it is repeated in SIX independent readers.** Approvals are not read
-through one function — retrieval, the sense plan, sense-hypothesis validation, continuity (topic
-memory) keys, the agent's by-key `get_workflow`, and walkthrough-start each query `CopilotApproval`
-directly. **A reader that forgets the filter silently serves retired content**, and the by-key fetch is
-the worst of them: it bypasses ranking entirely, so a retired workflow could be pulled whole. Any new
-reader of `CopilotApproval` must decide, explicitly, whether it wants live-only (almost always yes)
-or every approval ever granted (Studio's "Not answering" view).
+**The enforcement is a filter, and it is repeated in every reader — approvals are not read through
+one function.** This is the list, and it is deliberately a LIST rather than a number: a count goes
+stale silently, and it also hides its own scope. These are the readers on the copilot's answer and
+act path:
 
-That repetition is exactly why liveness is **one column**. Two flags to check would be two chances
-for one of six readers to check only the first.
+| Reader | Also requires the acting flag? |
+|---|:---:|
+| Retrieval (the ranking seam) | — |
+| The sense plan | — |
+| Sense-hypothesis validation | — |
+| Continuity (topic-memory) keys | — |
+| The agent's by-key `get_workflow` | — |
+| Walkthrough start | — |
+| The runnable-offer set | ✅ |
+| Execution-plan serving | ✅ |
+| Run start (the consent moment) | ✅ |
+
+Studio's own approval reads and the product-page gate are further live-only readers that this list
+does not cover, because they are not on that path — which is exactly the scope a bare integer hides.
+
+**The three acting readers ask a second question on top of liveness** — the acting flag — so a
+workflow may ANSWER without being RUNNABLE, never the reverse. That asymmetry is deliberate: acting
+presupposes approval, so retiring a workflow stops it acting through the same single column that
+stops it answering. **A reader that forgets the filter silently serves retired content**, and the
+by-key fetch is the worst of them: it bypasses ranking entirely, so a retired workflow could be
+pulled whole. Any new reader of `CopilotApproval` must decide, explicitly, whether it wants live-only
+(almost always yes) or every approval ever granted (Studio's "Not answering" view).
+
+That repetition is exactly why liveness is **one column**. Two *liveness* flags would be two chances
+for a reader to check only the first — which is also why the acting flag was made a second question
+rather than a second way of being retired.
 
 ### Overlap detection — how a duplicate is noticed
 
@@ -406,7 +426,8 @@ Two signals, both from vectors the KB already wrote, so detection costs no model
 
 Both must clear their gate. The second is what makes it work: a workflow's identity is its
 *destination*, and averaging lets shared navigation ("Click Home") outvote the goal in a short
-workflow — measured, that produced a real false positive between two unrelated tasks. It runs **on
+workflow. Never collapse it back to one score — the measured separation between the two signals is
+in the detector's header. It runs **on
 demand, never cached**, because what counts as a duplicate depends on what is approved *right now* —
 and a RETIRED workflow leaves both sides of the comparison, not just the live side, or it pairs with
 the workflow that replaced it and the warning the founder just resolved returns. Workflows from the
@@ -422,8 +443,8 @@ in [`build/workflow-identity.md`](../build/workflow-identity.md).
 
 | Store | Reads | Writes |
 |---|---|---|
-| **Postgres** | `KnowledgeSource` (manifest, to rehydrate) | `KnowledgeSource.status`/`transcript`; `KnowledgeItem[]` (delete + recreate) |
-| **Object storage** | the session's `audio.webm` (via `ArtifactReader`); screenshots are referenced by file name, not re-read here | — |
+| **Postgres** | `KnowledgeSource` (manifest, to rehydrate); the `Workflow` rows (identity matching); the approvals (which workflows have acting enabled) | `KnowledgeSource.status`/`transcript`; `KnowledgeItem[]` (delete + recreate); the refreshed **execution plan** (when re-matched content still compiles clean) and the **parked acting flag** (when it does not) |
+| **Object storage** | the session's audio, plus the before/after **DOM snapshots** of marker-bearing steps when refreshing an execution plan; screenshots are referenced by file name, not re-read here | — |
 | **OpenAI** | Whisper (transcribe) + the chat model (segment, distill) | — |
 
 ---
@@ -461,5 +482,5 @@ track renders approved workflows instead: [`portal.md`](../build/portal.md).
 - **Produces →** the `KnowledgeItem[]` + transcript that [Studio](studio.md) browses and the
   [Copilot](copilot.md) grounds on (Seam D).
 - **Hands the approval key to →** the gate in [studio.md](studio.md) and the enforcement in
-  [copilot.md](copilot.md), via `(sourceId, segmentIndex)`.
+  [copilot.md](copilot.md), via the durable **workflow identity** (§6).
 - **Row shapes →** [data.md](data.md).

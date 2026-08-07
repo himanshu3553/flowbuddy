@@ -30,7 +30,6 @@ that knowledge base — but only the parts you approved for each one.**
       ├──────────────┬──────────────────┬─────────────────┐
       ▼              ▼                  ▼                 ▼
   THE COPILOT    HELP PORTAL      OTHER AI AGENTS    CHECKING ITSELF
-   ✅ built       not built         not built          not built
 ```
 
 That last one is worth calling out: **checking itself** is the idea that FlowBuddy periodically
@@ -97,10 +96,10 @@ something in-app that you'd never publish publicly, and vice versa.
 ```
   ONE knowledge base
         │
-        ├──► approved for the copilot   ──►  the in-app assistant     ✅ BUILT
-        ├──► approved for the portal    ──►  a public help site       not built
-        ├──► approved for agents        ──►  other companies' AI      not built
-        └──► (no approval needed)       ──►  checking itself          not built
+        ├──► approved for the copilot   ──►  the in-app assistant
+        ├──► approved for the portal    ──►  a public help site
+        ├──► approved for agents        ──►  other companies' AI
+        └──► (no approval needed)       ──►  checking itself
 ```
 
 ---
@@ -151,6 +150,9 @@ Both show up in Studio. This is the feedback loop that makes the product improve
 | **The Chrome extension** | you | recording your product |
 | **Studio** (the web app) | you | reviewing, approving, configuring, and seeing what users asked |
 | **The widget** ⭐ | your customers | the in-app assistant — one line of code |
-| **The help portal** | your customers | a public help site — **not built** |
+| **The help portal** | your customers | a public help site |
+
+Which of these exist today, and which are still ideas, is kept in one place so it can't drift:
+[the roadmap](../roadmap.md).
 
 → Next: [building the knowledge base](03-building-the-knowledge-base.md)

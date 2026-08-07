@@ -88,6 +88,9 @@ services:
     dockerfilePath: ./packages/web/Dockerfile
     dockerContext: .
     envVars:
+      # Studio needs object storage of its own: it reads a recording's before/after DOM snapshots
+      # when compiling an execution plan, and deletes a recording's artifact prefix on delete.
+      # Stripping this group from web breaks plan compilation — it is not api-only wiring.
       - fromGroup: flowbuddy-dev-r2
       # Server-side Studio logs: JSON at info+. (Client/browser level is baked at build via
       # NEXT_PUBLIC_LOG_LEVEL — defaults to warn in prod so end-user consoles stay clean.)

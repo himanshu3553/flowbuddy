@@ -12,10 +12,12 @@ only tell them.**
 ```
   Copilot      Decides how to help as the conversation goes — explains,
                points at things, offers to guide. Never touches your page.
-               ✅ built · this is what everyone gets
+               This is what every workspace gets.
 
-  AI Agent     Does things for the user.
-               ❌ not built
+  AI Agent     Everything Copilot does, and it can also carry out one of your
+               recorded workflows in the user's own session, after they agree
+               to that specific run. Never a default: you turn it on
+               deliberately, and you accept the terms first.
 ```
 
 You choose in **Studio → Copilot → Settings**. **These are also intended to be the pricing tiers.**
@@ -93,14 +95,18 @@ too:
 
 ---
 
-## AI Agent — not built
+## AI Agent — doing it for them
 
 The assistant completes the task instead of describing it.
 
-The design decisions are locked even though nothing is written:
+You turn it on for the whole workspace once, and then for each workflow you're happy for it to run.
+The rules it works under:
 
-**It only runs workflows you recorded and approved.** Not "an AI that browses your app." It replays a
-path a human demonstrated and a human approved.
+**It only runs workflows you recorded, approved, and then separately switched on for it.** Not "an AI
+that browses your app." It replays a path a human demonstrated and a human approved. And it checks
+before you can switch one on: if any step can't be found reliably, or lands on someone else's site,
+or sits inside an embedded payment frame, it tells you why it won't run that one rather than
+discovering it halfway through.
 
 **Sensitive input is never typed by FlowBuddy.** For a password or a card number, the assistant
 highlights **your app's own field** and asks the user to type there. The value never passes through
@@ -113,6 +119,17 @@ tickets for you.
 
 **Offering is conversational; agreeing is not.** The assistant can *ask* "want me to do this for
 you?" in normal language. But the actual go-ahead is a real button, not the user typing "yeah go on".
+
+**What agreeing actually starts.** The button opens a sheet before anything happens: what will run,
+where it starts, your own description of the workflow, the values it has already picked up from the
+conversation, what it will still have to ask for, and which steps stop for confirmation or are the
+user's own to do. Once they say yes, it works through your recorded steps in their session, saying
+what it's doing in the chat as it goes. When it needs a value it doesn't have, it asks for that one
+thing in the chat and the reply *is* the value — one field at a time. It pauses before anything that
+commits, and at a sensitive field it points instead of typing, as above. After every action it checks
+the page really did what your recording says it should; when it can't tell, it stops and says so
+rather than carrying on and claiming success. **Pause**, **Stop** and *"I'll take it from here"* are
+on screen the whole time — and taking over turns the rest into a guided walkthrough at the same step.
 
 **A warning that's already been written down:** today there's a natural speed bump between being told
 something and being acted for — you have to press a distinct button. A fluid conversational agent
@@ -143,4 +160,4 @@ showing an error after a rejected submit. That's the state the strictest rules w
 the recorded app doesn't produce one — so merging the two paths today would be checked only against
 three versions of "the form isn't finished yet".
 
-→ Next: [the help portal](06-the-help-portal.md)
+→ Next: [the three things we haven't built yet](06-not-built-yet.md)

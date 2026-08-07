@@ -4,10 +4,9 @@
 
 > **Core loop:** Record once → Knowledge Base → **approve workflows for the copilot** → embedded copilot answers in-context (with citations + honest declines) → feedback loop tells you what to record next.
 
-- **Status:** v0.3 — **copilot-first** · **Version 1 LIVE IN PRODUCTION since 2026-07-23** at [flowbuddyai.com](https://flowbuddyai.com) (`app.` Studio · `api.` · `widget.` + the landing card; user-verified E2E — [`deploy.md`](../ops/deploy.md))
+- **Status:** [`roadmap.md`](../roadmap.md) — the only status surface.
 - **Name:** **FlowBuddy** (domain `flowbuddyai.com`) — decided 2026-07-17; built under the working name "Sync" until then (the full rename runs through code, contract, and infra).
-- **Last updated:** 2026-07-25 · **Branch:** `dev`
-- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](../roadmap.md) · Phase 1 build/spec/as-built → [`copilot.md`](../build/copilot.md) · Phase 1 visual → [`copilot.md §1.1`](../build/copilot.md#11-system-map-the-visual) · V2 portal by-products → [`portal.md`](../build/portal.md) · KB step distillation → [`kb-step-distillation.md`](../build/kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md)
+- **Companion docs:** technical model → [`architecture.md`](architecture.md) · versions/phases/modules + status → [`roadmap.md`](../roadmap.md) · Phase 1 build/spec/as-built → [`copilot.md`](../build/copilot.md) · the system in one diagram → [`internals/`](../internals/README.md) · V2 portal by-products → [`portal.md`](../build/portal.md) · KB step distillation → [`kb-step-distillation.md`](../build/kb-step-distillation.md) · manual E2E test plan → [`e2e-testing.md`](../ops/e2e-testing.md) · local dev → [`dev-setup.md`](../ops/dev-setup.md) · deploy → [`deploy.md`](../ops/deploy.md)
 
 ---
 
@@ -78,7 +77,7 @@ That knowledge base powers, in priority order:
 1. **An embedded in-app copilot (primary)** — answers from **approved-KB** in context, cites the workflow it used, declines honestly on gaps.
 2. **Sense — in-context help (Phase 2)** — the copilot knows **which workflow and which step** the end-user is on (a read-only probe of approved workflows' locators against their live page) and answers **positionally**: "you're on step 3 of X — here's how to get unstuck, then the path to done." **Reason (P2-M5)** extends it to diagnosis — "why is this button disabled?" — by comparing the user's live page state against the founder's own recording of the step succeeding. ([`sense-and-reason.md`](../build/sense-and-reason.md))
 3. **Self-validation (moat, later)** — periodically re-checks that documented steps still work and flags drift.
-4. **Autopilot (agentic execution — opened ahead of self-validation; the zero-acting P4-M0 guided walkthrough is ✅ built)** — the copilot offers to **execute the approved workflow in the end-user's live session** on consent: grounded actions (only recorded + approved workflows, never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty; the acting modules consume self-validation's certification when it lands. ([`agent.md`](../build/agent.md); the goal-based agent on top — Tell → Guide → Do — is drafted in [`agent.md`](../build/agent.md).)
+4. **Autopilot (agentic execution)** — on consent the copilot **executes the approved workflow in the end-user's live session**: grounded actions only (workflows the founder recorded, approved, and separately enabled for acting — never free-form agent browsing), human-in-the-loop, safe-stop on any uncertainty. Eligibility is analysed when the founder enables acting for a workflow; self-validation's certification slots into that same gate when it lands. ([`agent.md`](../build/agent.md); what remains of the goal layer above it — goals, product understanding, chaining — is drafted there.)
 5. **A published help portal + articles (Version 2 by-product)** — human-readable, searchable articles rendered from the same approved workflows. A *decoupled* publish target, moved to Version 2. ([`portal.md`](../build/portal.md))
 
 > The technical model (capture → KB → consumers, the data model, decisions) lives in [`architecture.md`](architecture.md). The phase/module plan and status live in [`roadmap.md`](../roadmap.md).
@@ -112,10 +111,10 @@ That knowledge base powers, in priority order:
 
 - **Commodity (table stakes; won't win on alone):** "record a screen flow → auto-generate a step-by-step doc." Scribe, Tango, Guidde, Supademo, Arcade already do versions of this, and generic LLMs are closing the gap.
 - **Moats (the actual product):**
-  1. **Grounded, context-aware copilot** — an in-app assistant grounded **only** in the customer's own approved recordings (never the model's general knowledge), that answers *for the screen the user is on* and **cites its source**. The KB's richness (selectors/routes/expected-outcomes, not lossy prose) is what makes context-awareness and future actionability possible.
+  1. **Grounded, context-aware copilot** — an in-app assistant grounded **only** in the customer's own approved recordings (never the model's general knowledge), that answers *for the screen the user is on* and **cites its source**. The KB's richness (selectors/routes/expected-outcomes, not lossy prose) is what makes context-awareness and actionability possible.
   2. **Self-validation / freshness** — knowledge that re-checks itself and flags drift. Hardest to copy; directly answers "products change faster than docs."
   3. **The compounding feedback loop** — copilot questions, thumbs, and honest declines tell the founder exactly what to record next. The product improves with use.
-  4. **Grounded agentic execution (Autopilot, Phase 4)** — the copilot doesn't just answer, it **does**: it executes the task in the end-user's session — but **only** workflows the founder recorded and approved, certified fresh by self-validation. Generic browser agents improvise actions and can't make that guarantee; FlowBuddy's grounding model extends from answers to actions.
+  4. **Grounded agentic execution (Autopilot, Phase 4)** — the copilot doesn't just answer, it **does**: it executes the task in the end-user's session — but **only** workflows the founder recorded, approved, and explicitly enabled for acting after an eligibility check — the model picks a grounded primitive, never a selector. Generic browser agents improvise actions and can't make that guarantee; self-validation's freshness certification tightens the same gate when it lands. FlowBuddy's grounding model extends from answers to actions.
 
 **Grounded authorship (core principle).** Everything the copilot says — and everything the V2 portal will publish (a rendered approved workflow, optionally prose-polished) — comes *only* from the customer's own recorded sessions. If nothing was recorded (and approved) on a topic, the copilot **declines and flags a coverage gap** instead of inventing an answer. This is the trust differentiator vs. generic AI assistants, and it keeps the KB self-validatable.
 
@@ -134,14 +133,14 @@ Recorder · KB build · copilot · Studio. What each one is and the decisions be
 
 - **Capture quality is the foundation** — copilot answer quality *is* capture quality. Highest-priority engineering (→ capture reliability).
 - **Grounding strictness** — tuning the decline threshold (honest vs. uselessly cautious) is the core quality knob. Confidently-wrong answers are the trust-killer.
-- **PII in answers** — approved-KB may still contain captured PII; client masking is the first line, and the **server text-scrub (P1-M12 Cut 1, shipped)** strips high-confidence structured PII from the copilot's answer path (transcript / KB text / narration). Screenshot- and DOM-pixel redaction (Cut 2) is deferred to Version 2 (rides with the portal) — needed before the public portal renders captured screenshots.
+- **PII in answers and inputs** — approved-KB may still contain captured PII; client masking is the first line, and the **server text-scrub (P1-M12 Cut 1, shipped)** strips high-confidence structured PII from the copilot's answer path (transcript / KB text / narration). Screenshot- and DOM-pixel redaction (Cut 2) is deferred to Version 2 (rides with the portal) — needed before the public portal renders captured screenshots. Acting adds an input channel, whose rule (sensitive fields are typed into the app's own field, so the value never reaches FlowBuddy) is decided in [`agent.md`](../build/agent.md) §6.
 - **Embed security & cost** — public key + origin allowlist + rate limiting; per-workspace LLM ceilings for an end-user-facing surface; anonymous session model.
 - **Context mapping** — mapping host routes to captured routes when paths differ (params/hashes); privacy of host-sent context.
 - **Citation UX without leaking structure** — Stage A has no articles to link, so a citation points to the workflow/step.
 - **Hard-to-capture apps** — canvas-heavy (Figma-like) and infinite-scroll SPAs resist DOM capture; iframes are constrained.
 - **Selector robustness** — obfuscated class names break brittle selectors; mitigate with multi-signal + visual matching (matters most for Phase 3).
 - **Self-validation reliability** — sandbox replay (auth/MFA, robustness) is the riskiest bet; the user-provided sandbox adds onboarding friction. Prototype early.
-- **Autopilot safety (Phase 4)** — a wrong action is worse than a wrong answer: execution runs on real end-user data, so it demands the validated-current certification gate, visible step-by-step runs, per-input prompts, destructive-step confirmation, and safe-stop on any unverifiable step.
+- **Autopilot safety (Phase 4)** — a wrong action is worse than a wrong answer: execution runs on real end-user data, so it demands a gate the founder opens per workflow (eligibility analysed at enable time; Phase-3's validated-current signal slots into the same socket when it lands), narrated step-by-step runs, values that come from the user rather than the recording, destructive-step confirmation, and safe-stop on any unverifiable step.
 - **Cold start / coverage gaps** — one recording leaves holes; the feedback loop fills them, so build it sooner than feels necessary.
 
 ---

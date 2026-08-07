@@ -1,4 +1,4 @@
-# 10 · Running, shipping and testing it
+# 7 · Running, shipping and testing it
 
 Three things that used to be three chapters: getting it running on your own machine, putting it in
 front of real people, and checking it still works. They're one chapter because they're one loop —
@@ -7,6 +7,11 @@ you run it, you ship it, you check it, you go again.
 > **Commands live in `CLAUDE.md`; the step-by-step test plan lives with the other operations docs.**
 > This chapter is the shape of the thing, not the keystrokes — so it doesn't go stale when a script
 > gets renamed.
+
+The three parts, in the order you'd meet them:
+[running it on your own machine](#running-it-on-your-own-machine) ·
+[putting it live](#putting-it-live) ·
+[checking it still works](#checking-it-still-works)
 
 ---
 
@@ -44,36 +49,31 @@ Four tools do the housekeeping:
 
 ---
 
-## First time only
-
----
-
 ## Every working session
 
-**Start the storage layer:**
+**The storage layer comes up first** — Postgres (the database), Redis (a job queue), and MinIO (file
+storage that behaves like the real thing).
 
-That's Postgres (the database), Redis (a job queue), and MinIO (file storage that behaves like the
-real thing).
+**Then the three programs, each in its own terminal.** All three need to be running. The worker is
+the one people forget — without it, recordings upload and then sit there doing nothing.
 
-**Then start the three programs, each in its own terminal:**
-
-All three need to be running. The worker is the one people forget — without it, recordings upload and
-then sit there doing nothing.
-
-**Build the browser bits when you're working on them:**
+The browser bits — the widget and the recorder extension — are built on demand, when you're working
+on them.
 
 ---
 
 ## Checking your work
 
-Run all three before believing anything works. `typecheck` is the main safety net — because all the
-packages share the same type definitions, changing a shape in one place makes everything that
-disagrees fail to compile.
+Before believing anything works: build everything, check the types, and run the tests.
+**Type-checking is the main safety net** — because all the packages share the same type definitions,
+changing a shape in one place makes everything that disagrees fail to compile.
 
 **About the tests:** there aren't many, deliberately. They cover the trickiest, purest logic —
-the rules that decide which knowledge gets found for a question, the answering loop's contract, and
-the safety rules around the modes. They deliberately **don't** test what the AI writes: a test
-that asserts on generated text fails for the wrong reasons.
+the rules that decide which knowledge gets found for a question, the answering loop's contract, the
+safety rules around the modes, and — since the assistant started acting — the machinery that drives a
+step on a page and the code that touches a control, run against a stand-in page rather than a real
+browser. They deliberately **don't** test what the AI writes: a test that asserts on generated text
+fails for the wrong reasons.
 
 There's no automated CI. That's a standing decision, not an oversight.
 
@@ -127,12 +127,6 @@ because the server logger only runs on Node.
 
 **The widget is silent by default.** It only logs if you explicitly ask it to, because it's running
 inside someone else's product and shouldn't be filling their console.
-
----
-
-## Shutting down
-
-→ Next: [putting it live](10-running-and-shipping-it.md)
 
 ---
 
@@ -294,19 +288,21 @@ Studio — instant, per account, no deploy. Retiring that mode removed the escap
 maintenance cost. It was the right trade (nobody was on the tier, and it cost double to maintain
 forever), but it is a real loss and this is where you'd have felt it.
 
-What you still have, per account and without a deploy, in Studio → Copilot → Settings:
+What you still have, per account and without a deploy, in Studio:
 
 - **Turn off the on-page abilities** — pointing and guided walkthroughs. Narrows what the assistant
   can do on your customers' screens without touching what it knows.
 - **Turn off diagnostics** — stops the assistant reading page state at all, so every question takes
   the plain answering path.
+- **Put the workspace back to Copilot** — instant, per account. The assistant keeps answering; it
+  stops doing anything. Modes switch both ways.
+- **Turn off running for one workflow** — leaves it answerable, stops it being runnable. The narrower
+  instrument when only one task is misbehaving.
 - **Un-approve a workflow** — the sharpest instrument. If one workflow is producing bad answers, it
   stops being answerable at all, immediately.
 
 Individual failures already handle themselves — if the smarter mode fails on one question, that
 question quietly falls back to a simple answer, and the setting stays put.
-
-→ Next: [testing it](10-running-and-shipping-it.md)
 
 ---
 

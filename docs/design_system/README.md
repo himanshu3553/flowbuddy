@@ -6,9 +6,21 @@ A design system for **FlowBuddy**, an in-app AI help **copilot** for SaaS produc
 
 ---
 
+## What this folder is
+
+**A design-tool export, not hand-written prose — don't tidy it.** `support.js` is a generated
+runtime (it says so on its first line), and every `guidelines/*.html` and `components/*/*.card.html`
+carries `@dsCard` annotations the tool parses at render time. The per-component `.prompt.md`,
+`.d.ts` and `.jsx` files sit inside that export. Consolidating, renaming or reflowing them risks a
+pipeline nobody has documented; this README is the index, and it is the only file here meant to be
+read as a document.
+
+---
+
 ## Sources this system was built from
 
-Everything here was distilled from the **FlowBuddy Studio handoff bundle** (in `design_handoff_sync_studio/` and `uploads/` at the time of authoring):
+Everything here was distilled from the **FlowBuddy Studio handoff bundle**, which still sits beside
+this file in `design_handoff_sync_studio/`:
 
 - **`prototype_full.html`** — the canvas prototype of *every* Studio screen + state (the structural / IA source of truth, mid-fidelity).
 - **`f1_home_states.html`** — Home in **hi-fi**, 3 states. The **pixel target** for visual fidelity.
@@ -17,6 +29,36 @@ Everything here was distilled from the **FlowBuddy Studio handoff bundle** (in `
 - **`Sync Studio Wireframes.dc.html`** *(the on-disk filename — predates the rename)* — the 20-frame wireframe canvas (F1–F20).
 
 **Two fidelities existed in the source.** The grayscale wireframes carry **structure, IA, copy, and the full set of states**; the hi-fi Home carries **visual fidelity**. This design system makes the **hi-fi indigo brand canonical** and elevates the wireframe structures into it — exactly the jump the handoff asks production to make ("apply the indigo system for final styling").
+
+### The two handoff briefs — why they stay
+
+Both `design_handoff_*` folders are **completed build briefs for surfaces that have shipped**. They
+are kept, and kept *here* rather than filed away, because each sits beside the HTML it annotates and
+carries things nothing else records:
+
+- **`design_handoff_sync_studio/`** — the *what to build*: full IA, every screen's states, the data
+  contract, and the original build order. It is also **the only index into the 20-frame wireframe
+  canvas** — F1 Home · F2 steady state · F3/F4 Recordings · F5/F6 Knowledge Base · F7 Copilot ·
+  F8 Analytics · F14 KB empty · F15 copilot not-installed · F16 Analytics empty · F17 origin blocked ·
+  F18/F19 onboarding. Frames are unlabelled in the canvas itself, so losing this list loses the map.
+  It also specifies **five states that appear never to have been built** — F15's install checklist,
+  F17's origin-blocked banner with inline "Add origin" recovery, F16's analytics empty state, F18's
+  Welcome modal, and F19 ("Your recording is ready — FlowBuddy found N workflows" → **Approve all &
+  go live**), which the brief names *the key activation beat*.
+- **`design_handoff_recorder_extension/`** — the four recorder popup states and their triggers
+  (F10 idle · F11 recording + mark workflow · F12 uploading · F13 upload interrupted). The recorder's
+  own source cites these frame IDs by bare number, so this brief is what makes them resolvable.
+  It also carries the **corrections to its own reference HTML** — the file uses the literal wireframe
+  hex `#3a5bd9`, which is *not* the brand (`--primary` = `#3b50e0`), and its `system-ui` type, 20×20
+  indigo square, grey circle and `⚙ ↻ ⚠` glyphs are placeholders. Those notes are worthless
+  separated from the HTML they correct, which is why the pair is not split.
+  Its `tokens/` subfolder is a byte-identical copy of `tokens/` here; the originals win.
+
+The recorder brief also makes one **voice** decision found nowhere else: an interrupted upload is a
+**warning, not an error** — the progress fill turns amber rather than indigo to say *stalled, not
+failed*, and the copy reassures ("Your narration is safe — nothing is lost" · "Retries automatically
+when you're back online"). That is a different register from the copilot's honest decline, and the
+only place the product states it.
 
 ---
 
@@ -57,10 +99,11 @@ The voice is **plain, calm, second-person, and trustworthy**. It explains the *w
 **The feel:** a quiet, modern SaaS console — cool-gray paper, crisp white cards, soft low shadows, and a single confident **indigo** that means *approved / live / primary action*. Density is high but never cramped; whitespace and hairline borders do the separating, not heavy fills.
 
 ### Color
-- **One accent, used with discipline.** Indigo `#3b50e0` (`--primary`) is the *only* chromatic UI color and it carries meaning: brand, primary action, active nav, "approved / live", citations. The primary CTA uses a subtle vertical gradient `linear-gradient(180deg,#4a63e8,#3a50dd)` with an indigo-tinted shadow; the logo mark uses the same gradient at 150°.
+- **One accent, used with discipline.** Indigo `#3b50e0` (`--primary`) is the *only* chromatic UI color and it carries meaning: brand, primary action, active nav, "approved / live", citations. The primary CTA uses a subtle vertical gradient `linear-gradient(180deg,#4a63e8,#3a50dd)` with an indigo-tinted shadow — an optional flourish; a solid `--primary` fill is equally on-brand. The logo mark uses the same gradient at 150°.
 - **Tinted brand surfaces are derived, not invented.** Active nav and step tiles are `--indigo-50` (`#eef0fe`) fills with `--indigo-100/200` borders and `--primary` text/icon. No extra brand hexes.
 - **Neutrals are cool with a warm-white paper.** Canvas `#f6f7f9`, cards pure white, hairlines `#eceef3`. Text ramps from `#14161f` (headings) through `#6b7180` (secondary) to `#9a9faf` (faint).
-- **Status is a 3-color system, always paired with text** (never color-only): **success/live** green (`#4e8d6e` dot, `#f3faf6` bg), **warning/pending** amber (`#b89030`, `#f8f2e3`), **danger/decline/record** terracotta-red (`#cc4a3a`/`#b06a5a`, `#fbf0ed`). Saturations stay low so they sit calmly next to the indigo.
+- **Status is a 3-color system, always paired with text** (never color-only): **success/live** green (`#4e8d6e` dot, `#eef5f0` bg), **warning/pending** amber (`#b89030`, `#f8f2e3`), **danger/decline/record** terracotta-red (`#cc4a3a`/`#b06a5a`, `#fbf0ed`). Saturations stay low so they sit calmly next to the indigo.
+  - Green has **two** surfaces and they are not interchangeable: the status *pill* uses `--success-bg-2` (`#eef5f0`), the lighter `--success-bg` (`#f3faf6`) is for full-width success *panels* and banners. Reading the pill off the wrong one is the easy mistake.
 - **Imagery / capture** is represented by a **45° diagonal-stripe placeholder** (`--media-fill`) with a `#e4e4e4` border and a mono caption (`recording`, `step shot`) — never a fake photo. Drop real screenshots into these slots.
 
 ### Type
@@ -103,10 +146,31 @@ The voice is **plain, calm, second-person, and trustworthy**. It explains the *w
 - `assets/` — `logo-mark.svg`, `logo-wordmark.svg`.
 
 **Components** (`components/`, React + tokens, each with `.d.ts` + `.prompt.md`)
-- `core/` — `Button`, `StatusBadge`, `Tag`, `Toggle`, `MetricCard`, `ProgressBar`
-- `app/` — `Sidebar`, `PageHeader`, `DataRow`, `ChecklistStep`, `CodeBlock`, `CoverageGapRow`
-- `feedback/` — `Dialog`, `EmptyState`
-- `copilot/` — `CopilotMessage`
+
+The `.jsx` is a token-styled *reference*; the `.d.ts` is the prop contract and the `.prompt.md` the
+one-line usage note. In production, build the real one on the base primitive named here **with the
+same props**.
+
+| Component | Group | Base primitive |
+|---|---|---|
+| `Button` | core | Button |
+| `StatusBadge` | core | Badge |
+| `Tag` | core | Badge (outline) |
+| `Toggle` | core | **Switch** |
+| `MetricCard` | core | Card |
+| `ProgressBar` | core | Progress |
+| `Sidebar` | app | nav + lucide icons |
+| `DataRow` | app | Table row / list row |
+| `ChecklistStep` | app | Card |
+| `CoverageGapRow` | app | list row |
+| `Dialog` | feedback | **Radix Dialog** |
+| `EmptyState` | feedback | EmptyState |
+| `PageHeader` | app | **none — layout only** |
+| `CodeBlock` | app | **none — custom, plus a copy button** |
+| `StepItem` | feedback | **none — timeline** |
+| `CopilotMessage` | copilot | **none — widget surface** |
+
+**The last four have no base primitive and must be hand-built** — nothing to `shadcn add`.
 
 **UI kit** (`ui_kits/studio/`)
 - `index.html` — interactive Studio (nav between screens, open dialogs, flip the approval toggle).
@@ -121,5 +185,7 @@ The voice is **plain, calm, second-person, and trustworthy**. It explains the *w
 
 - **Prototypes / assets:** link `styles.css`, pull values from the tokens, copy components or whole screens out of the UI kit. The specimen cards are copy-paste-able reference.
 - **Production:** the tokens map 1:1 onto the handoff's shadcn theme (`--primary: 232 73% 56%`, `--ring` inherits). Treat the components here as the *visual* contract; wire them to your real Radix/shadcn primitives.
+- **Adopting the brand changes exactly three lines** — `--primary`, `--primary-foreground` and `--ring`, in both `:root` and `.dark`. **Keep your own neutrals.** Every indigo-tinted surface then derives from that one token by opacity (active nav and soft tiles `bg-primary/10 text-primary` with `border-primary/20`); no new brand hexes, ever.
+- **⚠️ Everything under `ui_kits/`, `guidelines/` and the two handoff folders is a design *reference*, never production code.** Do not ship the reference HTML and do not copy its inline styles literally — recreate each surface on the repo's own primitives. The references also predate parts of the brand in places (see the recorder brief's corrections), so a literal paste imports mistakes that look correct.
 
 > **Sharing:** set this file's type to **Design System** in the Share menu so others in your org can browse the Design System tab.

@@ -3,8 +3,8 @@
 **Everything in `docs/` — rewritten without the jargon.**
 
 The technical docs organise themselves around *versions, phases and module numbers* (`P5-M0`, `D9`,
-`§7 Q1`). That vocabulary is useful when you're deep in a build, and it's genuinely bad for the one
-question you actually ask most often: **where are we, and what should I do next?**
+`§7 Q1`). That vocabulary is useful when you're deep in a build, and it's genuinely bad for the
+question anyone asks first: **what is this thing, and how does it actually work?**
 
 So these docs are organised around **what FlowBuddy is**, not around the order it got built in.
 
@@ -30,12 +30,12 @@ into the same house.
    ┌─────────┐      ┌─────────────┐   ┌──────────────┐
    │ THE     │      │ THE HELP    │   │ OTHER AI     │
    │ COPILOT │      │ PORTAL      │   │ AGENTS       │
-   │  BUILT  │      │ not built   │   │ not built    │
    └─────────┘      └─────────────┘   └──────────────┘
 
    The copilot has two modes:
-     Copilot     · decides how to help, turn by turn       built · what everyone gets
-     AI Agent    · does things for the user                not built
+     Copilot     · decides how to help, turn by turn; never touches your page
+     AI Agent    · everything Copilot does, and it can also carry out one of your
+                   recorded workflows in the user's own session, on their say-so
 ```
 
 ---
@@ -49,26 +49,39 @@ into the same house.
 | [01 · What FlowBuddy is](01-what-flowbuddy-is.md) | The product, the problem it solves, who buys it, and what competitors can't copy |
 | [02 · How it all fits together](02-how-it-all-fits-together.md) | The one picture: recording goes in, three things come out |
 
-**The knowledge base, and the three things that use it**
+**The knowledge base, and what uses it**
 
 | Doc | What's in it |
 |---|---|
 | [03 · Building the knowledge base](03-building-the-knowledge-base.md) | Recording, turning clicks into readable steps, and approving |
 | [04 · The copilot](04-the-copilot.md) | What your customers' assistant can do today |
 | [05 · The copilot's two modes](05-the-two-modes.md) | Copilot · AI Agent — where the line is, and why a third mode was retired |
-| [06 · The help portal](06-the-help-portal.md) | The second consumer: a public help site. Not built |
-| [07 · Opening up to other AI agents](07-other-ai-agents.md) | The third consumer: letting Claude and friends use your product. Not built |
-| [08 · The company agent](08-the-company-agent.md) | The flip: record the tools you *use*, not the one you sell. An idea, not a plan |
+| [06 · The three things we haven't built yet](06-not-built-yet.md) | A public help site · opening up to other companies' AI · the flip: recording the tools you *use* |
 
 **Run it**
 
 | Doc | What's in it |
 |---|---|
-| [09 · Where we are and what's next](09-where-we-are.md) | Honest status, the open gaps, and what to build next |
-| [10 · Running it on your machine](10-running-and-shipping-it.md) | Getting the whole thing up locally |
-| [11 · Putting it live](10-running-and-shipping-it.md) | How deploys work, and what to watch |
-| [12 · Testing it](10-running-and-shipping-it.md) | What to click through before believing something works |
-| [13 · What's in the code](13-whats-in-the-code.md) | A tour of the folders, and which one to open for what |
+| [07 · Running, shipping and testing it](07-running-and-shipping-it.md) | Getting it up locally, putting it live, and what to click through before believing something works |
+
+**What's built and what's next** isn't here — it lives in [the roadmap](../roadmap.md), which is the
+one place status is kept so it can't drift.
+
+---
+
+## If you need more than these
+
+Two doors lead further, and they're the ones worth knowing about:
+
+- **How each piece actually runs** — the recorder, the ingestion service, the knowledge-base build,
+  the answer engine, the widget, Studio, the data layer. One document each, all following the same
+  shape: what it's for, what goes in, what comes out, how it works inside, what can go wrong. They
+  follow the code — if a document and the source disagree, the source wins.
+  → [`internals/`](../internals/README.md)
+- **What everything looks like** — the source of truth for every surface: Studio, the recorder and
+  the widget. Colours, type, spacing, and a kit of ready-made Studio pieces. The brand is indigo;
+  recording and delete actions are terracotta, so "this is recording" and "this deletes something"
+  look the same everywhere. → [`design_system/`](../design_system/README.md)
 
 ---
 

@@ -25,7 +25,7 @@ each module doc below zooms into one piece.
 | [ingestion-api.md](ingestion-api.md) | **Ingestion API** (Fastify) | Authenticate the upload, stream artifacts to object storage, validate the manifest, persist the source record, enqueue the build job. |
 | [knowledge-base.md](knowledge-base.md) | **Knowledge Base build** (worker + synthesis) | Turn the raw bundle into clean, per-workflow steps: transcribe → align → clean → segment → distill → persist. |
 | [copilot.md](copilot.md) | **Copilot** (answer engine) | Retrieve **approved** KB, ground an answer, cite-or-decline, log the Q&A. The trust gate lives here. |
-| [widget.md](widget.md) | **Widget** (embeddable `<script>`) | The shadow-DOM chat panel a customer drops into their app; talks to the copilot endpoint with a public key. |
+| [widget.md](widget.md) | **Widget** (embeddable `<script>`) | The shadow-DOM chat panel a customer drops into their app — and, in AI Agent mode, the surface that performs a consented run's recorded steps. |
 | [studio.md](studio.md) | **Studio** (Next.js web app) | The operator console: connect the recorder, browse recordings/KB, **approve workflows**, configure the embed, read analytics. |
 | [data.md](data.md) | **Data substrate** | The Postgres schema, the object-storage layout and the Redis queue — plus what a real action actually writes. |
 
@@ -48,6 +48,7 @@ flowchart TB
     subgraph browser["Customer's browser"]
         REC["Recorder<br/>(Chrome extension)"]
         WID["Widget<br/>(embedded script)"]
+        PAGE["The host page<br/>(customer's own app)"]
     end
 
     subgraph operator["Operator (the SaaS founder)"]
@@ -78,11 +79,16 @@ flowchart TB
     WID -- "⑨ ask (public key)" --> API
     API -- "⑩ retrieve APPROVED-KB" --> PG
     API -- "⑪ grounded answer + log" --> WID
+    WID -. "⑫ consent → run start · step · terminal" .-> API
+    WID -. "⑬ fetch the pinned execution plan (mode-gated)" .-> API
+    API -. "⑭ ExecutionPlan / ExecutionRun" .-> PG
+    WID -. "⑮ perform the recorded steps" .-> PAGE
 
     STU -. "connect handshake (token)" .-> REC
 ```
 
-The numbers ①–⑪ are the happy path, traced step by step in [connections.md](connections.md).
+The numbers ①–⑮ are the happy path, traced step by step in [connections.md](connections.md). The
+dashed acting hops (⑫–⑮) are the only arrows that write to someone else's page.
 
 ---
 
@@ -97,8 +103,10 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
   (`recording → uploaded → processing → ready | error`) — `recording` meaning artifacts are still
   arriving, since the row is created from the first upload rather than at Stop.
 - **The trust gate is one row.** The copilot can only answer from workflows the operator explicitly
-  **approved** — represented by a `CopilotApproval` row keyed by `(sourceId, segmentIndex)`. Retrieval
-  filters through it; that's the single "no-leak" enforcement point.
+  **approved** — a `CopilotApproval` row naming a durable **workflow identity**, live while its
+  retirement column is null. Every path that reads the KB for the copilot re-checks it server-side,
+  and three of those additionally require the founder's per-workflow acting flag. Mechanism and the
+  reader count: [knowledge-base.md](knowledge-base.md) §6.
 - **Three keys, three audiences.** A secret **recorder token** (operator's machine → ingestion), a
   public **embed key** (customer's browser → copilot), and the **Studio login** (operator → console)
   are distinct and never interchangeable. See [connections.md](connections.md) §"Three identities".
@@ -111,11 +119,4 @@ The numbers ①–⑪ are the happy path, traced step by step in [connections.md
 
 ---
 
-*Last synced to the code: 2026-07-08 · staleness/label pass 2026-07-25 (branch `dev`). Known coverage
-gaps: the Sense/Reason answer-path mechanics and the walkthrough/Studio behavior toggles live in their
-phase docs' §8 as-builts, not yet here. Since the initial 2026-06-28 sync these docs
-have tracked: retrieval consolidated into `synthesis/retrieval.ts` + **hybrid keyword∪pgvector (P1-M3)**,
-the **Approach-B real-widget preview** (one answer path), **live-served widget appearance**
-(`GET /v1/copilot/config`), the recorder **v0.3.0** stop→upload resilience + R12/R13, the **Phase-2
-sweep** (the `Article`/`Step` tables are gone), and **`@flowbuddy/logger`**. If a mechanic here disagrees
-with the source, the source wins — please update the doc.*
+*If a mechanic here disagrees with the source, the source wins — please update the doc.*

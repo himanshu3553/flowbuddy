@@ -401,9 +401,12 @@ model CopilotApproval {
   // ── Is this approval LIVE? ───────────────────────────────────────────────────────────────────
   // **`inactiveReason IS NULL` is THE one test, everywhere.** An approval is never deleted — the
   // recording, the analytics history and the undo all depend on the row surviving — so "not
-  // answering" is a state, and this is the only column that expresses it. Six independent readers
-  // filter on it; a SECOND way to be inactive would mean six places to forget, so anything new that
-  // takes a workflow out of service becomes another value here, never another column.
+  // answering" is a state, and this is the only column that expresses it. Many independent readers
+  // filter on it — the acting ones ask a second question on top (`executeState`, below). They are
+  // enumerated, never counted, in docs/internals/knowledge-base.md §6; a count here would go stale
+  // and would also hide the readers it does not cover.
+  // A SECOND way to be INACTIVE would mean a place to forget in every one of them, so anything new
+  // that takes a workflow out of service becomes another value here, never another column.
   //   "superseded"   — P3-M0: the founder re-recorded the task and said the new telling replaces
   //                    this one. `supersededById` names the approval that replaced it.
   //   "needs_review" — P3-M1: a reprocess could not confirm that the content at this workflow is

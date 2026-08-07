@@ -25,7 +25,7 @@ flowbuddy/
     web/        # Next.js Studio — app shell + approval gate + copilot settings/analytics (Tailwind + shadcn/ui · indigo design system)
     widget/     # embeddable copilot <script> (esbuild → flowbuddy-copilot.js + the lazy P2-M5 renderer flowbuddy-copilot-render.js) — FlowBuddy-indigo default, host-rebrandable
     extension/  # Chrome MV3 recorder — indigo UI
-    landing/    # static marketing page for flowbuddyai.com (build = copy public/ → dist/)
+    landing/    # static marketing page for flowbuddyai.com (Astro)
   docs/       # the full doc set — start at the map: roadmap.md §10 / the CLAUDE.md doc table
 ```
 
@@ -97,8 +97,8 @@ pnpm --filter @flowbuddy/landing build             # static marketing page → d
 # building / checking
 pnpm build                                    # build everything (Turbo)
 pnpm typecheck                                # type-check everything
-pnpm test                                     # vitest over the pure seams (synthesis) — the repo's
-                                              # only tests; no CI, run it beside typecheck
+pnpm test                                     # vitest across synthesis + widget (Turbo) — no CI, run it
+                                              # beside typecheck
 
 # database
 pnpm db:migrate                               # apply schema changes (creates/updates tables)
@@ -113,8 +113,10 @@ docker compose down                           # stop Postgres + Redis (add -v to
 ### Root scripts that exist (`package.json`)
 `build` · `dev` · `typecheck` · **`test`** · `lint` · `db:generate` · `db:validate` · `db:migrate`
 
-> **Tests (added 2026-07-26 — the repo's first; 125 as of 2026-08-03).** `vitest` in
-> `@flowbuddy/synthesis` only, over the *pure* seams:
+> **Tests.** `vitest` in `@flowbuddy/synthesis` over the *pure* seams, and — since the acting layer —
+> in `@flowbuddy/widget` over jsdom DOM fixtures. `api` and `web` still have no runner; `pnpm test`
+> runs both suites through Turbo. Counts and what is still uncovered:
+> [`roadmap.md`](../roadmap.md) §9.
 > - `retrieval.test.ts` — signal-ordering invariants (route/sense outrank continuity; a real keyword
 >   match still beats all of them — the rule that lets a user change subject).
 > - `engine.test.ts` — the answer loop's contract (the floor = exactly one model call with no tool
@@ -135,6 +137,12 @@ docker compose down                           # stop Postgres + Redis (add -v to
 >   They all fail OPEN, so a mistake makes every fixture pass forever while measuring nothing.
 > - `overlap.test.ts` · `pages.test.ts` — duplicate detection (two signals, the last step deciding)
 >   and the product-page extractor's quote-anchoring and identity matching.
+> - `execution-plan.test.ts` — the acting compiler: what makes a workflow ineligible, that the
+>   consent hash is content-derived rather than timed, and that outcome markers only ever TIGHTEN
+>   (present = must be seen, absent = verifies as before).
+> - **In `@flowbuddy/widget` (jsdom):** `step-engine.test.ts` — the actor-independent machinery the
+>   guided walkthrough and the acting run both stand on; `act.test.ts` — the act verbs, including
+>   framework-controlled inputs a bare value assignment never reaches.
 >
 > Deliberately NOT tested: model OUTPUT — a unit test asserting on generated text fails for the
 > wrong reasons. Prompts are tested only for structural promises they must not make (see
@@ -174,8 +182,9 @@ conversation, not the question under test.
 > so it guards both wrongly-declining and wrongly-answering.
 
 **Two things it still cannot see**, both worth knowing before trusting a green run: it sends
-`--path` but never live page STATE, so the diagnostic path has no automated coverage; and `preview`
-suppresses the decline→diagnostic escalation, so that retry is never exercised. Both need a real
+`--path` but never live page STATE, so **it** never exercises the diagnostic path (that is what the
+fixture harness above is for); and `preview` suppresses the decline→diagnostic escalation, so that
+retry is never exercised. Both need a real
 browser — [`e2e-testing.md`](e2e-testing.md).
 
 ---
@@ -185,6 +194,7 @@ browser — [`e2e-testing.md`](e2e-testing.md).
 - **"command not found: pnpm"** → run `corepack enable` (once per machine / Node version).
 - **DB errors / "can't reach database"** → is Postgres up? `docker compose up -d`, then `docker compose ps` (postgres should be `healthy`).
 - **Type changes not picked up across packages** → `pnpm build` (Turbo rebuilds deps in order); for the Prisma client specifically, `pnpm db:generate`.
+- **Edited `synthesis` and the api is still running the old code?** `tsx watch` reloads the api's *own* files but **not** workspace-package changes (`@flowbuddy/synthesis`) — restart `pnpm --filter @flowbuddy/api dev` after an answer-engine edit, or you will spend an afternoon measuring the previous prompt.
 - **`.env` files** are git-ignored and per-package where needed (e.g., `packages/web/.env`, `packages/api/.env`, `packages/db/.env`). The root `.env.example` documents every variable. **`OPENAI_API_KEY` is needed in `packages/api/.env` only** (worker — transcribe + segment; and the copilot answer endpoint). *(The Studio needs no OpenAI key: its copilot preview embeds the real widget, so answers go through the api.)*
 - **Nothing happens after recording?** First check the badge. A recording shows **Recording** while artifacts are still arriving — that row exists from the first uploaded artifact, has no manifest yet, and the worker **deliberately skips it** (`no manifest yet — recording not finalized, skipping`); it only becomes work once you press Stop. If it says **Processing** and stays there, the **worker must be running** (`pnpm --filter @flowbuddy/api worker`) to turn an upload into the KB (`status → ready`). Once ready, open the recording's KB page to browse items and **approve workflows for the copilot**.
 - **Docker must be running** (Docker Desktop) before `docker compose up`.

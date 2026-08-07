@@ -8,7 +8,7 @@ The full manual test plan for the FlowBuddy copilot — from a clean slate → r
 | **2 · Dev** | Render free tier (`flowbuddy-dev-web.onrender.com`) + Cloudflare R2 | [Level 2 — Dev testing on Render](#level-2--dev-testing-on-render) |
 | **3 · Prod** | Render paid tier — **flowbuddyai.com, live since 2026-07-23** | [Level 3 — Prod testing on Render](#level-3--prod-testing-on-render-placeholder) |
 
-> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)** and **P4-M0 walkthrough** legs. Portal/article features (Version 2) are out of scope ([`portal.md`](../build/portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest over the pure seams in `@flowbuddy/synthesis`) and `scripts/copilot-baseline.mjs` for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. Nothing automated reaches the browser, which is what this plan is for.
+> **Scope.** This covers the copilot product end-to-end — **Phase 1** (P1-M0…M12) plus the shipped **Sense/Reason (Phase 2)**, the **P4-M0 walkthrough** and the **Phase 4 acting run (§11c)** legs. Portal/article features (Version 2) are out of scope ([`portal.md`](../build/portal.md)). Automated coverage exists but is partial — `pnpm test` (vitest: the pure seams in synthesis, plus the widget's step engine and act verbs against jsdom fixtures) and the copilot baseline script for answer quality — so verification is `pnpm typecheck` + `pnpm test` + `pnpm build` + this manual walkthrough. **Nothing automated reaches a real browser or a real host page**, which is what this plan is for.
 >
 > **Workflow-segmentation quality** (the "one task = one workflow" fix) is covered inline in **Part 6** of Level 1.
 
@@ -31,6 +31,7 @@ Chrome Extension ──sign──▶ API /v1/uploads/sign ──▶ short-lived 
         Recordings · KB approval · Copilot settings · Analytics
                                                                          │
    Widget (<script>) ──ask──▶ API /v1/copilot/answer ──grounded in APPROVED KB only──▶ answer
+                     └─run──▶ API /v1/copilot/execution-plan · /v1/copilot/run  ──AI Agent mode only──▶ consented run
 ```
 
 Stores: **Postgres** (data) · **object storage** for screenshots/audio/DOM (**MinIO** locally, **Cloudflare R2** on Render) · **Redis** (job queue). ⚠️ Since the direct-artifact-upload change the **recorder writes every artifact to object storage itself** — screenshots and DOM snapshots during the capture, the narration track at Stop — via short-lived presigned PUT URLs, so on a healthy connection the finalize request carries **the manifest and nothing else**. **MinIO is more forgiving than R2** (R2 enforces request checksums and cross-origin PUT rules, MinIO ignores both), so any *change* to the signing path is only really proven at **Level 2/3**, never by Level 1 alone — the path as it stands was verified against real R2 on the dev deploy **2026-07-28**. The all-in-one multipart bundle survives as the **fallback** when direct upload is unavailable; a run that lands there still passes, it just isn't testing the normal path. One Render-specific difference: on Render (dev **and** prod) the worker runs **inside** the api web service (`start:all`) instead of as a separate process (a standalone worker is scaling-ladder Step 1).
@@ -68,12 +69,12 @@ pnpm install
 
 ```bash
 pnpm typecheck     # type-check every package
-pnpm test          # vitest over the pure seams in @flowbuddy/synthesis (no CI — run it here)
+pnpm test          # vitest — synthesis (pure seams) + widget (jsdom) (no CI — run it here)
 pnpm build         # build every package in dependency order (Turbo)
 pnpm lint          # lint
 ```
 
-✅ **PASS:** all three exit 0 with no errors.
+✅ **PASS:** all four exit 0 with no errors.
 
 ---
 
@@ -422,7 +423,7 @@ Each fixture runs a few times and reports **rates**, not pass/fail (the model is
 
 ✅ **PASS:** offer only appears when the toggle is on + the answer is positional; the walkthrough starts at the probe's step; **the pointer never moves forward on its own — detection only shows "Detected ✓ — hit Next"** (genuine completions: checked/filled-and-valid, never a disabled click); blocked buttons are explained instead of demanded; Reason diagnosis on request; acknowledgments survive a hard navigation; safe-stops instead of guessing; every run lands one honest `CopilotWalkthrough` row (`autoAdvances` = detection-confirmed Nexts, `manualAdvances` = override Nexts).
 
-**Chat + topic memory across navigations (P5-M0 cuts 1 & 2 — ✅ user-verified 2026-07-26):**
+**Chat + topic memory across navigations (P5-M0 cuts 1 & 2 — status: [`roadmap.md`](../roadmap.md) §11):**
 
 Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.server 8080` from `packages/widget`), never `file://`, and put the same `data-flowbuddy-key` in **both** `demo/index.html` and `demo/page2.html`.
 
@@ -435,7 +436,7 @@ Locally the demo now has two pages — serve over **HTTP** (`python3 -m http.ser
 
 **Copilot mode — the read-only agent (built + user-verified 2026-07-27):**
 
-1. **Confirm the mode.** Studio → Copilot → Settings → **How your assistant works** → it reads **Copilot**, and there are exactly **two** rows (the AI Agent row visible but locked). If a third row appears, or the picker offers *AI Chatbot*, the retirement (2026-08-02) has been partially reverted — the mode is gone from the vocabulary, the picker and the database. If you changed anything, reload the host page — mode is read at mount, like every other config flag.
+1. **Confirm the mode.** Studio → Copilot → Settings → **How your assistant works** → it reads **Copilot**, and there are exactly **two** rows — **AI Agent is selectable**, and choosing it opens the terms-acceptance dialog (§11c). If a third row appears, or the picker offers *AI Chatbot*, the retirement (2026-08-02) has been partially reverted — the mode is gone from the vocabulary, the picker and the database. If you changed anything, reload the host page — mode is read at mount, like every other config flag.
 2. **Simple questions must not get worse.** Ask three or four straightforward "how do I…" questions you know are covered. They must answer as before, and at the same speed — round one of the agent loop *is* the old fast path. **This is the non-negotiable check**: a simple lookup that starts declining is the failure mode to watch (one such regression was caught during the build, at roughly 1-in-6).
 3. **Ambiguity → a question back.** With two or more approved workflows that could both match, ask something ambiguous ("how do I cancel?"). It should ask *which one you mean* rather than guessing or declining. *(With a single approved workflow this cannot fire — there is nothing to disambiguate.)*
 4. **It searches on its own.** Ask a follow-up that shifts topic ("what about …?"). It should find the other workflow rather than declining on the user's literal words.
@@ -456,7 +457,8 @@ reads forward with no special case.)*
    wired rather than to force it, look for `agent path failed — falling back to the floor` in the api
    log; in normal runs you should never see it. **Since AI Chatbot's retirement nothing else
    exercises this path**, so those log lines are the only evidence it works — and a run of them means
-   something upstream is failing.
+   something upstream is failing. Its success counterpart is `agent path engaged`, logged whenever
+   the loop actually runs — the line to grep for to confirm a question took the agent path at all.
 
 ---
 
@@ -504,13 +506,15 @@ the fingerprints; a workflow whose steps carry no `screenKey` was recorded too s
 step doesn't live (`/somewhere-else`). The card must read *"This step happens on /projects/…/settings"*
 — an elided path. **A real id there is the leak this closed**, and it is the founder's own record.
 
-**C. Structure as the way in (slice 1).** Record a workflow at **`/`** — the root carries no screen
-information by design, so nothing but the page itself can place it. Approve, reload `/`, ask a
-positional question.
+**C. Structure as the way in (slice 1).** Record a workflow that happens **inside a modal or a tab
+the URL never reflects** — the address stays on the parent screen throughout, so nothing but the page
+itself can place the user once the modal is open. *(The root used to be this leg's isolator, back
+when `/` matched nothing at all. It matches `/` exactly now, so a root recording would get a route
+match and the leg would pass for the wrong reason.)* Approve, open the modal, ask a positional
+question.
 
-✅ **PASS:** it still localizes. This is the case that was previously blind no matter how
-recognisable the page was. Server-side: `?route=/` must now return workflows rather than an empty
-shard.
+✅ **PASS:** it localizes to the step inside the modal, not to the parent screen's workflow. This is
+the case that was previously blind no matter how recognisable the page was.
 
 **D. Structure as a tiebreaker (slice 2).** Record one workflow on `/app?screen=team` and another on
 `/app?screen=billing`. The query is stripped, so **both live at exactly the same route** and only the
@@ -524,9 +528,9 @@ originally recorded app. Nothing may change — no new "X or Y?" questions, same
 Structure is only allowed to speak where the URL doesn't; a workflow the route never mentioned is
 dropped as soon as another matches the URL exactly.
 
-**What this leg cannot tell you.** The matching halves have unit coverage (`pnpm test`); the widget's
-scorer has no runner at all, so its behaviour is only ever observed here. Treat a surprise as the
-scorer's, not the fingerprint's.
+**What this leg cannot tell you.** The matching halves have unit coverage (`pnpm test`); the widget
+now has a runner, but **nothing tests the scorer on it**, so its behaviour is only ever observed
+here. Treat a surprise as the scorer's, not the fingerprint's.
 
 ## 11c. The acting run — AI Agent mode (P4)
 
@@ -535,6 +539,10 @@ dialog appears once per terms version; accepting writes the `AgentAcceptance` ro
 workflow's page, flip **"Agent may run it"** — enabling compiles the `ExecutionPlan` (with outcome
 markers for the last + destructive steps) or refuses with per-step reasons. Rebuild + re-copy BOTH
 widget bundles into the test app after widget changes.
+*(To drive one workflow's run without staging a conversation: embed with `data-flowbuddy-debug="true"`
+and call `FlowBuddyRun('sourceId:segmentIndex')` from the console — optionally
+`FlowBuddyRun('sourceId:segmentIndex', { 2: 'Acme' })` to hand step 2 a value and exercise the fill
+path. It obeys every gate — AI Agent mode, live approval, acting enabled.)*
 
 **The happy path.** In the embedded chat, ask for the outcome in your own words ("create an account
 for me — use the name John"). Expect, in order: a grounded answer + a **Run it for me** pill → the
@@ -551,6 +559,13 @@ for you. "Done" appears only after the final step's outcome verifies.
 - **Login wall:** start a dashboard workflow while signed out. ONE navigation attempt, then "you may
   need to sign in first — I'll pick it up when you arrive"; signing in and visiting the page resumes
   the run by itself. No redirect loop.
+- **Done must be earned:** on a workflow whose final (or destructive) step is a CLICK that compiled
+  appearance markers, the run may not say Done until one of the recorded success phrases is actually
+  on the page, and a completion shortcut needs an act it OBSERVED, never an assumption. *(Markers
+  are only consulted where an act was observed — ours or the user's press. A step that finishes some
+  other way, such as a final fill, still passes on element state alone, so pick a click-ending
+  workflow for this leg.)* Re-enable acting after any re-record so the markers recompile from the
+  new snapshots.
 - **Takeover / Stop:** always available (docked strip while the chat is open; floating card when
   closed). Takeover converts the rest into a guided walkthrough at the same step.
 
@@ -597,9 +612,14 @@ things.
 6. **The copilot stops citing it** — ask a question it used to answer and confirm it is no longer the
    source. This is the actual guarantee; the badge is only how you see it.
 7. Click **Looks right** on it → live again, and the copilot cites it once more.
+8. **Acting parks itself too.** If any workflow had **"Agent may run it"** on, its plan recompiles
+   from the new content — and one whose new steps no longer compile clean drops to **needs
+   re-review** for acting, so it can still be ANSWERED from but not RUN. A parked flag is never
+   silently re-enabled by a later clean compile.
 
 ✅ **PASS:** items aren't duplicated · approvals follow CONTENT, not position · anything unverifiable
-stops answering until a human confirms it · citation history survives.
+stops answering until a human confirms it · citation history survives · acting re-verifies
+eligibility and parks what no longer compiles.
 
 > **What "keyed by `sourceId + segmentIndex`" used to mean, and why it is gone.** Approval used to
 > name a POSITION so it would survive the worker's item delete-and-recreate. That was safe only while
@@ -627,8 +647,9 @@ because a second copy is how this list drifted out of date before (it used to om
 - [ ] Sense localizes to workflow + step; Reason diagnoses a blocked page
 - [ ] The walkthrough advances only on Next, and survives a full-page navigation
 - [ ] The conversation survives a navigation; a term-less follow-up stays on topic
-- [ ] Mode switching is instant and reversible; the founder switches always win
+- [ ] Switching to AI Agent requires a recorded acceptance; switching back is instant, and the founder switches always win
 - [ ] Analytics show the questions, the citations and the coverage gaps
+- [ ] A consented agent run does the founder's steps, asks for what it needs, and lands one run audit row — or hands back honestly instead of claiming Done
 
 ## Troubleshooting (local)
 
@@ -755,7 +776,7 @@ All migrations have been successfully applied.
 
 ## D5. Test from scratch
 
-Mirrors [`deploy.md`](deploy.md) §6 (end-to-end test), with the **post-wipe gotchas** called out.
+The Level 1 flow run against the dev deploy, with the **post-wipe gotchas** called out.
 
 ### D5.1–D5.6 — run Level 1, against the dev deploy
 

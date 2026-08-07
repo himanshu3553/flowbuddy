@@ -94,9 +94,9 @@ behaviour, and it declines when neither source covers the question.
 Instead of listing steps in chat, it can guide them one at a time. A compact card shows "step 2 of
 5", the element for that step stays highlighted, and it watches for them completing it.
 
-**FlowBuddy never clicks anything.** The user does everything. When it detects they've done a step it
-says *"Detected ✓ — hit Next to continue"* and waits. **It never advances on its own** — that's a
-deliberate decision, so the user is never surprised by the card jumping ahead.
+**In a walkthrough FlowBuddy never clicks anything.** The user does everything. When it detects
+they've done a step it says *"Detected ✓ — hit Next to continue"* and waits. **It never advances on
+its own** — that's a deliberate decision, so the user is never surprised by the card jumping ahead.
 
 It survives full page reloads: if a step navigates them somewhere else, the card comes back on the
 new page and picks up where it was. And when it isn't sure, it stops safely rather than guessing.
@@ -164,12 +164,9 @@ allowed.
 
 ## What it doesn't do yet
 
-**It knows your recipes, not your product.** Ask "what does this tool do?" or "can it handle
-X?" and it declines — because a question like that isn't answered by any single recorded workflow.
-It knows how to *do* things without knowing what your product *is*. Fixing this needs somewhere for
-you to describe your product in your own words. **This is the biggest gap.**
-
-**It can't do anything for the user.** That's [the acting mode](05-the-two-modes.md), not built.
+**It doesn't act unless you switch acting on.** In Copilot mode — what every workspace gets — the
+user does every click themselves. Carrying the task out for them is
+[the AI Agent mode](05-the-two-modes.md), which you choose deliberately and accept terms for.
 
 **It can't check whether its own knowledge is still true.** If you redesign a screen, the assistant
 keeps confidently describing the old one until you re-record. Fixing this is the hardest item on the

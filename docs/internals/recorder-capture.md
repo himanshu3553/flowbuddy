@@ -46,7 +46,10 @@ messages for start/stop/status, and the mic-level relay into the top frame. The 
 silently while audio kept recording — the failure that R4 exists to prevent.
 
 **Nothing passive is drawn on the recorded page.** The control bar is the only on-page surface, and it
-appears solely while recording.
+exists only for an active recording — with one deliberate, scoped exception: on Stop it collapses
+into a **status pill** that reports the upload's outcome and then removes itself (§4.9). The
+decision to reverse the rule for that one moment sits with the rest of the capture-reliability
+record in [`copilot.md`](../build/copilot.md).
 
 ---
 
@@ -115,13 +118,14 @@ capture robust and queryable later:
 | `attributes` | a whitelist: `id, name, class, type, href, placeholder, aria-label, data-testid` | raw re-location hints (the R13 ranking draws on the same signals) |
 | `cssPath` | a built CSS selector, stops at first `#id`, uses `:nth-of-type`, ≤8 levels | a positional fallback locator |
 | `xpath` | positional xpath | a second positional fallback |
-| `locators` | R13 — `rankedLocators()`: a best-first `{strategy, value, unique}` set — `testid` (data-testid/-test-id/-test/-cy/-qa) → human `id` (`looksGenerated()` rejects ember/react/uuid/digit-run ids) → `aria` → `name` → `placeholder` → `href` → visible `text` (≤60 chars); each CSS-strategy value is uniqueness-checked via `querySelectorAll` in its own document and the set is ordered unique-first, then `cssPath`/`xpath` tails; capped at 8 | **the Phase-3 replay key** — validation walks the list in order and uses the first locator that still resolves |
+| `locators` | R13 — `rankedLocators()`: a best-first `{strategy, value, unique}` set — `testid` (data-testid/-test-id/-test/-cy/-qa) → human `id` (`looksGenerated()` rejects ember/react/uuid/digit-run ids) → `aria` → `name` → `placeholder` → `href` → visible `text` (≤60 chars); each CSS-strategy value is uniqueness-checked via `querySelectorAll` in its own document and the set is ordered unique-first, then `cssPath`/`xpath` tails; capped at 8 | **the replay key** — every consumer walks the list in order and uses the first locator that still resolves: the Sense probe, the guided walkthrough, and the acting executor. The recovery rule lives once, shared by the sense-plan and execution-plan compilers — a drift between what the probe can find and what the executor can act on would look like a product limitation rather than a bug ([connections.md](connections.md) §6) |
 | `bbox` | `getBoundingClientRect()` → `{x,y,w,h}` | **powers the highlight box on the screenshot** |
 
 The element's *value* is captured for `input` events — but run through `maskValue` first (§4.4).
 
 The DOM snapshot is `document.documentElement.outerHTML` with `<script>`/`<style>` bodies blanked and
-capped at 400 KB. It's a forensic record, not used by the live copilot path today.
+capped at 400 KB. **It stopped being purely forensic with the acting layer:** the before/after pair
+feeds the step's appearance markers (§4.5).
 
 ### 4.3 Screenshots & the buffer (background side)
 
@@ -189,7 +193,12 @@ Enter/nav, the content script arms a watcher ([`schedulePostAction`](../../packa
 The background then takes a **post screenshot** (`shots/<id>-post.jpg`) and attaches `postAction`
 (screenshot + DOM + route + reason) to the original event. This before/after pair is what lets the KB
 later show "you clicked here → you landed there", and lets distillation pick the *result* frame for a
-workflow's final step.
+workflow's final step — and, since the acting layer, it is what an acting run verifies against: the
+DOM half of the pair is diffed, at acting-enable time, into short scrubbed phrases — *what appeared
+on the founder's screen when this step succeeded* — which the run matches by recall, never equality.
+So "did that act actually take?" is answered from the founder's own recorded evidence rather than
+from a heuristic. Absence changes nothing; presence tightens what counts as done, which is what
+retired the "last step ⇒ finished" assumption.
 
 ### 4.6 Reliability hardening (the "no silent loss" rules)
 
@@ -217,6 +226,16 @@ offscreen doc immediately reports `null` audio so recording proceeds silently. *
 duration, matching the active-time event clock). A **second `AnalyserNode`** on the same stream (no
 extra `getUserMedia`) samples the mic level ~8×/s and broadcasts `micLevel` → the background relays it
 to the recording tab's top frame for the **control-bar meter** (R7).
+
+**Both mic meters exist to close R6 — "you record blind, and find out the mic was dead afterwards."**
+A narrated recording whose narration is silent is worthless, and nothing in the pipeline can tell you
+that until the transcript comes back empty. So the level is shown live in two places (the popup's own
+meter and the control bar's), and permission is dealt with **before** Record rather than at it: the
+popup shows a *"microphone not granted"* state with a Grant button, which opens the request in a
+**normal tab** — the popup cannot reliably prompt, because the permission dialog closes it. Granting
+there persists for the whole extension origin, so the offscreen recorder simply works afterwards.
+Silent capture remains a *degradation*, never a failure (§6) — the point of the meters is that the
+operator finds out while they can still do something about it.
 
 ### 4.8 Streaming artifacts while recording, then assemble & upload
 

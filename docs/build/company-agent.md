@@ -2,7 +2,7 @@
 
 > **Version 3 flips who FlowBuddy is for — from the product a company MAKES to the products a company USES.** Versions 1–2 are vendor-side: a SaaS records its own product so its customers get a grounded copilot (V1) and a help portal (V2). Version 3 is **buyer-side**: **any company records the tools and processes it uses** — third-party SaaS, internal tools, cross-tool procedures — with the **same extension + Studio**, producing an approved workflow/SOP KB **the company owns**. On top of it, FlowBuddy ships **a second Chrome extension: the company agent** — a browser-use AI agent (Claude-for-Chrome-class surface) the company itself uses to **run those recorded applications** as needed, grounded FlowBuddy-style: **it executes only the workflows the company recorded and approved — never free-form browsing.**
 
-- **Status:** 📝 **DIRECTION — captured 2026-07-25 (user decision). Not designed, not scheduled.** "Version 3" is product packaging, not build order — the agent half leans on the shared replay core (Phase 3/4), so real scheduling follows those. The module list below is a candidate sketch, not a plan.
+- **Status:** 📝 **DIRECTION — captured 2026-07-25 (user decision). Not designed, not scheduled.** "Version 3" is product packaging, not build order — the agent half reuses the replay engine born in Phase 4's widget driver, which becomes a shared core when a second driver actually exists, so real scheduling follows that extraction ([`agent.md`](agent.md) §A3). The module list below is a candidate sketch, not a plan.
 - **Track name is provisional** ("the company agent"); rename freely when the track is designed.
 - **Companion docs:** the map → [`roadmap.md`](../roadmap.md) §7 · the vendor-side hands (execution semantics + safety rails to mirror) → [`agent.md`](agent.md) · replay core + certification → [`roadmap.md`](../roadmap.md) §4 · the knowledge interchange this agent consumes → [`interop.md`](interop.md) · the surface to match and the philosophy to beat → [`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) · human renderings of workflows → [`portal.md`](portal.md)
 - **The trust story, fourth seat:** answers are grounded (P1) · actions are grounded (P4) · goals are grounded (P5) · outside agents inherit the grounding (P6) · **the company agent is grounded the same way, pointed the other direction** — per-run consent, recorded values masked (inputs prompted at run time), safe-stop over guessing, full audit. **Approval remains the permission model — now for the company's own agent on the tools it uses.**
@@ -27,7 +27,7 @@
 1. **Same factory, second market.** The KB factory (record once → distilled, approved workflows) is the shipped, hard-to-copy half of FlowBuddy — and nothing about it cares whose product is being recorded. Buyer-side opens the product to **every company with SOPs**, not just software vendors: ops teams, agencies, finance/back-office, anyone running repeatable work through web UIs.
 2. **The anti-improvisation browser agent.** Claude-for-Chrome-class agents improvise any UI from general knowledge — with published prompt-injection attack rates to show for it ([`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §3). The company agent's action space is **closed by construction**: instructions found in page content cannot alter what it may do, because what it may do is the recorded, approved workflow — the "0% action-hijack by construction" play (§5.4 of the competitive doc), shipped as a product.
 3. **Record-once beats writing, squared.** Internal SOPs are even less likely to get written than product docs — and the same single recording yields **both** renderings: human-readable SOPs (Studio views; document/PDF export is a natural companion here) and agent-executable workflows.
-4. **It completes the matrix.** With P6, FlowBuddy serves knowledge **to their agents**; with V3, FlowBuddy **brings its own agent**. One replay core, three drivers (P3 sandbox runner · P4 widget driver · V3 extension driver); the agent consumes the company's KB through the same export seam P6 defines — dogfooding our own interchange.
+4. **It completes the matrix.** With P6, FlowBuddy serves knowledge **to their agents**; with V3, FlowBuddy **brings its own agent**. One replay engine, three drivers — it is born in P4's widget driver, and the shared core gets extracted at the second driver (P3's sandbox runner, then this one); the agent consumes the company's KB through the same export seam P6 defines — dogfooding our own interchange.
 
 ---
 
@@ -48,7 +48,7 @@
 | **V3-M0** | **Buyer-side capture mode** — record third-party/internal tools with the existing extension; approval semantics = "approved for internal use"; workspace framing for external-product sources (cross-app/process recording is an open design question, §6) |
 | **V3-M1** | **SOP library** — Studio views over the buyer-side KB; human renderings of workflows (the document/PDF export naturally lands here — cf. the V2 portal renderer as a sibling) |
 | **V3-M2** | **The company-agent extension** — a second MV3 extension: pick a workflow (or state a goal) → plan → per-run consent → execute step-by-step, narrated → done/safe-stop report; permissions UX modeled on the proven Claude-for-Chrome control vocabulary ([`competitive-claude-chrome.md`](../product/competitive-claude-chrome.md) §5.3) |
-| **V3-M3** | **Execution engine** — the shared replay core (locator walk + healing · step semantics · expected-outcome verification · safe-stop), extension-driver flavor; drift encountered at run time feeds back as a freshness signal |
+| **V3-M3** | **Execution engine** — the extension-driver flavor of the replay engine (locator walk + healing · step semantics · expected-outcome verification · safe-stop), on the shared core extracted at the second driver rather than a core built ahead of it; drift encountered at run time feeds back as a freshness signal |
 | **V3-M4** | **Safety & audit** — per-run consent, destructive-step confirmation, run log, org-level controls (who may run what, on which sites) |
 
 ---
@@ -58,9 +58,9 @@
 | Track | Role | V3's relation |
 |---|---|---|
 | **P1–P2 (copilot · Sense/Reason)** | Vendor-side answers over the KB | Same factory, flipped market; the copilot's grounding guarantees carry over |
-| **P3 Self-validation** | The replay core + "validated-current" certification | V3-M3 **is** that core in a third driver; certification gates which SOPs the agent may run when P3 lands |
+| **P3 Self-validation** | Sandbox validation + the "validated-current" certification signal | V3-M3 is a **third driver** on the replay engine Phase 4's widget already runs; certification is a pluggable input today (eligibility analysis at enable time) and Phase-3 validation slots into it when it lands |
 | **P4 Autopilot** | The vendor-side hands (widget driver) | V3 mirrors its consent/safety design on a new surface; they share the execution engine |
-| **P5 Converse** | Goal → plan → tier ladder (the brain) | The same brain pattern applies to the company agent (goal → SOP selection → run); reuse is an open question (§6) |
+| **P5 Converse** | Goal → plan → consent → narration (the brain) | The same brain pattern applies to the company agent (goal → SOP selection → run); reuse is an open question (§6) |
 | **P6 Interop** | Knowledge OUT to third-party agents | V3 is the **first consumer of P6's export seam** — P6 feeds *their* agents, V3 brings *ours* |
 | **V2 Portal** | Human renderings of approved workflows | V3-M1's SOP/document renderings are siblings of the portal renderer |
 
@@ -84,4 +84,4 @@
 
 - **2026-07-25 — Track opened (user decision).** Version 3 = the buyer-side flip: (1) any company records the tools/processes it **uses** with the existing extension + Studio into an owned, approved workflow/SOP KB; (2) a **second Chrome extension — FlowBuddy's own browser-use agent** — runs those applications for the company, grounded in that KB (recorded + approved workflows only). Captured as a version track; scheduling deliberately open (the agent half follows the P3/P4 replay core).
 
-> **Not in this track (until designed otherwise):** free-form agent browsing · improvised actions · exposing one company's buyer-side KB to other organizations · vendor-side features (V1's lane) · acting before the replay core + safety rails exist.
+> **Not in this track (until designed otherwise):** free-form agent browsing · improvised actions · exposing one company's buyer-side KB to other organizations · vendor-side features (V1's lane) · acting outside the recorded-and-approved action space, whatever rails exist around it.
