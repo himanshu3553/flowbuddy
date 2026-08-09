@@ -1,0 +1,91 @@
+---
+// Animated product mock — the host app with the next step spotlit. Recreated in HTML on the
+// tokens (design-system rule: never a fake photo). The markup IS the
+// finished state; the player that animates it lives with the section that
+// renders this, so no-JS and reduced-motion show the completed visual.
+---
+
+<div class="relative mx-auto w-full max-w-[520px] pb-8" data-cap-demo="2" aria-hidden="true">
+  <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
+    <!-- browser chrome -->
+    <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
+      <span class="size-2.5 rounded-full bg-gray-200"></span>
+      <span class="size-2.5 rounded-full bg-gray-200"></span>
+      <span class="size-2.5 rounded-full bg-gray-200"></span>
+      <span class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
+        >yoursaas.com/team</span
+      >
+    </div>
+    <div class="flex">
+      <!-- host sidebar -->
+      <div class="hidden w-[130px] shrink-0 space-y-1 border-r border-gray-100 bg-paper-2 p-3 sm:block">
+        <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+          Dashboard
+        </div>
+        <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+          Invoices
+        </div>
+        <div class="rounded-control bg-gray-100 px-2.5 py-1.5 text-[0.7rem] font-bold text-ink">
+          Team
+        </div>
+        <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+          Settings
+        </div>
+      </div>
+      <!-- host content -->
+      <div class="min-h-[250px] flex-1 p-4">
+        <div class="flex items-center justify-between">
+          <div class="media-fill h-6 w-2/5 rounded-control"></div>
+          <button
+            data-anim="spot"
+            tabindex="-1"
+            class="rounded-control px-3 py-1.5 text-[0.7rem] font-bold text-white ring-2 ring-brand-400 ring-offset-2 transition-all duration-300"
+            style="background: linear-gradient(180deg, #4a63e8, #3a50dd)"
+            >Invite member</button
+          >
+        </div>
+        <div class="mt-4 space-y-2.5">
+          {
+            [1, 2, 3].map(() => (
+              <div class="flex items-center gap-3">
+                <div class="media-fill size-7 rounded-pill" />
+                <div class="media-fill h-3.5 w-2/5 rounded-control" />
+                <div class="media-fill ml-auto h-3.5 w-1/5 rounded-control" />
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- the assistant panel -->
+  <div
+    class="absolute -bottom-8 -right-2 w-[270px] rounded-card border border-gray-100 bg-white shadow-widget sm:-right-5"
+  >
+    <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+      <span
+        class="grid size-6 place-items-center rounded-[7px] text-[0.65rem] font-extrabold text-white"
+        style="background: linear-gradient(150deg, #4a63e8, #3a50dd)"
+        >F</span
+      >
+      <span class="text-[0.82rem] font-bold text-ink">Help</span>
+      <span class="ml-auto flex items-center gap-1.5 text-[0.62rem] font-semibold text-success-text">
+        <span class="size-1.5 rounded-full bg-success-dot"></span>Online
+      </span>
+    </div>
+    <div class="px-4 py-3.5">
+      <div
+        data-anim="a"
+        class="w-fit rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.74rem] leading-relaxed text-gray-700"
+      >
+        <span data-anim="dots" class="hidden items-center gap-1 py-1">
+          <span class="fb-dot"></span><span class="fb-dot"></span><span class="fb-dot"></span>
+        </span>
+        You're on Team — to add your teammate, select
+        <span class="font-semibold text-ink">Invite member</span>. I've highlighted it for
+        you.
+      </div>
+    </div>
+  </div>
+</div>

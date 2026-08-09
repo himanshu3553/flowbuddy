@@ -1,0 +1,71 @@
+---
+// Animated product mock — the walkthrough advancing through a task. Recreated in HTML on the
+// tokens (design-system rule: never a fake photo). The markup IS the
+// finished state; the player that animates it lives with the section that
+// renders this, so no-JS and reduced-motion show the completed visual.
+---
+
+<div
+  class="rounded-dialog border border-gray-150 bg-white p-6 pb-12 shadow-frame md:p-8 md:pb-14"
+  data-cap-demo="3"
+  aria-hidden="true"
+>
+  <div class="relative mx-auto w-full max-w-[400px]">
+    <div class="rounded-card border border-gray-150 bg-white p-4">
+      <p class="text-[0.8rem] font-bold text-ink">Invite teammate</p>
+      <div class="mt-3 space-y-2.5">
+        <div class="media-fill h-8 rounded-control"></div>
+        <div
+          data-anim="spot"
+          class="flex h-8 items-center justify-between rounded-control border border-gray-150 bg-white px-2.5 text-[0.7rem] font-semibold text-gray-600 ring-2 ring-brand-400 ring-offset-2 transition-all duration-300"
+        >
+          Role: Member
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+        <div class="media-fill h-8 w-2/5 rounded-control"></div>
+      </div>
+    </div>
+    <div
+      class="absolute -bottom-8 right-0 w-[250px] rounded-card border border-gray-100 bg-white p-4 shadow-widget sm:-right-4"
+    >
+      <p class="font-mono text-[0.58rem] font-bold uppercase tracking-widest text-brand-500">
+        Walkthrough
+      </p>
+      <div class="mt-1.5 flex items-center justify-between">
+        <p class="text-[0.8rem] font-bold text-ink">Add a team member</p>
+        <span data-anim="ptext" class="font-mono text-[0.6rem] font-semibold text-gray-500"
+          >Step 2 of 3</span
+        >
+      </div>
+      <div class="mt-2 h-1.5 overflow-hidden rounded-pill bg-gray-100">
+        <div
+          data-anim="bar"
+          class="h-full rounded-pill transition-[width] duration-500"
+          style="width: 66%; background: linear-gradient(90deg, #4a63e8, #3a50dd)"
+        >
+        </div>
+      </div>
+      <div class="mt-3 space-y-2">
+        <div class="cap-step" data-anim="step1">
+          <span class="cap-badge cap-badge-on">
+            <span data-anim="num" class="hidden">1</span>
+            <svg data-anim="check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </span>
+          <span class="cap-step-title">Select Invite member</span>
+        </div>
+        <div class="cap-step cap-step-active" data-anim="step2">
+          <span data-anim="badge2" class="cap-badge cap-badge-on">2</span>
+          <span class="cap-step-title">Choose a role</span>
+        </div>
+        <div class="cap-step">
+          <span class="cap-badge cap-badge-off">3</span>
+          <span class="cap-step-title">Send the invite</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -3,12 +3,12 @@ import { faqs } from '../data/faqs';
 ---
 
 <section id="faq" class="border-t border-gray-100 bg-paper">
-  <div class="mx-auto max-w-[820px] px-5 py-16 md:px-8 md:py-24">
+  <div class="mx-auto max-w-[820px] px-5 py-12 md:px-8 md:py-16">
     <div class="text-center">
       <p class="eyebrow mb-4">FAQ</p>
       <h2 class="display-section">Questions founders ask us</h2>
     </div>
-    <div class="mt-10 space-y-3">
+    <div class="mt-8 space-y-3">
       {
         faqs.map((f) => (
           <details class="faq-item rounded-list border border-gray-100 bg-white px-6 py-4 shadow-card">
@@ -35,5 +35,9 @@ import { faqs } from '../data/faqs';
         ))
       }
     </div>
+    <p class="mt-8 text-center text-[0.9rem] text-gray-500">
+      More questions?
+      <a href="/faq" class="font-semibold text-brand-500 hover:underline">Read the full FAQ</a>
+    </p>
   </div>
 </section>

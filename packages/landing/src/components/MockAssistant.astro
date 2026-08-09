@@ -1,0 +1,51 @@
+---
+// Animated product mock — the in-app chat answering in context. Recreated in HTML on the
+// tokens (design-system rule: never a fake photo). The markup IS the
+// finished state; the player that animates it lives with the section that
+// renders this, so no-JS and reduced-motion show the completed visual.
+---
+
+<div
+  class="rounded-dialog border border-gray-150 bg-white p-6 shadow-frame md:p-8"
+  data-cap-demo="1"
+  aria-hidden="true"
+>
+  <div class="mx-auto w-full max-w-[300px] rounded-card border border-gray-100 bg-white shadow-widget">
+    <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+      <span
+        class="grid size-6 place-items-center rounded-[7px] text-[0.65rem] font-extrabold text-white"
+        style="background: linear-gradient(150deg, #4a63e8, #3a50dd)"
+        >F</span
+      >
+      <span class="text-[0.82rem] font-bold text-ink">Help</span>
+      <span class="ml-auto flex items-center gap-1.5 text-[0.62rem] font-semibold text-success-text">
+        <span class="size-1.5 rounded-full bg-success-dot"></span>Online
+      </span>
+    </div>
+    <div class="space-y-3 px-4 py-4">
+      <div
+        data-anim="q"
+        class="ml-auto w-fit max-w-[85%] rounded-tile bg-brand-500 px-3 py-2 text-[0.76rem] font-medium leading-snug text-white"
+      >
+        Can I change my billing email?
+      </div>
+      <div
+        data-anim="a"
+        class="w-fit max-w-[92%] rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.76rem] leading-relaxed text-gray-700"
+      >
+        <span data-anim="dots" class="hidden items-center gap-1 py-1">
+          <span class="fb-dot"></span><span class="fb-dot"></span><span class="fb-dot"></span>
+        </span>
+        Yes — that lives in Settings.
+        <span class="mt-1.5 block font-semibold text-ink">1. Open Settings → Billing.</span>
+        <span class="block font-semibold text-ink">2. Edit the billing email and save.</span>
+        Your next invoice will use it.
+        <span
+          data-anim="chip"
+          class="mt-2 inline-block rounded-pill border border-brand-100 bg-brand-50 px-2 py-0.5 font-mono text-[0.58rem] font-bold uppercase tracking-wide text-brand-600"
+          >From: Update billing details</span
+        >
+      </div>
+    </div>
+  </div>
+</div>

@@ -393,3 +393,44 @@ body {
 .faq-item[open] summary .faq-icon {
   transform: rotate(45deg);
 }
+
+/* ---- "One knowledge base": consumers arrive one at a time --------------
+   Nothing here hides anything until the section's script adds
+   [data-kb-reveal] — the served markup is the finished diagram, so a crawler,
+   a JS failure and prefers-reduced-motion all see all six consumers. */
+.kb-rail-fill {
+  height: 100%;
+  background: linear-gradient(180deg, var(--color-brand-400), var(--color-brand-600));
+}
+[data-kb-reveal] .kb-rail-fill {
+  height: 0;
+  transition: height 620ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-kb-reveal] .kb-tile .kb-card {
+  opacity: 0;
+  transform: translateY(22px) scale(0.985);
+  transition:
+    opacity 620ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    transform 620ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-kb-reveal] .kb-tile.is-in .kb-card {
+  opacity: 1;
+  transform: none;
+}
+.kb-tile .kb-dot {
+  transition:
+    background-color 380ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    transform 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.kb-tile.is-in .kb-dot,
+:root:not(:has([data-kb-reveal])) .kb-tile .kb-dot {
+  background-color: var(--color-brand-500);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-kb-reveal] .kb-tile .kb-card,
+  [data-kb-reveal] .kb-rail-fill {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

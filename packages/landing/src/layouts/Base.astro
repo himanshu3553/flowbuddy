@@ -45,6 +45,11 @@ const baseJsonLd = [
     url: 'https://flowbuddyai.com',
     description:
       'FlowBuddy is an in-app, context-aware AI assistant for SaaS products. Record a demo of your product once and get a custom AI assistant that answers questions, unblocks stuck users, and walks them through tasks — live in about 30 minutes, no coding required.',
+    featureList: [
+      'In-App AI Assistant — answers user questions inside the product, from approved workflows only',
+      'Contextual Guidance — reads the page the user is on and highlights their next step in the product UI',
+      'Interactive Walkthroughs — guides a user through a whole task, one step at a time, across pages',
+    ],
     offers: {
       '@type': 'Offer',
       price: '0',
@@ -108,7 +113,7 @@ const baseJsonLd = [
       )
     }
     <!-- "See it in action": opens the embedded copilot (clicks its launcher inside the
-         open shadow root). Until the widget is embedded, falls back to the capabilities
+         open shadow root). Until the widget is embedded, falls back to the knowledge-base
          section so the button is never dead. -->
     <script is:inline>
       document.addEventListener('click', (e) => {
@@ -118,7 +123,7 @@ const baseJsonLd = [
           .getElementById('flowbuddy-copilot-root')
           ?.shadowRoot?.querySelector('.fb-launcher');
         if (launcher instanceof HTMLElement) launcher.click();
-        else document.getElementById('capabilities')?.scrollIntoView({ behavior: 'smooth' });
+        else document.getElementById('knowledge-base')?.scrollIntoView({ behavior: 'smooth' });
       });
     </script>
   </body>
