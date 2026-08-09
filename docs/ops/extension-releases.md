@@ -9,7 +9,7 @@
 
 ---
 
-## v0.8.0 — 🔨 **built 2026-08-08, NOT packaged/submitted** — the fill-flush build
+## v0.8.0 — ⏳ **SUBMITTED 2026-08-09, in review** — the fill-flush build
 
 **The full-page-nav capture fix** — a typed value can no longer be lost to the navigation that follows it.
 
@@ -20,8 +20,9 @@
   - Only fields the **user actually typed in** are swept (tracked via `input` events) — server-prefilled values the user never touched are never captured as the user's steps. A de-dup map guarantees a value `change` already delivered is never emitted twice. Every swept value passes the same `maskValue()` redaction as normal captures.
 - **Compatibility:** none required — emits only the existing `input` event shape, no API/header changes, no release-ordering constraint (store-first is satisfied trivially).
 - **Permissions:** **unchanged.**
-- **Baked targets:** unchanged from v0.7.0 (set at packaging time).
-- **Status:** built (version bumped in `src/manifest.json`); **not packaged, not submitted** — cut via the checklist below when releasing.
+- **Baked targets:** unchanged from v0.7.0 — `https://app.flowbuddyai.com` (primary — the popup's Connect target) + `https://flowbuddy-dev-web.onrender.com` + `http://localhost:3000` (bridge only).
+- **Artifact:** `packages/extension/flowbuddy-recorder-0.8.0.zip` (gitignored, 108 KB, 24 files) — built `NODE_ENV=production`. Verified before zipping: manifest `0.8.0`, all three bridge origins, `__DEV__` stripped, popup bakes the prod Studio, `X-FlowBuddy-Upload-Id` still sent, and the sweep's values still pass the sensitive-field mask.
+- **Status:** **uploaded and submitted for review 2026-08-09** (same listing, extension ID unchanged). No permissions delta, so it should take the fast path. **v0.7.0 stays live until this is approved**, and it remains the build the API requires — nothing here is a compatibility floor, so there is no deploy to sequence against it.
 
 ## v0.7.0 — ✅ **LIVE on the Chrome Web Store** (packaged 2026-07-28) — the build production requires
 
