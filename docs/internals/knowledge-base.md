@@ -153,10 +153,13 @@ boundaries come primarily from
 - with **narration** ("now let's…", or an up-front enumeration of tasks) and **user markers** (the
   recorder's "new workflow" hotkey) as *supporting* signals.
 
-The prompt builds a **timeline** that surfaces, per event, its label, any **route transition**
-(`route.path -> postAction.route.path` — the terminal-state tell), and the aligned narration; plus the
-markers and the full transcript (so the model can tell "one task across many steps" from "several
-tasks"). It's biased to **split at the clearest terminal state when uncertain**, because a human editor
+The prompt builds a **timeline** that surfaces, per event, its **timestamp**, its label, any **route
+transition** (`route.path -> postAction.route.path` — the terminal-state tell), and the aligned
+narration; plus the markers and the full transcript (so the model can tell "one task across many steps" from "several
+tasks"). The timestamp is what makes a marker usable at all: markers arrive as times on that same
+clock, so without it the model is told to split at 62000ms while reading a list with no clocks — and a
+long pause, a documented boundary signal, is equally invisible. It's biased to **split at the clearest
+terminal state when uncertain**, because a human editor
 merges a false split in one click, whereas an un-split workflow buried inside another is far harder to
 recover.
 
@@ -210,7 +213,7 @@ Then each model step is *resolved* into the persisted `DistilledStep`:
 | `DistilledStep` field | Resolved from |
 |---|---|
 | `instruction`, `detail` | model output, **redacted** |
-| `route` | model's `route`, else the key event's `route.path` |
+| `route` | the key event's `route.path` — **never the model's**. This was the one field that escaped the id-grounding above: the prompt says copy it from the key event, and a plausible rewrite (`/project/` for `/projects/`) was persisted as though anchored, then fed the sense probe, retrieval's route boost, the walkthrough and `displayRoute`. The model still emits `route` (strict schema); it is advisory only. |
 | `narration` | the **unique** narration across the step's source events, joined + redacted (`stepNarration`) |
 | `screenshotFile` | **frame rule C** — the key event's *action* screenshot by default; the **post/result** screenshot for the workflow's **last (outcome) step** ("you landed here") |
 | `bbox` | the key event's element rect — powers the element highlight on the screenshot (**rendered in Studio's KB detail page** as a lightbox overlay). The overlay is expressed as **viewport fractions** (`bbox / manifest.app.viewport`), which makes it **DPR-independent and needs no coordinate calibration**. That fraction math is implemented once, in the KB page's own render layer — the only implementation in the tree. |
@@ -305,7 +308,8 @@ After `buildWorkflowKB` returns, the worker, in one job:
 
 1. Sets `status = processing` at the start (so Studio shows progress).
 2. Saves `KnowledgeSource.transcript`.
-3. **Idempotent rebuild:** `deleteMany({ sourceId })` then `createMany` of all step rows. Each row:
+3. **Idempotent rebuild — one transaction** covering the identity writes below, the `deleteMany({ sourceId })`
+   / `createMany` of all step rows, and the vector writes. Each row:
    - `kind: 'step'`, `orderIndex` = order **within** the workflow,
    - `text` = `distilledStepText(step)` (instruction + detail + narration, joined — the searchable
      field),
@@ -370,8 +374,12 @@ founder's gate stands until they flip it, and the enable action recompiles for i
 **An embedding failure during a reprocess is fatal, on purpose.** Without vectors identity cannot be
 verified, and both alternatives are worse: guessing by position is the bug this replaced, and
 detaching everything would unapprove an entire KB over a transient API blip. Throwing leaves the
-existing KB and every approval untouched, because nothing has been deleted at that point. A *first*
-process has no identity to protect and still degrades to keyword-only.
+existing KB and every approval untouched, because nothing has been deleted at that point. **Once
+deleting starts, a transaction holds that same guarantee** — the evidence identity is matched from
+lives in the very rows being deleted, so a death between the delete and the last vector write would
+leave the BullMQ retry reading zero fingerprints, matching nothing, and suspending every approval in
+the workspace: the identical blast radius, reached through a side door. A *first* process has no
+identity to protect and still degrades to keyword-only.
 
 ### Liveness — approval is not a boolean
 

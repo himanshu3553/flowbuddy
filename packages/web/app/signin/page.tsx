@@ -83,7 +83,7 @@ export default function SignInPage({
                   required
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
               {showResend && (
                 <p className="text-sm text-muted-foreground">
                   Didn’t get it?{' '}

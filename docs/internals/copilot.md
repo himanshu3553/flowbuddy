@@ -357,7 +357,10 @@ shipped page state, else `answerAsAgent`; `answerAsFloor` if either fails) → *
 (the model's pick, validated against that set — the model chooses from it and never defines it — else
 deterministically on a positional covered answer about a runnable workflow) → **log + respond**. Input caps (cost ceiling — the key is public):
 **question ≤ 2000 chars** (`400` above it; the widget input additionally caps at 400 via
-`maxlength`), `context.path` clipped to 512.
+`maxlength`), `context.path` **scrubbed then clipped to 512** — it is page-derived text that lands in
+both the DB and the prompt, and a real product URL carries emails and tokens, so it goes through the
+one page-string cleaner (angle brackets and control chars out, whitespace collapsed, PII-redacted)
+rather than a bare `slice`. An empty result reads as "unknown route".
 
 - **Zero approved items** → log `CopilotQuery(answered: false)` and return a distinct reason ("this
   copilot has no approved help content yet") — *not* a coverage gap (nothing was asked-but-missing;
@@ -426,6 +429,10 @@ It **never writes the KB** — knowledge flows one way (see [connections.md](con
 - **No approved workflows** → friendly "no approved help content yet" (covered:false), logged but **not**
   a coverage gap.
 - **`OPENAI_API_KEY` unset** → `500` before any LLM call.
+- **Any unhandled throw** → the caller gets a status and `{ error: 'internal error' }`, nothing more;
+  the real error goes to the log with the request id. Fastify's default handler puts `err.message` —
+  Prisma connection text, provider errors, table names — on the wire, and these routes are a PUBLIC
+  surface (any page holding the widget key). Framework 4xx keep their status but not their prose.
 - **LLM returns unparseable JSON** (including output truncated at `max_completion_tokens`) → treated
   as a clean decline ("couldn't find an answer").
 - **Oversized question** (> 2000 chars) → `400` before retrieval or any LLM spend.

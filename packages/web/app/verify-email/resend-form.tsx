@@ -14,7 +14,7 @@ export function ResendVerificationForm() {
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" autoComplete="email" required />
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? 'Sending…' : 'Send verification link'}
       </Button>

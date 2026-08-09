@@ -256,16 +256,19 @@ no client left that knows its id. The route's rules:
 
 | Situation | Response | Why |
 |---|---|---|
-| Row exists at `status = recording` | `deleteSessionPrefix` → delete the row → `{ discarded: true }` | Storage first, so a failure mid-way leaves a row the sweep can retry. |
-| Row exists at any later status | `409 recording is already <status> — delete it in Studio` | Once a recording finalizes it is the founder's, and deleting it is Studio's job, not the recorder's. This is what stops a stray discard from destroying a recording that actually made it. |
+| Row exists at `status = recording` | conditional row delete (status re-checked atomically) → `deleteSessionPrefix` → `{ discarded: true }` | Row first, because the delete is the race arbiter: a finalize that commits between the status read and the delete makes the conditional delete match nothing, and the finalized recording survives. A crash between the two steps leaves orphaned objects — the lesser evil, since a finalize's 2xx has already wiped the recorder's buffer, making the row the only copy. |
+| Row exists at any later status — including one that finalized mid-discard | `409 recording is already <status> — delete it in Studio` | Once a recording finalizes it is the founder's, and deleting it is Studio's job, not the recorder's. This is what stops a stray discard from destroying a recording that actually made it. |
 | No such row | `200 { discarded: false, reason: 'not found' }` | Nothing was ever uploaded. A clean no-op, not an error — the recorder must not be blocked from starting over. |
 
 The recorder treats the whole call as best-effort (deadlined, failures swallowed): being offline must
 never prevent someone from starting a new recording.
 
 **2. The sweep — `recording` rows idle more than 12 hours.** `sweepAbandonedRecordings(workspaceId)`
-finds up to 20 `recording` rows whose `updatedAt` is older than `ABANDONED_AFTER_MS`, deletes each
-prefix then each row, and rides **fire-and-forget on finalize** — a finished recording being the
+finds up to 20 `recording` rows whose `updatedAt` is older than `ABANDONED_AFTER_MS`, then for each
+**claims the row with a conditional delete** (status and staleness re-checked atomically — the
+snapshot can be minutes stale by the time the loop reaches a row, and a finalize that landed in that
+window must win the race) before deleting its prefix, and rides **fire-and-forget on finalize** — a
+finished recording being the
 cheapest reliable signal that this workspace is active. It is `void`-called and wrapped in a
 `try/catch`: cleanup may never delay or fail the request that delivers a recording. There is no cron
 and no separate service.

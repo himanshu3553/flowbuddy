@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { __agentSystemForTest as agentSystem } from './agent';
+import { __agentSystemForTest as agentSystem, __knowledgeHeaderForTest as knowledgeHeader } from './agent';
 
 /**
  * The agent prompt in its two configurations — Copilot (tools bound) and THE FLOOR (nothing bound,
@@ -72,6 +72,17 @@ describe('the floor configuration', () => {
     // Removing the tool talk must not leave the model with no account of its situation — an
     // unexplained absence is how you get "let me check that for you" with nothing behind it.
     expect(floor).toContain('nothing further to look up');
+  });
+
+  it('the USER message header carries no search invitation either', () => {
+    // The system prompt is not the only string the model reads: the knowledge block's header sits
+    // in the user message, closest to the question, and used to say "search for more" on BOTH
+    // configurations. The ban covers every string assembled for the floor.
+    const header = knowledgeHeader(false);
+    expect(header.toLowerCase()).not.toContain('search');
+    for (const tool of TOOL_NAMES) expect(header).not.toContain(tool);
+    // …while the Copilot configuration keeps its invitation — that path CAN search.
+    expect(knowledgeHeader(true).toLowerCase()).toContain('search for more');
   });
 
   it('keeps every rule that has nothing to do with tools', () => {

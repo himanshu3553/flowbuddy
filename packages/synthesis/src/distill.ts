@@ -195,7 +195,12 @@ function resolveStep(
   return {
     instruction: redactText((s.instruction ?? '').trim()),
     detail: detail ? redactText(detail) : undefined,
-    route: ((s.route || keyEvent.route?.path) ?? '').trim(),
+    // From the anchored key event, NEVER from the model. `route` was the one field that escaped
+    // the event-id grounding — the prompt says "copy it from the key event" but a plausible
+    // rewrite (/project/ for /projects/) was persisted as if anchored, then fed the sense probe,
+    // retrieval's route boost, the walkthrough and displayRoute. The model still emits `route`
+    // (strict schema); it is advisory only.
+    route: (keyEvent.route?.path ?? '').trim(),
     narration: stepNarration(sourceIds, narration),
     screenshotFile: resolveScreenshot(keyEvent, false),
     bbox: keyEvent.target?.bbox,

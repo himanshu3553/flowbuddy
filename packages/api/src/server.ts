@@ -1,4 +1,4 @@
-import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyError, type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { prisma } from '@flowbuddy/db';
 import {
@@ -54,6 +54,21 @@ import { getSenseShard } from './sense-plan';
 // and secret redaction. `app.log` / `req.log` are children of it (Fastify adds the reqId + req/res
 // serializers), so the request lifecycle logs Fastify emits stay consistent with everything else.
 const app = Fastify({ loggerInstance: createLogger('api') });
+
+// A route that throws must never serialize its internals to the caller. Fastify's default handler
+// puts `err.message` — Prisma connection text, provider errors, table names — in the response
+// body, and the copilot routes are a PUBLIC surface (any page holding the widget key). The real
+// error goes to the log with the request id; the wire gets a shape and nothing else. Framework 4xx
+// (malformed JSON, payload too large) keep their status but not their prose.
+app.setErrorHandler((err: FastifyError, req, reply) => {
+  const statusCode = typeof err.statusCode === 'number' ? err.statusCode : 500;
+  if (statusCode >= 500) {
+    req.log.error({ err }, 'unhandled route error');
+    return reply.code(statusCode).send({ error: 'internal error' });
+  }
+  req.log.warn({ err, statusCode }, 'request rejected');
+  return reply.code(statusCode).send({ error: 'request rejected' });
+});
 
 // CORS so the extension (chrome-extension://...) can upload.
 app.addHook('onRequest', async (req, reply) => {
@@ -154,21 +169,28 @@ const SWEEP_BATCH = 20;
  */
 async function sweepAbandonedRecordings(workspaceId: string): Promise<void> {
   try {
+    const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS);
     const stale = await prisma.knowledgeSource.findMany({
-      where: {
-        workspaceId,
-        status: 'recording',
-        updatedAt: { lt: new Date(Date.now() - ABANDONED_AFTER_MS) },
-      },
+      where: { workspaceId, status: 'recording', updatedAt: { lt: cutoff } },
       select: { id: true },
       take: SWEEP_BATCH,
     });
     if (stale.length === 0) return;
+    let swept = 0;
     for (const { id } of stale) {
-      await deleteSessionPrefix(workspaceId, id); // storage first — a surviving row can be re-swept
-      await prisma.knowledgeSource.delete({ where: { id } }).catch(() => {});
+      // Claim the row FIRST, re-checking eligibility inside the delete itself. The snapshot above
+      // can be minutes stale by the time this loop reaches a row (prefix deletion paginates), and a
+      // finalize that lands in that window has already told the recorder "saved" — any 2xx wipes
+      // its buffer, so this row would be the only copy left. Row-first over storage-first on
+      // purpose: a crash between the two leaves orphaned objects, which is the lesser evil.
+      const { count } = await prisma.knowledgeSource.deleteMany({
+        where: { id, status: 'recording', updatedAt: { lt: cutoff } },
+      });
+      if (count === 0) continue; // finalized (or already swept) since the snapshot — not ours to touch
+      await deleteSessionPrefix(workspaceId, id);
+      swept += 1;
     }
-    app.log.info({ workspaceId, count: stale.length }, 'swept abandoned recordings');
+    if (swept > 0) app.log.info({ workspaceId, count: swept }, 'swept abandoned recordings');
   } catch (err) {
     app.log.warn({ workspaceId, err }, 'abandoned-recording sweep failed');
   }
@@ -194,8 +216,17 @@ app.delete('/v1/uploads/:uploadId', async (req, reply) => {
     return reply.code(409).send({ error: `recording is already ${rec.status} — delete it in Studio` });
   }
 
+  // The status check above is only a fast path — the delete re-checks it atomically. A finalize
+  // retry (a restarted service worker) can commit between that read and this delete, and once its
+  // 200 is out the recorder's buffer is gone; count 0 means we lost that race and the recording is
+  // now the founder's to keep, exactly as if the read had seen it finalized.
+  const { count } = await prisma.knowledgeSource.deleteMany({
+    where: { id: rec.id, status: 'recording' },
+  });
+  if (count === 0) {
+    return reply.code(409).send({ error: 'recording was finalized while discarding — delete it in Studio' });
+  }
   await deleteSessionPrefix(ws.workspaceId, rec.id);
-  await prisma.knowledgeSource.delete({ where: { id: rec.id } });
   return { discarded: true };
 });
 
@@ -616,7 +647,13 @@ const MAX_REASON_TEXTS = 40;
 const MAX_REASON_IMAGE_CHARS = 1_200_000; // ~900 KB binary; the route's bodyLimit backstops this
 const REASON_MAX_PER_WINDOW = 6; // per-minute ceiling for the expensive path (per key)
 
-/** Untrusted page-derived string → prompt-safe: strip angle brackets/control chars, cap, redact. */
+/**
+ * THE scrub for untrusted page-derived text — strip angle brackets/control chars, collapse
+ * whitespace, cap, PII-redact. Every string that arrives from a page and is stored or prompted
+ * goes through here (question text has its own storage-only variant above). It started as the
+ * Reason payload's cleaner; `contextPath` and `safeStopReason` were each missed once by hand-rolled
+ * slicing, which is why this is one function and not a convention.
+ */
 function cleanPageString(v: unknown, cap: number): string {
   if (typeof v !== 'string') return '';
   return redactText(v.replace(/[<>\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cap));
@@ -923,8 +960,10 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
   const storedQuestion = redactText(question);
 
   // P1-M8: the host page the end-user is on (sent by the widget) biases retrieval + the answer.
-  // Bounded — it's untrusted input that lands in the DB and the prompt.
-  const contextPath = typeof body.context?.path === 'string' ? body.context.path.slice(0, 512) : null;
+  // Untrusted input that lands in the DB and the prompt, so it gets the one page-string scrub —
+  // real product URLs carry emails and tokens. An empty result reads as "unknown route" (null).
+  const contextPath =
+    typeof body.context?.path === 'string' ? cleanPageString(body.context.path, 512) || null : null;
   // P2 Sense — validate the probe's hypotheses (approval-checked, titles from server truth).
   // Both context resolutions hit the DB and are independent — run them together so cut 2's
   // approval re-check costs no extra serial round-trip on the path every question rides.
@@ -1672,7 +1711,9 @@ app.post('/v1/copilot/run', async (req, reply) => {
         outcome: event,
         ...(step !== undefined ? { lastStep: step } : {}),
         ...(event === 'safe_stop' && typeof body.reason === 'string'
-          ? { safeStopReason: body.reason.slice(0, 300) }
+          ? // Page-derived prose the founder reads back in Studio — scrubbed like every other
+            // stored page string (it describes what the run saw, exactly where a value appears).
+            { safeStopReason: cleanPageString(body.reason, 300) }
           : {}),
       },
     });

@@ -58,7 +58,9 @@ SUPPORTING signals:
   "next..."). Treat each distinct task the narration names as its own workflow. But do
   NOT require explicit narration to split — most demos narrate continuously and never
   say "new workflow." Absence of a verbal marker is NOT evidence of a single workflow.
-- User-placed markers: explicit author boundaries. Always start a new workflow at each.
+- User-placed markers: explicit author boundaries, given as timestamps on the same
+  clock as the events' "@ Nms" times. Always start a new workflow at the first event
+  at or after each marker's time.
 
 ONE GOAL = ONE WORKFLOW:
 The phases of a single task — navigating to a page, filling a form, toggling an
@@ -125,12 +127,15 @@ export async function segment(
   const allIds = events.map((e) => e.id);
 
   // Timeline — surface routes AND route transitions (the terminal-state signal) + narration.
+  // Each line carries the event's timestamp, on the same clock as the markers: without it the model
+  // is told "split at the marker at 62000ms" while looking at a list with no clocks — it cannot
+  // place a marker between two events, and a long pause (a documented boundary signal) is invisible.
   const timeline = events
     .map((ev) => {
       const n = narration.get(ev.id);
       const post = ev.postAction?.route?.path;
       const nav = post && post !== ev.route?.path ? ` -> ${post}` : '';
-      return `- id=${ev.id} | ${eventLabel(ev)}${nav}${n ? ` | said: "${n.slice(0, 160)}"` : ''}`;
+      return `- id=${ev.id} @ ${ev.t}ms | ${eventLabel(ev)}${nav}${n ? ` | said: "${n.slice(0, 160)}"` : ''}`;
     })
     .join('\n');
 

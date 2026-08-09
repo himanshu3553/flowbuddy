@@ -8,7 +8,7 @@ let recording = false;
 let startTime = 0;
 let pausedTotal = 0; // ms paused before the current active span (active-time base for event t)
 let port: chrome.runtime.Port | null = null;
-let postWatcher: { observer: MutationObserver; timer: number; hard: number } | null = null;
+let postWatcher: { observer: MutationObserver; timer: number; hard: number; finish: (reason: string) => void } | null = null;
 
 // R4 — service-worker-eviction resilience. In MV3 the background can be evicted after ~30s idle
 // (e.g. a stretch of quiet narration with no interaction), which silently drops the capture port
@@ -78,7 +78,9 @@ function startCapture(t0: number, pausedBase = 0): void {
   addEventListener('pointerdown', onPointerDown, true); // R12 — pre-click screenshot (before side effects)
   addEventListener('click', onClick, true);
   addEventListener('change', onChange, true);
+  addEventListener('input', onInputTouch, true); // fill-flush — remember which fields the USER typed in
   addEventListener('submit', onSubmit, true);
+  addEventListener('pagehide', onPageHide, true); // fill-flush — last chance before a full-page nav
   addEventListener('keydown', onKeydown, true);
   addEventListener('popstate', onNav, true);
   // R10 — richer capture: debounced page scroll + menu-hover (passive, low-noise; see the handlers).
@@ -92,7 +94,9 @@ function stopCapture(): void {
   recording = false;
   removeEventListener('click', onClick, true);
   removeEventListener('change', onChange, true);
+  removeEventListener('input', onInputTouch, true);
   removeEventListener('submit', onSubmit, true);
+  removeEventListener('pagehide', onPageHide, true);
   removeEventListener('keydown', onKeydown, true);
   removeEventListener('popstate', onNav, true);
   removeEventListener('pointerdown', onPointerDown, true);
@@ -216,6 +220,7 @@ function onChange(e: Event): void {
   if (isControlBarEvent(e)) return;
   const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
   if (!el || !('value' in el)) return;
+  lastCaptured.set(el, String(el.value ?? '')); // the sweep must not re-emit a value change already captured
   // R12 — a text field's `change` fires on blur, usually caused by clicking the next control (or the
   // final submit). That click's pointerdown just captured a pre-side-effect frame — reference it (PEEK,
   // don't consume; the click claims it too) so the input's screenshot shows the filled field BEFORE the
@@ -227,8 +232,62 @@ function onSubmit(e: Event): void {
   if (isControlBarEvent(e)) return;
   const el = e.target as Element | null;
   if (!el) return;
+  // Fill-flush half 1: commit the form's still-uncaptured values BEFORE the submit event, so the
+  // captured order reads fill → fill → submit the way the user actually did it.
+  if (el instanceof HTMLFormElement) sweepFields(el);
   emit('submit', el);
   schedulePostAction();
+}
+
+// ---- fill-flush — close the full-page-nav capture gap -----------------------------------------
+// A text field's `change` only fires on COMMIT (blur/Enter). Real apps break that contract around
+// navigation: a custom submit control that preventDefault()s its mousedown never blurs the field,
+// and a programmatic redirect mid-typing commits nothing — so the typed value (a whole fill step)
+// silently missed the recording, and any plan compiled from it would submit a half-empty form.
+// Two flush points close it: `submit` (the form's own fields) and `pagehide` (everything left).
+// Only fields the USER actually typed in (`touched`, via `input` events) are ever swept — a page
+// full of server-prefilled values the user never touched must not be captured as the user's steps.
+// `lastCaptured` de-dups against `change` events that DID fire, so nothing is ever emitted twice.
+// Values pass the same maskValue() redaction as every other capture; nothing new leaves the browser.
+
+const touched = new WeakSet<Element>();
+const lastCaptured = new WeakMap<Element, string>();
+// Types whose value is meaningless or already reliably captured by click/change at interaction time.
+const SWEEP_SKIP_TYPES = new Set(['button', 'submit', 'reset', 'hidden', 'image', 'file', 'checkbox', 'radio']);
+
+function onInputTouch(e: Event): void {
+  // Shadow DOM retargets composed events to the host, so our own control bar (a value-less div host)
+  // can never land here — no isControlBarEvent() needed on this per-keystroke path.
+  const el = e.target as Element | null;
+  if (el && 'value' in el) touched.add(el);
+}
+
+function sweepFields(scope: Document | HTMLFormElement): void {
+  const candidates =
+    scope instanceof HTMLFormElement
+      ? Array.from(scope.elements)
+      : Array.from(scope.querySelectorAll('input, textarea, select'));
+  for (const c of candidates) {
+    if (!touched.has(c)) continue;
+    const tag = c.tagName.toLowerCase();
+    if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') continue;
+    if (tag === 'input' && SWEEP_SKIP_TYPES.has(((c as HTMLInputElement).type || '').toLowerCase())) continue;
+    const el = c as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const value = String(el.value ?? '');
+    if (!value || lastCaptured.get(el) === value) continue;
+    lastCaptured.set(el, value);
+    emit('input', el, maskValue(el));
+  }
+}
+
+function onPageHide(): void {
+  if (!recording) return;
+  // Fill-flush half 2: the page is going away — commit any user-typed value `change` never delivered,
+  // hand the pending post-action watcher its answer now (the navigation would otherwise discard it),
+  // and drain the outbox while this document can still speak to the background.
+  sweepFields(document);
+  postWatcher?.finish('pagehide');
+  flush();
 }
 
 // R10 — richer keyboard: Enter/Escape bare + app-command modifier combos (Cmd+K, Ctrl+S, …). Plain
@@ -381,6 +440,7 @@ function schedulePostAction(): void {
     observer,
     timer: setTimeout(() => finish('mutation_quiet'), SETTLE_QUIET_MS) as unknown as number,
     hard: setTimeout(() => finish('timeout'), SETTLE_MAX_MS) as unknown as number,
+    finish, // exposed so onPageHide can settle NOW instead of losing the post-action to the navigation
   };
 }
 

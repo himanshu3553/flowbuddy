@@ -236,7 +236,7 @@ The residual open items from the Phase-1 end-to-end review — nothing release-b
   **Risk is modest but real:** not an abuse vector (minting a URL needs the workspace's own recorder token), but a runaway capture loop or pathological DOM snapshots would show up as a storage bill rather than an error — and a **leaked recorder token** now has a much larger blast radius than it did when everything went through a rate-limited API.
   **The fix, when it happens:** sign each URL with an exact `ContentLength` so storage itself rejects a different-sized body — real enforcement, not a declared size the client could lie about. The cost is that the recorder must know each artifact's byte size *before* signing, and it currently signs a batch of 25 paths and only builds the blobs afterwards; that loop has to be reordered to build-then-sign (~25 blobs in memory at once). Deferred rather than rushed into a hardening batch, because it reorders a hot path.
   *(The two sibling gaps opened at the same time are now CLOSED: abandoned recordings are swept — explicit discard via `DELETE /v1/uploads/:uploadId` plus a 12-hour server-side sweep riding on finalize; and R2 + CORS on a browser-issued presigned PUT is **verified on dev/Render**, 2026-07-28.)*
-- **Capture quality** — type-aware distill labels (`typed`/`pressed`/`scrolled to`), inner-container scroll capture, `Enter`+`submit` merge in `clean.ts`, the multi-tab screenshot wrong-tab case, and the **full-page-nav capture gap** (late `change`/post-action loss — candidate fix: flush field values on `submit` + a `pagehide` flush). **Re-prioritised by the acting layer:** a plan missing fill steps is a form submitted half-empty in a live account, so this is no longer capture-quality polish.
+- **Capture quality** — type-aware distill labels (`typed`/`pressed`/`scrolled to`), inner-container scroll capture, `Enter`+`submit` merge in `clean.ts`, and the multi-tab screenshot wrong-tab case. The **full-page-nav capture gap** (late `change`/post-action loss) is **CLOSED in code 2026-08-08** — fill-flush on `submit` + `pagehide` in recorder v0.8.0 ([`extension-releases.md`](ops/extension-releases.md)); **not yet on the store, not user-verified**. It had been re-prioritised by the acting layer: a plan missing fill steps is a form submitted half-empty in a live account, so it was no longer capture-quality polish.
 - **Studio/widget polish** — range-window the coverage-gap "asked N×" count (+ fuzzy gap matching), per-workspace timezone for analytics day-bucketing, client-side history slicing + widget `maxlength`, widget a11y (dialog role, focus management, thumb labels), a real deflection metric, and a CORS-scope note.
 
 ### Product audit (2026-08-03) — status
@@ -270,6 +270,27 @@ signal firing on 23 of 46 items filled the whole 24-item evidence window and sta
 step that answered the question. The window now reserves 8 slots for relevance, and the agent's own
 search carries no context signals at all — both pinned by tests, both reproduced and re-measured
 against the live workspace.
+
+**Actioned 2026-08-09 (third pass)** — a correctness-and-trust sweep, each item a hole that failed
+silently rather than loudly (`git log` carries the mechanisms):
+
+- **Grounding.** A step's `route` came from the model whenever it offered one — the single field that
+  escaped the event-id anchoring, feeding a plausible rewrite to the sense probe, the route boost, the
+  walkthrough and every route shown to a human. It is now the key event's, always. Segmentation's
+  timeline gained per-event timestamps, without which the user's own "new workflow" markers — given as
+  times — could not be placed at all.
+- **What leaves the page.** A chat-supplied run input could ride the NEXT question to the server: chat
+  history filtered by denylist while the guarantee was written against the storage allowlist. The wire
+  now has its own allowlist. Page-derived strings (`context.path`, a safe-stop reason) go through the
+  one scrub instead of a bare slice, and an unhandled throw no longer serializes Prisma text to a
+  public endpoint.
+- **Races and stalls.** Discard and the abandoned-recording sweep re-check eligibility inside the
+  delete, so a finalize that lands mid-flight wins and the recording it already told the recorder was
+  saved cannot be destroyed. The worker's KB rewrite is one transaction — the identity evidence lives
+  in the rows it deletes. The widget's answer fetch had no timeout, the one fetch without a budget,
+  and a half-open connection pinned the chat indefinitely.
+- Plus the recorder's fill-flush (the capture-quality bullet above), `role="alert"` on the auth
+  forms' errors, and Studio now dogfooding the widget on itself behind an env flag.
 
 **Deferred, each with the trigger that reopens it:**
 

@@ -9,6 +9,20 @@
 
 ---
 
+## v0.8.0 — 🔨 **built 2026-08-08, NOT packaged/submitted** — the fill-flush build
+
+**The full-page-nav capture fix** — a typed value can no longer be lost to the navigation that follows it.
+
+- **Why it exists:** a text field's `change` only fires on commit (blur/Enter), and real apps break that around navigation — a custom submit control that `preventDefault()`s its mousedown never blurs the field, and a programmatic redirect mid-typing commits nothing. The typed value (a whole fill step) silently missed the recording. Harmless-ish for answers; **not** for the acting layer, where a plan compiled without its fill steps submits a half-empty form in a live account — which is what re-prioritised this from capture-quality polish.
+- **Content:**
+  - **Fill-flush on `submit`:** before emitting the submit event, the form's still-uncaptured field values are emitted as `input` events, so the capture reads fill → fill → submit in the user's actual order.
+  - **Fill-flush on `pagehide`:** last chance before a full-page nav — any user-typed value `change` never delivered is committed, the pending post-action watcher settles NOW (`settleReason: "pagehide"`) instead of losing the post-state to the navigation, and the outbox drains while the document can still reach the background.
+  - Only fields the **user actually typed in** are swept (tracked via `input` events) — server-prefilled values the user never touched are never captured as the user's steps. A de-dup map guarantees a value `change` already delivered is never emitted twice. Every swept value passes the same `maskValue()` redaction as normal captures.
+- **Compatibility:** none required — emits only the existing `input` event shape, no API/header changes, no release-ordering constraint (store-first is satisfied trivially).
+- **Permissions:** **unchanged.**
+- **Baked targets:** unchanged from v0.7.0 (set at packaging time).
+- **Status:** built (version bumped in `src/manifest.json`); **not packaged, not submitted** — cut via the checklist below when releasing.
+
 ## v0.7.0 — ✅ **LIVE on the Chrome Web Store** (packaged 2026-07-28) — the build production requires
 
 **The upload-identity release** — one recording now has one identity, and its artifacts upload while you record instead of in one lump at Stop.

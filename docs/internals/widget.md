@@ -174,12 +174,18 @@ on the way *in* and on the way *out*, so an older bundle or the host page cannot
 that has since been excluded. `assistant.error` is deliberately absent: a transport failure is about
 a moment, not the conversation.
 
-**The allowlist is the whole enforcement, and the two acting kinds land on opposite sides of it.**
+**The allowlists are the whole enforcement, and the two acting kinds land on opposite sides of them.**
 Run narration IS persisted — the narrative has to survive the very page loads the run causes. A
-chat-supplied input value rides a kind that was **never added to the allowlist**, so it is never
-written to storage, never sent to the answer endpoint, and never logged: it exists for one fill and
-is gone on navigation. Excluding it cost a decision not to add a string, not a storage migration
+chat-supplied input value rides a kind that was **never added to either**, so it is never written to
+storage, never sent to the answer endpoint, and never logged: it exists for one fill and is gone on
+navigation. Excluding it cost a decision not to add a string, not a storage migration
 ([`agent.md`](../build/agent.md) §6).
+
+**There are TWO allowlists, because storage is not the wire.** `PERSISTED_KINDS` decides what may be
+stored; `HISTORY_KINDS` decides what may ride `/answer` as conversation history. The wire side used to
+be a *denylist* — everything except `assistant.error` — which is why a typed value did leave the page
+with the next question, in contradiction of the paragraph above. A denylist protects only the kinds
+someone remembered; the allowlist means a new kind leaks nothing until it is deliberately listed.
 
 Writes map fields one by one, so `walkOffer` (a full founder-derived plan copy) structurally cannot
 reach storage; stale plans re-derive on re-ask. Reads cap message count (20), content length, and

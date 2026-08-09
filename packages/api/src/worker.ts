@@ -362,94 +362,108 @@ const worker = new Worker(
         ? matchWorkflowIdentities(fingerprintsFrom(workflows, stepTexts, vectors), existingFingerprints)
         : new Map<number, string>();
 
-      // Detach every existing workflow first so positions are free: a re-split can swap two
-      // workflows' indices, and updating them one at a time would collide on the unique key.
-      await prisma.workflow.updateMany({
-        where: { sourceId: sessionId },
-        data: { segmentIndex: null },
-      });
-
-      const identified: Array<{ workflowId: string; wf: (typeof workflows)[number] }> = [];
-      for (const wf of workflows) {
-        const existingId = matched.get(wf.segmentIndex);
-        if (existingId) {
-          await prisma.workflow.update({
-            where: { id: existingId },
-            data: { segmentIndex: wf.segmentIndex, title: wf.title, description: wf.description },
+      // ONE transaction around everything that rewrites the stored KB. The identity evidence lives
+      // in the old items' embeddings — the very rows deleted below — so a death between that delete
+      // and the last vector write (OOM, the shutdown failsafe, a thrown write) must roll back to
+      // the pre-write state. Without this, the BullMQ retry reads zero fingerprints, matches
+      // nothing, and suspends every approval in the workspace: the exact blast radius the fatal
+      // embedding rule above exists to prevent, reached through a side door. All model/embedding
+      // calls already happened; this wraps only DB writes, so the 30s budget is generous.
+      const identified = await prisma.$transaction(
+        async (tx) => {
+          // Detach every existing workflow first so positions are free: a re-split can swap two
+          // workflows' indices, and updating them one at a time would collide on the unique key.
+          await tx.workflow.updateMany({
+            where: { sourceId: sessionId },
+            data: { segmentIndex: null },
           });
-          identified.push({ workflowId: existingId, wf });
-        } else {
-          // Nothing here matched it, so it is genuinely new — and born unapproved.
-          const created = await prisma.workflow.create({
-            data: {
-              workspaceId: rec.workspaceId,
+
+          const kept: Array<{ workflowId: string; wf: (typeof workflows)[number] }> = [];
+          for (const wf of workflows) {
+            const existingId = matched.get(wf.segmentIndex);
+            if (existingId) {
+              await tx.workflow.update({
+                where: { id: existingId },
+                data: { segmentIndex: wf.segmentIndex, title: wf.title, description: wf.description },
+              });
+              kept.push({ workflowId: existingId, wf });
+            } else {
+              // Nothing here matched it, so it is genuinely new — and born unapproved.
+              const created = await tx.workflow.create({
+                data: {
+                  workspaceId: rec.workspaceId,
+                  sourceId: sessionId,
+                  segmentIndex: wf.segmentIndex,
+                  title: wf.title,
+                  description: wf.description,
+                },
+                select: { id: true },
+              });
+              kept.push({ workflowId: created.id, wf });
+            }
+          }
+
+          // A workflow that nothing matched has lost its content. Its approval was granted for
+          // something that is no longer there, so it stops answering until a human looks at it.
+          const keptIds = new Set(kept.map((x) => x.workflowId));
+          const detachedIds = existingWorkflowIds.filter((id) => !keptIds.has(id));
+          if (detachedIds.length > 0) {
+            const { count } = await tx.copilotApproval.updateMany({
+              where: { workflowId: { in: detachedIds }, inactiveReason: null },
+              data: { inactiveReason: 'needs_review', inactiveAt: new Date() },
+            });
+            log.warn(
+              { sessionId, detached: detachedIds.length, approvalsSuspended: count },
+              'workflows no longer present after reprocess — their approvals need re-review',
+            );
+          }
+
+          // Replace the recording's KB items idempotently with the freshly distilled steps.
+          await tx.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
+          const rows = kept.flatMap(({ workflowId, wf }) =>
+            wf.steps.map((step, i) => ({
               sourceId: sessionId,
+              workspaceId: rec.workspaceId,
+              workflowId,
+              kind: 'step',
+              orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
+              text: distilledStepText(step), // searchable: instruction + detail + narration
               segmentIndex: wf.segmentIndex,
-              title: wf.title,
-              description: wf.description,
-            },
-            select: { id: true },
-          });
-          identified.push({ workflowId: created.id, wf });
-        }
-      }
+              segmentTitle: wf.title,
+              data: step as object,
+            })),
+          );
+          if (rows.length > 0) await tx.knowledgeItem.createMany({ data: rows });
 
-      // A workflow that nothing matched has lost its content. Its approval was granted for
-      // something that is no longer there, so it stops answering until a human looks at it.
-      const keptIds = new Set(identified.map((x) => x.workflowId));
-      const detachedIds = existingWorkflowIds.filter((id) => !keptIds.has(id));
-      if (detachedIds.length > 0) {
-        const { count } = await prisma.copilotApproval.updateMany({
-          where: { workflowId: { in: detachedIds }, inactiveReason: null },
-          data: { inactiveReason: 'needs_review', inactiveAt: new Date() },
-        });
-        log.warn(
-          { sessionId, detached: detachedIds.length, approvalsSuspended: count },
-          'workflows no longer present after reprocess — their approvals need re-review',
-        );
-      }
+          // P1-M3 — persist the vectors computed above. Raw SQL: Prisma cannot write
+          // Unsupported("vector"), and a handful of rows makes per-row updates fine.
+          if (vectors && rows.length > 0) {
+            const created = await tx.knowledgeItem.findMany({
+              where: { sourceId: sessionId },
+              select: { id: true, text: true },
+            });
+            // Matched on TEXT rather than on read-back order. The order rows come back in need not
+            // mirror the order the texts were embedded in, and writing a vector onto the wrong step
+            // corrupts retrieval invisibly — the failure would look like bad answers, not a bug.
+            const vectorByText = new Map<string, number[]>();
+            flatTexts.forEach((t, i) => {
+              const v = vectors?.[i];
+              if (v && !vectorByText.has(t)) vectorByText.set(t, v);
+            });
+            let written = 0;
+            for (const row of created) {
+              const vector = vectorByText.get(row.text);
+              if (!vector) continue;
+              await tx.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
+              written += 1;
+            }
+            log.info({ sessionId, count: written }, 'embedded items for hybrid retrieval');
+          }
 
-      // Replace the recording's KB items idempotently with the freshly distilled steps.
-      await prisma.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
-      const rows = identified.flatMap(({ workflowId, wf }) =>
-        wf.steps.map((step, i) => ({
-          sourceId: sessionId,
-          workspaceId: rec.workspaceId,
-          workflowId,
-          kind: 'step',
-          orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
-          text: distilledStepText(step), // searchable: instruction + detail + narration
-          segmentIndex: wf.segmentIndex,
-          segmentTitle: wf.title,
-          data: step as object,
-        })),
+          return kept;
+        },
+        { maxWait: 10_000, timeout: 30_000 },
       );
-      if (rows.length > 0) await prisma.knowledgeItem.createMany({ data: rows });
-
-      // P1-M3 — persist the vectors computed above. Raw SQL: Prisma cannot write
-      // Unsupported("vector"), and a handful of rows makes per-row updates fine.
-      if (vectors && rows.length > 0) {
-        const created = await prisma.knowledgeItem.findMany({
-          where: { sourceId: sessionId },
-          select: { id: true, text: true },
-        });
-        // Matched on TEXT rather than on read-back order. The order rows come back in need not
-        // mirror the order the texts were embedded in, and writing a vector onto the wrong step
-        // corrupts retrieval invisibly — the failure would look like bad answers, not a bug.
-        const vectorByText = new Map<string, number[]>();
-        flatTexts.forEach((t, i) => {
-          const v = vectors?.[i];
-          if (v && !vectorByText.has(t)) vectorByText.set(t, v);
-        });
-        let written = 0;
-        for (const row of created) {
-          const vector = vectorByText.get(row.text);
-          if (!vector) continue;
-          await prisma.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${row.id}`;
-          written += 1;
-        }
-        log.info({ sessionId, count: written }, 'embedded items for hybrid retrieval');
-      }
 
       // AIL slice 2 — reconcile the extracted product pages. Best-effort by design: a page-pass
       // failure must never fail a recording whose KB built cleanly (pages are additive knowledge).
@@ -544,7 +558,7 @@ const worker = new Worker(
         {
           sessionId,
           workflows: workflows.length,
-          steps: rows.length,
+          steps: flatTexts.length,
           segments: transcript.segments.length,
           ...(warning ? { warning } : {}),
         },

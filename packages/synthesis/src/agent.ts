@@ -142,6 +142,20 @@ POSITION CONTEXT (Sense): the message may include an auto-detected reading of WH
  *  tool it does not have, and that is only checkable if the string can be built without a model. */
 export const __agentSystemForTest = agentSystem;
 
+/**
+ * The knowledge block's header line in the USER message — the same no-promised-tools rule the
+ * system prompt is tested for, applied to the string that sits CLOSEST to the question. It used to
+ * say "search for more if these don't cover it" unconditionally, which handed the floor — the one
+ * configuration with nothing bound, running for a user who already hit a failure — an invitation to
+ * a search it cannot make: the exact "decline invented by the prompt" this file's test exists to ban.
+ */
+function knowledgeItemsHeader(withTools: boolean): string {
+  return withTools
+    ? "KNOWLEDGE ITEMS (what retrieval found for this question — search for more if these don't cover it):"
+    : 'KNOWLEDGE ITEMS (all the help content available for this question):';
+}
+export const __knowledgeHeaderForTest = knowledgeItemsHeader;
+
 const MAX_SEARCH_RESULTS = 12;
 /**
  * Ceiling on how much of one workflow `get_workflow` may pour into the conversation.
@@ -346,7 +360,7 @@ async function runAgent(input: AgentInput, withTools: boolean): Promise<CopilotA
   // the cold, follow-up and must-decline cells all unmoved.
   messages.push({
     role: 'user',
-    content: `${ctxLine}${senseBlock(input.context?.sense)}KNOWLEDGE ITEMS (what retrieval found for this question — search for more if these don't cover it):\n${formatItems(input.items)}\n\nThe user's NEW message — this is the one to answer, not anything asked earlier: ${input.question}`,
+    content: `${ctxLine}${senseBlock(input.context?.sense)}${knowledgeItemsHeader(withTools)}\n${formatItems(input.items)}\n\nThe user's NEW message — this is the one to answer, not anything asked earlier: ${input.question}`,
   });
 
   const loop = await runAnswerLoop({

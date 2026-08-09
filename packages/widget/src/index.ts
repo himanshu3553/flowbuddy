@@ -56,6 +56,8 @@ import {
 import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
 // P5-M0 cut 1 — the conversation survives full-page navigations (see the chat-persistence section).
 import { clearSession, readSession, writeSession, type SessionSpec } from './session.js';
+// What may ride /answer as history — an allowlist, so `user.value` structurally cannot leak.
+import { historyForAnswer } from './chat-history.js';
 
 /** The server sends `{itemId, sourceId, segmentIndex, segmentTitle}`; the widget renders the title
  *  and — since P5-M0 cut 2 — echoes the workflow key back as `context.lastCited` so a follow-up
@@ -73,8 +75,8 @@ interface AnswerPosition { sourceId: string; segmentIndex: number; step: number 
  * declining to add one string to a set. No storage migration, no retrofit (docs/build/agent.md §6).
  */
 // `user.value` is D3's chat-supplied run input (agent.md §6): deliberately NEVER added to
-// PERSISTED_KINDS — the value exists for one fill and is gone on navigation, by the allowlist
-// that was designed for exactly this — and it never rides /answer or any log.
+// PERSISTED_KINDS (so it is gone on navigation) NOR to HISTORY_KINDS (chat-history.ts, so it
+// never rides /answer) — two allowlists, one exclusion each, and it never reaches any log.
 type MsgKind = 'user.question' | 'assistant.answer' | 'assistant.decline' | 'assistant.error' | 'assistant.narration' | 'user.value';
 
 /** P4 slice 4 — the acting offer riding a covered answer (AI Agent workspaces only; the server
@@ -508,6 +510,13 @@ function lastCitedKeys(): Array<{ sourceId: string; segmentIndex: number }> {
   return [];
 }
 
+// Generous — a reasoning model plus tool rounds is legitimately slow — but it must EXIST: this was
+// the one fetch in the widget without a budget, and while `loading` is true the composer is
+// disabled, so a half-open connection pinned the chat until the browser's own socket timeout
+// (minutes, or never). Abort lands in ask()'s catch → the standard error bubble, and the composer
+// recovers. The escalation retry is its own call, so it gets its own budget.
+const ANSWER_TIMEOUT_MS = 90_000;
+
 async function postAnswer(
   question: string,
   history: Array<{ role: string; content: string }>,
@@ -528,13 +537,20 @@ async function postAnswer(
     ...(reasonPayload ? { reason: reasonPayload } : reasonActive() ? { reason: { available: true } } : {}),
   };
   captureForFixture(question, context);
-  const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
-    body: JSON.stringify({ question, history, context, ...(cfg.preview ? { preview: true } : {}) }),
-  });
-  const data = (await res.json().catch(() => ({}))) as AnswerResponse;
-  return { ok: res.ok, status: res.status, data };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ANSWER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${cfg.apiBase}/v1/copilot/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(cfg.key ? { 'X-FlowBuddy-Key': cfg.key } : {}) },
+      body: JSON.stringify({ question, history, context, ...(cfg.preview ? { preview: true } : {}) }),
+      signal: ctl.signal,
+    });
+    const data = (await res.json().catch(() => ({}))) as AnswerResponse;
+    return { ok: res.ok, status: res.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -574,11 +590,11 @@ async function ask(question: string): Promise<void> {
   // Persist the question NOW, not just with its answer: a walkthrough step that navigates while
   // the request is in flight must not lose what the user just asked.
   persistChat();
-  // Prior turns (exclude the question we just pushed; it's sent separately). Only the last 10
-  // ride along — the server slices to 10 anyway, so a long chat must not grow the payload.
-  // Since P5-M0 cut 1 this history can SPAN NAVIGATIONS — that is the point, and it is the one
-  // behavioral change the cut makes to the answer path.
-  const history = messages.filter((m) => m.kind !== 'assistant.error').slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content }));
+  // Prior turns (exclude the question we just pushed; it's sent separately). What may ride is an
+  // ALLOWLIST of kinds (chat-history.ts) — critically it excludes D3's `user.value`, which must
+  // never leave the page. Since P5-M0 cut 1 this history can SPAN NAVIGATIONS — that is the point,
+  // and it is the one behavioral change the cut makes to the answer path.
+  const history = historyForAnswer(messages);
   // P2 Sense — re-probe on EVERY message (the user may have advanced since the last turn). The
   // shard is normally cached from panel open; a short budget covers the cold case. null = Sense
   // has nothing to say → the context is simply omitted (the copilot behaves exactly as before).
@@ -671,7 +687,14 @@ async function ask(question: string): Promise<void> {
     else messages.push({ role: 'assistant', kind: 'assistant.decline', content: data.reason || "I don't have that in our help content yet.", queryId: data.queryId });
   } catch (e) {
     log.error('could not reach the assistant', e);
-    messages.push({ role: 'assistant', kind: 'assistant.error', content: 'Could not reach the assistant. Please try again.' });
+    const timedOut = e instanceof Error && e.name === 'AbortError';
+    messages.push({
+      role: 'assistant',
+      kind: 'assistant.error',
+      content: timedOut
+        ? 'That took longer than it should — please try asking again.'
+        : 'Could not reach the assistant. Please try again.',
+    });
   } finally {
     loading = false;
     render();

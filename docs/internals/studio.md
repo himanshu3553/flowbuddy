@@ -163,6 +163,11 @@ session-authed host page [`copilot/preview-frame/route.ts`](../../packages/web/a
 which embeds the actual bundle (`FLOWBUDDY_WIDGET_URL`, or the local fallback route
 [`app/widget/flowbuddy-copilot.js`](../../packages/web/app/widget/flowbuddy-copilot.js/route.ts) that serves the
 monorepo build) in `data-flowbuddy-preview` mode — appearance edits ride in as debounced query params. The host page is a **flat backdrop in the Studio container's tint** (and the iframe is chromeless), so the widget floats on one clean surface instead of a page-behind-a-page.
+**Studio dogfoods the widget on itself.** The root layout renders the same three-attribute snippet a
+customer pastes — nothing bespoke — and only when `FLOWBUDDY_DOGFOOD_WIDGET_KEY` and a real
+`FLOWBUDDY_WIDGET_URL` are both set, so a placeholder src never becomes a script tag. The key is a
+public embeddable key, and the workspace behind it is the one whose KB is about Studio.
+
 The settings actions let the operator edit the origin allowlist (enforced server-side by
 [`copilot-auth.ts`](../../packages/api/src/copilot-auth.ts); the Studio origin itself is exempt via
 `FLOWBUDDY_STUDIO_URL` so the tester survives a locked-down allowlist).
