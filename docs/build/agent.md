@@ -723,13 +723,46 @@ or navigates.** It is config-gated per workspace (`copilotWalkthrough`, requires
 founder's switch is the whole rule (D11), and the per-workspace defaults are status —
 [`roadmap.md`](../roadmap.md) §5.
 
-**D4's law, and the reason it is a law.** *Advancement is manual-only* — **user decision
-2026-07-15**. Detection only ever ACKNOWLEDGES ("Detected ✓ — hit Next to continue"); the pointer
-moves forward exclusively on the user's Next click, including after a recorded navigation. The case
-for auto-advance was that it feels smoother; the case against it is that `filled ≠ done`, a
-multi-field step has no observable completion moment, and being confidently early costs the user a
-half-finished form in their own live account. Waiting costs one click. **This is guided mode's law
-regardless of what the acting policy does** on the same engine.
+**D4's law, and its amendment.** *Advancement was manual-only* — **user decision 2026-07-15**:
+detection only ACKNOWLEDGES, the pointer moves on the user's Next. The case against auto-advance
+was always an INPUT-step case: `filled ≠ done`, a multi-field step has no observable completion
+moment, and being confidently early costs the user a half-finished form in their own live account.
+The traveling card exposed the other half: for a click the widget just WATCHED land — evidence in,
+recorded navigation confirmed — demanding a second click on → re-taxes exactly the mouse travel
+the card redesign removed. So the law now splits by evidence (**founder decision 2026-08-11**): a
+conclusively-detected ACTION step advances itself, including across the page load it causes;
+input steps and any click without evidence still wait for the user's →. Auto-advance runs through
+the same advancement path as the button — never over a pending earlier field, never off a
+disabled click, never on a guess — and the walkthrough still performs nothing itself. The →
+button holds the same standard in reverse, but **only over the workflow's skeleton** (**founder
+decisions 2026-08-12** — first the gate, then its scope): → re-verifies a CLICK step at press
+time and refuses an un-evidenced one, saying what to finish — you cannot honestly be on step 5
+if step 2's navigation never happened. The LAST step is the exception: the gate protects the
+pointer's position, and past the last step there is no position left to protect, so **Done always
+completes** — refusing it would only convert honest endings into ✕-aborts, while the auto/manual
+stamp already separates verified from declared completions. INPUT steps are deliberately never gated: an empty field
+or unticked box may BE the user's decision — the recorded state was the founder's choice, not a
+requirement, the same recorder's-choice rule the acting run applies to values — so guidance
+stays, → passes, and the skip is remembered so the pointer doesn't drag them back. The app
+remains the enforcer of record for required fields: its disabled or rejecting submit surfaces
+through the next click's gate and the blocked-button explanation. Two escapes keep the click
+gate from becoming a trap: a safe-stopped step keeps → (an element that legitimately cannot
+resolve must never brick the walkthrough), and instruction-only steps stay ungated (nothing
+checkable). **This is guided mode's law regardless of what the acting policy does** on the same
+engine.
+
+**The card travels — one step, beside the element (2026-08-11).** The step card began as a fixed
+corner overlay, which made every step a full viewport crossing: eyes and mouse shuttling between
+the spotlit element and the Next button. The redesign is the industry tour pattern: one step per
+card on the widget's accent, anchored beside the highlighted element with a beacon dot marking the
+anchor point, "2 of 5" progress and ← / → at the card's foot. The workflow title appears only when
+the card DOCKS back to the fixed corner — which it does exactly when there is nothing to point at:
+a step on another page, an instruction-only step, a safe-stop, waiting out a navigation. On the
+last step the forward control reads **Done**, and completing simply closes the card (**founder
+decision 2026-08-12**) — there is no parting banner, because it would only restate what the user
+just did. One thing deliberately did not move: the **acting run's card keeps the fixed corner and
+the neutral surface** — its user is watching a run, not steering one, so a traveling card there
+would be motion without meaning.
 
 **The boundary the whole module exists to hold: zero acting.** Observation is user-initiated,
 session-scoped and read-only; nothing leaves the page except run analytics. Its two sharpest edges

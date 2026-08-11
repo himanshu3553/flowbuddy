@@ -1,17 +1,21 @@
 // P4-M0 Guided walkthrough (decisions: docs/build/agent.md §A8 · mechanics:
 // docs/internals/widget.md §4.9) — the zero-acting stepping stone to
 // Autopilot. After a positional answer the widget offers "Walk me through it"; on consent it
-// highlights each remaining step of the APPROVED workflow and watches the user complete it —
-// detection only ACKNOWLEDGES ("Detected ✓ — hit Next"); the pointer moves FORWARD exclusively on
-// the user's Next click (manual-only advancement, user decision 2026-07-15). The user performs
-// every action themselves; FlowBuddy never clicks, fills, or navigates.
+// highlights each remaining step of the APPROVED workflow and watches the user complete it.
+// Advancement (user decision 2026-07-15; amended 2026-08-11/12): the walkthrough VERIFIES ITS
+// SKELETON and never polices the user's data — a conclusively-detected CLICK advances itself and
+// an un-evidenced click with steps after it refuses → (the hard gate; the safe-stop keeps → as
+// its escape, and the last step's Done always completes), while
+// INPUT steps acknowledge when done but → always passes them: an empty field or unticked box may
+// BE the user's decision, and the app stays the enforcer of record for required fields. The user
+// performs every action themselves; FlowBuddy never clicks, fills, or navigates.
 //
 // SINCE 2026-08-05 this file is the GUIDED ACTOR on the shared step engine (`step-engine.ts`,
 // agent.md §A2.10): the page-machinery — settle, element-state verdicts, the retry ladder, the
 // pointer's evidence scan, completion evidence, the observation harness — lives there, shared with
 // the acting driver; THIS file owns everything guided-specific: the session, the card, the copy,
-// manual-only advancement, the offer, analytics, and the Reason escalation. D4's law is this
-// actor's, not the engine's: detection acknowledges, only Next moves.
+// the advancement policy, the offer, analytics, and the Reason escalation. D4's law (as amended)
+// is this actor's, not the engine's: evidence moves clicks, only → moves everything else.
 //
 // POSTURE — user-initiated, zero-acting, session-scoped observation. Observation starts only on
 // the user's explicit click and is torn down on done/exit/stall-exit/TTL: (a) read-only
@@ -26,8 +30,17 @@
 // Detection is evidence-or-nothing: any ambiguity leaves the card waiting with Next available
 // (uncertainty costs one click, never a wrong assertion), and an unresolvable step SAFE-STOPS
 // (Retry/Back/Exit) — the walkthrough never guesses forward.
+//
+// THE CARD (redesigned 2026-08-11, founder decision — the industry tour pattern): one step at a
+// time on a brand-accent card that TRAVELS WITH the highlighted element (pure placement math in
+// `card-anchor.ts`), a beacon dot marking the anchor point, "2 of 5" progress and ←/→ at the
+// card's foot. States with nothing to point at (wrong page, instruction-only, safe-stop,
+// waiting-for-page) DOCK it to the fixed bottom corner, where the workflow title returns for
+// context. The last step's forward control reads Done, and completing simply closes the card.
 
 import { log } from './log.js';
+// The anchored card's placement math — pure, tested on its own. This file only feeds it rects.
+import { placeCard } from './card-anchor.js';
 import {
   clearSpotlight,
   displayRoute,
@@ -87,8 +100,8 @@ interface WalkSession {
    *  self-correcting pointer respects the override and never pulls back to these. */
   skipped?: number[];
   /** ACTION steps with conclusive completion evidence (click landed / recorded navigation matched).
-   *  Detection only ACKNOWLEDGES — the pointer moves exclusively on the user's Next. Persisted so
-   *  a navigating step's evidence survives the page load it causes. */
+   *  Persisted so a navigating step's evidence survives the page load it causes — which is what
+   *  lets the resume auto-advance past it (D4 as amended). */
   detected?: number[];
   auto: number;
   manual: number;
@@ -115,8 +128,8 @@ let resolving = false; // showStep's retry ladder is in flight — the state tic
 let cleanups: Array<() => void> = [];
 let card: {
   el: HTMLDivElement;
-  chip: HTMLSpanElement;
-  title: HTMLSpanElement;
+  progress: HTMLSpanElement;
+  title: HTMLDivElement;
   instr: HTMLDivElement;
   status: HTMLDivElement;
   explain: HTMLButtonElement;
@@ -124,6 +137,11 @@ let card: {
   retry: HTMLButtonElement;
   next: HTMLButtonElement;
 } | null = null;
+// Anchoring state: the beacon dot element, the listener teardown, and the live reposition hook
+// (setStatus re-runs it so a status line growing the card can't leave it overlapping the target).
+let beacon: HTMLDivElement | null = null;
+let anchorCleanup: (() => void) | null = null;
+let repositionRef: (() => void) | null = null;
 
 export function walkthroughActive(): boolean {
   return session !== null;
@@ -200,8 +218,41 @@ function inputStatus(st: ReasonElementWire): { text: string; explain: boolean } 
   if (st.filled && st.valid === false) {
     return { text: `This field doesn't look right yet — ${invalidHint(st.invalidReason)}.`, explain: true };
   }
-  if (st.checked !== undefined) return { text: 'Waiting for you — tick the highlighted box.', explain: false };
+  // A toggle is a CHOICE — the recorded state was the founder's, not a requirement — so the copy
+  // offers rather than demands, and → passes either way.
+  if (st.checked !== undefined) return { text: 'Your choice — tick the box if you want, then hit →.', explain: false };
   return { text: 'Waiting for you — fill the highlighted field.', explain: false };
+}
+
+// ── The hard gate on → — CLICKS ONLY (founder decisions 2026-08-12: first the gate, then its
+//    scope): an un-evidenced action step refuses to advance — → re-verifies at press time and
+//    explains what to finish instead of silently skipping the workflow's skeleton. INPUTS are
+//    never gated: an empty field or unticked box may BE the user's decision (the recorded state
+//    was the founder's choice, not a requirement — the same recorder's-choice rule the acting
+//    run applies to values), so guidance stays but → passes, and the app remains the enforcer of
+//    record for required fields (its disabled/rejecting submit surfaces at the NEXT click's
+//    gate). A SAFE-STOPPED step keeps → as its escape; instruction-only steps have nothing
+//    checkable and were never gated; the LAST step's Done is never gated (reasoned at the gate
+//    itself, in `advanceNext`). ───────────────────────────────────────────────────────────────────
+const GATE_FLASH_MS = 2500; // how long the gate's message outranks the tick's routine status line
+let gateFlashUntil = 0;
+
+/** The blocked-press message for an un-evidenced CLICK step: name what's in the way, reusing the
+ *  most specific explanation the page can give (wrong page → where; disabled button → the
+ *  unfinished earlier step). */
+function gateBlock(step: SenseStep): void {
+  gateFlashUntil = Date.now() + GATE_FLASH_MS;
+  log.debug('walkthrough: gate blocked →', { step: step.index });
+  if (step.route && matchStrength(step.route, normalizePath(location.pathname)) === 0) {
+    setStatus(`Finish this step first — it happens on ${displayRoute(step.route)}.`, { alert: true });
+    return;
+  }
+  const st = currentEl ? readElementState(currentEl) : null;
+  if (st?.disabled) {
+    setStatus(blockedText(step), { explain: true, alert: true });
+    return;
+  }
+  setStatus("Finish this step first — I haven't seen that click yet.", { alert: true });
 }
 
 /** Why a disabled button is disabled, as far as the plan can tell: name the first earlier input
@@ -215,7 +266,9 @@ function blockedText(current: SenseStep): string {
   return 'This button is disabled — an earlier requirement may be unfinished.';
 }
 
-// ── Card UI (shadow-root resident; fixed overlay — never touches the host page's layout) ───────
+// ── Card UI (shadow-root resident; fixed overlay — never touches the host page's layout).
+//    Anchored beside the target it shows instruction + status + "2 of 5" + ←/→ only; docked
+//    (nothing to point at) the workflow title returns for context. ─────────────────────────────
 function buildCard(): void {
   if (!rootRef || card) return;
   const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -224,34 +277,36 @@ function buildCard(): void {
     if (text != null) e.textContent = text;
     return e;
   };
-  const el = mk('div', 'fb-walk-card');
-  const head = mk('div', 'fb-walk-head');
-  const chip = mk('span', 'fb-walk-chip');
-  const title = mk('span', 'fb-walk-title');
-  const exit = mk('button', 'fb-walk-exit', '✕');
+  const el = mk('div', 'fb-tour-card');
+  const exit = mk('button', 'fb-tour-exit', '✕');
   exit.setAttribute('aria-label', 'Exit walkthrough');
-  head.appendChild(chip);
-  head.appendChild(title);
-  head.appendChild(exit);
-  const instr = mk('div', 'fb-walk-instr');
-  const status = mk('div', 'fb-walk-status');
-  const actions = mk('div', 'fb-walk-actions');
+  const title = mk('div', 'fb-tour-title');
+  const instr = mk('div', 'fb-tour-instr');
+  const status = mk('div', 'fb-tour-status');
   // The Reason escalation — shown only on blocked/invalid/stalled states (and only when the
   // founder's Reason toggle is on): opens the chat and asks the diagnostic question for the user.
-  const explain = mk('button', 'fb-walk-btn fb-walk-explain', "Explain what's blocking me");
-  const back = mk('button', 'fb-walk-btn', 'Back');
-  const retry = mk('button', 'fb-walk-btn', 'Retry');
-  const next = mk('button', 'fb-walk-btn fb-walk-next', 'Next');
+  const extra = mk('div', 'fb-tour-extra');
+  const explain = mk('button', 'fb-tour-btn', "Explain what's blocking me");
+  const retry = mk('button', 'fb-tour-btn', 'Retry');
   explain.style.display = 'none';
   retry.style.display = 'none';
-  actions.appendChild(explain);
-  actions.appendChild(back);
-  actions.appendChild(retry);
-  actions.appendChild(next);
-  el.appendChild(head);
+  extra.appendChild(explain);
+  extra.appendChild(retry);
+  const foot = mk('div', 'fb-tour-foot');
+  const progress = mk('span', 'fb-tour-progress');
+  const back = mk('button', 'fb-tour-arrow', '←');
+  back.setAttribute('aria-label', 'Back');
+  const next = mk('button', 'fb-tour-arrow', '→');
+  next.setAttribute('aria-label', 'Next');
+  foot.appendChild(progress);
+  foot.appendChild(back);
+  foot.appendChild(next);
+  el.appendChild(exit);
+  el.appendChild(title);
   el.appendChild(instr);
   el.appendChild(status);
-  el.appendChild(actions);
+  el.appendChild(extra);
+  el.appendChild(foot);
   rootRef.appendChild(el);
 
   exit.addEventListener('click', () => end('aborted'));
@@ -266,19 +321,79 @@ function buildCard(): void {
   });
   retry.addEventListener('click', () => void showStep());
   next.addEventListener('click', () => advanceNext());
-  card = { el, chip, title, instr, status, explain, back, retry, next };
+  card = { el, progress, title, instr, status, explain, back, retry, next };
 }
 function removeCard(): void {
+  anchorCleanup?.();
+  beacon?.remove();
+  beacon = null;
   card?.el.remove();
   card = null;
 }
-function setStatus(text: string, opts?: { stall?: boolean; explain?: boolean }): void {
+function setStatus(text: string, opts?: { stall?: boolean; explain?: boolean; alert?: boolean }): void {
   if (!card) return;
   card.status.textContent = text;
-  card.status.classList.toggle('fb-walk-stalled', opts?.stall === true);
+  card.status.classList.toggle('fb-tour-stalled', opts?.stall === true);
+  card.status.classList.toggle('fb-tour-alert', opts?.alert === true);
   card.retry.style.display = opts?.stall ? '' : 'none';
   // The escalation shows only where a "why" exists AND the founder's Reason toggle allows it.
   card.explain.style.display = opts?.explain && cfgRef?.reason ? '' : 'none';
+  // Status/buttons change the card's height — re-place it so growth never overlaps the target.
+  repositionRef?.();
+}
+
+// ── Anchoring (the traveling card) ─────────────────────────────────────────────────────────────
+/** Pin the card beside `target` and keep it there through scroll, resize and its own growth; the
+ *  beacon dot marks the anchor point in the gap. A target that leaves the DOM docks the card —
+ *  the state tick's re-render decides what happens next. */
+function anchorCard(target: Element): void {
+  if (!card || !rootRef) return;
+  anchorCleanup?.();
+  card.el.classList.add('fb-tour-anchored');
+  if (!beacon) {
+    beacon = document.createElement('div');
+    beacon.className = 'fb-tour-beacon';
+    rootRef.appendChild(beacon);
+  }
+  const reposition = (): void => {
+    if (!card || !beacon) return;
+    if (!target.isConnected) return dockCard();
+    const r = target.getBoundingClientRect();
+    const p = placeCard(
+      { top: r.top, left: r.left, width: r.width, height: r.height },
+      { width: card.el.offsetWidth, height: card.el.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    card.el.style.top = `${p.top}px`;
+    card.el.style.left = `${p.left}px`;
+    card.el.style.right = 'auto';
+    card.el.style.bottom = 'auto';
+    beacon.style.display = p.beacon.visible ? '' : 'none';
+    beacon.style.left = `${p.beacon.x}px`;
+    beacon.style.top = `${p.beacon.y}px`;
+  };
+  reposition();
+  window.addEventListener('scroll', reposition, true);
+  window.addEventListener('resize', reposition);
+  repositionRef = reposition;
+  anchorCleanup = () => {
+    window.removeEventListener('scroll', reposition, true);
+    window.removeEventListener('resize', reposition);
+    anchorCleanup = null;
+    repositionRef = null;
+  };
+}
+/** Return the card to its fixed dock — the home for every state with nothing to point at. */
+function dockCard(): void {
+  anchorCleanup?.();
+  beacon?.remove();
+  beacon = null;
+  if (!card) return;
+  card.el.classList.remove('fb-tour-anchored');
+  card.el.style.top = '';
+  card.el.style.left = '';
+  card.el.style.right = '';
+  card.el.style.bottom = '';
 }
 
 // ── Observers (attached only while a walkthrough is active) ────────────────────────────────────
@@ -332,7 +447,9 @@ function onStateTick(): void {
   }
   if (stalled) return;
   if (session.step && isDetected(session.step)) {
-    setStatus(ackText(session.step)); // acknowledged done — nothing left to observe but Next
+    if (maybeAutoAdvance()) return; // a race left a detected action current — the tick self-heals
+    gateFlashUntil = 0; // done always outranks the gate's message
+    setStatus(ackText(session.step)); // acknowledged done — nothing left to observe but →
     return;
   }
   const step = curStep();
@@ -344,13 +461,18 @@ function onStateTick(): void {
   }
   const st = readElementState(currentEl);
   if (step.kind === 'input') {
-    if (stateDone(st)) setStatus(ackText(step.index)); // done (incl. programmatic fills) — Next moves
-    else {
+    if (stateDone(st)) {
+      gateFlashUntil = 0;
+      setStatus(ackText(step.index)); // done (incl. programmatic fills) — Next moves
+    } else if (Date.now() >= gateFlashUntil) {
+      // While the gate's message is fresh it outranks the routine waiting line — same facts, but
+      // the user just asked to move on and deserves the answer to THAT.
       const s = inputStatus(st);
       setStatus(s.text, { explain: s.explain });
     }
     return;
   }
+  if (Date.now() < gateFlashUntil) return;
   if (st.disabled) setStatus(blockedText(step), { explain: true });
   else setStatus('Waiting for you — click the highlighted element.');
 }
@@ -375,9 +497,11 @@ function watchInput(el: Element, stepIndex: number): void {
     if (!session || stalled || session.step !== stepIndex) return;
     const st = readElementState(el);
     if (stateDone(st) || (st.checked === undefined && st.filled === undefined && isFilled(el))) {
-      setStatus(ackText(stepIndex)); // acknowledged — the user's Next moves the pointer
+      gateFlashUntil = 0; // done always outranks the gate's message
+      setStatus(ackText(stepIndex)); // acknowledged — the user's → moves the pointer
       return;
     }
+    if (Date.now() < gateFlashUntil) return; // the gate's message keeps the slot for a beat
     const s = inputStatus(st);
     setStatus(s.text, { explain: s.explain });
   };
@@ -393,25 +517,49 @@ function curStep(): SenseStep | null {
   return session?.workflow.steps.find((s) => s.index === session!.step) ?? null;
 }
 
-// ── Detection = acknowledgment, never motion (manual-only advancement, user decision 2026-07-15).
-//    The card confirms what the user did; ONLY the Next click moves the pointer forward. ─────────
+// ── Detection → motion for clicks, acknowledgment for everything else (user decision 2026-07-15,
+//    amended 2026-08-11): evidence of the user's OWN click advances the pointer; inputs and
+//    unevidenced clicks confirm and wait for →. ────────────────────────────────────────────────
 function isDetected(i: number): boolean {
   return (session?.detected ?? []).includes(i);
 }
-function ackText(i: number): string {
+function isLastStep(i: number): boolean {
   const last = session?.workflow.steps[session.workflow.steps.length - 1]?.index ?? i;
-  return i >= last ? 'Detected ✓ — hit Next to finish.' : 'Detected ✓ — hit Next to continue.';
+  return i >= last;
 }
-/** Record conclusive completion evidence for an ACTION step and acknowledge it on the card.
+function ackText(i: number): string {
+  return isLastStep(i) ? 'Detected ✓ — hit Done to finish.' : 'Detected ✓ — hit → to continue.';
+}
+/** Record conclusive completion evidence for an ACTION step; the current step auto-advances on it.
  *  (Input steps are live-verified instead — their state is re-readable at any moment.) */
 function markDetected(i: number): void {
   if (!session) return;
   if (!isDetected(i)) {
     session.detected = [...(session.detected ?? []), i];
     persist();
-    log.debug('walkthrough: step detected done (awaiting Next)', { step: i });
+    log.debug('walkthrough: step detected done', { step: i });
   }
-  if (session.step === i) void showStep();
+  if (session.step === i && !maybeAutoAdvance()) void showStep();
+}
+
+/** The 2026-08-11 amendment to D4: a conclusively-detected ACTION step advances the pointer
+ *  ITSELF — the observed click already was the user's intent, and demanding a second click on →
+ *  re-taxes exactly the mouse travel the traveling card removed. INPUT steps keep manual
+ *  advancement (filled ≠ done — the original, still-valid half of the law), as does any click
+ *  without evidence. Motion still happens ONLY through advanceNext, so every guard — never
+ *  leapfrog a pending earlier input, the completion path, the auto/manual analytics — applies
+ *  unchanged. The loop covers a resume arriving with consecutive steps already confirmed; it
+ *  terminates because every advance changes the step, and a backward correction always lands on
+ *  an input (which breaks the loop). */
+function maybeAutoAdvance(): boolean {
+  let moved = false;
+  while (session && !stalled) {
+    const step = curStep();
+    if (!step || step.kind !== 'action' || !isDetected(step.index)) break;
+    advanceNext();
+    moved = true;
+  }
+  return moved;
 }
 
 /** THE POINTER IS SELF-CORRECTING (post-E2E redesign): it always means "the first thing you
@@ -456,8 +604,8 @@ function onActionTriggered(step: SenseStep): void {
     return;
   }
   // Same-page action: let the page react, then look for evidence the click did its job (the
-  // engine's completion-evidence rule). Evidence only ACKNOWLEDGES (markDetected) — the pointer
-  // moves when the user hits Next. No evidence either way = keep waiting; Next stays one click away.
+  // engine's completion-evidence rule). Evidence advances (markDetected → auto-advance). No
+  // evidence either way = keep waiting; → stays one click away as the override.
   void awaitSettle().then(() => {
     if (!session || session.step !== step.index) return;
     if (
@@ -478,7 +626,7 @@ function handleRouteChange(path: string): void {
   const nav = session.awaitingNav;
   if (nav?.postRoute && matchStrength(nav.postRoute, path) > 0) {
     session.awaitingNav = undefined;
-    markDetected(nav.fromStep); // the recorded landing happened — acknowledged; Next moves on
+    markDetected(nav.fromStep); // the recorded landing happened — the pointer moves on it
     return;
   }
   const step = curStep();
@@ -492,22 +640,48 @@ function handleRouteChange(path: string): void {
   void showStep(); // wrong-route ↔ on-route transitions re-render the aim
 }
 
-/** The ONLY way the pointer moves forward: the user's Next click (manual-only advancement, user
- *  decision 2026-07-15). Analytics keep measuring detection quality without a wire change: a Next
- *  on a step the widget had VERIFIED done logs as `auto` (detection-confirmed); an unverified Next
- *  logs as `manual` (override/skip). */
+/** The ONE advancement path — the user's → click, and (D4 as amended) `maybeAutoAdvance` driving
+ *  a detected action step through this same function, so every guard below applies to both.
+ *  Analytics keep measuring detection quality without a wire change: an advance over a step the
+ *  widget had VERIFIED done logs as `auto` (automatic for actions, the user's → over a verified
+ *  input); an unverified → logs as `manual` (override/skip). */
 function advanceNext(): void {
   if (!session) return;
   const from = session.step;
   const cur = curStep();
   const el = cur && cur.kind === 'input' && cur.locators.length > 0 ? resolveStep(cur) : null;
+  // → re-verifies at press time. Inputs read the live element; actions take recorded evidence OR
+  // a fresh page read — clickObserved:false, so the last-step/lives-elsewhere shortcuts stay off
+  // (they prove a click nobody made — the step engine's own warning) while "the next step
+  // appeared" / "the control left the DOM" can still pass a click the widget missed live.
   const verified =
     cur?.kind === 'input'
-      ? el !== null && isVisible(el) && inputDone(el) // inputs re-verify live at click time
-      : isDetected(from); // actions need recorded evidence (click landed / navigation matched)
+      ? el !== null && isVisible(el) && inputDone(el)
+      : isDetected(from) ||
+        (cur !== null &&
+          cur.locators.length > 0 &&
+          actionCompletionEvidence({
+            steps: session.workflow.steps,
+            stepIndex: from,
+            currentEl,
+            path: normalizePath(location.pathname),
+            clickObserved: false,
+          }));
+  // THE HARD GATE — CLICKS WITH STEPS AFTER THEM (2026-08-12, thrice: the gate, its clicks-only
+  // scope, then the last-step exception — see the block comment at `gateBlock`): an un-evidenced
+  // action step refuses → and explains; `!stalled` is the safe-stop's escape hatch, and inputs
+  // are the user's own data, never gated. The LAST step is never gated: the gate protects the
+  // pointer's POSITION (a skipped middle click makes "you are on step 5" a lie), and past the
+  // last step there is no position left to protect — Done is the user declaring the journey
+  // over. Refusing it only converts honest endings into ✕-aborts; the auto/manual stamp keeps
+  // verified and declared completions distinguishable.
+  if (!verified && cur !== null && cur.kind !== 'input' && cur.locators.length > 0 && !stalled && !isLastStep(from)) {
+    gateBlock(cur);
+    return;
+  }
   const mode: 'auto' | 'manual' = verified ? 'auto' : 'manual';
-  // Next over a step the gate still sees as pending = an explicit user override ("I know better —
-  // skip it"): remember it so the self-correcting pointer never drags them back to it.
+  // → over a still-pending input = an explicit skip ("my data, my call"): remember it so the
+  // self-correcting pointer never drags them back to it (Back onto it re-engages the checks).
   if (cur?.kind === 'input' && el && isVisible(el) && !inputDone(el)) {
     session.skipped = [...(session.skipped ?? []), from];
   }
@@ -551,25 +725,40 @@ async function showStep(): Promise<void> {
     if (!step) return end('completed'); // step index past the plan (defensive)
     buildCard();
     stalled = false;
+    gateFlashUntil = 0; // a fresh aim renders fresh guidance
     inputCleanup?.();
     currentEl = null;
-    card!.chip.textContent = `${step.index}/${session.workflow.steps.length}`;
+    card!.progress.textContent = `${step.index} of ${session.workflow.steps.length}`;
     card!.title.textContent = session.title;
     card!.instr.textContent = step.instruction;
     card!.back.disabled = step.index <= 1;
+    // The last step's forward control says what it does (founder decision 2026-08-12): Done
+    // completes and closes in one press — there is no parting card, and no gate (the exception
+    // reasoned at the gate itself).
+    card!.next.textContent = isLastStep(step.index) ? 'Done' : '→';
+    card!.next.setAttribute('aria-label', isLastStep(step.index) ? 'Done' : 'Next');
     const path = normalizePath(location.pathname);
 
     // Evidence already in (click landed / navigation matched — possibly on a page this element no
-    // longer exists on): acknowledge and wait for the user's Next. Never re-demand a done step.
+    // longer exists on): the FALLBACK ack. A detected action normally auto-advances before this
+    // renders; reaching it (a stall at detection time, a race) acknowledges and waits on →.
+    // Never re-demand a done step.
     if (isDetected(step.index)) {
       clearSpotlight(true);
       inputCleanup?.();
       setStatus(ackText(step.index));
+      // Keep the card beside the acted-on element when it still exists — the user's mouse is
+      // there and → should be one short reach away. ONE resolve attempt, no retries, and no
+      // spotlight (a done step is never re-demanded); a miss just docks the card.
+      const doneEl = step.locators.length > 0 ? resolveStep(step) : null;
+      if (doneEl && isVisible(doneEl)) anchorCard(doneEl);
+      else dockCard();
       return;
     }
 
     if (step.route && matchStrength(step.route, path) === 0) {
       clearSpotlight(true);
+      dockCard(); // nothing on THIS page to point at
       // `displayRoute`, never the raw route: this is the FOUNDER's recorded URL being shown to a
       // stranger, and an id segment in it is a real record out of the founder's own account.
       setStatus(`This step happens on ${displayRoute(step.route)} — head there and I'll pick it up.`);
@@ -577,7 +766,9 @@ async function showStep(): Promise<void> {
     }
     if (step.locators.length === 0) {
       clearSpotlight(true);
-      setStatus('Do this, then hit Next.'); // unrecoverable capture — instruction-only, manual advance
+      dockCard();
+      // Unrecoverable capture — instruction-only, manual advance.
+      setStatus(isLastStep(step.index) ? 'Do this, then hit Done.' : 'Do this, then hit →.');
       return;
     }
     setStatus('Looking for this step on your page…');
@@ -600,11 +791,14 @@ async function showStep(): Promise<void> {
       } else {
         setStatus('Waiting for you — click the highlighted element.');
       }
+      // Anchor AFTER the status is set — placement measures the card, so the text must be final.
+      anchorCard(el);
       return;
     }
     // SAFE-STOP: on the right page but the element won't resolve — say so, never guess forward.
     stalled = true;
     clearSpotlight(true);
+    dockCard();
     setStatus(
       "I can't find this step on your page — it may have moved or may not be available to your account.",
       { stall: true, explain: true },
@@ -623,25 +817,13 @@ function end(outcome: 'completed' | 'aborted'): void {
   inputCleanup?.();
   clearSpotlight(true);
   clearStore();
-  const title = session.title;
   session = null;
   currentEl = null;
   stalled = false;
-  if (outcome === 'completed' && card) {
-    // A brief done state, then the card dismisses itself. (The button's advance handler is
-    // harmless now — advance() no-ops without a session — so Close just needs its own listener.)
-    card.chip.textContent = '✓';
-    card.instr.textContent = `Done — you finished “${title}”.`;
-    setStatus('');
-    card.back.style.display = 'none';
-    card.retry.style.display = 'none';
-    card.next.textContent = 'Close';
-    card.next.addEventListener('click', removeCard);
-    window.setTimeout(removeCard, 6000);
-  } else {
-    removeCard();
-    if (outcome === 'aborted') hooksRef.onExit?.();
-  }
+  // No parting card on completion (founder decision 2026-08-12): the last step's Done press — or
+  // its detected final click — IS the ending; a banner would only restate what the user just did.
+  removeCard();
+  if (outcome === 'aborted') hooksRef.onExit?.();
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────────────────────────
@@ -743,6 +925,8 @@ export async function resumeWalkthrough(root: ShadowRoot, cfg: WalkCfg, hooks: W
   attachObservers();
   await awaitSettle(); // let the new page hydrate before the first resolve attempt
   correctPointer(); // page truth beats the stored pointer; if the form hydrates even later, the tick converges within ~400ms
-  void showStep();
+  // A navigating click detected before/through the unload advances HERE, on the landing page —
+  // the card resumes already past the step that caused the navigation, not waiting on →.
+  if (!maybeAutoAdvance()) void showStep();
   log.debug('walkthrough: resumed', { step: session?.step });
 }

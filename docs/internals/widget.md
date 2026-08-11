@@ -247,8 +247,8 @@ element-state verdicts, the pointer's evidence scan, the resolve retry ladder, c
 and the observation harness. It is **read-only by contract** — which is what keeps guided mode
 structurally incapable of clicking anything.
 
-- **`walkthrough.ts` is now the guided actor** on that engine — behaviour-identical, with D4's
-  manual-only advancement unchanged.
+- **`walkthrough.ts` is now the guided actor** on that engine — with D4 as amended: detected
+  action steps self-advance, inputs and unevidenced clicks wait for the user's →.
 - **`act.ts` is the only code in the product that touches a host page's controls** (native-setter
   fills, full pointer sequences), and the acting actor is its only importer. **The guided path never
   imports it**, so "a walkthrough cannot act" is enforced by the module graph rather than by a
@@ -257,6 +257,17 @@ structurally incapable of clicking anything.
 
 The payoff — and the reason there must never be two verification codepaths — is stated once, in
 [`CLAUDE.md`](../../CLAUDE.md)'s traps.
+
+**The guided card is a traveling anchor** (the decision: [`agent.md`](../build/agent.md) §A8).
+Placement is pure math in `card-anchor.ts` — side preference, viewport clamping, the beacon point,
+all unit-tested; the walkthrough only feeds it rects. Three mechanics are invisible from any one
+call site: re-placement runs on scroll/resize AND after every status write, because a status line
+growing the card could push it over the very element the user must click; a target that leaves the
+DOM docks the card and lets the state tick's re-render decide what happens next; and an already-
+ACKNOWLEDGED step re-resolves its element exactly once (no retry ladder, no spotlight — a done
+step is never re-demanded) purely so the card can stay near the user's mouse, docking on a miss.
+One styling trap: the acting run's card still wears the `.fb-walk-*` classes the walkthrough left
+behind — restyle those and you have repainted the RUN card, not the guided one (`.fb-tour-*`).
 
 **Every completion verdict reads the page through `readElementState`** — the same
 `disabled`/`checked`/`filled`/`valid` reading, failed-constraint name included, that the diagnostic
@@ -267,14 +278,29 @@ model is sent ([copilot.md](copilot.md)). One vocabulary, two consumers: it is w
 
 | Step kind | Completion evidence | Without it |
 |---|---|---|
-| `input` | `input`/`change`/blur/Enter on a debounce, **plus genuinely done**: a checkbox/radio must be `checked`; a field must be `filled` AND not provably invalid (constraint API / `aria-invalid`) — re-verified LIVE at Next-click time. Filled-but-invalid names the failed constraint in plain words, never the flag. | Next = an explicit skip |
-| `action` **with** a `postRoute` | an observed click (**a disabled target never counts**) → *awaiting-nav*, **persisted synchronously before unload** → confirmed by the route watcher (SPA) or by the resume handshake (hard nav). A matching route with **no** observed click also counts: **outcome over mechanism**. Persisting the evidence is what lets an acknowledgment survive the very page load the click causes. | Next = an override |
-| `action`, no `postRoute` | click → mutation-quiet settle → either the next step resolves and is visible, or the clicked control left the DOM. | Next = an override |
-| `locators: []` | none — an instruction-only card, honest about having no detection at all. | Next only |
+| `input` | `input`/`change`/blur/Enter on a debounce, **plus genuinely done**: a checkbox/radio must be `checked`; a field must be `filled` AND not provably invalid (constraint API / `aria-invalid`) — re-verified LIVE at →-press time. Filled-but-invalid names the failed constraint in plain words, never the flag. | → passes anyway — an explicit skip, remembered (the user's data is never gated; guidance stays) |
+| `action` **with** a `postRoute` | an observed click (**a disabled target never counts**) → *awaiting-nav*, **persisted synchronously before unload** → confirmed by the route watcher (SPA) or by the resume handshake (hard nav). A matching route with **no** observed click also counts: **outcome over mechanism**. Persisting the evidence is what lets the advance survive the very page load the click causes. | → refuses + explains (hard gate) |
+| `action`, no `postRoute` | click → mutation-quiet settle → either the next step resolves and is visible, or the clicked control left the DOM. | → refuses + explains (hard gate) |
+| `locators: []` | none — an instruction-only card, honest about having no detection at all. | → only (ungated — nothing checkable) |
 
-Because guided detection only ever ACKNOWLEDGES, the run row's auto/manual split measures
-**detection quality** rather than progress: a Next taken over verified evidence logs `auto`, a Next
-taken over an unverified step logs `manual`.
+Detection ACKNOWLEDGES for input steps and ADVANCES for action steps (D4 as amended,
+[`agent.md`](../build/agent.md) §A8) — an action's evidence drives the pointer through the **same
+advance path as the → button**, which is what keeps the never-leapfrog-a-pending-input rule, the
+completion check and the analytics identical for both. Consecutive already-confirmed steps chain
+(a resume can arrive that way), and the loop terminates because every advance changes the step
+while a backward correction always lands on an input. The → press **re-verifies at press time**:
+inputs read the live element (feeding the auto/manual stamp only — the user's data is never
+gated); actions take recorded evidence OR a fresh `actionCompletionEvidence` read with
+`clickObserved:false` — the engine's own warning honored, so the last-step/lives-elsewhere
+shortcuts never pass a click nobody made, while a click the widget missed live can still pass on
+page proof. Only an un-evidenced CLICK with steps after it is refused, with a "finish this step
+first" line that borrows the most specific explanation available (wrong page → where; disabled →
+the unfinished earlier step); the gate's message outranks the tick's routine status for a beat
+(`GATE_FLASH_MS`). The last step's Done is never gated — an unobservable final click would
+otherwise dead-end into an ✕-abort, and completion honesty is already carried by the auto/manual
+stamp on the final advance. The run row's auto/manual split still measures **detection quality**: `auto`
+= an advance over verified evidence; `manual` = the ungated advances — a skipped input, an
+instruction-only step, the safe-stop's escape →.
 
 **The plan guided mode verifies against is deliberately the poorer one.** The sense plan carries no
 per-step outcome markers, so detection runs on filled-state / click / `postRoute` /
@@ -294,7 +320,8 @@ naming the first EARLIER input step that is not genuinely done.
 
 #### The pointer self-corrects BACKWARDS
 
-Forward motion is only ever the user's Next. But every tick, every Next and every resume converges
+Forward motion is the user's → — or a detected action step advancing itself through the same
+path. But every tick, every advance and every resume converges
 the pointer **back** to the earliest on-this-route input step that is verifiably not done — **page
 evidence beats stored position**, so a stale resumed session or a hydration race snaps back within a
 tick.
@@ -302,10 +329,10 @@ tick.
 **Only INPUT steps may pull the pointer back, and the asymmetry is the point.** An input's state is
 readable; a completed click leaves nothing behind it, so letting action steps pull back would drag
 users backwards forever over work they had already finished. Completion is never declared over a
-pending step. **Next on a still-pending step is an explicit user override** — that step is
-remembered as skipped and the pointer never drags them back to it, while pressing Back onto it
-re-engages the gate. Every pointer decision (mode, from→to, corrections) logs under
-`data-flowbuddy-debug`.
+pending step. **→ over a still-pending INPUT is an explicit user skip** — remembered so the
+pointer never drags them back to it, while Back onto it re-engages its checks; a pending CLICK
+cannot be skipped (the hard gate — the skeleton is the one thing → refuses to jump). Every
+pointer decision (mode, from→to, corrections) logs under `data-flowbuddy-debug`.
 
 #### When it cannot resolve, it stops
 

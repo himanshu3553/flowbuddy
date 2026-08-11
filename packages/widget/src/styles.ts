@@ -164,6 +164,9 @@ export const CSS = `
 .fb-run-strip-x:hover { color: #1d2433; }
 .fb-run-strip-status { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #667085; }
 .fb-run-strip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* .fb-walk-* — the ACTING RUN's on-page card + the shared button/status looks (consent sheet, run
+   strip). Historically the walkthrough's; the guided card moved to .fb-tour-* when it became the
+   traveling accent card (2026-08-11) — the run card deliberately keeps this neutral surface. */
 .fb-walk-card {
   /* Below the panel (2147483000): an open chat — e.g. the Explain escalation's diagnosis — covers
      the card; closing the chat reveals it again. Above everything else on the host page. */
@@ -191,10 +194,6 @@ export const CSS = `
 .fb-walk-status { font-family: var(--fb-mono); font-size: 10.5px; color: var(--fb-muted-fg); min-height: 14px; }
 .fb-walk-status.fb-walk-stalled { color: #9c5c4d; } /* the decline terracotta — a safe-stop, not an error */
 .fb-walk-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.fb-walk-btn.fb-walk-explain {
-  margin-right: auto; border-color: var(--fb-accent); color: var(--fb-accent);
-  background: color-mix(in srgb, var(--fb-accent) 8%, transparent);
-}
 .fb-walk-btn {
   border: 1px solid var(--fb-border); border-radius: 9px; padding: 6px 12px; cursor: pointer;
   background: var(--fb-surface); color: var(--fb-fg);
@@ -204,6 +203,71 @@ export const CSS = `
 .fb-walk-btn:hover:not(:disabled) { opacity: .85; }
 .fb-walk-btn:disabled { opacity: .4; cursor: default; }
 .fb-walk-btn.fb-walk-next { background: var(--fb-accent); color: var(--fb-accent-fg); border-color: var(--fb-accent); }
+
+/* .fb-tour-* — P4-M0 guided walkthrough's TRAVELING card (redesign 2026-08-11, the industry tour
+   pattern): one step per card on the brand accent, anchored beside the highlighted element
+   (placement math: card-anchor.ts) with a beacon dot in the gap; without a target it docks to the
+   fixed corner and the workflow title returns. Text is --fb-accent-fg (white) throughout — the
+   accent is the surface, so every state color must stay readable on an ARBITRARY host accent. */
+.fb-tour-card {
+  /* Same layer as the run card: below the panel (2147483000), above the host page. */
+  position: fixed; z-index: 2147482999;
+  width: 300px; max-width: calc(100vw - 32px);
+  background: var(--fb-accent); color: var(--fb-accent-fg);
+  border-radius: 16px; box-shadow: 0 12px 32px rgba(15, 20, 55, .28);
+  padding: 14px 16px 12px; font-family: var(--fb-font);
+  display: flex; flex-direction: column; gap: 8px;
+  animation: fb-tour-in .18s ease;
+}
+.fb-tour-card:not(.fb-tour-anchored) { right: var(--fb-right); left: var(--fb-left); bottom: 86px; }
+@keyframes fb-tour-in { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }
+.fb-tour-exit {
+  position: absolute; top: 8px; right: 10px; background: transparent; border: none;
+  color: var(--fb-accent-fg); font-size: 13px; cursor: pointer; padding: 2px; opacity: .7;
+}
+.fb-tour-exit:hover { opacity: 1; }
+.fb-tour-title {
+  font-size: 12px; font-weight: 700; opacity: .85; padding-right: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fb-tour-anchored .fb-tour-title { display: none; } /* anchored = instruction only (founder call) */
+.fb-tour-instr { font-size: 13.5px; font-weight: 500; line-height: 1.5; padding-right: 18px; }
+.fb-tour-status {
+  font-family: var(--fb-mono); font-size: 10.5px; min-height: 14px;
+  color: color-mix(in srgb, var(--fb-accent-fg) 75%, transparent);
+}
+.fb-tour-status.fb-tour-stalled, .fb-tour-status.fb-tour-alert {
+  /* Safe-stop + gate-block emphasis that works on ANY accent: full-strength text on a dark
+     scrim — the neutral card's terracotta would vanish on a warm brand color. */
+  color: var(--fb-accent-fg); background: rgba(0, 0, 0, .16); border-radius: 7px; padding: 4px 7px;
+}
+.fb-tour-extra { display: flex; flex-wrap: wrap; gap: 8px; }
+.fb-tour-btn, .fb-tour-arrow {
+  border: none; cursor: pointer; font-family: var(--fb-font); font-weight: 600;
+  color: var(--fb-accent-fg); background: color-mix(in srgb, #fff 18%, transparent);
+  transition: background .15s ease;
+}
+.fb-tour-btn:hover:not(:disabled), .fb-tour-arrow:hover:not(:disabled) { background: color-mix(in srgb, #fff 30%, transparent); }
+.fb-tour-btn:disabled, .fb-tour-arrow:disabled { opacity: .4; cursor: default; }
+.fb-tour-btn { border-radius: 999px; padding: 5px 11px; font-size: 11.5px; }
+.fb-tour-foot { display: flex; align-items: center; gap: 8px; }
+.fb-tour-progress {
+  margin-right: auto; font-size: 12px; font-weight: 600; opacity: .92;
+  font-variant-numeric: tabular-nums;
+}
+.fb-tour-arrow { min-width: 34px; height: 30px; padding: 0 10px; border-radius: 10px; font-size: 14px; line-height: 1; }
+/* The beacon: a ringed dot + breathing halo at the anchor point, centered on its coordinate via
+   negative margins (no transform — the pulse animation must own nothing but the shadow). */
+.fb-tour-beacon {
+  position: fixed; z-index: 2147482998; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%; background: var(--fb-accent); border: 2px solid var(--fb-accent-fg);
+  pointer-events: none;
+  animation: fb-tour-beacon-pulse 1.6s ease-in-out infinite;
+}
+@keyframes fb-tour-beacon-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--fb-accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--fb-accent) 15%, transparent); }
+}
 
 /* P2-M3 "show me" — the config-gated single-step highlight drawn over the host page (fixed =
    viewport coords from getBoundingClientRect; pointer-events none so it never intercepts). */

@@ -91,12 +91,19 @@ behaviour, and it declines when neither source covers the question.
 
 ### 5 · Walk them through it
 
-Instead of listing steps in chat, it can guide them one at a time. A compact card shows "step 2 of
-5", the element for that step stays highlighted, and it watches for them completing it.
+Instead of listing steps in chat, it can guide them one at a time. A small card in the product's
+own brand colour sits right next to the thing to click, showing one step at a time — "2 of 5" —
+with back and forward arrows, while the element for that step stays highlighted. When a step
+happens somewhere the card can't point at, it tucks itself into the corner instead.
 
-**In a walkthrough FlowBuddy never clicks anything.** The user does everything. When it detects
-they've done a step it says *"Detected ✓ — hit Next to continue"* and waits. **It never advances on
-its own** — that's a deliberate decision, so the user is never surprised by the card jumping ahead.
+**In a walkthrough FlowBuddy never clicks anything.** The user does everything. When it sees them
+click the step's button, the card moves to the next step by itself — it watched the click happen,
+so asking for another click would just be friction. For typing steps it confirms — "Detected ✓" —
+and waits for the user to move on, because a filled field isn't always a *finished* field. **It
+only ever advances a click on something it actually saw** — never on a guess: the forward arrow
+refuses to jump over a click it hasn't seen, and says what to finish. Typing and ticking steps
+are the user's own data, so the arrow always lets them move past those — anything truly required
+gets caught by the product's own checks, exactly where it should be.
 
 It survives full page reloads: if a step navigates them somewhere else, the card comes back on the
 new page and picks up where it was. And when it isn't sure, it stops safely rather than guessing.
