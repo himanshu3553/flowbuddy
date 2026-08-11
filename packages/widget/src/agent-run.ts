@@ -21,9 +21,10 @@
 //    advances (D4 — `filled ≠ done`; D5 — state is read ON the Continue click). Chat-supplied and
 //    dev-supplied values are NEVER persisted — a resume falls back to point-and-type for what
 //    remains, and the audit stores only the SOURCE.
-//  - Destructive steps pause for a typed Confirm BEFORE acting (§A2.7). Take over / Stop are
-//    always visible; Take over converts the rest of the run into a guided walkthrough from the
-//    exact current step.
+//  - Destructive steps pause for a typed Confirm BEFORE acting (§A2.7). Stopping is always
+//    visible and unambiguous (founder decision 2026-08-11): "Stop Auto Run" (and the ✕) ABORTS the
+//    run outright and returns the widget to the plain copilot — the earlier takeover-to-guided
+//    handoff and the Pause control were removed with it (one exit, one meaning).
 //  - Navigation is a run-level move (§A2.5): only to id-free destinations; anything else is a
 //    polite hand-off ("head there and I'll pick it up") — same rule as the walkthrough.
 //  - The plan is PINNED: a resume re-fetches and a changed `planHash` ends the run quietly rather
@@ -42,7 +43,6 @@ import {
   spotlight,
   type SenseLocator,
   type SenseStep,
-  type SenseWorkflow,
 } from './sense.js';
 import { readElementState } from './reason.js';
 import {
@@ -64,7 +64,6 @@ import {
   type OutcomeCheck,
 } from './step-engine.js';
 import { actCheck, actClick, actFill, actNavigate, actSelect } from './act.js';
-import { startWalkthrough } from './walkthrough.js';
 import { clearSession, peekSession, readSession, writeSession, type SessionSpec } from './session.js';
 
 const RUN_TTL_MS = 30 * 60_000; // same bound as the walkthrough — an abandoned tab stops within the half hour
@@ -146,17 +145,6 @@ export function canDirectNavigate(path: string): boolean {
   return !routePattern(path).includes(':id');
 }
 
-/** Takeover: the rest of the plan, reshaped for the guided walkthrough. */
-export function toSenseWorkflow(sess: { workflowKey: string; title: string; steps: RunStep[] }): SenseWorkflow {
-  const [sourceId = '', seg = '0'] = sess.workflowKey.split(':');
-  return {
-    sourceId,
-    segmentIndex: Number(seg) || 0,
-    title: sess.title,
-    steps: sess.steps.map(asSenseStep),
-  };
-}
-
 // ── Session (persisted; values are NOT part of it — see the posture note above) ────────────────
 interface RunSession {
   workflowKey: string; // sourceId:segmentIndex — what the widget knows workflows by
@@ -210,7 +198,6 @@ export interface RunCardState {
   /** Label for the Continue/Confirm/Retry affordance, or null when none applies. */
   cont: string | null;
   stall: boolean;
-  paused: boolean;
 }
 let cardState: RunCardState | null = null;
 function notifyState(): void {
@@ -237,14 +224,10 @@ export function setRunPanelOpen(open: boolean): void {
 export function pressRunContinue(): void {
   onContinue();
 }
-export function toggleRunPause(): void {
-  togglePause();
-}
+/** "Stop Auto Run" and the ✕ are the same act (founder decision 2026-08-11): abort outright, tear
+ *  down, back to the plain copilot. No pause, no takeover-to-guided — one exit, one meaning. */
 export function stopRun(): void {
   end('aborted');
-}
-export function takeoverRun(): void {
-  takeover();
 }
 
 const RUN_SESSION: SessionSpec<RunSession> = {
@@ -263,7 +246,6 @@ let hooksRef: RunHooks = {};
 let values = new Map<number, string>(); // dev-supplied, this page view only — NEVER persisted
 let currentEl: Element | null = null;
 let acting = false; // an act path is in flight — ticks must not re-enter (see withActing)
-let paused = false;
 
 /** EVERY path that acts or verifies must hold the acting flag for its whole async span — the
  *  400ms tick's idle rescue (`waiting === null && !acting → showAndAct`) otherwise re-enters the
@@ -293,8 +275,7 @@ let card: {
   instr: HTMLDivElement;
   status: HTMLDivElement;
   cont: HTMLButtonElement;
-  pause: HTMLButtonElement;
-  take: HTMLButtonElement;
+  stop: HTMLButtonElement;
 } | null = null;
 
 export function agentRunActive(): boolean {
@@ -413,12 +394,10 @@ function buildCard(): void {
   const instr = mk('div', 'fb-walk-instr');
   const status = mk('div', 'fb-walk-status');
   const actions = mk('div', 'fb-walk-actions');
-  const take = mk('button', 'fb-walk-btn', "I'll take it from here");
-  const pause = mk('button', 'fb-walk-btn', 'Pause');
+  const stop = mk('button', 'fb-walk-btn', 'Stop Auto Run');
   const cont = mk('button', 'fb-walk-btn fb-walk-next', 'Continue');
   cont.style.display = 'none';
-  actions.appendChild(take);
-  actions.appendChild(pause);
+  actions.appendChild(stop);
   actions.appendChild(cont);
   el.appendChild(head);
   el.appendChild(instr);
@@ -427,24 +406,22 @@ function buildCard(): void {
   rootRef.appendChild(el);
 
   exit.addEventListener('click', () => end('aborted'));
-  take.addEventListener('click', takeover);
-  pause.addEventListener('click', togglePause);
+  stop.addEventListener('click', () => end('aborted'));
   cont.addEventListener('click', onContinue);
   if (panelOpen) el.style.display = 'none'; // the chat is on screen — its docked strip is the surface
-  card = { el, chip, title, instr, status, cont, pause, take };
+  card = { el, chip, title, instr, status, cont, stop };
 }
 function removeCard(): void {
   card?.el.remove();
   card = null;
 }
-const EMPTY_CARD: RunCardState = { chip: '', title: '', instr: '', status: '', cont: null, stall: false, paused: false };
+const EMPTY_CARD: RunCardState = { chip: '', title: '', instr: '', status: '', cont: null, stall: false };
 function setStatus(text: string, opts?: { cont?: string | null; stall?: boolean }): void {
   cardState = {
     ...(cardState ?? EMPTY_CARD),
     status: text,
     cont: opts?.cont === undefined ? (cardState?.cont ?? null) : opts.cont,
     stall: opts?.stall === true,
-    paused,
   };
   notifyState();
   if (!card) return;
@@ -462,7 +439,6 @@ function renderStepHead(step: RunStep): void {
     chip: `${step.index}/${session!.steps.length}`,
     title: `AI Agent · ${session!.title}`,
     instr: step.instruction,
-    paused,
   };
   notifyState();
   card!.chip.textContent = `${step.index}/${session!.steps.length}`;
@@ -471,31 +447,6 @@ function renderStepHead(step: RunStep): void {
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────────────────────────
-function togglePause(): void {
-  paused = !paused;
-  if (card) card.pause.textContent = paused ? 'Resume' : 'Pause';
-  if (paused) setStatus('Paused — nothing will happen until you resume.', { cont: null });
-  else {
-    if (cardState) cardState = { ...cardState, paused };
-    notifyState();
-    void showAndAct();
-  }
-}
-
-/** Takeover — the accountability handoff: the run stops acting and the SAME remaining steps become
- *  a guided walkthrough from this exact step (the user acts, the card follows). */
-function takeover(): void {
-  if (!session || !cfgRef || !rootRef) return;
-  const wf = toSenseWorkflow(session);
-  const from = session.step;
-  const cfg = cfgRef;
-  const root = rootRef;
-  const hooks = hooksRef;
-  narrate('takeover', `All yours from here — I’ll follow along and point at each step.`);
-  end('aborted', { silent: true });
-  startWalkthrough(root, cfg, wf, from, undefined, { onExit: hooks.onExit });
-  log.debug('agent-run: takeover → guided from step', { from });
-}
 
 /** The explicit Continue on a paused input step (D4/D5): re-read the field's state NOW; advance
  *  only on genuinely-done, otherwise say why in the app's own terms and stay. */
@@ -520,7 +471,7 @@ function onContinue(): void {
         setStatus(
           st && st.filled && st.valid === false
             ? `That doesn't look right yet — ${invalidHint(st.invalidReason)}.`
-            : 'That field still looks unfinished — fill it, then hit Continue.',
+            : 'Please provide correct details then click Continue',
           { cont: 'Continue' },
         );
         return;
@@ -537,7 +488,7 @@ function attachObservers(): void {
   // Enter on the focused control) on the highlighted element — observed exactly the way the guided
   // walkthrough observes — then judged with the click-observed evidence rule, last step included.
   const onUserAct = (): void => {
-    if (!session || paused || waiting !== 'handback' || !currentEl) return;
+    if (!session || waiting !== 'handback' || !currentEl) return;
     const step = curStep();
     if (!step || stepKindOf(step.verb) !== 'action') return;
     if (readElementState(currentEl).disabled) return; // a disabled control swallows the activation
@@ -639,7 +590,7 @@ function auditArrivalMarkers(stepIndex: number): void {
 }
 
 function handleRouteChange(path: string): void {
-  if (!session || paused || finishing) return;
+  if (!session || finishing) return;
   const nav = session.awaitingNav;
   if (nav?.postRoute && matchStrength(nav.postRoute, path) > 0) {
     session.awaitingNav = undefined;
@@ -668,7 +619,7 @@ function handleRouteChange(path: string): void {
 }
 
 function onStateTick(): void {
-  if (!session || acting || paused || finishing) return;
+  if (!session || acting || finishing) return;
   // A pending navigation that outlived its budget: the click didn't take — hand the step back.
   if (session.awaitingNav) {
     if (Date.now() - session.awaitingNav.at <= AWAIT_NAV_TIMEOUT_MS) return;
@@ -848,7 +799,7 @@ function handBack(step: RunStep | null, why: string, reason: 'disabled' | 'faile
 }
 
 async function showAndAct(): Promise<void> {
-  if (!session || !rootRef || acting || paused || finishing) return;
+  if (!session || !rootRef || acting || finishing) return;
   if (
     waiting === 'confirm' ||
     waiting === 'input' ||
@@ -953,7 +904,7 @@ function rejectedByApp(step: RunStep, message: string): void {
   // can read — one snippet, scrubbed and clipped server-side under the safe-stop reason's rule.
   emitRun('failure', { step: step.index, kind: 'rejected', reason: message.slice(0, 200) });
   try {
-    hooksRef.onNarrate?.(`The app said: “${message}” — so that didn’t go through. Fix what it mentions, then press it again; I’m watching. (Or take over.)`);
+    hooksRef.onNarrate?.(`The app said: “${message}” — so that didn’t go through. Fix what it mentions, then press it again; I’m watching. (Or stop the auto run.)`);
   } catch {
     /* best-effort */
   }
@@ -968,7 +919,7 @@ function enterChatInput(step: RunStep, el: Element): void {
   waiting = 'chat-input';
   const label = step.inputSlot?.label ?? 'this field';
   chatAsk = { step: step.index, label };
-  setStatus('Waiting for your reply in the chat…', { cont: null });
+  setStatus('Enter details in the chatbot below', { cont: null });
   let ask = `What should ${label} be? Reply with just the value.`;
   if (step.verb === 'select' && el instanceof HTMLSelectElement) {
     const opts = [...el.options].map((o) => (o.textContent ?? '').trim()).filter(Boolean).slice(0, 6);
@@ -1034,23 +985,6 @@ export async function provideRunValue(raw: string): Promise<void> {
   });
 }
 
-/** The user declined to answer in chat ("✕" on the composer chip) — fall back to point-and-type
- *  for this one field; the run continues on their Continue exactly as a sensitive field would. */
-export function cancelRunValue(): void {
-  if (!session || waiting !== 'chat-input' || !currentEl) return;
-  const step = curStep();
-  if (!step) return;
-  chatAsk = null;
-  waiting = 'input';
-  inputCleanup?.();
-  inputCleanup = watchInputState(currentEl, () => {
-    if (waiting === 'input' && currentEl && inputDone(currentEl)) {
-      setStatus('Looks good — hit Continue.', { cont: 'Continue' });
-    }
-  });
-  setStatus(`Fill in ${step.inputSlot?.label ?? 'this field'} yourself, then hit Continue.`, { cont: 'Continue' });
-}
-
 /** Direct navigation, TRIED ONCE: landing anywhere else is the app refusing the destination (a
  *  login wall, a permission gate), and retrying is how good intentions become a redirect loop —
  *  found live: a signed-out user's run ping-ponged /login ↔ /dashboard. After one refusal the run
@@ -1108,7 +1042,7 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
     clearSpotlight(true);
     narrate(
       `stall:${step.index}`,
-      `I can’t find “${instrQuote(step.instruction)}” on your page — it may have moved, or may not be available to your account. You can retry, take over, or stop.`,
+      `I can’t find “${instrQuote(step.instruction)}” on your page — it may have moved, or may not be available to your account. You can retry, or stop the auto run.`,
     );
     setStatus(
       "I can't find this step on your page — it may have moved or may not be available to your account.",
@@ -1185,7 +1119,7 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
       );
       setStatus(
         step.inputSlot?.sensitive
-          ? `Type ${step.inputSlot.label} into the highlighted field — it never touches FlowBuddy. Then hit Continue.`
+          ? 'Enter details in the highlighted field and click Continue'
           : `Fill in ${step.inputSlot?.label ?? 'this field'}, then hit Continue.`,
         { cont: 'Continue' },
       );
@@ -1346,7 +1280,6 @@ function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean; verifie
   waiting = null;
   chatAsk = null;
   handbackKind = null;
-  paused = false;
   values = new Map();
   narrated = new Set();
   stepStartedAt.clear(); // a later run must never inherit an earlier run's timers
@@ -1362,8 +1295,7 @@ function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean; verifie
     card.chip.textContent = '✓';
     card.instr.textContent = `Done — “${title}” is complete.`;
     setStatus('', { cont: null });
-    card.pause.style.display = 'none';
-    card.take.style.display = 'none';
+    card.stop.style.display = 'none';
     window.setTimeout(removeCard, 6000);
   } else {
     removeCard();

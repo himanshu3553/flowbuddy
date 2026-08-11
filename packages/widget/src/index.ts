@@ -39,7 +39,6 @@ import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActiv
 import {
   agentRunActive,
   agentRunPending,
-  cancelRunValue,
   pressRunContinue,
   provideRunValue,
   registerAgentRunDevTrigger,
@@ -49,8 +48,6 @@ import {
   setRunPanelOpen,
   startConsentedRun,
   stopRun,
-  takeoverRun,
-  toggleRunPause,
 } from './agent-run.js';
 // P2-M5 Reason — the selective diagnostic trigger + structured page-state capture (+ lazy image tier).
 import { reasonTrigger, captureSnapshot, renderPageImage, type ReasonAskPayload, type ReasonTrigger } from './reason.js';
@@ -302,17 +299,15 @@ form.appendChild(send);
 panel.appendChild(header);
 panel.appendChild(list);
 // P4 slice 6 — the DOCKED run strip: while the chat is open it is the run's control surface
-// (step counter · status · Continue/Confirm · Pause · Take over · Stop) and the floating card
+// (step counter · status · Continue/Confirm · Stop Auto Run · ✕) and the floating card
 // stays hidden. Docked at the BOTTOM, right above the composer (user feedback 2026-08-05): the
 // run's controls sit where the user's attention already is — beside where they reply.
 const runStrip = el('div', 'fb-run-strip');
 runStrip.style.display = 'none';
 panel.appendChild(runStrip);
-// P4 slice 6 — the "answering the agent" chip: shown while a run awaits a value in the chat, so
-// the composer's changed job is visible and cancellable (✕ = type it into the page instead).
-const valueChip = el('div', 'fb-value-chip');
-valueChip.style.display = 'none';
-panel.appendChild(valueChip);
+// The composer's changed job while a run awaits a value is signalled by the PLACEHOLDER alone
+// (founder decision 2026-08-11 — the "Answering: …" chip and its cancel ✕ were removed; the way
+// out of a value-ask is Stop Auto Run).
 panel.appendChild(form);
 root.appendChild(launcher);
 root.appendChild(panel);
@@ -320,10 +315,17 @@ root.appendChild(panel);
 /** The docked run strip — rebuilt from the run's card model. Called on every run-state change and
  *  every render; deliberately NOT part of the message-list rebuild, so 400ms status ticks repaint
  *  a few spans instead of the whole thread. */
+let runStripSuppressed = false; // a mid-run QUESTION hides the strip until the run next speaks
+
 function renderRunStrip(): void {
   const showInPanel = open && agentRunActive();
   setRunPanelOpen(showInPanel); // open panel ⇒ hide the floating card; closed ⇒ bring it back
-  const rc = showInPanel ? runCardState() : null;
+  // Founder decision 2026-08-11: asking the copilot a question DURING a run clears the run's strip
+  // out of the conversation — the answer reads like normal chat. The strip returns on the run's
+  // next state change (a step advancing, an ask, a hand-back), which is the moment it has
+  // something new to say; Stop stays reachable meanwhile by closing the panel (the floating card
+  // returns) or through the run's own asks.
+  const rc = showInPanel && !runStripSuppressed ? runCardState() : null;
   runStrip.style.display = rc ? '' : 'none';
   if (!rc) return;
   runStrip.replaceChildren();
@@ -346,13 +348,11 @@ function renderRunStrip(): void {
     b.addEventListener('click', () => pressRunContinue());
     row.appendChild(b);
   }
-  const p = el('button', 'fb-walk-btn', rc.paused ? 'Resume' : 'Pause');
-  p.type = 'button';
-  p.addEventListener('click', () => toggleRunPause());
-  row.appendChild(p);
-  const t = el('button', 'fb-walk-btn', "I'll take it from here");
+  // One exit, one meaning (founder decision 2026-08-11): Stop Auto Run aborts outright — the
+  // takeover-to-guided handoff and Pause were removed with it.
+  const t = el('button', 'fb-walk-btn', 'Stop Auto Run');
   t.type = 'button';
-  t.addEventListener('click', () => takeoverRun());
+  t.addEventListener('click', () => stopRun());
   row.appendChild(t);
   runStrip.appendChild(row);
 }
@@ -367,19 +367,6 @@ function render(): void {
   // normal composer, whatever this module thought was pending.
   const awaitingValue = runAwaitingValue();
   input.placeholder = awaitingValue ? `${awaitingValue.label} — type just the value…` : 'Ask anything…';
-  valueChip.style.display = awaitingValue ? '' : 'none';
-  if (awaitingValue) {
-    valueChip.replaceChildren();
-    valueChip.appendChild(el('span', 'fb-value-chip-label', `Answering: ${awaitingValue.label}`));
-    const x = el('button', 'fb-value-chip-x', '✕');
-    x.type = 'button';
-    x.setAttribute('aria-label', 'Cancel — type it into the page instead');
-    x.addEventListener('click', () => {
-      cancelRunValue();
-      render();
-    });
-    valueChip.appendChild(x);
-  }
   list.replaceChildren();
   if (messages.length === 0) list.appendChild(el('div', 'fb-greeting', cfg.greeting));
   for (const m of messages) {
@@ -725,7 +712,7 @@ const runHooks = () => ({
     pushNarration(req.ask);
   },
   // The run's control surface changed (step advanced, status line, pause) — repaint the strip only.
-  onState: renderRunStrip,
+  onState: () => { runStripSuppressed = false; renderRunStrip(); },
 });
 const runCfg = () => ({ apiBase: cfg.apiBase, key: cfg.key, reason: cfg.reason });
 
@@ -1048,6 +1035,7 @@ form.addEventListener('submit', (e) => {
     return;
   }
   input.value = '';
+  if (agentRunActive()) runStripSuppressed = true; // the answer should read as plain chat
   void ask(q);
 });
 

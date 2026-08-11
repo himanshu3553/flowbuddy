@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { actCheck, actClick, actFill, actSelect } from './act.js';
-import { canDirectNavigate, stepKindOf, toSenseWorkflow, type RunStep } from './agent-run.js';
+import { canDirectNavigate, stepKindOf } from './agent-run.js';
 
 /**
  * P4-M2 slice 3 — the act verbs and the run's pure mapping helpers.
@@ -129,16 +129,6 @@ describe('run helpers (pure)', () => {
     expect(canDirectNavigate('   ')).toBe(false);
   });
 
-  it('toSenseWorkflow reshapes the remaining plan for a guided takeover', () => {
-    const steps: RunStep[] = [
-      { index: 1, verb: 'fill', instruction: 'Name it', route: '/projects', locators: [{ strategy: 'css', value: '#n' }] },
-      { index: 2, verb: 'click', instruction: 'Create', route: '/projects', locators: [], postRoute: '/projects/done' },
-    ];
-    const wf = toSenseWorkflow({ workflowKey: 'src-1:2', title: 'Create a project', steps });
-    expect(wf).toMatchObject({ sourceId: 'src-1', segmentIndex: 2, title: 'Create a project' });
-    expect(wf.steps[0]).toMatchObject({ index: 1, kind: 'input', route: '/projects' });
-    expect(wf.steps[1]).toMatchObject({ index: 2, kind: 'action', postRoute: '/projects/done' });
-  });
 });
 
 // `actNavigate` is deliberately untested here: it is `location.assign` in a try/catch, and jsdom

@@ -128,8 +128,8 @@ what it's doing in the chat as it goes. When it needs a value it doesn't have, i
 thing in the chat and the reply *is* the value — one field at a time. It pauses before anything that
 commits, and at a sensitive field it points instead of typing, as above. After every action it checks
 the page really did what your recording says it should; when it can't tell, it stops and says so
-rather than carrying on and claiming success. **Pause**, **Stop** and *"I'll take it from here"* are
-on screen the whole time — and taking over turns the rest into a guided walkthrough at the same step.
+rather than carrying on and claiming success. **Stop Auto Run** is on screen the whole time — one
+button, one meaning: everything stops immediately and the assistant goes back to simply answering.
 
 **A warning that's already been written down:** today there's a natural speed bump between being told
 something and being acted for — you have to press a distinct button. A fluid conversational agent

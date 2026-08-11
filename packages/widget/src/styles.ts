@@ -148,18 +148,6 @@ export const CSS = `
 .fb-run-consent-meta { color: #667085; }
 .fb-run-consent-val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #1d2433; }
 .fb-run-consent-actions { display: flex; gap: 8px; margin-top: 9px; }
-/* Slice 6 — the "answering the agent" chip above the composer while a run awaits a value. */
-.fb-value-chip {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  margin: 0 12px; padding: 5px 10px; border: 1px solid #dfe3f2; border-radius: 8px 8px 0 0;
-  border-bottom: none; background: #f6f7fe; font-size: 11px; color: #4a5578;
-}
-.fb-value-chip-label { font-weight: 600; }
-.fb-value-chip-x {
-  border: none; background: none; cursor: pointer; color: #667085; font-size: 12px;
-  padding: 0 2px; line-height: 1;
-}
-.fb-value-chip-x:hover { color: #1d2433; }
 /* Slice 6 — the docked run strip: the run's control surface while the chat panel is open.
    Docked at the BOTTOM, above the composer — beside where the user replies. */
 .fb-run-strip {

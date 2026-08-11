@@ -502,9 +502,10 @@ an error class to fight:
   guided posture ("click this one yourself — I'll take it from there"), detection confirms, the run
   resumes acting from the next step.
 - **An unresolvable step = safe-stop, in place:** the run stops where it stands, says so in the
-  user's terms, and offers Retry · Take over · Stop. Taking over converts the remaining steps into a
-  guided walkthrough at that exact step (Sense's mid-workflow entry); the terminal audit row records
-  it as `safe_stop`. **Never guess forward** — unchanged from the walkthrough, now with more to lose.
+  user's terms, and offers Retry · Stop Auto Run. The terminal audit row records the exit as
+  `safe_stop`. **Never guess forward** — unchanged from the walkthrough, now with more to lose.
+  *(Until 2026-08-11 this state also offered a takeover that converted the remaining steps into a
+  guided walkthrough — removed, see §A2.7.)*
 
 ### A2.7 Destructive steps, takeover, narration
 
@@ -512,8 +513,12 @@ an error class to fight:
   founder at enable time and to the user on the consent sheet, and **each one pauses for a typed
   confirm mid-run** — always, in v1 (founder-configurable automation later; goal layer §5 Q3
   resolved).
-- **The run card** (the walkthrough card, grown up) always offers Pause · Stop · "I'll take it from
-  here" (→ guided from the current step).
+- **The run card** (the walkthrough card, grown up) always offers **Stop Auto Run** (and the ✕ —
+  the same act): abort outright, back to the plain copilot. **Reversed 2026-08-11 (founder):** the
+  original card also carried Pause and a takeover ("I'll take it from here" → guided walkthrough
+  from the current step); both were removed for one unambiguous exit — a mid-run user either lets
+  the agent finish or stops it, and stopping never turns into a second mode. Abort-at-any-moment —
+  the contractual minimum — is unchanged.
 - **Every state change is narrated in chat** as it happens — narration is the visibility mechanism
   that replaces watch-every-click, and it survives navigations because the thread does (P5-M0).
 
@@ -657,10 +662,10 @@ second consumer — §A3. It is no longer a Phase-3 deliverable consumed here.)*
 3. ~~Input values~~ — the frozen mechanism (§A2.4): conversation values confirmed once at consent;
    everything else asked just-in-time, one field at a time in the chat, the reply itself being the
    value (per-page batching deferred — §A2.4); sensitive fields always point-and-type.
-4. ~~Abort / takeover / safe-stop~~ — Pause · Stop · take-over on the run card at all times; every
-   deviation verifies-or-hands-back; safe-stop reports what's done/what isn't and downgrades to
-   guided from the exact step (§A2.6, §A2.7). "What was already done" = the narration thread + the
-   `ExecutionRun` rows.
+4. ~~Abort / takeover / safe-stop~~ — Stop Auto Run on the run card at all times (Pause + the
+   guided-takeover downgrade were removed 2026-08-11 — §A2.7); every deviation
+   verifies-or-hands-back; safe-stop reports what's done/what isn't (§A2.6, §A2.7). "What was
+   already done" = the narration thread + the `ExecutionRun` rows.
 5. ~~Execution limits~~ — **eligibility at enable time** (§A2.9): unrecoverable locators,
    cross-origin-frame steps, foreign-origin navigations, unsupported verbs and navigation into a
    specific record all block the flag, never surprise a run. Full-page navigations were already
