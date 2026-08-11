@@ -260,6 +260,13 @@ export default async function AnalyticsPage({
                 <p className="text-[11px] text-muted-foreground">
                   {agentRuns.counts.total} run{agentRuns.counts.total === 1 ? '' : 's'} ·{' '}
                   {agentRuns.counts.completed} completed
+                  {agentRuns.counts.verified > 0 && <> · {agentRuns.counts.verified} verified</>}
+                  {agentRuns.counts.unverified > 0 && (
+                    <span className="font-medium text-warning-text">
+                      {' '}
+                      · {agentRuns.counts.unverified} finished unverified
+                    </span>
+                  )}
                   {agentRuns.counts.safeStop > 0 && (
                     <span className="font-medium text-danger-text">
                       {' '}
@@ -268,6 +275,17 @@ export default async function AnalyticsPage({
                   )}
                 </p>
               </div>
+              {/* P3-M2 (EC-6) — the drift ledger: every kind of miss the window's runs recorded.
+                  This line is the live half of self-validation paying out — fragility as numbers,
+                  not anecdotes. */}
+              {agentRuns.failureKinds.length > 0 && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Rough spots:{' '}
+                  {agentRuns.failureKinds
+                    .map((f) => `${f.kind.replace(/-/g, ' ')} ×${f.count}`)
+                    .join(' · ')}
+                </p>
+              )}
               <div className="mt-3 divide-y">
                 {agentRuns.recent.map((r) => (
                   <div key={r.id} className="flex items-center justify-between gap-3 py-2">
@@ -281,7 +299,9 @@ export default async function AnalyticsPage({
                     <StatusBadge
                       tone={
                         r.outcome === 'completed'
-                          ? 'success'
+                          ? r.verified === false
+                            ? 'pending'
+                            : 'success'
                           : r.outcome === 'safe_stop'
                             ? 'danger'
                             : r.outcome === 'active'
@@ -290,7 +310,11 @@ export default async function AnalyticsPage({
                       }
                     >
                       {r.outcome === 'completed'
-                        ? 'Completed'
+                        ? r.verified === false
+                          ? 'Done — unverified'
+                          : r.verified === true
+                            ? 'Completed ✓'
+                            : 'Completed'
                         : r.outcome === 'safe_stop'
                           ? 'Safe stop'
                           : r.outcome === 'active'

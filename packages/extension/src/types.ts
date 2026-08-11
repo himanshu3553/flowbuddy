@@ -72,6 +72,9 @@ export interface PortPostActionMsg {
   domHtml: string;
   route: Route;
   settleReason: string;
+  /** v0.9.0 — false = skip the post screenshot (input commits: expectations need the DOM's text,
+   *  and doubling the shot count on typing-heavy forms buys no evidence). Absent = capture it. */
+  shot?: boolean;
 }
 export interface PortAppMetaMsg { kind: 'appMeta'; meta: AppMeta; }
 // R4 — a heartbeat with no payload: resets the MV3 idle timer so the service worker isn't evicted

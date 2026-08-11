@@ -443,6 +443,7 @@ interface WireSenseHypothesis {
   totalSteps?: unknown;
   confidence?: unknown;
   stepsDone?: unknown;
+  phrasesSeen?: unknown;
   error?: unknown;
 }
 
@@ -470,11 +471,24 @@ async function resolveSenseContext(
     const stepsDone = (Array.isArray(h.stepsDone) ? h.stepsDone.slice(0, 50) : [])
       .map(Number)
       .filter((n) => Number.isInteger(n) && n >= 1 && n <= totalSteps);
+    // P3-M2 — the expected-outcome echoes: same clamp discipline as stepsDone (untrusted ints).
+    const phrasesSeen = (Array.isArray(h.phrasesSeen) ? h.phrasesSeen.slice(0, 50) : [])
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= totalSteps);
     const error =
       typeof h.error === 'string' && h.error.trim()
         ? h.error.replace(/[<>\u0000-\u001f]/g, ' ').trim().slice(0, MAX_SENSE_ERROR_CHARS)
         : undefined;
-    parsed.push({ sourceId, segmentIndex, step, totalSteps, confidence, stepsDone, ...(error ? { error } : {}) });
+    parsed.push({
+      sourceId,
+      segmentIndex,
+      step,
+      totalSteps,
+      confidence,
+      stepsDone,
+      ...(phrasesSeen.length > 0 ? { phrasesSeen } : {}),
+      ...(error ? { error } : {}),
+    });
   }
   if (parsed.length === 0) return { sense: null, probed };
 
@@ -789,6 +803,10 @@ interface RunnableWorkflow {
   /** Where the workflow STARTS, display-safe (ids elided — a recorded route is the founder's own
    *  URL). The consent sheet's "Starts on…" line (Part 2). */
   entryRoute: string;
+  /** P3-M2 — the contract's cold-start verdict: true when the workflow presupposes being somewhere
+   *  the run may not navigate to itself (`entry.start === 'on-screen'`), so the consent sheet says
+   *  "head there first" instead of promising "I'll head there". False on pre-contract plans. */
+  mustBeThere: boolean;
   /** The workflow's description — the founder's narrated "what this does / what has to happen
    *  first", scrubbed and capped for the consent sheet. Already-approved content. */
   about: string | null;
@@ -811,7 +829,7 @@ async function resolveRunnableWorkflows(workspaceId: string): Promise<Map<string
           sourceId: true,
           segmentIndex: true,
           description: true,
-          executionPlan: { select: { planHash: true, stepCount: true, steps: true } },
+          executionPlan: { select: { planHash: true, stepCount: true, steps: true, contract: true } },
         },
       },
     },
@@ -834,6 +852,8 @@ async function resolveRunnableWorkflows(workspaceId: string): Promise<Map<string
       destructive: steps.filter((s) => s.destructive).length,
       manual: steps.filter((s) => s.userOnly).length,
       entryRoute: displayRoute(steps[0]?.route ?? ''),
+      mustBeThere:
+        ((plan.contract as { entry?: { start?: string } } | null) ?? {}).entry?.start === 'on-screen',
       about: r.workflow.description ? redactText(r.workflow.description).slice(0, 240) : null,
     });
   }
@@ -1354,6 +1374,7 @@ app.post('/v1/copilot/answer', { bodyLimit: 4 * 1024 * 1024 }, async (req, reply
         destructive: runOffer.info.destructive,
         manual: runOffer.info.manual,
         entryRoute: runOffer.info.entryRoute,
+        mustBeThere: runOffer.info.mustBeThere,
         about: runOffer.info.about,
         prefills: runOffer.prefills,
       }
@@ -1594,7 +1615,7 @@ app.get('/v1/copilot/execution-plan', async (req, reply) => {
   const plan = approval
     ? await prisma.executionPlan.findUnique({
         where: { workflowId: workflow!.id },
-        select: { planHash: true, steps: true },
+        select: { planHash: true, steps: true, contract: true },
       })
     : null;
   if (!workflow || !approval || !plan) return reply.code(404).send({ error: 'not available' });
@@ -1603,6 +1624,9 @@ app.get('/v1/copilot/execution-plan', async (req, reply) => {
     title: workflow.title ?? 'Workflow',
     planHash: plan.planHash,
     steps: plan.steps,
+    // P3-M2 — the entry/outcome contract; a sibling field deployed widgets ignore, null on plans
+    // compiled before contracts existed.
+    contract: plan.contract,
   };
 });
 
@@ -1611,10 +1635,16 @@ app.get('/v1/copilot/execution-plan', async (req, reply) => {
  * it re-verifies everything live — the mode may act, the approval is LIVE, acting is enabled, and
  * the plan's hash still equals the one the user consented to — then writes the `ExecutionRun`
  * audit row and returns its id. Anything un-actable is the same 404 (absence, not refusal); a hash
- * mismatch is a 409 so the widget can say "this just changed — ask again". Progress and terminal
- * events append per-step outcomes and input SOURCES (never values), every field clamped and
- * untrusted like the walkthrough's analytics; a 4xx never affects the run client-side.
+ * mismatch is a 409 so the widget can say "this just changed — ask again". Progress, failure and
+ * terminal events append per-step outcomes and input SOURCES (never values), every field clamped
+ * and untrusted like the walkthrough's analytics; a 4xx never affects the run client-side.
  */
+// The closed set of failure kinds a run may report (P3-M2, EC-6) — the whole set from day one so
+// slice-3 emitters land without a server change; anything else is a 400, never stored.
+const RUN_FAILURE_KINDS = new Set([
+  'handback', 'rejected', 'marker-miss', 'label-mismatch',
+  'stall', 'nav-timeout', 'entry-miss', 'outcome-miss',
+]);
 app.post('/v1/copilot/run', async (req, reply) => {
   const gate = await copilotGate(req, reply, 'run');
   if (!gate) return reply;
@@ -1623,6 +1653,7 @@ app.post('/v1/copilot/run', async (req, reply) => {
   const body = (req.body ?? {}) as {
     event?: unknown; workflow?: unknown; planHash?: unknown; queryId?: unknown;
     runId?: unknown; step?: unknown; outcome?: unknown; input?: unknown; confirmed?: unknown; reason?: unknown;
+    kind?: unknown; ms?: unknown; verified?: unknown; presat?: unknown;
   };
   const event = typeof body.event === 'string' ? body.event : '';
 
@@ -1676,6 +1707,11 @@ app.post('/v1/copilot/run', async (req, reply) => {
   const runId = typeof body.runId === 'string' ? body.runId.slice(0, 64) : '';
   if (!runId) return reply.code(400).send({ error: 'runId required' });
 
+  // Per-step wall time, clamped to a plausible ceiling — an integer the founder reads as "which
+  // steps are slow", never trusted beyond that (untrusted client, like every field here).
+  const msRaw = Number(body.ms);
+  const ms = Number.isInteger(msRaw) && msRaw >= 0 ? Math.min(msRaw, 600_000) : undefined;
+
   if (event === 'step') {
     const step = Number(body.step);
     if (!Number.isInteger(step) || step < 1 || step > 400) return reply.code(400).send({ error: 'bad step' });
@@ -1694,10 +1730,40 @@ app.post('/v1/copilot/run', async (req, reply) => {
         ? { in: body.input }
         : {}),
       ...(body.confirmed === true ? { c: true } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+      ...(body.presat === true ? { p: true } : {}),
     };
     await prisma.executionRun.update({
       where: { id: run.id },
       data: { steps: [...steps, entry] as object, lastStep: step },
+    });
+    return { ok: true };
+  }
+
+  // P3-M2 (EC-6) — a FAILURE is a first-class audit event: what kind went wrong and where, appended
+  // to the same `steps` Json (the schema comment block owns the vocabulary). `lastStep` is NOT
+  // bumped — failures are not progress. `reason` is the one page-derived snippet allowed up
+  // (the app's own rejection words), scrubbed exactly like the safe-stop reason.
+  if (event === 'failure') {
+    const step = Number(body.step);
+    if (!Number.isInteger(step) || step < 1 || step > 400) return reply.code(400).send({ error: 'bad step' });
+    const kind = typeof body.kind === 'string' && RUN_FAILURE_KINDS.has(body.kind) ? body.kind : null;
+    if (!kind) return reply.code(400).send({ error: 'bad kind' });
+    const run = await prisma.executionRun.findFirst({
+      where: { id: runId, workspaceId: gate.workspaceId, outcome: 'active' },
+      select: { id: true, steps: true },
+    });
+    if (!run) return reply.code(404).send({ error: 'run not found' });
+    const steps = Array.isArray(run.steps) ? (run.steps as unknown[]).slice(0, 399) : [];
+    const entry = {
+      i: step,
+      f: kind,
+      ...(typeof body.reason === 'string' && body.reason ? { r: cleanPageString(body.reason, 200) } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+    };
+    await prisma.executionRun.update({
+      where: { id: run.id },
+      data: { steps: [...steps, entry] as object },
     });
     return { ok: true };
   }
@@ -1710,6 +1776,12 @@ app.post('/v1/copilot/run', async (req, reply) => {
       data: {
         outcome: event,
         ...(step !== undefined ? { lastStep: step } : {}),
+        // P3-M2 (EC-5) — completion is qualified, never blocked: the outcome-contract verdict is a
+        // stamp beside `completed`, absent until the widget computes it (slice 3) and on every
+        // non-completed outcome.
+        ...(event === 'completed' && typeof body.verified === 'boolean'
+          ? { outcomeVerified: body.verified }
+          : {}),
         ...(event === 'safe_stop' && typeof body.reason === 'string'
           ? // Page-derived prose the founder reads back in Studio — scrubbed like every other
             // stored page string (it describes what the run saw, exactly where a value appears).

@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
 import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
+import { displayRoute } from '@flowbuddy/shared/route-pattern';
 import { planSummary, type ExecutionStep } from '@flowbuddy/synthesis/execution-plan';
 
 export const dynamic = 'force-dynamic';
@@ -145,10 +146,27 @@ export default async function KbWorkflowPage({
     workflow && approval?.executeState
       ? await prisma.executionPlan.findUnique({
           where: { workflowId: workflow.id },
-          select: { steps: true },
+          select: { steps: true, contract: true },
         })
       : null;
-  const runSummary = plan ? planSummary(plan.steps as unknown as ExecutionStep[]) : null;
+  const planSteps = plan ? (plan.steps as unknown as ExecutionStep[]) : null;
+  const runSummary = planSteps ? planSummary(planSteps) : null;
+  // P3-M2 — what the agent will CHECK, from the stored contract (EC-10): the founder reads it at
+  // the same spot they read what a run would do.
+  const planContract = plan?.contract as
+    | { entry?: { route?: string; start?: string }; outcome?: { route?: string; screen?: unknown; appeared?: string[] } }
+    | null;
+  const runChecks =
+    planSteps && planContract?.entry
+      ? {
+          entry: displayRoute(planContract.entry.route ?? ''),
+          mustBeThere: planContract.entry.start === 'on-screen',
+          markerSteps: planSteps.filter((s) => s.expect?.appeared?.length).length,
+          verifiableFinish: Boolean(
+            planContract.outcome?.route || planContract.outcome?.screen || planContract.outcome?.appeared?.length,
+          ),
+        }
+      : null;
   const shotCount = items.filter((it) => it.screenshotUrl).length;
 
   // P3-M0 — duplicates involving THIS workflow. A founder who navigates straight here (from a
@@ -351,6 +369,7 @@ export default async function KbWorkflowPage({
                     approved={approved}
                     executeState={approval?.executeState ?? null}
                     summary={runSummary}
+                    checks={runChecks}
                     ready={ready}
                   />
                 </CardContent>

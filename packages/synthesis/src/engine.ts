@@ -137,10 +137,20 @@ export function formatItems(items: CopilotKBItem[]): string {
         const group = byWorkflow.get(k)!;
         const first = group[0]!;
         const plan = first.workflowDescription?.trim();
-        // No plan → emit exactly what this function emitted before it existed.
-        if (!plan) return group.map(lineFor).join('\n');
+        // P3-M2 (EC-10) — the contract facts, stated where the plan is: where the workflow starts
+        // and what the user sees when it is done. Same one-owner grouping rule as the plan itself.
+        const facts = first.workflowFacts;
+        const head = [
+          plan ? `  about: ${plan}` : null,
+          facts?.entry ? `  starts on: ${facts.entry}` : null,
+          facts?.finish?.length
+            ? `  when done, the user sees: ${facts.finish.map((f) => `"${f}"`).join(' · ')}`
+            : null,
+        ].filter((l): l is string => l !== null);
+        // No plan and no facts → emit exactly what this function emitted before either existed.
+        if (head.length === 0) return group.map(lineFor).join('\n');
         const title = first.segmentTitle ? `WORKFLOW: ${first.segmentTitle}` : 'WORKFLOW';
-        return `${title}\n  about: ${plan}\n${group.map(lineFor).join('\n')}`;
+        return `${title}\n${head.join('\n')}\n${group.map(lineFor).join('\n')}`;
       })
       .join('\n') + backgroundBlock
   );

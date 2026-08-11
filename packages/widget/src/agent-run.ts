@@ -37,6 +37,7 @@ import {
   findAlertSurfaces,
   matchStrength,
   normalizePath,
+  readLiveScreen,
   routePattern,
   spotlight,
   type SenseLocator,
@@ -48,12 +49,19 @@ import {
   actionCompletionEvidence,
   AWAIT_NAV_TIMEOUT_MS,
   awaitSettle,
+  disappearedSatisfied,
+  entryVerdict,
   inputDone,
   invalidHint,
+  labelMatches,
+  markerBaseline,
+  markerVerdict,
   observeRun,
+  outcomeSatisfied,
   resolveStepWithRetries,
   stateDone,
   watchInputState,
+  type OutcomeCheck,
 } from './step-engine.js';
 import { actCheck, actClick, actFill, actNavigate, actSelect } from './act.js';
 import { startWalkthrough } from './walkthrough.js';
@@ -61,6 +69,10 @@ import { clearSession, peekSession, readSession, writeSession, type SessionSpec 
 
 const RUN_TTL_MS = 30 * 60_000; // same bound as the walkthrough — an abandoned tab stops within the half hour
 const MAX_PLAN_STEPS = 200;
+/** EC — the second, delayed rejection sample on the agent's OWN clicks: server-side validation
+ *  often lands after mutation-quiet, and one late look catches it before a false Done. A beat of
+ *  patience per click; never applied after a step has completed (no reconsideration). */
+const REJECTION_RECHECK_MS = 750;
 
 // ── The plan wire (GET /v1/copilot/execution-plan) ─────────────────────────────────────────────
 export interface RunStep {
@@ -75,10 +87,40 @@ export interface RunStep {
   /** Only a human can perform this step (today: file pickers — trusted gestures only). The run
    *  pauses for the user and verifies the result; never chat-asked, never acted by the agent. */
   userOnly?: boolean;
-  /** Part 2 — what success LOOKED like when this step was recorded: short scrubbed phrases that
-   *  appeared afterward. Presence TIGHTENS completion (≥1 must be visible); absence changes
-   *  nothing. Matched by contains, case-insensitive — recall, never equality. */
-  expect?: { appeared: string[] };
+  /** P3-M2 — the step's recorded moment (execution-contracts.md EC-7/EC-8): phrases that NEWLY
+   *  appeared when it succeeded, phrases that disappeared, the target's recorded label (the
+   *  resolved-element cross-check), and the landing title on navigating steps. Presence TIGHTENS
+   *  completion; absence changes nothing. Matched by contains, case-insensitive — recall, never
+   *  equality. Pre-contract plans carry `appeared` only. */
+  expect?: { appeared?: string[]; disappeared?: string[]; label?: string; landedTitle?: string };
+}
+
+/** The plan-level contract halves (P3-M2): where the run may start and what Done looks like —
+ *  founder-recording-derived, served beside the steps, consent-pinned with them. Absent on plans
+ *  compiled before contracts existed: the run then verifies exactly as it always did. */
+export interface RunContract {
+  v: 1;
+  entry: {
+    route: string;
+    screen?: { title: string; anchors: string[] };
+    start: 'anywhere' | 'on-screen';
+  };
+  outcome: {
+    route?: string;
+    screen?: { title: string; anchors: string[] };
+    appeared?: string[];
+  };
+}
+
+/** Accept the contract only when it is structurally the thing we pinned consent over — junk from
+ *  an out-of-sync server is treated as ABSENT (fail-open to today's behavior, never a throw). */
+function parseContract(raw: unknown): RunContract | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const c = raw as RunContract;
+  if (c.v !== 1 || !c.entry || typeof c.entry.route !== 'string') return undefined;
+  if (c.entry.start !== 'anywhere' && c.entry.start !== 'on-screen') return undefined;
+  if (!c.outcome || typeof c.outcome !== 'object') return undefined;
+  return c;
 }
 
 /** Engine compatibility: the acting plan's verbs collapse onto the engine's two step kinds. */
@@ -132,6 +174,12 @@ interface RunSession {
    *  so the refusal is remembered HERE, across the very page loads the loop would span, until the
    *  user arrives themselves or the step completes. */
   navTried?: { target: string; at: number };
+  /** P3-M2 — the plan's entry/outcome contract, pinned with the steps. Absent on pre-contract
+   *  plans; the run then behaves exactly as before contracts existed. */
+  contract?: RunContract;
+  /** The entry pre-flight runs ONCE per run (before the first act); persisted so a reload can't
+   *  re-audit an entry that was already judged. */
+  entryChecked?: boolean;
 }
 
 interface RunCfg {
@@ -273,6 +321,9 @@ function curStep(): RunStep | null {
 
 // ── Narration + the audit wire (both best-effort; neither may affect the run) ──────────────────
 let narrated = new Set<string>(); // one narration per (kind, step) — re-renders must not repeat it
+/** True from "last step completed" until `end()` — the Done check awaits a settle, and nothing
+ *  (tick, route watcher) may re-enter the loop and re-act a finished plan during that window. */
+let finishing = false;
 function narrate(key: string, text: string): void {
   if (narrated.has(key)) return;
   narrated.add(key);
@@ -285,10 +336,35 @@ function narrate(key: string, text: string): void {
 
 /** Append one lifecycle event to the consented run's audit row. Fire-and-forget, keepalive (the
  *  event most worth keeping precedes the navigation that unloads us). Debug runs have no runId
- *  and emit nothing — no consent, no audit row. */
+ *  and emit nothing — no consent, no audit row.
+ *
+ *  P3-M2 (execution-contracts.md EC-6): failures are first-class events — what KIND went wrong and
+ *  where, so "which steps are fragile in the field" is a query instead of a guess. What travels is
+ *  enum kinds, integers and at most one page-derived snippet (`reason`, scrubbed server-side like
+ *  the safe-stop reason); values never ride this wire. */
+type RunFailureKind =
+  | 'handback'      // an act didn't take, or a control was disabled — the user finished the step
+  | 'rejected'      // the app itself refused (a fresh rejection surface); `reason` = its words
+  | 'marker-miss'   // page evidence looked done, but the recorded success phrases never showed
+  | 'label-mismatch'// slice 3: the resolved element contradicted the recorded label
+  | 'stall'         // the step's element never resolved on the right page
+  | 'nav-timeout'   // a pressed navigation never arrived
+  | 'entry-miss'    // slice 3: the run could not start where the recording starts
+  | 'outcome-miss'; // slice 3: completed, but the finish didn't look like the recording's
 function emitRun(
-  event: 'step' | 'completed' | 'aborted' | 'safe_stop',
-  extra: { step?: number; outcome?: 'acted' | 'user'; input?: 'prefill' | 'typed' | 'chat'; confirmed?: boolean; reason?: string } = {},
+  event: 'step' | 'failure' | 'completed' | 'aborted' | 'safe_stop',
+  extra: {
+    step?: number;
+    outcome?: 'acted' | 'user';
+    input?: 'prefill' | 'typed' | 'chat';
+    confirmed?: boolean;
+    reason?: string;
+    kind?: RunFailureKind;
+    ms?: number;
+    verified?: boolean;
+    /** EC-7: the step's markers were ALL visible before the act — presence fallback fired. */
+    presat?: boolean;
+  } = {},
 ): void {
   if (!cfgRef) return;
   const runId = session?.runId;
@@ -301,6 +377,19 @@ function emitRun(
   }).catch(() => {
     /* best-effort */
   });
+}
+
+/** When each step's FIRST attempt began (first-set-wins: a confirm pause or retry is part of the
+ *  step's honest duration). Module state — a hard navigation loses it, so a step completed on
+ *  resume simply carries no `ms`, which is true: its wall time is unknowable from here. */
+const stepStartedAt = new Map<number, number>();
+function markStepStart(index: number): void {
+  if (!stepStartedAt.has(index)) stepStartedAt.set(index, Date.now());
+}
+function takeStepMs(index: number): number | undefined {
+  const started = stepStartedAt.get(index);
+  stepStartedAt.delete(index);
+  return started !== undefined ? Math.max(0, Date.now() - started) : undefined;
 }
 
 // ── Card (reuses the walkthrough's shadow-root classes — same overlay, different actor) ────────
@@ -455,6 +544,7 @@ function attachObservers(): void {
     void withActing(async () => {
       if (!session || session.step !== step.index) return;
       const alertsBefore = alertTexts(); // the user's press gets the same outcome check as ours
+      const markersBefore = markerBaseline([...(step.expect?.appeared ?? []), ...(step.expect?.disappeared ?? [])]);
       if (step.postRoute) {
         // Their click navigates: persist the expectation SYNCHRONOUSLY (the nav unloads us); the
         // route watcher (SPA) or the resume handshake (hard nav) completes the step on landing.
@@ -481,6 +571,10 @@ function attachObservers(): void {
         rejectedByApp(step, rejection); // stays handed back, with the app's fresh words
         return;
       }
+      // The user's press earns completion by the same recorded standard as ours — newly-visible
+      // markers against the baseline taken at their observed press (EC-7).
+      const mv = markerVerdict(step.expect?.appeared, markersBefore);
+      const gone = disappearedSatisfied(step.expect?.disappeared, markersBefore);
       if (
         actionCompletionEvidence({
           steps: session.steps.map(asSenseStep),
@@ -489,11 +583,12 @@ function attachObservers(): void {
           path: normalizePath(location.pathname),
           clickObserved: true,
         }) &&
-        markersSatisfied(step) // the user's press earns completion by the same recorded standard
+        mv !== 'unsatisfied' &&
+        gone
       ) {
         waiting = null;
         handbackKind = null;
-        completeStep(step.index, { o: 'user' });
+        completeStep(step.index, { o: 'user', ...(mv === 'presence' ? { p: true } : {}) });
       }
     });
   };
@@ -524,13 +619,33 @@ function detachObservers(): void {
   }
 }
 
+/** Soft check on navigation-completed steps (the EC-7 per-path table): the step IS complete — the
+ *  navigation happened and cannot be un-done — but the recorded phrases missing on arrival are a
+ *  fragility signal worth an audit event and one gentle line, never a block. The LAST step is
+ *  excluded: the Done check (`finishRun`) owns the finish, and double-counting one miss as two
+ *  events would lie to the founder's numbers. */
+function auditArrivalMarkers(stepIndex: number): void {
+  const steps = session?.steps;
+  const step = steps?.find((s) => s.index === stepIndex);
+  const markers = step?.expect?.appeared;
+  if (!steps || !step || !markers?.length) return;
+  if (!steps.some((s) => s.index > step.index)) return; // last step — finishRun owns it
+  void (async () => {
+    await awaitSettle();
+    if (anyMarkerVisible(markers)) return;
+    emitRun('failure', { step: step.index, kind: 'marker-miss' });
+    narrate(`arrmiss:${step.index}`, `(Though I didn’t spot the usual confirmation on arrival — worth a glance.)`);
+  })();
+}
+
 function handleRouteChange(path: string): void {
-  if (!session || paused) return;
+  if (!session || paused || finishing) return;
   const nav = session.awaitingNav;
   if (nav?.postRoute && matchStrength(nav.postRoute, path) > 0) {
     session.awaitingNav = undefined;
     waiting = null;
     completeStep(nav.fromStep);
+    auditArrivalMarkers(nav.fromStep);
     return;
   }
   const step = curStep();
@@ -538,6 +653,7 @@ function handleRouteChange(path: string): void {
     session.awaitingNav = undefined;
     waiting = null;
     completeStep(step.index);
+    auditArrivalMarkers(step.index);
     return;
   }
   // The world changed under whatever we were waiting for — re-aim from scratch. A pending confirm
@@ -552,13 +668,14 @@ function handleRouteChange(path: string): void {
 }
 
 function onStateTick(): void {
-  if (!session || acting || paused) return;
+  if (!session || acting || paused || finishing) return;
   // A pending navigation that outlived its budget: the click didn't take — hand the step back.
   if (session.awaitingNav) {
     if (Date.now() - session.awaitingNav.at <= AWAIT_NAV_TIMEOUT_MS) return;
     const from = session.awaitingNav.fromStep;
     session.awaitingNav = undefined;
     persist();
+    emitRun('failure', { step: from, kind: 'nav-timeout' });
     handBack(session.steps.find((s) => s.index === from) ?? null, 'The page did not follow my press.');
     return;
   }
@@ -584,6 +701,9 @@ function onStateTick(): void {
     }
     // (2) Hard page evidence only (clickObserved: false): the next step appeared, or the control
     // left the DOM. The user's own click is (3), handled by the observers' click listener.
+    // EC-7 per-path rule: with no act moment there is no baseline, so markers are required by
+    // PRESENCE here — a marker-carrying step stays handed back until its phrases are on screen,
+    // which costs nothing worse than continuing to wait.
     if (
       actionCompletionEvidence({
         steps: session.steps.map(asSenseStep),
@@ -591,7 +711,8 @@ function onStateTick(): void {
         currentEl,
         path: normalizePath(location.pathname),
         clickObserved: false,
-      })
+      }) &&
+      (!step.expect?.appeared?.length || anyMarkerVisible(step.expect.appeared))
     ) {
       waiting = null;
       handbackKind = null;
@@ -625,7 +746,7 @@ function onStateTick(): void {
 // ── The loop: resolve → act → verify → advance (or pause on purpose) ───────────────────────────
 function completeStep(
   index: number,
-  how: { o: 'acted' | 'user'; in?: 'prefill' | 'typed' | 'chat'; c?: boolean } = { o: 'acted' },
+  how: { o: 'acted' | 'user'; in?: 'prefill' | 'typed' | 'chat'; c?: boolean; p?: boolean } = { o: 'acted' },
 ): void {
   if (!session) return;
   // A completed step ends whatever was being waited for, as a RULE — a stale wait surviving the
@@ -635,7 +756,15 @@ function completeStep(
   handbackKind = null;
   if (!session.done.includes(index)) {
     session.done = [...session.done, index];
-    emitRun('step', { step: index, outcome: how.o, ...(how.in ? { input: how.in } : {}), ...(how.c ? { confirmed: true } : {}) });
+    const ms = takeStepMs(index);
+    emitRun('step', {
+      step: index,
+      outcome: how.o,
+      ...(how.in ? { input: how.in } : {}),
+      ...(how.c ? { confirmed: true } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+      ...(how.p ? { presat: true } : {}),
+    });
     const instr = session.steps.find((s) => s.index === index)?.instruction ?? `step ${index}`;
     narrate(`done:${index}`, how.o === 'acted' ? `✓ ${instr}` : `✓ ${instr} — nicely done.`);
   }
@@ -645,7 +774,11 @@ function completeStep(
   const next = session.steps.find((s) => s.index > index)?.index ?? null;
   log.debug('agent-run: step complete', { index, next: next ?? 'done' });
   if (next === null) {
-    end('completed');
+    // EC-5 — Done is CHECKED, whatever path the last step completed by: settle, then judge the
+    // finish against the outcome contract. `finishing` keeps the tick and the route watcher from
+    // re-entering the loop during the await.
+    finishing = true;
+    void finishRun();
     return;
   }
   session.step = next;
@@ -653,6 +786,46 @@ function completeStep(
   session.navTried = undefined; // a completed step spends any refused-navigation memory
   persist();
   void showAndAct();
+}
+
+/** The Done check (EC-5, execution-contracts.md §4): completion is qualified, never blocked. A run
+ *  with no contract — or a contract with nothing checkable — ends exactly as before, stamping
+ *  nothing. A miss stamps `verified: false`, audits WHICH half missed, and narrates the honest
+ *  qualifier; the run still ends `completed` — the steps did complete. */
+async function finishRun(): Promise<void> {
+  if (!session) return;
+  const outcome = session.contract?.outcome;
+  if (!outcome) {
+    end('completed');
+    return;
+  }
+  await awaitSettle();
+  if (!session) return;
+  const body = document.body as HTMLElement | null;
+  const check = outcomeSatisfied(outcome, {
+    path: normalizePath(location.pathname),
+    screen: readLiveScreen(),
+    bodyText: body?.innerText ?? body?.textContent ?? '',
+  });
+  if (!check.checked) {
+    end('completed');
+    return;
+  }
+  if (!check.ok) {
+    emitRun('failure', { step: session.step, kind: 'outcome-miss', reason: outcomeMissReason(check) });
+  }
+  end('completed', { verified: check.ok });
+}
+
+/** Founder-readable component verdicts for the outcome-miss audit — derived booleans, never page
+ *  content ("finish check: route ok · phrases miss"). */
+function outcomeMissReason(c: OutcomeCheck): string {
+  const part = (v: boolean | null, name: string): string | null =>
+    v === null ? null : `${name} ${v ? 'ok' : 'miss'}`;
+  const parts = [part(c.route, 'route'), part(c.screen, 'screen'), part(c.markers, 'phrases')]
+    .filter((p): p is string => p !== null)
+    .join(' · ');
+  return `finish check: ${parts}`;
 }
 
 function handBack(step: RunStep | null, why: string, reason: 'disabled' | 'failed' = 'failed'): void {
@@ -675,7 +848,7 @@ function handBack(step: RunStep | null, why: string, reason: 'disabled' | 'faile
 }
 
 async function showAndAct(): Promise<void> {
-  if (!session || !rootRef || acting || paused) return;
+  if (!session || !rootRef || acting || paused || finishing) return;
   if (
     waiting === 'confirm' ||
     waiting === 'input' ||
@@ -690,6 +863,26 @@ async function showAndAct(): Promise<void> {
     if (!step) return end('completed'); // pointer past the plan (defensive)
     renderStepHead(step);
     const path = normalizePath(location.pathname);
+
+    // EC-3/EC-4 pre-flight — ONCE, before the first act. The verdict never blocks anything the
+    // existing navigation rules wouldn't (wrong-route falls through to the same try-once /
+    // polite-wait below — the compile-time cold-start verdict and `canDirectNavigate` are the same
+    // rule on the same route); what it adds is the AUDIT, and the knowing caution when the URL is
+    // right but the screen doesn't look like the recording's start.
+    if (session.done.length === 0 && !session.entryChecked && session.contract) {
+      session.entryChecked = true;
+      persist();
+      const verdict = entryVerdict(session.contract.entry, { path, screen: readLiveScreen() });
+      if (verdict !== 'ok') {
+        emitRun('failure', { step: step.index, kind: 'entry-miss' });
+        if (verdict === 'screen-mismatch') {
+          narrate(
+            'entry',
+            `This page doesn’t look quite like the screen the recording started on — I’ll go carefully.`,
+          );
+        }
+      }
+    }
 
     // Wrong route: navigate there if the destination is a screen — TRIED ONCE (outcome checks,
     // part 1); otherwise hand off politely. No awaiting-nav bookkeeping — the pointer is already
@@ -744,21 +937,21 @@ function newAlertAfterAct(before: Set<string>): string | null {
 
 /** Part 2 — is any of the step's recorded success markers visible right now? Recall matching on
  *  the page's whole visible text: a redesigned phrase stops matching and degrades to a hand-back —
- *  annoying, never wrong. */
+ *  annoying, never wrong. PRESENCE semantics — used only where no act moment exists to baseline
+ *  against (the hand-back poll, arrival audits); acted paths use the engine's `markerVerdict`. */
 function anyMarkerVisible(markers: string[]): boolean {
-  const text = ((document.body as HTMLElement | null)?.innerText ?? '').toLowerCase();
+  const body = document.body as HTMLElement | null;
+  const text = (body?.innerText ?? body?.textContent ?? '').toLowerCase();
   return markers.some((m) => text.includes(m.toLowerCase()));
-}
-/** True when the step carries no markers (verify as before) OR at least one is visible. */
-function markersSatisfied(step: RunStep): boolean {
-  const markers = step.expect?.appeared;
-  return !markers || markers.length === 0 || anyMarkerVisible(markers);
 }
 
 /** The app refused the act: the step is NOT done, whatever else looks finished. Say the app's own
  *  words and hand the step back. (Mapping the message to the FIELD it blames is Reason's deferred
  *  half — v1 tells the user honestly and watches for their retry.) */
 function rejectedByApp(step: RunStep, message: string): void {
+  // EC-6: the app's own words at the moment it refused are the most diagnostic thing the founder
+  // can read — one snippet, scrubbed and clipped server-side under the safe-stop reason's rule.
+  emitRun('failure', { step: step.index, kind: 'rejected', reason: message.slice(0, 200) });
   try {
     hooksRef.onNarrate?.(`The app said: “${message}” — so that didn’t go through. Fix what it mentions, then press it again; I’m watching. (Or take over.)`);
   } catch {
@@ -890,12 +1083,14 @@ function attemptNavigate(step: RunStep, target: string, expectNav?: boolean): vo
 
 async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise<void> {
   if (!session || !rootRef) return;
+  markStepStart(step.index);
 
   // NAVIGATE steps target a route, not an element — same try-once rule as any other navigation.
   if (step.verb === 'navigate') {
     const dest = step.postRoute ?? step.route;
     if (matchStrength(dest, normalizePath(location.pathname)) > 0) {
       completeStep(step.index); // already there
+      auditArrivalMarkers(step.index);
       return;
     }
     attemptNavigate(step, dest, true);
@@ -908,6 +1103,7 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
   if (!el) {
     // SAFE-STOP: on the right page but the element won't resolve — say so, never guess forward.
     // The Continue button doubles as Retry here (onContinue handles the stalled state).
+    emitRun('failure', { step: step.index, kind: 'stall' });
     waiting = 'stalled';
     clearSpotlight(true);
     narrate(
@@ -922,6 +1118,18 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
   }
   currentEl = el;
   spotlight(rootRef, el, { sticky: true });
+
+  // EC-8 — the resolved element must still SAY what the recording said. A stale selector aiming at
+  // the wrong control is invisible to resolution (the first locator that resolves wins); the
+  // recorded label is the cross-check. Contradiction hands back, never acts — an act is
+  // irreversible, a hand-back is annoying but never wrong. The audit kind tells us within weeks
+  // if this over-fires (the recorded label rides as the detail — founder-derived, safe).
+  const expectedLabel = step.expect?.label;
+  if (expectedLabel && !labelMatches(expectedLabel, readElementState(el).name ?? (el.textContent ?? '').slice(0, 120))) {
+    emitRun('failure', { step: step.index, kind: 'label-mismatch', reason: expectedLabel });
+    handBack(step, `What I found doesn’t say what the recording said it would.`);
+    return;
+  }
 
   // Destructive steps confirm BEFORE acting — always, in v1 (§A2.7).
   if (step.destructive && !opts.confirmed) {
@@ -985,16 +1193,37 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
     }
     // A known value: act, then judge the result exactly like a user's typing would be judged.
     setStatus(`Filling in ${step.inputSlot?.label ?? 'the field'}…`, { cont: null });
+    const fillBase = markerBaseline([...(step.expect?.appeared ?? []), ...(step.expect?.disappeared ?? [])]);
     if (step.verb === 'fill') actFill(el, supplied);
     else if (step.verb === 'select') actSelect(el, supplied);
     else actCheck(el, /^(1|true|yes|on|checked)$/i.test(supplied));
     await awaitSettle(200, 1000);
     if (!session || session.step !== step.index) return;
     const st = readElementState(el);
-    if (stateDone(st) || (st.checked === undefined && st.filled === undefined)) {
+    const unreadable = st.checked === undefined && st.filled === undefined;
+    if (stateDone(st) || unreadable) {
+      // EC-7 per-path rule: a READABLE control's state beats markers (stronger evidence for
+      // inputs). An UNREADABLE custom control used to pass unconditionally — when it carries
+      // markers, they are now the only evidence there is, so they must be newly satisfied.
+      if (unreadable && step.expect?.appeared?.length) {
+        const mv = markerVerdict(step.expect.appeared, fillBase);
+        if (mv === 'unsatisfied') {
+          emitRun('failure', { step: step.index, kind: 'marker-miss' });
+          handBack(step, `I typed it, but I can’t see the app registering it.`);
+          return;
+        }
+        completeStep(step.index, {
+          o: 'acted',
+          in: 'prefill',
+          ...(opts.confirmed ? { c: true } : {}),
+          ...(mv === 'presence' ? { p: true } : {}),
+        });
+        return;
+      }
       completeStep(step.index, { o: 'acted', in: 'prefill', ...(opts.confirmed ? { c: true } : {}) });
       return;
     }
+    emitRun('failure', { step: step.index, kind: 'handback' });
     handBack(
       step,
       st.filled && st.valid === false
@@ -1007,11 +1236,15 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
   // ACTION step: a click, verified. A disabled target is a fact worth stopping on, not pressing —
   // and the moment it ENABLES, the tick presses it (the Confirm already given still covers it).
   if (readElementState(el).disabled) {
+    emitRun('failure', { step: step.index, kind: 'handback' });
     handBack(step, 'This control is disabled right now — an earlier field may be unfinished.', 'disabled');
     return;
   }
   setStatus('Pressing it…', { cont: null });
   const alertsBefore = alertTexts(); // the app's answer to this press outranks every heuristic
+  // EC-7 — the marker baseline, taken at the same moment as the alert baseline and for the same
+  // reason: only what CHANGED after the act carries signal.
+  const markersBefore = markerBaseline([...(step.expect?.appeared ?? []), ...(step.expect?.disappeared ?? [])]);
   if (step.postRoute) {
     // Persist the expectation BEFORE acting — the navigation this press causes unloads us.
     session.awaitingNav = { fromStep: step.index, postRoute: step.postRoute, at: Date.now() };
@@ -1044,12 +1277,33 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
     currentEl,
     path: normalizePath(location.pathname),
   });
-  // Part 2: a step that KNOWS what its success looks like must actually see it (the recorded
-  // markers) — this is what retires "it was the last step, so we're done" for good.
-  if (evidence && markersSatisfied(step)) {
-    completeStep(step.index, { o: 'acted', ...(opts.confirmed ? { c: true } : {}) });
+  // Part 2 + EC-7: a step that KNOWS what its success looks like must actually see it — and
+  // "see" now means NEWLY (against the pre-act baseline), with the disappeared half checked too.
+  // All-pre-satisfied markers carry no signal and fall back to presence, stamped `presat` so the
+  // phrase quality stays measurable (the page can't distinguish; failing the step would be worse).
+  const mv = markerVerdict(step.expect?.appeared, markersBefore);
+  const gone = disappearedSatisfied(step.expect?.disappeared, markersBefore);
+  if (evidence && mv !== 'unsatisfied' && gone) {
+    // The second, delayed rejection sample (EC-6/§5.5) — on the agent's own acts only, always
+    // before completeStep, never after: a completed step is never reconsidered.
+    await new Promise((r) => setTimeout(r, REJECTION_RECHECK_MS));
+    if (!session || session.step !== step.index) return;
+    const late = newAlertAfterAct(alertsBefore);
+    if (late) {
+      rejectedByApp(step, late);
+      return;
+    }
+    completeStep(step.index, {
+      o: 'acted',
+      ...(opts.confirmed ? { c: true } : {}),
+      ...(mv === 'presence' ? { p: true } : {}),
+    });
     return;
   }
+  // EC-6: the two honest reasons this press failed are different fragility signals — evidence
+  // without the recorded phrases (newly appeared, or still-visible ones that should have gone)
+  // is a marker miss; no reaction at all is a plain hand-back.
+  emitRun('failure', { step: step.index, kind: evidence ? 'marker-miss' : 'handback' });
   handBack(
     step,
     evidence
@@ -1058,7 +1312,7 @@ async function performStep(step: RunStep, opts: { confirmed: boolean }): Promise
   );
 }
 
-function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean } = {}): void {
+function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean; verified?: boolean } = {}): void {
   if (!session) return;
   // The terminal audit event goes out BEFORE teardown (it needs the runId and the step), and an
   // exit from a stalled state records as a SAFE-STOP — the honest outcome, not a mere abort.
@@ -1066,10 +1320,19 @@ function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean } = {}):
   const stalledStep = stalledExit ? curStep() : null;
   emitRun(stalledExit ? 'safe_stop' : outcome, {
     step: session.step,
+    ...(outcome === 'completed' && typeof opts.verified === 'boolean' ? { verified: opts.verified } : {}),
     ...(stalledStep ? { reason: `could not resolve step ${stalledStep.index} (“${stalledStep.instruction.slice(0, 80)}”)` } : {}),
   });
-  if (outcome === 'completed') narrate('end', `Done — “${session.title}” is complete. ✅`);
-  else if (!opts.silent) narrate('end', 'Stopped — nothing else will happen.');
+  // EC-5 — an unverified finish is narrated as a qualifier, never an alarm: the user did nothing
+  // wrong and every step ran (the exact copy is founder-approved — execution-contracts.md §5.1).
+  if (outcome === 'completed') {
+    narrate(
+      'end',
+      opts.verified === false
+        ? `Done — every step went through, though the finish didn’t look quite the way the recording did. Worth a glance.`
+        : `Done — “${session.title}” is complete. ✅`,
+    );
+  } else if (!opts.silent) narrate('end', 'Stopped — nothing else will happen.');
   detachObservers();
   inputCleanup?.();
   inputCleanup = null;
@@ -1086,6 +1349,8 @@ function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean } = {}):
   paused = false;
   values = new Map();
   narrated = new Set();
+  stepStartedAt.clear(); // a later run must never inherit an earlier run's timers
+  finishing = false;
   cardState = null;
   notifyState(); // the panel's strip clears with the run
   log.debug('agent-run: ended', { outcome, done, total });
@@ -1111,17 +1376,23 @@ function end(outcome: 'completed' | 'aborted', opts: { silent?: boolean } = {}):
 async function fetchPlan(
   cfg: RunCfg,
   workflowKey: string,
-): Promise<{ title: string; planHash: string; steps: RunStep[] } | null> {
+): Promise<{ title: string; planHash: string; steps: RunStep[]; contract?: RunContract } | null> {
   try {
     const res = await fetch(
       `${cfg.apiBase}/v1/copilot/execution-plan?workflow=${encodeURIComponent(workflowKey)}`,
       { headers: { 'X-FlowBuddy-Key': cfg.key } },
     );
     if (!res.ok) return null;
-    const d = (await res.json()) as { title?: string; planHash?: string; steps?: RunStep[] };
+    const d = (await res.json()) as { title?: string; planHash?: string; steps?: RunStep[]; contract?: unknown };
     if (!Array.isArray(d.steps) || d.steps.length === 0 || d.steps.length > MAX_PLAN_STEPS) return null;
     if (typeof d.planHash !== 'string') return null;
-    return { title: typeof d.title === 'string' ? d.title : 'Workflow', planHash: d.planHash, steps: d.steps };
+    const contract = parseContract(d.contract);
+    return {
+      title: typeof d.title === 'string' ? d.title : 'Workflow',
+      planHash: d.planHash,
+      steps: d.steps,
+      ...(contract ? { contract } : {}),
+    };
   } catch {
     return null;
   }
@@ -1131,7 +1402,7 @@ function startAgentRun(
   root: ShadowRoot,
   cfg: RunCfg,
   hooks: RunHooks,
-  plan: { title: string; planHash: string; steps: RunStep[] },
+  plan: { title: string; planHash: string; steps: RunStep[]; contract?: RunContract },
   workflowKey: string,
   suppliedValues?: Record<number, string>,
   runId?: string,
@@ -1141,6 +1412,7 @@ function startAgentRun(
   cfgRef = cfg;
   hooksRef = hooks;
   narrated = new Set();
+  finishing = false;
   values = new Map(Object.entries(suppliedValues ?? {}).map(([k, v]) => [Number(k), String(v)]));
   session = {
     workflowKey,
@@ -1150,6 +1422,7 @@ function startAgentRun(
     steps: plan.steps,
     step: plan.steps[0]?.index ?? 1,
     done: [],
+    ...(plan.contract ? { contract: plan.contract } : {}),
   };
   persist();
   narrate('start', `Running “${plan.title}” — ${plan.steps.length} steps. I’ll do the clicks; you watch, and anything that needs you lands back with you.`);
@@ -1222,6 +1495,7 @@ export async function resumeAgentRun(root: ShadowRoot, cfg: RunCfg, hooks: RunHo
   if (!session) return true;
   if (nav?.postRoute && matchStrength(nav.postRoute, path) > 0) {
     completeStep(nav.fromStep);
+    auditArrivalMarkers(nav.fromStep);
     return true;
   }
   void showAndAct();

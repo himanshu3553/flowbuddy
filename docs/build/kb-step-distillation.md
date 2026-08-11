@@ -77,6 +77,22 @@ judgment), then **segmented into workflows** and **distilled into steps** by the
 narration context the cleanup stage deliberately doesn't have. That ordering — cheap filter before
 expensive judgment — is the design.
 
+**The granularity invariant (2026-08-11): one step = one actable control — and it is enforced,
+never trusted to the prompt.** The model's original brief included "merge low-level interactions
+into one step"; the merges that justified it (focus-click + typing, button + its duplicate submit)
+had all long since moved into the deterministic cleanup, so the only merging left to the model was
+the harmful kind — and it happened live: *"Enter your email address and password"* as one step
+compiled to an acting plan that filled the email and silently never asked for the password, then
+checked the instruction off anyway. The model now keeps exactly two judgments — which events are
+stray (DROP) and how a step reads (WORDING) — and loses the third (merging). Three layers hold the
+line: the prompt asks for one step per control (raises the hit rate, guarantees nothing); a
+**deterministic split pass** after grounding validation breaks any step spanning several actable
+controls into one step per control, at fallback wording quality (the guarantee); and the plan
+compiler **refuses** a multi-control step at enable time (the alarm, should enforcement ever
+regress). Repeated commits to the *same* control remain one step, keyed on the last commit — the
+final value is the one a run must reproduce. Each step now persists the event ids it was built
+from, which is what makes the invariant checkable forever rather than a one-time cleanup.
+
 ---
 
 ## 6. Build plan & sequence

@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SenseStep } from './sense.js';
+import { buildFingerprint } from '@flowbuddy/shared/screen-fingerprint';
 import {
   actionCompletionEvidence,
+  disappearedSatisfied,
   earliestPendingInput,
+  entryVerdict,
   firstUnfinishedEarlierInput,
   inputDone,
   invalidHint,
+  labelMatches,
+  markerBaseline,
+  markerVerdict,
   observeRun,
+  outcomeSatisfied,
   resolveStepWithRetries,
   ROUTE_POLL_MS,
   stateDone,
@@ -285,5 +292,119 @@ describe('observeRun (route watcher + state tick — no history monkey-patching)
     vi.advanceTimersByTime(ROUTE_POLL_MS * 3);
     expect(onRouteChange).toHaveBeenCalledTimes(1);
     expect(onTick).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── P3-M2 contract questions (execution-contracts.md §4) ───────────────────────────────────────
+
+describe('marker baseline + verdict (EC-7 — appearance means NEWLY visible)', () => {
+  it('baseline captures what is already on screen; a phrase appearing after the act is "newly"', () => {
+    document.body.innerHTML = `<h1>Team members</h1>`;
+    const base = markerBaseline(['Invitation sent', 'Team members']);
+    expect(base.has('team members')).toBe(true);
+    expect(base.has('invitation sent')).toBe(false);
+    document.body.innerHTML += `<div role="status">Invitation sent</div>`;
+    expect(markerVerdict(['Invitation sent', 'Team members'], base)).toBe('newly');
+  });
+
+  it('ALL markers pre-visible = presence fallback (no signal, still satisfied); a partial set that never newly appears = unsatisfied', () => {
+    document.body.innerHTML = `<h1>Team members</h1>`;
+    const base = markerBaseline(['Team members']);
+    expect(markerVerdict(['Team members'], base)).toBe('presence'); // pre-satisfied — vacuous pass, audited by the caller
+    const base2 = markerBaseline(['Team members', 'Invitation sent']);
+    expect(markerVerdict(['Team members', 'Invitation sent'], base2)).toBe('unsatisfied'); // one could have appeared and did not
+  });
+
+  it('no markers = none; pre-visible markers that VANISHED are unsatisfied, not presence', () => {
+    document.body.innerHTML = `<h1>Team members</h1>`;
+    const base = markerBaseline(['Team members']);
+    document.body.innerHTML = `<h1>Somewhere else</h1>`;
+    expect(markerVerdict(['Team members'], base)).toBe('unsatisfied');
+    expect(markerVerdict([], base)).toBe('none');
+    expect(markerVerdict(undefined, base)).toBe('none');
+  });
+});
+
+describe('disappearedSatisfied (EC-7 — the inverse half)', () => {
+  it('a phrase that WAS visible must be gone; one never visible proves nothing', () => {
+    document.body.innerHTML = `<div class="modal">Invite a teammate</div>`;
+    const base = markerBaseline(['Invite a teammate', 'Ghost phrase']);
+    expect(disappearedSatisfied(['Invite a teammate'], base)).toBe(false); // still on screen
+    document.body.innerHTML = `<h1>Team members</h1>`;
+    expect(disappearedSatisfied(['Invite a teammate'], base)).toBe(true); // was there, now gone
+    expect(disappearedSatisfied(['Ghost phrase'], base)).toBe(true); // never visible — vacuous
+    expect(disappearedSatisfied(undefined, base)).toBe(true);
+  });
+});
+
+describe('labelMatches (EC-8 — the resolved element must still say what the recording said)', () => {
+  it('normalizes case, whitespace, digits and edge punctuation; matches by containment either way', () => {
+    expect(labelMatches('Invite member', 'Invite member')).toBe(true);
+    expect(labelMatches('Invite member', 'Invite member (3)')).toBe(true); // count badge grew
+    expect(labelMatches('Inbox 3', 'Inbox 12')).toBe(true); // digits carry no identity
+    expect(labelMatches('Invite member', '  invite   MEMBER  ')).toBe(true);
+    expect(labelMatches('Invite member', 'Delete member')).toBe(false); // the contradiction EC-8 exists for
+  });
+
+  it('a short expected label or an unreadable live label is vacuously true — only contradiction blocks', () => {
+    expect(labelMatches('OK', 'Anything at all')).toBe(true); // <3 chars after normalizing
+    expect(labelMatches(undefined, 'Anything')).toBe(true);
+    expect(labelMatches('Invite member', '')).toBe(true); // unreadable cannot contradict
+    expect(labelMatches('Invite member', undefined)).toBe(true);
+    expect(labelMatches('Invite member', '42')).toBe(true); // digits-only live label normalizes away
+  });
+});
+
+describe('entryVerdict (EC-3/EC-4 — may the run start here?)', () => {
+  const screen = buildFingerprint('Team', ['Invite member', 'Pending invites', 'Send invite']);
+  it('route compared as a pattern; the screen consulted only once the route matches', () => {
+    expect(entryVerdict({ route: '/settings/team', screen }, { path: '/projects' })).toBe('wrong-route');
+    expect(
+      entryVerdict(
+        { route: '/projects', screen },
+        { path: '/projects', screen: { title: 'Team', anchors: ['Invite member', 'Pending invites', 'Send invite'] } },
+      ),
+    ).toBe('ok');
+    expect(
+      entryVerdict(
+        { route: '/projects', screen },
+        { path: '/projects', screen: { title: 'Billing', anchors: ['Change plan', 'Add card', 'Save billing'] } },
+      ),
+    ).toBe('screen-mismatch');
+  });
+
+  it('an unknown entry route, an absent contract, or an unidentifiable screen checks nothing', () => {
+    expect(entryVerdict({ route: '' }, { path: '/anywhere' })).toBe('ok');
+    expect(entryVerdict(undefined, { path: '/anywhere' })).toBe('ok');
+    expect(entryVerdict({ route: '/projects' }, { path: '/projects' })).toBe('ok'); // no screen recorded
+  });
+});
+
+describe('outcomeSatisfied (EC-5 — does the page look the way the recording says Done looks?)', () => {
+  const screen = buildFingerprint('Team', ['Invite member', 'Pending invites', 'Send invite']);
+  it('reports component verdicts, null for facts the contract does not carry', () => {
+    const check = outcomeSatisfied(
+      { route: '/projects', appeared: ['Invitation sent'] },
+      { path: '/projects', bodyText: 'Team members · Invitation sent' },
+    );
+    expect(check).toEqual({ checked: true, ok: true, route: true, screen: null, markers: true });
+  });
+
+  it('one missed component fails the whole check, and an empty contract checks nothing', () => {
+    const miss = outcomeSatisfied(
+      { route: '/projects', screen, appeared: ['Invitation sent'] },
+      {
+        path: '/projects',
+        screen: { title: 'Billing', anchors: ['Change plan', 'Add card', 'Save billing'] },
+        bodyText: 'Invitation sent',
+      },
+    );
+    expect(miss.ok).toBe(false);
+    expect(miss.screen).toBe(false);
+    expect(miss.route).toBe(true);
+    expect(miss.markers).toBe(true);
+
+    const empty = outcomeSatisfied({}, { path: '/projects', bodyText: 'anything' });
+    expect(empty.checked).toBe(false); // nothing checkable — the caller stamps nothing
   });
 });

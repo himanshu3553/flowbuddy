@@ -9,6 +9,18 @@
 
 ---
 
+## v0.9.0 — 🧰 **BUILT 2026-08-11, not yet packaged/submitted** — the evidence-capture build
+
+**The capture half of execution contracts** ([`execution-contracts.md`](../build/execution-contracts.md) EC-9) — three additive fields that make the evidence layer richer; every consumer fails open on older manifests, so there is no ordering constraint in either direction.
+
+- **Content:**
+  - **Checkbox/radio end state:** a change event on a checkbox/radio now carries `checked` (`el.checked` — the real position; `el.value` is literally `"on"` either way, the long-documented gap). The distill timeline can finally say `toggled on`/`toggled off`, and a compiled check step records its `desired` state as **context** — the acting run still asks the user for the value (the values rule is untouched).
+  - **`autocomplete` joins the captured-attribute whitelist:** the plan compiler's `cc-*` sensitivity rule always read this attribute, but capture never supplied it — a live dead branch until now. Card-number-shaped fields become point-and-type-always the way the rule intended.
+  - **Post-action settle for input commits (DOM only, no post screenshot):** typing then pausing/Enter now captures the field's after-state — inline validation, an enabling submit — which the evidence layer turns into fill-step expectations. A blur caused by clicking the next control supersedes the input's watcher in favor of the click's, the same discard rule consecutive clicks have always had.
+- **Compatibility:** none required — all three fields are additive (`checked` on the event, `shot: false` on an internal message, one more captured attribute); the API schema accepts and older manifests keep working everywhere. No release ordering against any API deploy.
+- **Permissions:** **unchanged.**
+- **Status:** code-complete on `dev`, `src/manifest.json` bumped to `0.9.0`. **Not packaged, not submitted — queued behind v0.8.0, which is still in review** (one review cycle at a time). Package + submit via the checklist below when v0.8.0 resolves.
+
 ## v0.8.0 — ⏳ **SUBMITTED 2026-08-09, in review** — the fill-flush build
 
 **The full-page-nav capture fix** — a typed value can no longer be lost to the navigation that follows it.

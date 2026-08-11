@@ -93,6 +93,9 @@ interface RunOfferWire {
   manual?: number;
   /** Where the workflow starts, display-safe (Part 2) — the consent sheet's "Starts on…" line. */
   entryRoute?: string;
+  /** P3-M2 — the contract's cold-start verdict: the run may NOT navigate there itself, so the
+   *  sheet says "head there first" instead of promising "I'll head there". */
+  mustBeThere?: boolean;
   /** The founder's narrated "what this does / what has to happen first", scrubbed + capped. */
   about?: string | null;
   prefills: Record<string, string>;
@@ -758,8 +761,16 @@ function consentSheet(m: Msg, offer: RunOfferWire): HTMLElement {
   // to happen first" lives) and where it starts.
   if (offer.about) sheet.appendChild(el('div', 'fb-run-consent-meta', offer.about));
   if (offer.entryRoute) {
+    // P3-M2 — honest at consent time, not discovered mid-run: a workflow whose entry the run may
+    // not navigate to itself (a record page, a gated screen) says so up front.
     sheet.appendChild(
-      el('div', 'fb-run-consent-meta', `Starts on ${offer.entryRoute} — I’ll head there if needed.`),
+      el(
+        'div',
+        'fb-run-consent-meta',
+        offer.mustBeThere
+          ? `Starts on ${offer.entryRoute} — head there first and I’ll pick it up.`
+          : `Starts on ${offer.entryRoute} — I’ll head there if needed.`,
+      ),
     );
   }
   const prefillKeys = Object.keys(offer.prefills);

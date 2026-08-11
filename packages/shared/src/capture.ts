@@ -68,6 +68,10 @@ export interface CapturedEvent {
   type: CaptureEventType | string;
   target: EventTarget;
   value?: string;
+  /** Recorder ≥0.9.0 — a checkbox/radio change's END STATE (`el.checked`; for these controls
+   *  `value` is the value ATTRIBUTE, literally "on" either way). Absent = older recording: the
+   *  position is unknown and downstream must not guess one. */
+  checked?: boolean;
   route: Route;
   domSnapshot?: FileRef;
   screenshot?: FileRef;

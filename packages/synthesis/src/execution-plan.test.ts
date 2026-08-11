@@ -4,6 +4,7 @@ import {
   attachOutcomeMarkers,
   compileExecutionPlan,
   extractAppearedMarkers,
+  hashPlan,
   hashSteps,
   markerSnapshotRefs,
   planSummary,
@@ -243,6 +244,31 @@ describe('compileExecutionPlan — eligibility (§A2.9: refused at enable time, 
     expect(planSummary(steps)).toEqual({ steps: 2, inputs: 1, destructive: 0, manual: 1 });
   });
 
+  it('refuses a step spanning several actable controls — the granularity backstop (never silent)', () => {
+    const events = [
+      fillEvent('em', { target: { tag: 'input', accessibleName: 'Email', cssPath: '#email', locators: [{ strategy: 'id', value: '#email' }] } }),
+      fillEvent('pw', { target: { tag: 'input', accessibleName: 'Password', cssPath: '#password', locators: [{ strategy: 'id', value: '#password' }] } }),
+    ];
+    const merged = compileExecutionPlan({
+      steps: [{ instruction: 'Enter your email address and password', route: '/projects', keyEventId: 'em', sourceEventIds: ['em', 'pw'] }],
+      events,
+    });
+    expect(merged.eligible).toBe(false);
+    expect(merged.issues[0]).toMatchObject({ step: 1, code: 'multi-action-step' });
+
+    // Same-control repeats and legacy rows (no sourceEventIds) compile as before.
+    const sameControl = compileExecutionPlan({
+      steps: [{ instruction: 'Enter your email', route: '/projects', keyEventId: 'em', sourceEventIds: ['em', 'em'] }],
+      events,
+    });
+    expect(sameControl.eligible).toBe(true);
+    const legacy = compileExecutionPlan({
+      steps: [{ instruction: 'Enter your email', route: '/projects', keyEventId: 'em' }],
+      events,
+    });
+    expect(legacy.eligible).toBe(true);
+  });
+
   it('refuses steps that leave the app’s own origin (OAuth popups, checkout hops)', () => {
     const events = [
       clickEvent('home'),
@@ -361,6 +387,147 @@ describe('outcome markers (Part 2 — the recorded AFTER, compiled)', () => {
     expect(withMarkers[1]!.expect).toEqual({ appeared: ['Saved successfully'] });
     expect(hashSteps(withMarkers)).not.toBe(bare); // the pin covers what the run will verify
     expect(hashSteps(attachOutcomeMarkers(steps, new Map()))).toBe(bare); // no snapshots ⇒ unchanged
+  });
+});
+
+describe('evidence-driven expect (P3-M2 — the stored layer compiled in)', () => {
+  it('builds expect from stored evidence — appeared, disappeared, label, landedTitle', () => {
+    const events = [
+      clickEvent('c1'),
+      clickEvent('c2', {
+        postAction: {
+          route: { url: 'https://app.example.com/settings', path: '/settings', hash: '', title: 'Settings' },
+        },
+      }),
+    ];
+    const sources: ExecutionStepSource[] = [
+      { ...step('c1'), evidence: { appeared: ['Invitation sent'], disappeared: ['Invite a teammate'], label: 'Send invite' } },
+      { ...step('c2'), evidence: { label: 'Open settings', landedTitle: 'Settings' } },
+    ];
+    const { steps, eligible } = compileExecutionPlan({ steps: sources, events });
+    expect(eligible).toBe(true);
+    expect(steps[0]!.expect).toEqual({
+      appeared: ['Invitation sent'],
+      disappeared: ['Invite a teammate'],
+      label: 'Send invite',
+    });
+    expect(steps[1]!.expect).toEqual({ label: 'Open settings', landedTitle: 'Settings' });
+  });
+
+  it('a check step carries the RECORDED end state as context (v0.9.0 capture) — absent on older recordings', () => {
+    const events = [
+      fillEvent('cb-on', {
+        checked: true,
+        target: { tag: 'input', accessibleName: 'Make it private', attributes: { type: 'checkbox' }, locators: [{ strategy: 'id', value: '#p' }] },
+      }),
+      fillEvent('cb-old', {
+        target: { tag: 'input', accessibleName: 'Accept terms', attributes: { type: 'checkbox' }, locators: [{ strategy: 'id', value: '#t' }] },
+      }),
+    ];
+    const { steps } = compileExecutionPlan({ steps: [step('cb-on'), step('cb-old')], events });
+    expect(steps[0]).toMatchObject({ verb: 'check', desired: true });
+    expect(steps[1]!.desired).toBeUndefined(); // pre-0.9.0 recording — the position stays unknown
+  });
+
+  it('attachOutcomeMarkers leaves evidence-built expect alone — the KB layer beats the legacy diff', () => {
+    const events = [clickEvent('c1'), clickEvent('c2')];
+    const sources: ExecutionStepSource[] = [
+      step('c1'),
+      { ...step('c2'), evidence: { appeared: ['Saved'] } },
+    ];
+    const { steps } = compileExecutionPlan({ steps: sources, events });
+    const after = attachOutcomeMarkers(
+      steps,
+      new Map([[2, { pre: '<div>Form</div>', post: '<div>Form</div><div>Legacy marker</div>' }]]),
+    );
+    expect(after[1]!.expect).toEqual({ appeared: ['Saved'] }); // stored evidence wins
+  });
+});
+
+describe('the contract (P3-M2 — entry/outcome, execution-contracts.md §3)', () => {
+  // Three labelled touches on one screen — enough anchors for an identifiable fingerprint.
+  const teamEvents = [
+    clickEvent('t1', {
+      route: { url: 'https://app.example.com/team', path: '/team', hash: '', title: 'Team' },
+      target: { tag: 'button', accessibleName: 'Invite member', locators: [{ strategy: 'id', value: '#a' }] },
+    }),
+    clickEvent('t2', {
+      route: { url: 'https://app.example.com/team', path: '/team', hash: '', title: 'Team' },
+      target: { tag: 'button', accessibleName: 'Pending invites', locators: [{ strategy: 'id', value: '#b' }] },
+    }),
+    clickEvent('t3', {
+      route: { url: 'https://app.example.com/team', path: '/team', hash: '', title: 'Team' },
+      target: { tag: 'button', accessibleName: 'Send invite', locators: [{ strategy: 'id', value: '#c' }] },
+    }),
+  ];
+  const teamStep = (id: string, evidence?: ExecutionStepSource['evidence']): ExecutionStepSource => ({
+    instruction: 'Do it',
+    route: '/team',
+    keyEventId: id,
+    ...(evidence ? { evidence } : {}),
+  });
+
+  it('derives entry (route · screen · cold-start) and outcome (route · screen · final markers)', () => {
+    const { contract, eligible } = compileExecutionPlan({
+      steps: [teamStep('t1'), teamStep('t2'), teamStep('t3', { appeared: ['Invitation sent'] })],
+      events: teamEvents,
+    });
+    expect(eligible).toBe(true);
+    expect(contract?.entry.route).toBe('/team');
+    expect(contract?.entry.start).toBe('anywhere');
+    expect(contract?.entry.screen?.title).toBe('Team');
+    expect(contract?.entry.screen?.anchors).toContain('invite member');
+    expect(contract?.outcome.route).toBe('/team');
+    expect(contract?.outcome.screen).toBeDefined();
+    expect(contract?.outcome.appeared).toEqual(['Invitation sent']);
+  });
+
+  it('a record-route entry is on-screen; a navigating last step drops the outcome screen', () => {
+    const recordRoute = {
+      url: 'https://app.example.com/projects/6a6a49ca1a22045b0b32b353',
+      path: '/projects/6a6a49ca1a22045b0b32b353',
+      hash: '',
+      title: 'Project',
+    };
+    const events = [
+      clickEvent('r1', { route: recordRoute }),
+      clickEvent('r2', {
+        route: recordRoute,
+        postAction: {
+          route: { url: 'https://app.example.com/billing', path: '/billing', hash: '', title: 'Billing' },
+        },
+      }),
+    ];
+    const { contract } = compileExecutionPlan({
+      steps: [
+        { instruction: 'Open it', route: '/projects/6a6a49ca1a22045b0b32b353', keyEventId: 'r1' },
+        { instruction: 'Go to billing', route: '/projects/6a6a49ca1a22045b0b32b353', keyEventId: 'r2' },
+      ],
+      events,
+    });
+    expect(contract?.entry.start).toBe('on-screen'); // presupposes a specific record
+    expect(contract?.outcome.route).toBe('/billing'); // where the workflow lands
+    expect(contract?.outcome.screen).toBeUndefined(); // the landing screen has no recorded events
+  });
+
+  it('an ineligible plan carries no contract, and the pin covers the contract (EC-2)', () => {
+    const bad = compileExecutionPlan({ steps: [step('missing')], events: [clickEvent('other')] });
+    expect(bad.contract).toBeNull();
+
+    // Same steps, different surrounding events ⇒ same step content, different entry fingerprint —
+    // hashPlan must move (the verification changed) while the steps-only hash stands still.
+    const extraChrome = [
+      ...teamEvents,
+      clickEvent('t4', {
+        route: { url: 'https://app.example.com/team', path: '/team', hash: '', title: 'Team' },
+        target: { tag: 'button', accessibleName: 'Billing settings', locators: [{ strategy: 'id', value: '#d' }] },
+      }),
+    ];
+    const a = compileExecutionPlan({ steps: [teamStep('t1'), teamStep('t3')], events: teamEvents });
+    const b = compileExecutionPlan({ steps: [teamStep('t1'), teamStep('t3')], events: extraChrome });
+    expect(hashSteps(a.steps)).toBe(hashSteps(b.steps));
+    expect(a.hash).not.toBe(b.hash);
+    expect(hashPlan(a.steps, a.contract)).toBe(a.hash);
   });
 });
 

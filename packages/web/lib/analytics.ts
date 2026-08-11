@@ -575,6 +575,9 @@ export interface AgentRunRow {
   id: string;
   title: string;
   outcome: string; // active | completed | aborted | safe_stop
+  /** P3-M2 (EC-5) — the outcome-contract stamp beside `completed`: true = the finish looked like
+   *  the recording's; false = it didn't (worth a glance); null = nothing checkable or pre-contract. */
+  verified: boolean | null;
   lastStep: number;
   totalSteps: number;
   safeStopReason: string | null;
@@ -583,7 +586,20 @@ export interface AgentRunRow {
 
 export interface AgentRunStats {
   recent: AgentRunRow[];
-  counts: { total: number; completed: number; safeStop: number; aborted: number; active: number };
+  counts: {
+    total: number;
+    completed: number;
+    safeStop: number;
+    aborted: number;
+    active: number;
+    /** Among completed: stamped verified / stamped unverified (the rest carried no stamp). */
+    verified: number;
+    unverified: number;
+  };
+  /** P3-M2 (EC-6) — failure events across the window's runs, by kind ("which steps are fragile"
+   *  becomes a number): handback · rejected · marker-miss · label-mismatch · stall · nav-timeout ·
+   *  entry-miss · outcome-miss. Empty when the window recorded none. */
+  failureKinds: Array<{ kind: string; count: number }>;
 }
 
 /**
@@ -593,7 +609,7 @@ export interface AgentRunStats {
  */
 export async function getAgentRuns(workspaceId: string, days: number): Promise<AgentRunStats> {
   const since = windowStart(days);
-  const [recent, grouped] = await Promise.all([
+  const [recent, grouped, windowRows] = await Promise.all([
     prisma.executionRun.findMany({
       where: { workspaceId, consentAt: { gte: since } },
       orderBy: { consentAt: 'desc' },
@@ -602,6 +618,7 @@ export async function getAgentRuns(workspaceId: string, days: number): Promise<A
         id: true,
         segmentTitle: true,
         outcome: true,
+        outcomeVerified: true,
         lastStep: true,
         totalSteps: true,
         safeStopReason: true,
@@ -613,13 +630,35 @@ export async function getAgentRuns(workspaceId: string, days: number): Promise<A
       where: { workspaceId, consentAt: { gte: since } },
       _count: { _all: true },
     }),
+    // P3-M2 — the failure/verified aggregation reads the audit entries themselves (a JSON shape
+    // groupBy can't reach). Bounded: the newest 500 rows of the window is plenty for a founder
+    // dashboard, and a workspace past that has outgrown a card.
+    prisma.executionRun.findMany({
+      where: { workspaceId, consentAt: { gte: since } },
+      orderBy: { consentAt: 'desc' },
+      take: 500,
+      select: { outcome: true, outcomeVerified: true, steps: true },
+    }),
   ]);
   const count = (o: string): number => grouped.find((g) => g.outcome === o)?._count._all ?? 0;
+  const kinds = new Map<string, number>();
+  let verified = 0;
+  let unverified = 0;
+  for (const row of windowRows) {
+    if (row.outcome === 'completed') {
+      if (row.outcomeVerified === true) verified += 1;
+      else if (row.outcomeVerified === false) unverified += 1;
+    }
+    for (const e of Array.isArray(row.steps) ? (row.steps as Array<{ f?: unknown }>) : []) {
+      if (typeof e?.f === 'string') kinds.set(e.f, (kinds.get(e.f) ?? 0) + 1);
+    }
+  }
   return {
     recent: recent.map((r) => ({
       id: r.id,
       title: r.segmentTitle ?? 'Workflow',
       outcome: r.outcome,
+      verified: r.outcomeVerified,
       lastStep: r.lastStep,
       totalSteps: r.totalSteps,
       safeStopReason: r.safeStopReason,
@@ -631,6 +670,11 @@ export async function getAgentRuns(workspaceId: string, days: number): Promise<A
       safeStop: count('safe_stop'),
       aborted: count('aborted'),
       active: count('active'),
+      verified,
+      unverified,
     },
+    failureKinds: [...kinds.entries()]
+      .map(([kind, n]) => ({ kind, count: n }))
+      .sort((a, b) => b.count - a.count),
   };
 }

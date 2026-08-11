@@ -23,6 +23,12 @@ import {
   resolveStep,
   type SenseStep,
 } from './sense.js';
+import {
+  screenMatchScore,
+  SCREEN_MATCH_MIN,
+  type LiveScreen,
+  type ScreenFingerprint,
+} from '@flowbuddy/shared/screen-fingerprint';
 // ONE element-state vocabulary (P2-M5): the same reading Reason ships to the diagnostic model
 // gates the engine locally — disabled/checked/filled/valid + the failed-constraint name.
 import { readElementState, type ReasonElementWire } from './reason.js';
@@ -175,6 +181,116 @@ export function actionCompletionEvidence(args: {
     (nextEl !== null && isVisible(nextEl)) || // the next step appeared — the page moved on
     (args.currentEl !== null && !args.currentEl.isConnected) // the acted-on control left the DOM
   );
+}
+
+// ── P3-M2 contract questions (execution-contracts.md §4) — pure page reads, policy-free ────────
+// The acting run is the only caller today; the walkthrough deliberately never asks these (its
+// adoption is the contract road's last item, shadow-first). Everything here answers; the actor
+// decides — same contract as the rest of this module.
+
+/** The page's visible text, lowercased. `innerText` when the engine provides it (visible text
+ *  only — the honest read); `textContent` as the fallback where it doesn't (jsdom). */
+function visiblePageText(): string {
+  const body = document.body as HTMLElement | null;
+  return (body?.innerText ?? body?.textContent ?? '').toLowerCase();
+}
+
+/** Which of these phrases are visible RIGHT NOW — the pre-act baseline EC-7's newly-visible
+ *  semantics diff against (the discipline rejection detection always had, applied to markers). */
+export function markerBaseline(phrases: string[] | undefined): Set<string> {
+  if (!phrases || phrases.length === 0) return new Set();
+  const text = visiblePageText();
+  return new Set(phrases.filter((p) => text.includes(p.toLowerCase())).map((p) => p.toLowerCase()));
+}
+
+export type MarkerVerdict = 'none' | 'newly' | 'presence' | 'unsatisfied';
+/** EC-7 — a marker means NEWLY visible.
+ *  `none`        — the step carries no appeared-markers: nothing to check, verify as before.
+ *  `newly`       — a marker is visible now that was NOT visible before the act: the recorded success.
+ *  `presence`    — EVERY marker was already visible before the act, so appearance carries no signal;
+ *                  presence is the honest fallback (the page can't distinguish), and the caller
+ *                  audits it so phrase quality stays measurable.
+ *  `unsatisfied` — markers that COULD have newly appeared didn't (or the pre-visible ones vanished). */
+export function markerVerdict(appeared: string[] | undefined, baseline: Set<string>): MarkerVerdict {
+  if (!appeared || appeared.length === 0) return 'none';
+  const text = visiblePageText();
+  const visible = appeared.filter((m) => text.includes(m.toLowerCase()));
+  if (visible.some((m) => !baseline.has(m.toLowerCase()))) return 'newly';
+  if (appeared.every((m) => baseline.has(m.toLowerCase()))) {
+    return visible.length > 0 ? 'presence' : 'unsatisfied';
+  }
+  return 'unsatisfied';
+}
+
+/** EC-7's inverse half: every disappeared-marker that WAS visible before the act must be gone now;
+ *  one that was never visible proves nothing (vacuously fine). No markers → true. */
+export function disappearedSatisfied(disappeared: string[] | undefined, baseline: Set<string>): boolean {
+  if (!disappeared || disappeared.length === 0) return true;
+  const text = visiblePageText();
+  return disappeared.every((m) => !baseline.has(m.toLowerCase()) || !text.includes(m.toLowerCase()));
+}
+
+/** EC-8 — does the resolved element still say what the recording said? Tolerant on purpose:
+ *  normalized (case, whitespace, digits, edge punctuation — labels legitimately grow counts and
+ *  badges), matched by equality or containment either direction. A short expected label (<3 chars
+ *  after normalizing) or an unreadable live label is vacuously true — unreadable cannot CONTRADICT,
+ *  and EC-8 blocks only on contradiction. */
+export function labelMatches(expected: string | undefined, liveLabel: string | undefined): boolean {
+  const norm = (s: string): string =>
+    s.toLowerCase().replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[^a-z]+|[^a-z]+$/g, '');
+  const e = norm(expected ?? '');
+  if (e.length < 3) return true;
+  const l = norm(liveLabel ?? '');
+  if (l.length === 0) return true;
+  return e === l || l.includes(e) || (l.length >= 3 && e.includes(l));
+}
+
+/** EC-3/EC-4 — may the run start here? Route compared as a PATTERN; the screen consulted only when
+ *  the route already matches (a wrong route makes the screen question moot), and only when the
+ *  recording made the entry screen identifiable. An unknown entry route checks nothing. */
+export function entryVerdict(
+  entry: { route: string; screen?: ScreenFingerprint } | undefined,
+  live: { path: string; screen?: LiveScreen },
+): 'ok' | 'wrong-route' | 'screen-mismatch' {
+  if (!entry || !entry.route.trim()) return 'ok';
+  if (matchStrength(entry.route, live.path) === 0) return 'wrong-route';
+  if (entry.screen && live.screen && screenMatchScore(entry.screen, live.screen) < SCREEN_MATCH_MIN) {
+    return 'screen-mismatch';
+  }
+  return 'ok';
+}
+
+export interface OutcomeCheck {
+  /** Whether the contract carried anything checkable at all — an uncheckable finish stamps nothing. */
+  checked: boolean;
+  ok: boolean;
+  route: boolean | null;
+  screen: boolean | null;
+  markers: boolean | null;
+}
+/** EC-5 — does the page look the way the recording says DONE looks? Component verdicts (null =
+ *  the contract carried no such fact) so the caller can audit WHICH half missed. Never blocks —
+ *  the caller stamps and narrates. */
+export function outcomeSatisfied(
+  outcome: { route?: string; screen?: ScreenFingerprint; appeared?: string[] } | undefined,
+  live: { path: string; screen?: LiveScreen; bodyText: string },
+): OutcomeCheck {
+  const text = live.bodyText.toLowerCase();
+  const route = outcome?.route ? matchStrength(outcome.route, live.path) > 0 : null;
+  const screen =
+    outcome?.screen && live.screen ? screenMatchScore(outcome.screen, live.screen) >= SCREEN_MATCH_MIN : null;
+  const markers =
+    outcome?.appeared && outcome.appeared.length > 0
+      ? outcome.appeared.some((m) => text.includes(m.toLowerCase()))
+      : null;
+  const parts = [route, screen, markers];
+  return {
+    checked: parts.some((p) => p !== null),
+    ok: parts.every((p) => p !== false),
+    route,
+    screen,
+    markers,
+  };
 }
 
 // ── Observation harness (attached only while a run is active; detached on end) ─────────────────

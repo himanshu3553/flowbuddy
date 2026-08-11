@@ -7,9 +7,9 @@ import {
   buildWorkflowKB,
   compileExecutionPlan,
   distilledStepText,
-  hashSteps,
+  hashPlan,
+  loadMarkerSnapshots,
   markerSnapshotRefs,
-  SNAPSHOT_MAX_CHARS,
   embedTexts,
   matchPageIdentities,
   matchWorkflowIdentities,
@@ -499,21 +499,21 @@ const worker = new Worker(
                 route: s.route,
                 keyEventId: s.keyEventId,
                 screenshotFile: s.screenshotFile,
+                evidence: s.evidence,
               }))
             : [];
           const compiled = wf ? compileExecutionPlan({ steps: srcSteps, events: manifest.events }) : null;
           if (compiled?.eligible) {
-            // Part 2 — refresh the outcome markers from the NEW recording's snapshots (same
-            // best-effort rule as the enable action: unreadable snapshot ⇒ step compiles bare).
-            const snapshots = new Map<number, { pre: string; post: string }>();
-            for (const ref of markerSnapshotRefs(compiled.steps, srcSteps, manifest.events)) {
-              if (!ref.pre || !ref.post) continue;
-              const [pre, post] = await Promise.all([getArtifact(ref.pre), getArtifact(ref.post)]);
-              if (!pre || !post || pre.length > SNAPSHOT_MAX_CHARS || post.length > SNAPSHOT_MAX_CHARS) continue;
-              snapshots.set(ref.index, { pre: pre.toString('utf8'), post: post.toString('utf8') });
-            }
+            // Legacy fallback only: steps whose data carries stored evidence compiled their
+            // `expect` above; `attachOutcomeMarkers` leaves those alone and diffs the last +
+            // destructive steps for evidence-less rows (same best-effort rule as the enable
+            // action: unreadable snapshot ⇒ step compiles bare).
+            const snapshots = await loadMarkerSnapshots(
+              markerSnapshotRefs(compiled.steps, srcSteps, manifest.events),
+              getArtifact,
+            );
             const finalSteps = attachOutcomeMarkers(compiled.steps, snapshots);
-            const finalHash = hashSteps(finalSteps);
+            const finalHash = hashPlan(finalSteps, compiled.contract);
             await prisma.executionPlan.upsert({
               where: { workflowId: appr.workflowId },
               create: {
@@ -522,11 +522,13 @@ const worker = new Worker(
                 planHash: finalHash,
                 stepCount: finalSteps.length,
                 steps: finalSteps as object,
+                contract: compiled.contract as object,
               },
               update: {
                 planHash: finalHash,
                 stepCount: finalSteps.length,
                 steps: finalSteps as object,
+                contract: compiled.contract as object,
               },
             });
           } else {

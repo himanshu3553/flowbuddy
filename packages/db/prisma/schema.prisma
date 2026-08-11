@@ -452,12 +452,22 @@ model CopilotApproval {
 
 model ExecutionPlan {
   // P4-M1 — the compiled, replay-ready artifact for ONE actable workflow (agent.md §A2.2): ordered
-  // steps { verb, instruction, route, locators, postRoute?, inputSlot?, destructive? }, compiled
-  // from the recording's manifest when the founder ENABLES acting, and re-verified on reprocess.
+  // steps { verb, instruction, route, locators, postRoute?, inputSlot?, destructive?, expect? },
+  // compiled from the recording's manifest when the founder ENABLES acting, and re-verified on
+  // reprocess.
+  //
+  // `contract` (P3-M2, execution-contracts.md) is the workflow-level half: entry (route · screen
+  // fingerprint · cold-start verdict) + outcome (destination route · final screen · final
+  // markers). Per-step `expect` and the contract both derive from the KB's stored step EVIDENCE
+  // (extracted at processing time — one layer, three consumers); rows processed before the
+  // evidence layer fall back to the legacy enable-time last+destructive marker diff, and a null
+  // `contract` means exactly "compiled before contracts existed" — the run then verifies as it
+  // always did (absence never loosens).
   //
   // `planHash` is the CONSENT PIN: a run stores the hash it was consented against, so "the run
   // executed the plan the user agreed to" is checkable equality. It is derived from the steps
-  // alone (key-sorted), never from timestamps.
+  // PLUS the contract (key-sorted), never from timestamps — the verification a user consented to
+  // is pinned with the actions (EC-2).
   //
   // Lifecycle: created/replaced by the Studio enable action; refreshed by the worker when a
   // reprocess re-matches the workflow BY CONTENT and the new steps are still eligible; left in
@@ -470,6 +480,7 @@ model ExecutionPlan {
   planHash    String
   stepCount   Int
   steps       Json
+  contract    Json?
   createdAt   DateTime @default(now())
   compiledAt  DateTime @updatedAt
 
@@ -519,13 +530,28 @@ model ExecutionRun {
   updatedAt      DateTime @updatedAt
   totalSteps     Int
   lastStep       Int      @default(0)
-  // [{ i, o: "acted" | "user", in?: "prefill" | "typed" | "chat", c?: true }] — what happened at
-  // each step (the agent acted vs. the user did it), where an input's value came from (an offer
-  // prefill · typed into the field · asked-and-answered in the chat), and whether a destructive
-  // confirm preceded it. NEVER values — those ride the page, not the wire (§A2.4).
-  steps          Json     @default("[]")
-  outcome        String   @default("active") // active | completed | aborted | safe_stop
-  safeStopReason String?
+  // Two entry shapes share this array, appended in the order they happened:
+  //   SUCCESS { i, o: "acted" | "user", in?: "prefill" | "typed" | "chat", c?: true, ms?, p?: true }
+  //     — what happened at each step (the agent acted vs. the user did it), where an input's value
+  //     came from (an offer prefill · typed into the field · asked-and-answered in the chat),
+  //     whether a destructive confirm preceded it, and the step's wall time when the widget could
+  //     measure it (absent on resume-completed steps — their duration is unknowable). `p` (EC-7)
+  //     = every appearance marker was already on screen BEFORE the act, so the check fell back to
+  //     presence — the step passed, but its phrases carried no signal and their quality is suspect.
+  //   FAILURE { i, f: "handback" | "rejected" | "marker-miss" | "label-mismatch" | "stall" |
+  //     "nav-timeout" | "entry-miss" | "outcome-miss", r?, ms? } (P3-M2, execution-contracts.md
+  //     EC-6) — what kind of miss, at which step; failures never bump `lastStep` (they are not
+  //     progress), and one step may accrue several before a success entry. `r` is the ONE
+  //     page-derived snippet allowed here (the app's own rejection words), scrubbed and clipped
+  //     like `safeStopReason`. A new way to fail is a new `f` VALUE, never a new column.
+  // NEVER values — those ride the page, not the wire (§A2.4).
+  steps           Json     @default("[]")
+  outcome         String   @default("active") // active | completed | aborted | safe_stop
+  // P3-M2 (EC-5) — the outcome-contract verdict STAMPED beside `completed`, never a fifth outcome
+  // value: the steps did complete, and whether the finish looked like the recording is a second
+  // fact. null = pre-contract run, a widget that computed no verdict, or any non-completed outcome.
+  outcomeVerified Boolean?
+  safeStopReason  String?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

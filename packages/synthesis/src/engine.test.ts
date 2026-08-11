@@ -483,6 +483,20 @@ describe('formatItems — what the agent can aim a tool at', () => {
     expect(formatItems([item({ narration: 'say hi' })])).toContain('\n   narration: "say hi"');
     expect(formatItems([])).toBe('- (none)');
   });
+
+  it('P3-M2 (EC-10) — states the workflow’s contract facts where the plan lives, and only when they exist', () => {
+    const withFacts = formatItems([
+      item({ workflowFacts: { entry: '/settings/team', finish: ['Invitation sent'] } }),
+    ]);
+    expect(withFacts).toContain('WORKFLOW: Create a project');
+    expect(withFacts).toContain('\n  starts on: /settings/team');
+    expect(withFacts).toContain('\n  when done, the user sees: "Invitation sent"');
+    // Facts without a plan still get the header; neither → byte-identical to the pre-facts output.
+    expect(formatItems([item()])).toBe('- id=itm1 [workflow: Create a project · key=src9:2]: Click New Project');
+    const entryOnly = formatItems([item({ workflowFacts: { entry: '/settings/team' } })]);
+    expect(entryOnly).toContain('starts on: /settings/team');
+    expect(entryOnly).not.toContain('when done');
+  });
 });
 
 describe('shapeAnswer', () => {

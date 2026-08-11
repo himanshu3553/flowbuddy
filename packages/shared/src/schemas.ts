@@ -51,6 +51,7 @@ export const capturedEventSchema = z.object({
   type: z.string(),
   target: eventTargetSchema,
   value: z.string().optional(),
+  checked: z.boolean().optional(), // recorder ≥0.9.0 — checkbox/radio end state
   route: routeSchema,
   domSnapshot: fileRefSchema.optional(),
   screenshot: fileRefSchema.optional(),

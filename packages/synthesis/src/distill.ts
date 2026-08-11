@@ -1,8 +1,13 @@
 import OpenAI from 'openai';
+import { createLogger } from '@flowbuddy/logger';
 import type { Bbox, CapturedEvent } from '@flowbuddy/shared';
 import { eventLabel } from './segment';
+import { ACTABLE_TYPES, controlKey } from './event-granularity';
 import { redactText } from './redact';
 import { structuredJsonCall } from './responses';
+import type { StepEvidence } from './step-evidence';
+
+const log = createLogger('synthesis');
 
 // KB step distillation — Phase 2 (LLM distillation "A").
 // See docs/build/kb-step-distillation.md §5.3. Turns ONE workflow's (cleaned) events + narration into a
@@ -32,6 +37,16 @@ export interface DistilledStep {
   // Phase-3/4 execution plan) can recover the event's ranked locators WITHOUT re-matching by
   // screenshot. Additive: pre-Sense rows lack it and fall back to screenshotFile matching.
   keyEventId?: string;
+  // P3-M2 — the step's stored evidence layer (step-evidence.ts): what its success LOOKED like,
+  // extracted at build time for every consumer (answers · Sense/Reason · the acting plan).
+  // Additive: pre-evidence rows lack it and the plan compiler falls back to the legacy
+  // enable-time marker diff. NEVER folded into the item's `text` — that feeds embeddings.
+  evidence?: StepEvidence;
+  // The validated event ids this step was built from — persisted so the GRANULARITY invariant
+  // (one step = one actable control, kb-step-distillation.md) is checkable forever: the plan
+  // compiler refuses a step spanning several controls. Usually one id; several only for repeated
+  // commits to the same control. Additive: pre-invariant rows lack it and compile as before.
+  sourceEventIds?: string[];
 }
 
 const SYSTEM = `You convert ONE recorded product workflow into a short, clean, user-facing list of steps for an in-app help copilot.
@@ -40,7 +55,7 @@ You get the workflow's title, its captured interaction events in order (each wit
 
 Produce the MINIMAL sequence of steps a user would actually follow to accomplish the task:
 - DROP orienting/stray actions that don't advance the goal — e.g. clicking around the landing page, the logo, or a chat widget while explaining. The narration reveals intent ("this is the landing page" = not a step).
-- MERGE low-level interactions into one user-facing step (focusing a field + typing = one "Enter your X" step; a button click that submits a form = one step).
+- ONE STEP PER CONTROL. Every step is built from exactly ONE control the user acts on — the low-level noise you might merge (focus-clicks before typing, the duplicate submit right after its button) was already removed before you saw this timeline. NEVER combine two different controls into one step: "Enter your email address and password" hides a whole field from anyone following along — write two steps. The only multi-event step allowed is repeated commits to the SAME control (the recorder re-typing one field): keep ONE step, keyEventId = the last commit.
 - Write each instruction imperatively and concretely ("Click 'Sign In'", "Enter your email"). Put any helpful context in "detail" (else "").
 - Preserve order.
 
@@ -52,7 +67,7 @@ Reading an element's description:
 You are writing for SOMEONE ELSE'S account, not describing the recording:
 - "entered: <...>" stands for text the recorder typed into a field. It is their own sample data. Say what the reader must supply, taking the wording from the field's own name or placeholder — "Enter your project name", "Upload a PDF". NEVER invent a specific value to put there.
 - "selected: X" is an option the product itself offers, so naming it is allowed. Name it when it is part of THIS task ("Choose the Website URL tab"). When it is a personal preference — a country, a plan, a theme, a language — say what to choose, not what the recorder chose.
-- "toggled" means a checkbox or switch was used. THE RECORDING DOES NOT CAPTURE WHETHER IT ENDED ON OR OFF. So never state a position unless the narration states one. Read the narration:
+- "toggled" means a checkbox or switch was used. "toggled on"/"toggled off" is the RECORDED end position; a bare "toggled" means the recording did not capture it. Either way the position is the RECORDER'S OWN choice — never state one unless the narration rules below allow it. Read the narration:
   · It marks the reader's own decision ("you can enable or disable this", "for now I'm just keeping it on") → write the DECISION and what it changes: "Decide whether to enable general-knowledge responses — with them on, the bot also answers from its own knowledge." NEVER the recorder's position.
   · It marks a requirement, or the control is plainly required (accepting terms) → write the required action: "Accept the terms and conditions."
   · It says nothing → write the neutral action for the control the element name describes.
@@ -60,7 +75,7 @@ You are writing for SOMEONE ELSE'S account, not describing the recording:
 
 Grounding (critical — do not violate):
 - Use ONLY the provided events and narration. NEVER invent steps, UI, or behaviour from general knowledge — and never reproduce the recorder's sample values either.
-- For every step, "sourceEventIds" MUST list the real event id(s) it is built from, and "keyEventId" MUST be one id from that step's sourceEventIds — the event whose screen best represents the step.
+- For every step, "sourceEventIds" MUST list the real event id(s) it is built from — usually exactly ONE (one step per control); several only for repeated commits to the SAME control. "keyEventId" MUST be one id from that step's sourceEventIds — the event whose screen best represents the step (the LAST commit when there are several).
 - "route" is the page path the step happens on (copy it from the key event's route).
 - Never output a step that has no real source event.`;
 
@@ -154,7 +169,14 @@ function contentShape(ev: CapturedEvent, value: string): string {
  */
 export function valueHint(ev: CapturedEvent): string {
   const kind = valueKind(ev);
-  if (kind === 'unknown-state') return ' | toggled';
+  // Recorder ≥0.9.0 captures the real end state (`ev.checked`), so the timeline may finally say
+  // which way the toggle went. Older recordings keep the bare word — the position stays unknown
+  // and the prompt's narration rules stay the only source for one. Knowing the position does NOT
+  // license stating it: it is still the RECORDER'S choice, and the prompt decides when a position
+  // is a requirement versus a preference.
+  if (kind === 'unknown-state') {
+    return ev.checked === undefined ? ' | toggled' : ` | toggled ${ev.checked ? 'on' : 'off'}`;
+  }
   const value = (ev.value ?? '').trim();
   if (!value) return '';
   if (kind === 'choice') return ` | selected: "${value.slice(0, 80)}"`;
@@ -205,6 +227,7 @@ function resolveStep(
     screenshotFile: resolveScreenshot(keyEvent, false),
     bbox: keyEvent.target?.bbox,
     keyEventId: keyEvent.id,
+    sourceEventIds: sourceIds,
   };
 }
 
@@ -218,7 +241,62 @@ function fallbackStep(ev: CapturedEvent, narration: Map<string, string>): Distil
     screenshotFile: resolveScreenshot(ev, false),
     bbox: ev.target?.bbox,
     keyEventId: ev.id,
+    sourceEventIds: [ev.id],
   };
+}
+
+// ── The granularity invariant (kb-step-distillation.md) ────────────────────────────────────────
+
+/**
+ * ONE STEP = ONE ACTABLE CONTROL, enforced deterministically — never by prompt compliance.
+ *
+ * The prompt asks the model not to merge; this pass makes merging IMPOSSIBLE. A step whose source
+ * events span several actable controls compiles to a plan that acts on one and silently drops the
+ * rest — found live as "Enter your email address and password": one step, the password never asked,
+ * the run ✓'d the instruction anyway. Split steps take fallback-quality instructions derived from
+ * their events (the prompt makes splits rare; this pass makes the invariant certain). Repeated
+ * commits to the SAME control stay one step keyed on the LAST commit — the final value is the one
+ * the run must reproduce. A split half whose control an earlier step already owns is skipped —
+ * overlap-citing model output must not duplicate steps.
+ */
+export function enforceStepGranularity(
+  built: Array<{ step: DistilledStep; keyEvent: CapturedEvent; sourceIds: string[] }>,
+  eventsById: Map<string, CapturedEvent>,
+  order: Map<string, number>,
+  narration: Map<string, string>,
+): Array<{ step: DistilledStep; keyEvent: CapturedEvent }> {
+  const out: Array<{ step: DistilledStep; keyEvent: CapturedEvent }> = [];
+  const ownedControls = new Set<string>();
+  for (const b of built) {
+    const groups = new Map<string, CapturedEvent[]>();
+    for (const id of b.sourceIds) {
+      const ev = eventsById.get(id);
+      if (!ev || !ACTABLE_TYPES.has(ev.type)) continue;
+      const key = controlKey(ev);
+      const g = groups.get(key);
+      if (g) g.push(ev);
+      else groups.set(key, [ev]);
+    }
+    if (groups.size <= 1) {
+      out.push({ step: b.step, keyEvent: b.keyEvent });
+      for (const key of groups.keys()) ownedControls.add(key);
+      continue;
+    }
+    const perControl = [...groups.values()]
+      .map((evs) => evs[evs.length - 1]!)
+      .sort((a, e) => (order.get(a.id) ?? 0) - (order.get(e.id) ?? 0));
+    log.warn(
+      { component: 'distill', instruction: b.step.instruction.slice(0, 80), controls: perControl.length },
+      'model merged multiple controls into one step — split deterministically',
+    );
+    for (const ev of perControl) {
+      const key = controlKey(ev);
+      if (ownedControls.has(key)) continue;
+      ownedControls.add(key);
+      out.push({ step: fallbackStep(ev, narration), keyEvent: ev });
+    }
+  }
+  return out;
 }
 
 /** Searchable text for a distilled step (instruction + detail + narration). Used by the worker for `KnowledgeItem.text`. */
@@ -279,18 +357,23 @@ export async function distillSteps(
   }
 
   // Resolve + validate each model step; keep the key event so we can switch the last step's frame.
-  const built: { step: DistilledStep; keyEvent: CapturedEvent }[] = [];
+  const built: { step: DistilledStep; keyEvent: CapturedEvent; sourceIds: string[] }[] = [];
   for (const s of parsed.steps ?? []) {
     const sourceIds = (s.sourceEventIds ?? []).filter((id) => known.has(id));
     if (sourceIds.length === 0) continue; // guardrail: drop ungrounded (hallucinated) steps
     const keyId = known.has(s.keyEventId) ? s.keyEventId : sourceIds[sourceIds.length - 1]!;
     const keyEvent = eventsById.get(keyId)!;
-    built.push({ step: resolveStep(s, sourceIds, keyEvent, narration), keyEvent });
+    built.push({ step: resolveStep(s, sourceIds, keyEvent, narration), keyEvent, sourceIds });
   }
+
+  // The granularity invariant: one step = one actable control, enforced — never trusted to the
+  // prompt (see enforceStepGranularity).
+  const order = new Map(events.map((e, i) => [e.id, i]));
+  const granular = enforceStepGranularity(built, eventsById, order, narration);
 
   // Fallback — never lose a workflow.
   const final =
-    built.length > 0 ? built : events.map((ev) => ({ step: fallbackStep(ev, narration), keyEvent: ev }));
+    granular.length > 0 ? granular : events.map((ev) => ({ step: fallbackStep(ev, narration), keyEvent: ev }));
 
   // Frame rule C: the last/outcome step shows the result frame of its key event.
   const last = final[final.length - 1];

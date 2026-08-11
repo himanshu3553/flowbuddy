@@ -34,6 +34,9 @@ export interface SenseStep {
   locators: SenseLocator[];
   postRoute?: string;
   screenKey?: string;
+  /** P3-M2 — the step's recorded success phrases (founder-derived, scrubbed, shipped DOWN in the
+   *  shard). Presence on the live page = soft "this step already happened" evidence. */
+  expect?: string[];
 }
 export interface SenseWorkflow {
   sourceId: string;
@@ -51,6 +54,10 @@ export interface SenseHypothesisWire {
   totalSteps: number;
   confidence: number;
   stepsDone: number[];
+  /** P3-M2 — steps whose recorded success phrases are visible right now: the expected-outcome
+   *  echoes (§A2's up-travel list). Integers only; SOFT evidence the answer model weighs —
+   *  presence-based (no act moment to baseline against), so it may never gate anything. */
+  phrasesSeen?: number[];
   error?: string;
 }
 
@@ -256,6 +263,10 @@ export function readLiveScreen(): LiveScreen {
 // ── The scorer (deterministic; the answer LLM makes the final call with the question in hand) ──
 const MIN_SCORE = 0.2; // below this a workflow isn't worth sending as a hypothesis
 const TIE_DELTA = 0.15; // top two closer than this = "ask X or Y?" territory
+/** P3-M2 — how much phrase-progression (recorded success phrases visible for earlier steps) may
+ *  nudge a hypothesis. Deliberately half the screen signal: presence-based evidence with no act
+ *  baseline is the softest signal the probe has, so it settles near-ties and nothing else. */
+const PHRASE_PROGRESS_WEIGHT = 0.05;
 /**
  * How many hypotheses may ride to the server — and why it is not 2.
  *
@@ -294,6 +305,12 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
   // fingerprints existed — or from a recording too sparse to identify anything — costs nothing here
   // and behaves exactly as it did before.
   const live = workflows.some((wf) => wf.screens) ? readLiveScreen() : undefined;
+  // P3-M2 — one lowercased page read for the expected-outcome echoes, same one-read discipline as
+  // the screen above; skipped entirely on pre-evidence shards.
+  const pageText = workflows.some((wf) => wf.steps.some((s) => s.expect?.length))
+    ? (((document.body as HTMLElement | null)?.innerText ??
+        (document.body as HTMLElement | null)?.textContent) ?? '').toLowerCase()
+    : '';
 
   for (const wf of workflows) {
     if (wf.steps.length === 0) continue;
@@ -379,11 +396,27 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
     const inputsBefore = cur ? wf.steps.filter((s) => s.kind === 'input' && s.index < cur.step.index).length : 0;
     const filledBefore = cur ? filled.filter((i) => i < cur.step.index).length : 0;
     const doneFrac = inputsBefore > 0 ? filledBefore / inputsBefore : 0;
+    // P3-M2 — the expected-outcome echoes: steps whose recorded success phrases are on the page
+    // right now. SOFT evidence (presence, not appearance — the probe has no act to baseline
+    // against), so it travels as data for the answer model and nudges the score only as
+    // PHRASE_PROGRESS_WEIGHT — the same posture as `0.1 × bestScreen`: enough to settle a
+    // near-tie between workflows, never enough to overrule route or element placement.
+    const phrasesSeen = pageText
+      ? wf.steps
+          .filter((s) => s.expect?.length && s.expect.some((p) => pageText.includes(p.toLowerCase())))
+          .map((s) => s.index)
+      : [];
+    const phraseFracBefore = cur
+      ? phrasesSeen.filter((i) => i < cur.step.index).length / Math.max(1, cur.step.index - 1)
+      : 0;
     // Base confidence by the strongest claim available; `+0.1 × screen` is slice 2 — among workflows
     // the URL rates identically (the normal case now that `/projects/:id` matches several), the one
     // whose screen the page actually shows wins, and TIE_DELTA stops that being a coin toss.
     const base = exact ? 0.45 : recognisedHere ? 0.4 : 0.3;
-    const score = Math.min(1, base + (cur ? 0.35 : 0) + 0.2 * doneFrac + 0.1 * bestScreen);
+    const score = Math.min(
+      1,
+      base + (cur ? 0.35 : 0) + 0.2 * doneFrac + 0.1 * bestScreen + PHRASE_PROGRESS_WEIGHT * phraseFracBefore,
+    );
     if (score < MIN_SCORE) continue;
 
     // Last resort — nothing resolved on screen, so fall back to placement alone. Same precedence:
@@ -401,6 +434,7 @@ export function runProbe(workflows: SenseWorkflow[], path: string): SenseProbeRe
       totalSteps: wf.steps.length,
       confidence: Math.round(score * 100) / 100,
       stepsDone: filled.filter((i) => i < stepIndex),
+      ...(phrasesSeen.length > 0 ? { phrasesSeen: phrasesSeen.slice(0, 50) } : {}),
       ...(cur ? { error: findError(cur.el) } : {}),
     };
     if (h.error === undefined) delete h.error;

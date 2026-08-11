@@ -398,7 +398,8 @@ async function handlePortMsg(msg: PortMsg, windowId?: number, tabId?: number, fr
     if (!ev) return;
     const shotFile = `shots/${msg.eventId}-post.jpg`; // R12 — JPEG
     const domFile = `dom/${msg.eventId}-post.html`;
-    const shot = await captureShot(shotWindow);
+    // v0.9.0 — input post-actions are DOM-only by the content script's request.
+    const shot = msg.shot === false ? null : await captureShot(shotWindow);
     if (shot) await kvPut('shot:' + shotFile, shot);
     await kvPut('dom:' + domFile, msg.domHtml);
     ev.postAction = {

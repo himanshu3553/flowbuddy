@@ -221,11 +221,22 @@ function onChange(e: Event): void {
   const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
   if (!el || !('value' in el)) return;
   lastCaptured.set(el, String(el.value ?? '')); // the sweep must not re-emit a value change already captured
+  // v0.9.0 — a checkbox/radio's END STATE. `el.value` is the value ATTRIBUTE (literally "on"
+  // whether ticked or cleared — the documented capture gap); `el.checked` is the real position.
+  const checked =
+    el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')
+      ? el.checked
+      : undefined;
   // R12 — a text field's `change` fires on blur, usually caused by clicking the next control (or the
   // final submit). That click's pointerdown just captured a pre-side-effect frame — reference it (PEEK,
   // don't consume; the click claims it too) so the input's screenshot shows the filled field BEFORE the
   // click's result, not the delayed post-click state. No pointerdown (keyboard/Tab) → normal capture.
-  emit('input', el, maskValue(el), pendingShotId ?? undefined);
+  emit('input', el, maskValue(el), pendingShotId ?? undefined, checked === undefined ? undefined : { checked });
+  // v0.9.0 — arm the settle watcher for input commits too (DOM only, no post screenshot): inline
+  // validation, an enabling submit, a character counter — the fill step's own after-state, which
+  // the evidence layer turns into expectations. Best-effort like every post-action: a click that
+  // follows this blur re-arms the watcher for itself and this one is simply superseded.
+  schedulePostAction({ shot: false });
 }
 
 function onSubmit(e: Event): void {
@@ -389,17 +400,24 @@ function clearScrollHover(): void {
   lastHoverKey = '';
 }
 
-function emit(type: string, el: Element, value?: string, preShotId?: string): void {
-  emitEvent(type, buildTarget(el), value, preShotId);
+function emit(type: string, el: Element, value?: string, preShotId?: string, extra?: { checked?: boolean }): void {
+  emitEvent(type, buildTarget(el), value, preShotId, extra);
 }
 
-function emitEvent(type: string, target: EventTarget, value?: string, preShotId?: string): void {
+function emitEvent(
+  type: string,
+  target: EventTarget,
+  value?: string,
+  preShotId?: string,
+  extra?: { checked?: boolean },
+): void {
   const event: CapturedEvent = {
     id: crypto.randomUUID(),
     t: Date.now() - startTime - pausedTotal,
     type,
     target,
     value,
+    ...(extra?.checked !== undefined ? { checked: extra.checked } : {}),
     route: buildRoute(),
     screenshot: { file: '' }, // filled by background after captureVisibleTab
     domSnapshot: { file: '' },
@@ -418,7 +436,7 @@ function emitEvent(type: string, target: EventTarget, value?: string, preShotId?
 
 let pendingEventId: string | null = null;
 
-function schedulePostAction(): void {
+function schedulePostAction(opts: { shot?: boolean } = {}): void {
   const eventId = pendingEventId;
   if (!eventId) return;
   clearWatcher();
@@ -426,7 +444,16 @@ function schedulePostAction(): void {
   const finish = (reason: string) => {
     if (!postWatcher) return;
     clearWatcher();
-    send({ kind: 'postAction', eventId, domHtml: serializeDom(), route: buildRoute(), settleReason: reason });
+    send({
+      kind: 'postAction',
+      eventId,
+      domHtml: serializeDom(),
+      route: buildRoute(),
+      settleReason: reason,
+      // v0.9.0 — input post-actions carry DOM only: expectations need text, and screenshots are
+      // the size cost (a typing-heavy form would double its shot count for no evidence gain).
+      ...(opts.shot === false ? { shot: false } : {}),
+    });
   };
 
   const observer = new MutationObserver(() => {
@@ -543,7 +570,9 @@ function frameOffset(): { x: number; y: number } | null {
 }
 
 function pickAttrs(el: Element): Record<string, string> {
-  const keys = ['id', 'name', 'class', 'type', 'href', 'placeholder', 'aria-label', 'data-testid'];
+  // v0.9.0 added `autocomplete`: the plan compiler's cc-* sensitivity rule always read it, but the
+  // capture never supplied it — a live dead branch until this line.
+  const keys = ['id', 'name', 'class', 'type', 'href', 'placeholder', 'aria-label', 'data-testid', 'autocomplete'];
   const out: Record<string, string> = {};
   for (const k of keys) {
     const v = el.getAttribute(k);

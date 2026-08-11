@@ -172,17 +172,20 @@ is stored verbatim, and `redactText` will not catch it either (a name matches no
 build's answer is not to redact harder but to never reproduce a recorded value at all: see
 `valueHint` in [knowledge-base.md](knowledge-base.md) §Stage 5.
 
-**A checkbox's real state is NOT captured.** `maskValue` reads `el.value`, and for a checkbox or
-radio that is the value *attribute* — the literal string `"on"` whether the box was ticked or
-cleared. Nothing else records `checked`, so **the pipeline cannot know whether a toggle was turned on
-or off**, and any instruction that states a position for one came from the narration. Capturing it
-would need an extension change, which means a Web Store resubmission
-([extension-releases.md](../ops/extension-releases.md)).
+**A checkbox's real state: captured since recorder v0.9.0, unknown before it.** `maskValue` reads
+`el.value`, and for a checkbox or radio that is the value *attribute* — the literal string `"on"`
+whether the box was ticked or cleared. Since v0.9.0 the change event also carries `checked` (the
+real end state), so the distill timeline can say `toggled on`/`toggled off` and a compiled check
+step records its `desired` state as context. Two rules survive the fix: on **older recordings** the
+position stays unknown and nothing may guess one; and even when known, the position is the
+*recorder's own choice* — whether an instruction may state it is still decided by the narration
+rules, and the acting run still asks the user rather than replaying it (the values rule).
 
 ### 4.5 The post-action settle watcher
 
 A single screenshot at click-time would miss the *result* of the action. So after a click/submit/
-Enter/nav, the content script arms a watcher ([`schedulePostAction`](../../packages/extension/src/content.ts)):
+Enter/nav — and, since recorder v0.9.0, after an input commit too — the content script arms a
+watcher ([`schedulePostAction`](../../packages/extension/src/content.ts)):
 
 - A `MutationObserver` watches the DOM; each mutation resets a **500 ms quiet timer**
   (`SETTLE_QUIET_MS`). When the DOM goes quiet for 500 ms → settle.
@@ -191,7 +194,12 @@ Enter/nav, the content script arms a watcher ([`schedulePostAction`](../../packa
   `settleReason` (`mutation_quiet` | `timeout`).
 
 The background then takes a **post screenshot** (`shots/<id>-post.jpg`) and attaches `postAction`
-(screenshot + DOM + route + reason) to the original event. This before/after pair is what lets the KB
+(screenshot + DOM + route + reason) to the original event. **Input post-actions are DOM-only** —
+expectations need text, and doubling the shot count on a typing-heavy form buys no evidence — and
+they are best-effort in a specific way: a blur is usually caused by clicking the next control, and
+that click re-arms the watcher for itself, superseding the input's (the same discard rule two quick
+clicks have always had). An input's after-state therefore survives when typing is followed by a
+pause or Enter — which is exactly the inline-validation case it exists to capture. This before/after pair is what lets the KB
 later show "you clicked here → you landed there", and lets distillation pick the *result* frame for a
 workflow's final step — and, since the acting layer, it is what an acting run verifies against: the
 DOM half of the pair is diffed, at acting-enable time, into short scrubbed phrases — *what appeared

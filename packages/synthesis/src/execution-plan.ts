@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 import type { CapturedEvent, Locator } from '@flowbuddy/shared';
 import { eventLocators } from '@flowbuddy/shared/event-locators';
 import { routePattern } from '@flowbuddy/shared/route-pattern';
+import type { ScreenFingerprint } from '@flowbuddy/shared/screen-fingerprint';
+import { distinctActableControls } from './event-granularity';
 import { redactText } from './redact';
+import { buildScreens } from './screen-runs';
+import type { StepEvidence } from './step-evidence';
 
 /**
  * P4-M1 — the EXECUTION PLAN compiler: turn one approved workflow's distilled steps + its
@@ -74,12 +78,50 @@ export interface ExecutionStep {
    *  disqualifying the workflow (2026-08-07): the run pauses, the user does it, Continue verifies
    *  the resulting state. Never chat-asked, never acted by the agent. */
   userOnly?: boolean;
-  /** Part 2 (2026-08-07) — the step's recorded AFTER, distilled: short phrases that APPEARED on
-   *  the founder's screen when this step succeeded (a success toast, the next screen's heading).
-   *  Extracted from the before/after DOM snapshots at enable time, scrubbed, matched at run time
-   *  by recall (contains), never equality. PRESENCE tightens verification (fail-closed); absence
-   *  changes nothing — a step without markers verifies exactly as before. */
-  expect?: { appeared: string[] };
+  /** P3-M2 capture tranche — a check step's RECORDED end state (recorder ≥0.9.0). CONTEXT, never
+   *  a value to replay: the values rule stands (every value comes from the user — the run still
+   *  asks), this exists so surfaces can say which way the recording went. Absent = unknown. */
+  desired?: boolean;
+  /** The step's recorded moment, distilled (execution-contracts.md EC-7/EC-8): `appeared` — short
+   *  phrases NEWLY on the founder's screen when this step succeeded (a success toast, the next
+   *  screen's heading); `disappeared` — phrases gone after it (the closed dialog); `label` — the
+   *  acted element's recorded label, the resolved-element cross-check; `landedTitle` — the landing
+   *  page's title on navigating steps, an audit corroborator. Sourced from the KB's stored step
+   *  evidence (build-time extraction) — or, for rows processed before the evidence layer, from the
+   *  legacy enable-time diff of the last + destructive steps. Matched at run time by recall
+   *  (contains), never equality. PRESENCE tightens verification (fail-closed); absence changes
+   *  nothing — a step without expectations verifies exactly as before. */
+  expect?: { appeared?: string[]; disappeared?: string[]; label?: string; landedTitle?: string };
+}
+
+/**
+ * The workflow-level halves of the contract (execution-contracts.md §3): where a run may START and
+ * what DONE looks like — derived from the same events the steps compiled from, checked by the run
+ * at pre-flight and at completion. Signals here narrate and audit; they never block (EC-4, EC-5).
+ */
+export interface PlanContract {
+  v: 1;
+  entry: {
+    /** Step 1's recorded route (raw; consumers compare as PATTERNS). '' when unknown. */
+    route: string;
+    /** What the starting screen looked like — when the recording made it identifiable. */
+    screen?: ScreenFingerprint;
+    /** 'anywhere' = the entry route is pattern-safe to navigate to cold (the §A2.5 rule, decided
+     *  at compile time); 'on-screen' = the workflow presupposes being somewhere (a record route,
+     *  or an unknown entry) — the run waits for the user instead of attempting navigation. */
+    start: 'anywhere' | 'on-screen';
+  };
+  outcome: {
+    /** Where the workflow ends: the last step's landing route, or its own route when it stays. */
+    route?: string;
+    /** The final screen's fingerprint — omitted when the last step navigates away, because the
+     *  landing screen has no recorded events to fingerprint. */
+    screen?: ScreenFingerprint;
+    /** The last step's appeared markers, duplicated here ON PURPOSE: the Done check runs whatever
+     *  path the last step completed by, so it must not depend on that step's own verification
+     *  having consulted them. */
+    appeared?: string[];
+  };
 }
 
 export interface EligibilityIssue {
@@ -92,14 +134,17 @@ export interface EligibilityIssue {
     | 'framed-target'
     | 'no-locator'
     | 'nav-into-record'
-    | 'foreign-origin';
+    | 'foreign-origin'
+    | 'multi-action-step';
   /** Founder-facing, plain words — rendered verbatim in Studio when enabling is refused. */
   message: string;
 }
 
 export interface CompiledExecutionPlan {
   steps: ExecutionStep[];
-  /** Content hash over `steps` (key-sorted) — the consent pin (§A2.2). */
+  /** The entry/outcome halves — null only when the plan is ineligible (nothing will ever run it). */
+  contract: PlanContract | null;
+  /** Content hash over steps + contract (key-sorted) — the consent pin (§A2.2). */
   hash: string;
   eligible: boolean;
   issues: EligibilityIssue[];
@@ -111,6 +156,11 @@ export interface ExecutionStepSource {
   route?: string;
   keyEventId?: string;
   screenshotFile?: string | null;
+  /** The stored evidence layer (step-evidence.ts), present on rows processed since it exists. */
+  evidence?: StepEvidence;
+  /** The validated events the step was built from (distill.ts) — lets the granularity backstop
+   *  below verify one-step-one-control. Absent on pre-invariant rows: nothing to check. */
+  sourceEventIds?: string[];
 }
 
 /** Deterministic JSON: keys sorted at every depth, so the hash ignores construction order. */
@@ -155,6 +205,18 @@ function isDestructive(ev: CapturedEvent): boolean {
   return DESTRUCTIVE_LABEL_RE.test(label);
 }
 
+/** A step's `expect` from its stored evidence — only the fields the evidence actually carries. */
+function expectFrom(evidence: StepEvidence | undefined): ExecutionStep['expect'] {
+  if (!evidence) return undefined;
+  const expect = {
+    ...(evidence.appeared?.length ? { appeared: evidence.appeared } : {}),
+    ...(evidence.disappeared?.length ? { disappeared: evidence.disappeared } : {}),
+    ...(evidence.label ? { label: evidence.label } : {}),
+    ...(evidence.landedTitle ? { landedTitle: evidence.landedTitle } : {}),
+  };
+  return Object.keys(expect).length > 0 ? expect : undefined;
+}
+
 /**
  * Compile one workflow. Steps arrive in workflow order (`orderIndex`); events are the recording's
  * full manifest event list. Recovery mirrors the sense plan: `keyEventId` first, screenshot-file
@@ -168,6 +230,9 @@ export function compileExecutionPlan(input: {
 }): CompiledExecutionPlan {
   const issues: EligibilityIssue[] = [];
   const steps: ExecutionStep[] = [];
+  // Which recorded event each compiled step anchored to — the contract derivation below needs the
+  // first and last steps' screens, and the loop is where recovery already happened.
+  const evByIndex = new Map<number, CapturedEvent>();
 
   const byId = new Map<string, CapturedEvent>();
   const byShot = new Map<string, CapturedEvent>();
@@ -198,6 +263,24 @@ export function compileExecutionPlan(input: {
         message: `Step ${index} can't be tied to a recorded action, so there is nothing safe to act on.`,
       });
       return;
+    }
+
+    // The granularity BACKSTOP (kb-step-distillation.md): a step spanning several actable controls
+    // would compile to a plan that acts on one and silently drops the rest — found live as
+    // "Enter your email address and password", the password never asked. The distillation split
+    // pass makes this unreachable for new rows; refusing here turns any future regression loud at
+    // enable time instead of silent at a user's form. Pre-invariant rows carry no sourceEventIds
+    // and compile as before — a reprocess is what splits them.
+    if (src.sourceEventIds && src.sourceEventIds.length > 1) {
+      const controls = distinctActableControls(src.sourceEventIds.map((id) => byId.get(id)));
+      if (controls > 1) {
+        issues.push({
+          step: index,
+          code: 'multi-action-step',
+          message: `Step ${index} combines ${controls} separate controls in one step — re-process this recording to split it, then enable acting.`,
+        });
+        return;
+      }
     }
 
     const attrs = ev.target?.attributes ?? {};
@@ -277,6 +360,8 @@ export function compileExecutionPlan(input: {
         });
         return;
       }
+      evByIndex.set(index, ev);
+      const navExpect = expectFrom(src.evidence);
       steps.push({
         index,
         verb,
@@ -284,10 +369,13 @@ export function compileExecutionPlan(input: {
         route,
         locators: [],
         postRoute: destination,
+        ...(navExpect ? { expect: navExpect } : {}),
       });
       return;
     }
 
+    evByIndex.set(index, ev);
+    const expect = expectFrom(src.evidence);
     steps.push({
       index,
       verb,
@@ -296,19 +384,67 @@ export function compileExecutionPlan(input: {
       locators,
       ...(navigates ? { postRoute: landed } : {}),
       ...(verb === 'fill' || verb === 'select' || verb === 'check' ? { inputSlot: slotFor(ev) } : {}),
+      ...(verb === 'check' && ev.checked !== undefined ? { desired: ev.checked } : {}),
       ...(isDestructive(ev) ? { destructive: true } : {}),
       ...(userOnly ? { userOnly: true } : {}),
+      ...(expect ? { expect } : {}),
     });
   });
 
   // Indexes were assigned per SOURCE step so issue messages match what the founder sees on the KB
   // page; a plan only exists when every step compiled, so a gap cannot ship.
   const eligible = issues.length === 0;
+  const contract = eligible && steps.length > 0 ? deriveContract(steps, evByIndex, input.events) : null;
   return {
     steps,
-    hash: hashSteps(steps),
+    contract,
+    hash: hashPlan(steps, contract),
     eligible,
     issues,
+  };
+}
+
+/** The entry/outcome halves, from the same events the steps compiled from (execution-contracts.md
+ *  §3). Screens come from the ONE screen-run builder the sense plan uses, so the probe's idea of a
+ *  screen and the contract's can never drift. Note for legacy rows: `outcome.appeared` copies the
+ *  last step's evidence-built markers; markers attached AFTER compile (the legacy last+destructive
+ *  path) deliberately do not reach it — the Done check then rests on route/screen, which is still
+ *  strictly more than today's. */
+function deriveContract(
+  steps: ExecutionStep[],
+  evByIndex: Map<number, CapturedEvent>,
+  events: CapturedEvent[],
+): PlanContract {
+  const { screens, byEventId } = buildScreens(events);
+  const fingerprintOf = (step: ExecutionStep | undefined): ScreenFingerprint | undefined => {
+    const ev = step ? evByIndex.get(step.index) : undefined;
+    const key = ev ? byEventId.get(ev.id) : undefined;
+    return key ? screens.get(key) : undefined;
+  };
+
+  const first = steps[0]!;
+  const last = steps[steps.length - 1]!;
+  const entryScreen = fingerprintOf(first);
+  // The §A2.5 rule, decided at compile time: navigable cold only to a pattern-safe, known route.
+  const start: PlanContract['entry']['start'] =
+    first.route && !routePattern(first.route).includes(':id') ? 'anywhere' : 'on-screen';
+
+  const navigatesAway = last.verb === 'navigate' || !!last.postRoute;
+  const outcomeRoute = last.postRoute ?? last.route;
+  const outcomeScreen = navigatesAway ? undefined : fingerprintOf(last);
+
+  return {
+    v: 1,
+    entry: {
+      route: first.route,
+      ...(entryScreen ? { screen: entryScreen } : {}),
+      start,
+    },
+    outcome: {
+      ...(outcomeRoute ? { route: outcomeRoute } : {}),
+      ...(outcomeScreen ? { screen: outcomeScreen } : {}),
+      ...(last.expect?.appeared?.length ? { appeared: last.expect.appeared } : {}),
+    },
   };
 }
 
@@ -360,9 +496,11 @@ export function extractAppearedMarkers(preHtml: string, postHtml: string): strin
   return out;
 }
 
-/** Which steps deserve markers: the LAST step and every DESTRUCTIVE one — the "did the app accept
- *  it?" moments where every false-Done so far has lived. Bounded so compile-time artifact fetches
- *  stay a handful, not two per step of a long workflow. */
+/** LEGACY fallback (rows processed before the evidence layer): which steps deserve an enable-time
+ *  marker diff — the LAST step and every DESTRUCTIVE one, the "did the app accept it?" moments
+ *  where every false-Done so far had lived. Rows with stored evidence never reach this: their
+ *  `expect` compiles from the KB and `attachOutcomeMarkers` leaves it alone. Bounded so enable-time
+ *  artifact fetches stay a handful, not two per step of a long workflow. */
 export function markerStepIndexes(steps: ExecutionStep[]): number[] {
   const last = steps[steps.length - 1]?.index;
   const set = new Set<number>();
@@ -394,14 +532,17 @@ export function markerSnapshotRefs(
   });
 }
 
-/** Attach extracted markers to their steps (pure — snapshots arrive as text). Steps without usable
- *  snapshots compile WITHOUT `expect` and verify exactly as before: knowledge tightens, absence
- *  never loosens. Returns the new steps array; re-hash with `hashSteps` after. */
+/** LEGACY fallback: attach enable-time markers to their steps (pure — snapshots arrive as text).
+ *  A step that already carries `expect` (compiled from stored evidence) is left alone — the KB's
+ *  richer extraction wins over the last+destructive diff. Steps without usable snapshots compile
+ *  WITHOUT `expect` and verify exactly as before: knowledge tightens, absence never loosens.
+ *  Returns the new steps array; re-hash with `hashPlan` after. */
 export function attachOutcomeMarkers(
   steps: ExecutionStep[],
   snapshots: Map<number, { pre: string; post: string }>,
 ): ExecutionStep[] {
   return steps.map((s) => {
+    if (s.expect) return s;
     const snap = snapshots.get(s.index);
     if (!snap) return s;
     const appeared = extractAppearedMarkers(snap.pre, snap.post);
@@ -409,8 +550,34 @@ export function attachOutcomeMarkers(
   });
 }
 
-/** The consent pin over FINAL steps (markers included) — one hash function, used by the compiler
- *  and by every caller that post-processes steps, so two sites can never hash differently. */
+/** Load the legacy marker snapshots for `markerSnapshotRefs` output — pure by dependency injection
+ *  (the caller supplies the artifact reader), shared by the enable action and the worker's
+ *  reprocess hook so the two can never drift. Unreadable or oversized snapshots are skipped:
+ *  best-effort, enabling never gains a new way to fail. */
+export async function loadMarkerSnapshots(
+  refs: Array<{ index: number; pre?: string; post?: string }>,
+  read: (file: string) => Promise<Buffer | null>,
+): Promise<Map<number, { pre: string; post: string }>> {
+  const snapshots = new Map<number, { pre: string; post: string }>();
+  for (const ref of refs) {
+    if (!ref.pre || !ref.post) continue;
+    const [pre, post] = await Promise.all([read(ref.pre), read(ref.post)]);
+    if (!pre || !post || pre.length > SNAPSHOT_MAX_CHARS || post.length > SNAPSHOT_MAX_CHARS) continue;
+    snapshots.set(ref.index, { pre: pre.toString('utf8'), post: post.toString('utf8') });
+  }
+  return snapshots;
+}
+
+/** The consent pin over the FINAL plan — steps (markers included) plus the entry/outcome contract.
+ *  One hash function, used by the compiler and by every caller that post-processes steps, so two
+ *  sites can never hash differently. The contract is INSIDE the pin on purpose (EC-2): a run must
+ *  execute the verification the user consented to, not just the steps. */
+export function hashPlan(steps: ExecutionStep[], contract: PlanContract | null): string {
+  return createHash('sha256').update(stableStringify({ contract, steps })).digest('hex');
+}
+
+/** Hash over steps alone — the pre-contract pin, kept for tests that reason about step content
+ *  drift in isolation. Persisted plans pin with `hashPlan`. */
 export function hashSteps(steps: ExecutionStep[]): string {
   return createHash('sha256').update(stableStringify(steps)).digest('hex');
 }

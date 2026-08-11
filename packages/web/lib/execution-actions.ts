@@ -3,13 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import type { SessionManifest } from '@flowbuddy/shared';
+import { displayRoute } from '@flowbuddy/shared/route-pattern';
 import {
   attachOutcomeMarkers,
   compileExecutionPlan,
-  hashSteps,
+  hashPlan,
+  loadMarkerSnapshots,
   markerSnapshotRefs,
   planSummary,
-  SNAPSHOT_MAX_CHARS,
   type ExecutionStepSource,
 } from '@flowbuddy/synthesis/execution-plan';
 import { getCurrentWorkspace } from '@/lib/session';
@@ -38,6 +39,10 @@ export type ExecutionToggleResult =
       ok: true;
       enabled: boolean;
       summary?: { steps: number; inputs: number; destructive: number; manual: number };
+      /** P3-M2 — what the agent will CHECK, shown at the moment of enabling (EC-10): where runs
+       *  must start, how many steps carry recorded success phrases, and whether the finish itself
+       *  is verifiable. */
+      checks?: { entry: string; mustBeThere: boolean; markerSteps: number; verifiableFinish: boolean };
     }
   | { ok: false; issues: string[] };
 
@@ -102,20 +107,18 @@ export async function setWorkflowExecution(input: {
     return { ok: false, issues: compiled.issues.map((i) => i.message) };
   }
 
-  // Part 2 — outcome markers: open the recorded before/after DOM snapshots for the steps that
-  // need them (the last + every destructive one) and compile "what success looked like" into the
-  // plan. Best-effort by design: an unreadable snapshot means the step compiles WITHOUT markers
+  // Steps whose KB rows carry stored evidence (P3-M2) compiled their `expect` already; the
+  // snapshot pass below is the LEGACY fallback for rows processed before the evidence layer —
+  // it diffs the last + destructive steps and `attachOutcomeMarkers` leaves evidence-built steps
+  // alone. Best-effort by design: an unreadable snapshot means the step compiles WITHOUT markers
   // and verifies as before — enabling never gains a new way to fail.
   const read = artifactReader(workspaceId, workflow.sourceId);
-  const snapshots = new Map<number, { pre: string; post: string }>();
-  for (const ref of markerSnapshotRefs(compiled.steps, srcSteps, manifest.events)) {
-    if (!ref.pre || !ref.post) continue;
-    const [pre, post] = await Promise.all([read(ref.pre), read(ref.post)]);
-    if (!pre || !post || pre.length > SNAPSHOT_MAX_CHARS || post.length > SNAPSHOT_MAX_CHARS) continue;
-    snapshots.set(ref.index, { pre: pre.toString('utf8'), post: post.toString('utf8') });
-  }
+  const snapshots = await loadMarkerSnapshots(
+    markerSnapshotRefs(compiled.steps, srcSteps, manifest.events),
+    read,
+  );
   const finalSteps = attachOutcomeMarkers(compiled.steps, snapshots);
-  const finalHash = hashSteps(finalSteps);
+  const finalHash = hashPlan(finalSteps, compiled.contract);
 
   await prisma.$transaction([
     prisma.executionPlan.upsert({
@@ -126,11 +129,13 @@ export async function setWorkflowExecution(input: {
         planHash: finalHash,
         stepCount: finalSteps.length,
         steps: finalSteps as object,
+        contract: compiled.contract as object,
       },
       update: {
         planHash: finalHash,
         stepCount: finalSteps.length,
         steps: finalSteps as object,
+        contract: compiled.contract as object,
       },
     }),
     prisma.copilotApproval.update({
@@ -145,5 +150,23 @@ export async function setWorkflowExecution(input: {
 
   revalidatePath(`/dashboard/kb/${workflow.sourceId}`);
   revalidatePath('/dashboard');
-  return { ok: true, enabled: true, summary: planSummary(finalSteps) };
+  return {
+    ok: true,
+    enabled: true,
+    summary: planSummary(finalSteps),
+    ...(compiled.contract
+      ? {
+          checks: {
+            entry: displayRoute(compiled.contract.entry.route),
+            mustBeThere: compiled.contract.entry.start === 'on-screen',
+            markerSteps: finalSteps.filter((s) => s.expect?.appeared?.length).length,
+            verifiableFinish: Boolean(
+              compiled.contract.outcome.route ||
+                compiled.contract.outcome.screen ||
+                compiled.contract.outcome.appeared?.length,
+            ),
+          },
+        }
+      : {}),
+  };
 }

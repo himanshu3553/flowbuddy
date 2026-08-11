@@ -29,6 +29,11 @@ export interface CopilotKBItem {
   /** P3-M1 — the workflow's PLAN in prose: what is optional, what is a choice, what must be true
    *  first. The steps cannot express any of that — a recording is a list of actions. */
   workflowDescription?: string | null;
+  /** P3-M2 (EC-10) — the workflow's contract facts for ANSWERS: where it starts (display-safe,
+   *  ids elided) and what the user sees when it is done (the LAST step's recorded phrases).
+   *  Derived from the same stored evidence the acting run verifies against — answers state it,
+   *  the run enforces it, one layer. Attached per item like `workflowDescription`. */
+  workflowFacts?: { entry?: string; finish?: string[] } | null;
   sourceId: string;
   segmentIndex: number | null;
   segmentTitle: string | null;
@@ -64,6 +69,10 @@ export interface SenseHypothesisContext {
   totalSteps: number;
   confidence: number; // 0..1 (deterministic client score)
   stepsDone: number[]; // 1-based indices with hard "done" evidence (filled inputs)
+  /** P3-M2 — steps whose RECORDED success phrases are visible on the live page (the
+   *  expected-outcome echoes). SOFT evidence: presence-based, so it suggests a step already
+   *  happened without proving it — the model weighs it, the measured current step still wins. */
+  phrasesSeen?: number[];
   /** The current step's instruction, resolved SERVER-SIDE from the KB (trusted — anchors the
    *  model on what "step k" actually is, so it can't skip past an uncompleted step). */
   instruction?: string;
@@ -120,8 +129,15 @@ export function senseBlock(sense: SenseContext | undefined): string {
       h.stepsDone.length > 0
         ? ` Steps already completed: ${h.stepsDone.join(', ')}.`
         : ' No steps show completion evidence yet.';
+    // P3-M2 — the expected-outcome echoes, stated as the soft evidence they are: presence of a
+    // step's recorded success phrases SUGGESTS it happened (maybe long ago, maybe as page chrome);
+    // the measured current step above remains the position. The model weighs, never we.
+    const echoes =
+      h.phrasesSeen && h.phrasesSeen.length > 0
+        ? ` The recorded success phrases of step${h.phrasesSeen.length === 1 ? '' : 's'} ${h.phrasesSeen.join(', ')} are visible on the page — soft evidence those steps already happened; the measured current step still wins.`
+        : '';
     const err = h.error ? ` The page shows an error near this step: <page-error>${h.error}</page-error>.` : '';
-    return `- key=${h.sourceId}:${h.segmentIndex} — workflow "${h.title}" (${h.totalSteps} steps). The user's CURRENT step — visible on their screen and NOT yet completed — is step ${h.step}${what} (confidence: ${conf(h.confidence)}).${done}${err}`;
+    return `- key=${h.sourceId}:${h.segmentIndex} — workflow "${h.title}" (${h.totalSteps} steps). The user's CURRENT step — visible on their screen and NOT yet completed — is step ${h.step}${what} (confidence: ${conf(h.confidence)}).${done}${echoes}${err}`;
   });
   return `POSITION CONTEXT (measured from the user's live page just now; may be irrelevant to the question — the question wins on topic)${sense.tie ? ' [TIE — too close to call]' : ''}:\n${lines.join('\n')}\n\n`;
 }

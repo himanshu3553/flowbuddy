@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CapturedEvent } from '@flowbuddy/shared';
 
-import { valueHint } from './distill';
+import { enforceStepGranularity, valueHint, type DistilledStep } from './distill';
 
 // ── valueHint — the recorder's data must never become the reader's instruction ──────────────────
 //
@@ -58,13 +58,20 @@ describe('valueHint', () => {
     expect(valueHint(ev('textarea', {}, 'Hi how ae you?'))).toBe(' | entered: <text>');
   });
 
-  it('reports a checkbox as toggled WITHOUT a state, because the state is not captured', () => {
+  it('reports a checkbox as toggled WITHOUT a state when the recording did not capture one', () => {
     // `maskValue` reads el.value; for a checkbox that is the value ATTRIBUTE — the string "on"
     // whether it was ticked or cleared. Passing it through told the model it knew a state it has
     // never had, which is how "for now I'm just keeping it enabled" became an instruction.
     const out = valueHint(ev('input', { type: 'checkbox' }, 'on'));
     expect(out).toBe(' | toggled');
     expect(out).not.toContain('on"');
+  });
+
+  it('states the recorded END position when recorder ≥0.9.0 captured it — and only then', () => {
+    const on = { ...ev('input', { type: 'checkbox' }, 'on'), checked: true } as CapturedEvent;
+    const off = { ...ev('input', { type: 'checkbox' }, 'on'), checked: false } as CapturedEvent;
+    expect(valueHint(on)).toBe(' | toggled on');
+    expect(valueHint(off)).toBe(' | toggled off');
   });
 
   it('says nothing about state for a radio either', () => {
@@ -90,5 +97,127 @@ describe('valueHint', () => {
   it('emits nothing when there is no value at all', () => {
     expect(valueHint(ev('button', { type: 'button' }))).toBe('');
     expect(valueHint(ev('input', { type: 'text' }, '   '))).toBe('');
+  });
+});
+
+// ── The GRANULARITY invariant (kb-step-distillation.md): one step = one actable control ─────────
+//
+// Enforced deterministically, never trusted to the prompt. Pinned because the failure it closes was
+// found live: "Enter your email address and password" as ONE step compiled to a plan that filled
+// the email and silently never asked for the password, then ✓'d the instruction anyway.
+
+let seq = 0;
+function gev(partial: Partial<CapturedEvent> & { type: string }): CapturedEvent {
+  seq += 1;
+  return {
+    id: partial.id ?? `e${seq}`,
+    t: seq * 1000,
+    target: {},
+    route: { url: 'https://app.example.com/auth/login', path: '/auth/login', hash: '', title: 'Sign in' },
+    ...partial,
+  } as CapturedEvent;
+}
+
+const inputEv = (id: string, name: string, css: string): CapturedEvent =>
+  gev({ id, type: 'input', target: { tag: 'input', accessibleName: name, cssPath: css } });
+const clickEv = (id: string, name: string, css: string): CapturedEvent =>
+  gev({ id, type: 'click', target: { tag: 'button', accessibleName: name, cssPath: css } });
+const hoverEv = (id: string): CapturedEvent => gev({ id, type: 'hover', target: { tag: 'button' } });
+
+function fixture(events: CapturedEvent[]) {
+  return {
+    eventsById: new Map(events.map((e) => [e.id, e])),
+    order: new Map(events.map((e, i) => [e.id, i])),
+    narration: new Map<string, string>(),
+  };
+}
+
+const builtStep = (instruction: string, keyEvent: CapturedEvent, sourceIds: string[]) => ({
+  step: {
+    instruction,
+    route: keyEvent.route?.path ?? '',
+    narration: null,
+    screenshotFile: null,
+    keyEventId: keyEvent.id,
+    sourceEventIds: sourceIds,
+  } as DistilledStep,
+  keyEvent,
+  sourceIds,
+});
+
+describe('enforceStepGranularity — one step, one actable control', () => {
+  it('splits a step spanning two controls into two, in timeline order, keyed on each control', () => {
+    const email = inputEv('em', 'Email', '#email');
+    const password = inputEv('pw', 'Password', '#password');
+    const f = fixture([email, password]);
+    const out = enforceStepGranularity(
+      [builtStep('Enter your email address and password.', email, ['em', 'pw'])],
+      f.eventsById,
+      f.order,
+      f.narration,
+    );
+    expect(out).toHaveLength(2);
+    expect(out[0]!.step.keyEventId).toBe('em');
+    expect(out[1]!.step.keyEventId).toBe('pw');
+    expect(out[0]!.step.sourceEventIds).toEqual(['em']);
+    expect(out[1]!.step.instruction.toLowerCase()).toContain('password');
+  });
+
+  it('repeated commits to the SAME control stay one step — split halves key on the LAST commit', () => {
+    const email1 = inputEv('em1', 'Email', '#email');
+    const email2 = inputEv('em2', 'Email', '#email'); // retyped — same cssPath
+    const password = inputEv('pw', 'Password', '#password');
+    const f = fixture([email1, email2, password]);
+
+    const sameControl = enforceStepGranularity(
+      [builtStep('Enter your email address.', email2, ['em1', 'em2'])],
+      f.eventsById,
+      f.order,
+      f.narration,
+    );
+    expect(sameControl).toHaveLength(1); // one control — the model's step survives untouched
+    expect(sameControl[0]!.step.instruction).toBe('Enter your email address.');
+
+    const merged = enforceStepGranularity(
+      [builtStep('Enter your email address and password.', email2, ['em1', 'em2', 'pw'])],
+      f.eventsById,
+      f.order,
+      f.narration,
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged[0]!.step.keyEventId).toBe('em2'); // the final value is the one the run reproduces
+    expect(merged[1]!.step.keyEventId).toBe('pw');
+  });
+
+  it('non-actable context events never force a split, and single-control steps pass through verbatim', () => {
+    const menu = hoverEv('h1');
+    const save = clickEv('c1', 'Save', '#save');
+    const f = fixture([menu, save]);
+    const out = enforceStepGranularity(
+      [builtStep('Click "Save".', save, ['h1', 'c1'])],
+      f.eventsById,
+      f.order,
+      f.narration,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.step.instruction).toBe('Click "Save".'); // the model's wording survives
+  });
+
+  it('overlap-citing model output cannot duplicate a control an earlier step already owns', () => {
+    const email = inputEv('em', 'Email', '#email');
+    const password = inputEv('pw', 'Password', '#password');
+    const f = fixture([email, password]);
+    const out = enforceStepGranularity(
+      [
+        builtStep('Enter your email address.', email, ['em']),
+        builtStep('Enter your email address and password.', password, ['em', 'pw']),
+      ],
+      f.eventsById,
+      f.order,
+      f.narration,
+    );
+    expect(out).toHaveLength(2); // email (model's own step) + password (split half); no duplicate email
+    expect(out[0]!.step.instruction).toBe('Enter your email address.');
+    expect(out[1]!.step.keyEventId).toBe('pw');
   });
 });

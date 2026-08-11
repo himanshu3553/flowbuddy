@@ -6,6 +6,7 @@ import { segment } from './segment';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
+import { attachStepEvidence } from './step-evidence';
 import { describeRecording, describeWorkflow } from './describe';
 import { extractProductPages, type ExtractedPage } from './pages';
 import { createLogger } from '@flowbuddy/logger';
@@ -63,12 +64,20 @@ export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export {
   attachOutcomeMarkers,
   compileExecutionPlan,
+  hashPlan,
   hashSteps,
+  loadMarkerSnapshots,
   markerSnapshotRefs,
   planSummary,
   SNAPSHOT_MAX_CHARS,
 } from './execution-plan'; // P4-M1/M2 — the acting substrate + outcome markers
-export type { ExecutionStep, ExecutionStepSource, EligibilityIssue, CompiledExecutionPlan } from './execution-plan';
+export type {
+  ExecutionStep,
+  ExecutionStepSource,
+  EligibilityIssue,
+  CompiledExecutionPlan,
+  PlanContract,
+} from './execution-plan';
 export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step distillation B — see docs/build/kb-step-distillation.md
 // The two pure stages either side of segmentation. Exported so a harness can replay the pipeline
 // in memory over a stored recording without re-transcribing or writing anything —
@@ -90,6 +99,10 @@ export {
 } from './pages';
 export type { ExtractedPage, PageFingerprint } from './pages';
 export type { DistilledStep, DistilledStepLLM } from './distill';
+// P3-M2 — the step evidence layer (one layer, three consumers) + the shared screen-run builder.
+export { attachStepEvidence, extractStepEvidence, extractDisappearedMarkers } from './step-evidence';
+export type { StepEvidence } from './step-evidence';
+export { buildScreens } from './screen-runs';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
 // ---------- Module 2 (LIVE copilot path): capture → distilled workflow KB ----------
@@ -293,6 +306,26 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     }
     // Contiguous segmentIndex (0..n) — the approval key; skip-on-empty keeps it dense.
     workflows.push({ segmentIndex: workflows.length, title: seg.title, steps, description });
+  }
+
+  // P3-M2 — the step EVIDENCE layer (execution-contracts.md EC-1/EC-10): what each step's success
+  // looked like, extracted deterministically from the recording's before/after artifacts and stored
+  // on the step itself — one layer read by answers, Sense/Reason, and the acting plan. Best-effort
+  // like every additive pass here: a recording whose KB built cleanly must never fail over it.
+  for (const wf of workflows) {
+    try {
+      wf.steps = await attachStepEvidence(wf.steps, input.manifest.events, input.getArtifact);
+      const withEvidence = wf.steps.filter((s) => s.evidence).length;
+      log.info(
+        { component: 'evidence', title: wf.title, steps: wf.steps.length, withEvidence },
+        'attached step evidence',
+      );
+    } catch (e) {
+      log.warn(
+        { component: 'evidence', title: wf.title, err: e instanceof Error ? e.message : String(e) },
+        'evidence pass failed — workflow proceeds without stored evidence',
+      );
+    }
   }
 
   // The two narration-level reads run together: what the RECORDING covers (slice 1) and the

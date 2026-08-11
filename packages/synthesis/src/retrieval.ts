@@ -1,7 +1,13 @@
 import { createLogger } from '@flowbuddy/logger';
-import { isIdSegment, normalizePath, routeMatchStrength } from '@flowbuddy/shared/route-pattern';
+import { displayRoute, isIdSegment, normalizePath, routeMatchStrength } from '@flowbuddy/shared/route-pattern';
 import type { CopilotKBItem, CopilotTurn } from './copilot';
 import { embedTexts, toVectorLiteral, type EmbedOpts } from './embeddings';
+
+/** P3-M2 (EC-10) — the per-workflow contract facts answers state (see `CopilotKBItem`). */
+export type WorkflowFacts = { entry?: string; finish?: string[] };
+/** How many finish phrases ride into an answer — the last step's recorded phrases, capped: one is
+ *  usually the message itself; three covers a redesigned wording without flooding the prompt. */
+const FINISH_FACT_MAX = 3;
 
 const log = createLogger('retrieval');
 
@@ -274,7 +280,11 @@ export function selectOnePerTask(
   return dropped.size === 0 ? items : items.filter((i) => !dropped.has(i.workflowId));
 }
 
-function toCopilotItem(i: RetrievableKBItem, descriptions?: Map<string, string>): CopilotKBItem {
+function toCopilotItem(
+  i: RetrievableKBItem,
+  descriptions?: Map<string, string>,
+  facts?: Map<string, WorkflowFacts>,
+): CopilotKBItem {
   const related = ((i.data as { related?: Array<{ title: string; key: string }> } | null) ?? {})
     .related;
   return {
@@ -282,6 +292,7 @@ function toCopilotItem(i: RetrievableKBItem, descriptions?: Map<string, string>)
     workflowId: i.workflowId,
     kind: i.kind === 'topic' ? 'topic' : 'step',
     workflowDescription: descriptions?.get(i.workflowId) ?? null,
+    workflowFacts: facts?.get(i.workflowId) ?? null,
     sourceId: i.sourceId,
     segmentIndex: i.segmentIndex,
     segmentTitle: i.segmentTitle,
@@ -289,6 +300,35 @@ function toCopilotItem(i: RetrievableKBItem, descriptions?: Map<string, string>)
     narration: ((i.data as { narration?: string | null } | null) ?? {}).narration ?? null,
     ...(related && related.length > 0 ? { related } : {}),
   };
+}
+
+/**
+ * P3-M2 (EC-10) — the contract facts per workflow, from rows ALREADY loaded in workflow order:
+ * the first item's route is where the workflow starts (display-safe — a recorded route is the
+ * founder's own URL, so ids are elided); the LAST item's stored evidence phrases are what the user
+ * sees when it is done. Deliberately the last item's ONLY — an earlier step's phrases presented as
+ * the finish would be wrong, so a last step without evidence means no finish line at all.
+ */
+function buildWorkflowFacts(
+  items: Array<{ workflowId: string; data: unknown }>,
+): Map<string, WorkflowFacts> {
+  const facts = new Map<string, WorkflowFacts>();
+  for (const i of items) {
+    if (!i.workflowId) continue;
+    const d = (i.data ?? {}) as { route?: string; evidence?: { appeared?: string[] } };
+    let f = facts.get(i.workflowId);
+    if (!f) {
+      f = {};
+      facts.set(i.workflowId, f);
+      const entry = displayRoute(d.route ?? '');
+      if (entry) f.entry = entry;
+    }
+    const appeared = d.evidence?.appeared;
+    if (appeared && appeared.length > 0) f.finish = appeared.slice(0, FINISH_FACT_MAX);
+    else delete f.finish; // items arrive in order — only the LAST item's phrases may survive
+  }
+  for (const [id, f] of facts) if (!f.entry && !f.finish) facts.delete(id);
+  return facts;
 }
 
 /** A live ProductPage row, adapted into the retrieval pool. No route, no position, no workflow —
@@ -407,6 +447,8 @@ export function shortlistItems(
   /** P3-M1 — workflow plans, so a vector-path failure degrades the RANKING without also losing the
    *  plan. The fallback must answer as well as the primary path can, minus the ordering. */
   descriptions?: Map<string, string>,
+  /** P3-M2 — same rule for the contract facts: the fallback path states them too. */
+  facts?: Map<string, WorkflowFacts>,
 ): CopilotKBItem[] {
   const limit = opts.limit ?? 24;
   const contextPath = (opts.contextPath ?? '').trim();
@@ -429,7 +471,7 @@ export function shortlistItems(
   });
   // The same reserve as the hybrid path — this fallback runs whenever the vector half fails, which
   // is exactly when a paraphrased question most needs its keyword matches to survive.
-  return selectWithRelevanceReserve(scored, limit).map((i) => toCopilotItem(i, descriptions));
+  return selectWithRelevanceReserve(scored, limit).map((i) => toCopilotItem(i, descriptions, facts));
 }
 
 /**
@@ -550,6 +592,8 @@ export async function retrieveApprovedKBItems(
     queryVectorPromise.then((qv) => (qv ? vectorTopK(db, workspaceId, qv, [...liveWorkflowIds]) : null)),
   ]);
   const live = all.filter((i) => liveWorkflowIds.has(i.workflowId));
+  // P3-M2 — contract facts from the rows already in hand (ordered by workflow, then step order).
+  const factsByWorkflow = buildWorkflowFacts(live);
   const pageItems = livePages.map((p) => pageToPoolItem(p, liveKeyByWorkflowId));
   // "No approved content at all" now means no live workflows AND no live pages — a workspace whose
   // only approved knowledge is pages (e.g. an overview approved before any workflow) still answers.
@@ -560,7 +604,7 @@ export async function retrieveApprovedKBItems(
   const pool = [...approved, ...pageItems];
 
   if (!vecIds || vecIds.length === 0)
-    return shortlistItems(pool, question, opts, descriptionByWorkflow);
+    return shortlistItems(pool, question, opts, descriptionByWorkflow, factsByWorkflow);
 
   // ── Hybrid: reciprocal-rank fusion over three signals ─────────────────────────────────────────
   // (a) keyword rank over MATCHING items only — an item with zero term overlap isn't "ranked", it
@@ -605,7 +649,9 @@ export async function retrieveApprovedKBItems(
     }
     return { item: i, fused: score, relevance };
   });
-  return selectWithRelevanceReserve(fused, limit).map((i) => toCopilotItem(i, descriptionByWorkflow));
+  return selectWithRelevanceReserve(fused, limit).map((i) =>
+    toCopilotItem(i, descriptionByWorkflow, factsByWorkflow),
+  );
 }
 
 /** Accept only well-formed user/assistant turns from an untrusted body (cap count + length). */

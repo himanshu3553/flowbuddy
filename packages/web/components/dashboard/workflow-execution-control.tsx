@@ -24,6 +24,7 @@ export function WorkflowExecutionControl({
   approved,
   executeState,
   summary,
+  checks,
   ready,
 }: {
   workflowId: string;
@@ -34,6 +35,8 @@ export function WorkflowExecutionControl({
   executeState: string | null;
   /** From the compiled plan, when one exists. */
   summary: { steps: number; inputs: number; destructive: number; manual: number } | null;
+  /** P3-M2 — what the agent will CHECK (from the stored contract); null on pre-contract plans. */
+  checks: { entry: string; mustBeThere: boolean; markerSteps: number; verifiableFinish: boolean } | null;
   ready: boolean;
 }) {
   const [busy, start] = useTransition();
@@ -69,8 +72,10 @@ export function WorkflowExecutionControl({
         setIssues([]);
         if (result.enabled && result.summary) {
           const s = result.summary;
+          const c = result.checks;
           toast.success(
-            `“${segmentTitle}” is runnable — ${s.steps} step${s.steps === 1 ? '' : 's'} · ${s.inputs} input${s.inputs === 1 ? '' : 's'} · ${s.destructive} confirm-first`,
+            `“${segmentTitle}” is runnable — ${s.steps} step${s.steps === 1 ? '' : 's'} · ${s.inputs} input${s.inputs === 1 ? '' : 's'} · ${s.destructive} confirm-first` +
+              (c ? ` · verifies ${c.markerSteps} step${c.markerSteps === 1 ? '' : 's'} against the recording` : ''),
           );
         } else {
           toast.success(`“${segmentTitle}” will not be run for users`);
@@ -108,6 +113,15 @@ export function WorkflowExecutionControl({
             ? ` · ${summary.manual} step${summary.manual === 1 ? '' : 's'} the user does themselves (file picking)`
             : ''}
           .
+        </p>
+      )}
+
+      {enabled && checks && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          What the agent checks: starts on <span className="font-medium">{checks.entry || 'the recorded page'}</span>
+          {checks.mustBeThere ? ' (the user must be there — it won’t navigate itself)' : ''} ·{' '}
+          {checks.markerSteps} step{checks.markerSteps === 1 ? '' : 's'} verified against the recording’s own
+          success phrases · the finish {checks.verifiableFinish ? 'is checked before it says Done' : 'has nothing checkable — runs complete unstamped'}.
         </p>
       )}
 
