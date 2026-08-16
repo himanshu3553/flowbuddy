@@ -1,0 +1,66 @@
+---
+// The capability-page hero shell — the layout the old homepage hero proved
+// (text left, animated HTML product recreation right, caption pinned to the
+// first viewport's bottom edge on lg). Each page supplies its own headline
+// and demo through slots; the demo's player script lives with the page.
+import AiButton from './AiButton.astro';
+
+interface Props {
+  /** Optional kicker above the H1 (the agent page pairs it with a Beta pill). */
+  eyebrow?: string;
+  badge?: string;
+  sub: string;
+  /** Unique per page — namespaces the AiButton's SVG gradient id. */
+  ctaId: string;
+  caption?: string;
+}
+
+const {
+  eyebrow,
+  badge,
+  sub,
+  ctaId,
+  caption = 'Go live in 30 minutes · No credit card required',
+} = Astro.props;
+---
+
+<section class="relative overflow-hidden">
+  <div
+    class="pointer-events-none absolute inset-0"
+    style="background:
+      radial-gradient(55rem 32rem at 85% -12%, rgba(59, 80, 224, 0.08), transparent 60%),
+      radial-gradient(45rem 30rem at -8% 30%, rgba(59, 80, 224, 0.05), transparent 55%);"
+    aria-hidden="true"
+  >
+  </div>
+  <!-- On lg+ the hero fills the first viewport (minus the 62px header) and the
+       caption is pinned to its bottom edge; below lg it flows naturally. -->
+  <div
+    class="relative mx-auto flex max-w-[1140px] flex-col px-5 pb-8 pt-10 md:px-8 md:pt-14 lg:min-h-[calc(100vh-62px)]"
+  >
+    <div class="my-auto grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
+      <div>
+        {
+          eyebrow && (
+            <p class="eyebrow mb-4 flex flex-wrap items-center gap-2.5">
+              {eyebrow}
+              {badge && (
+                <span class="rounded-pill border border-brand-200 bg-brand-50 px-2.5 py-1 font-mono text-[0.58rem] font-bold uppercase tracking-wider text-brand-600">
+                  {badge}
+                </span>
+              )}
+            </p>
+          )
+        }
+        <h1 class="display-hero"><slot name="headline" /></h1>
+        <p class="lead mt-6 max-w-xl">{sub}</p>
+        <div class="mt-8 flex flex-wrap items-center gap-4">
+          <a href="https://app.flowbuddyai.com/signup" class="btn-primary">Get started free</a>
+          <AiButton id={ctaId} />
+        </div>
+      </div>
+      <slot name="demo" />
+    </div>
+    <p class="eyebrow mt-10 text-center lg:mt-auto lg:pt-8">{caption}</p>
+  </div>
+</section>

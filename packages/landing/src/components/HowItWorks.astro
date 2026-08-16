@@ -11,8 +11,8 @@ const steps = [
   {
     icon: 'approve' as const,
     title: 'Approve',
-    body: 'FlowBuddy automatically converts your walkthrough into clear product knowledge and step-by-step workflows, ready for you to review and approve.',
-    safeguard: 'Your assistant only responds with information you’ve reviewed and approved.',
+    body: 'FlowBuddy converts your walkthrough into structured application intelligence — clear product knowledge and step-by-step workflows, ready for you to review and approve.',
+    safeguard: 'Every capability only uses knowledge you’ve reviewed and approved.',
   },
   {
     icon: 'live' as const,
@@ -23,7 +23,10 @@ const steps = [
 ];
 ---
 
-<section id="how-it-works" class="border-y border-gray-100 bg-paper">
+<!-- White ground: this section sits between the brand-tinted layer section and
+     the paper Benefits band, so the position's band is white (the alternation
+     rule — the ground belongs to the position, not the section). -->
+<section id="how-it-works" class="border-b border-gray-100">
   <div class="mx-auto max-w-[1140px] px-5 py-12 md:px-8 md:py-16">
     <div class="max-w-2xl">
       <p class="eyebrow mb-4">How it works</p>

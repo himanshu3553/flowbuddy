@@ -1,0 +1,37 @@
+---
+// The capability page's white detail band: heading + checklist on the left,
+// a page-supplied panel (a mock or a feature-rows card) on the right.
+interface Props {
+  eyebrow: string;
+  heading: string;
+  lead?: string;
+  bullets: string[];
+}
+
+const { eyebrow, heading, lead, bullets } = Astro.props;
+---
+
+<section class="border-b border-gray-100">
+  <div class="mx-auto max-w-[1140px] px-5 py-12 md:px-8 md:py-16">
+    <div class="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+      <div>
+        <p class="eyebrow mb-4">{eyebrow}</p>
+        <h2 class="display-section">{heading}</h2>
+        {lead && <p class="lead mt-4">{lead}</p>}
+        <ul class="mt-6 space-y-3">
+          {
+            bullets.map((item) => (
+              <li class="flex items-start gap-2.5 text-[0.94rem] font-medium leading-snug text-gray-700">
+                <svg class="mt-0.5 shrink-0 text-brand-500" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                {item}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+      <div><slot /></div>
+    </div>
+  </div>
+</section>

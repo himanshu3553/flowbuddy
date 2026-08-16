@@ -6,9 +6,11 @@
 // editor would break them:
 //   1. This page says "FlowBuddy AI" throughout — it is written for people and
 //      engines searching that phrase. The rest of the site says "FlowBuddy".
-//   2. Acting (a run the assistant drives itself) is DIRECTION here, never
-//      available — the same guardrail /future is written inside. What is sold
-//      today is guided: the assistant shows the next step, the user clicks it.
+//   2. Acting (a run the assistant drives itself) is sold as BETA — and always
+//      with the full trust framing: off by default, switched on deliberately,
+//      every run consented, stoppable, outcome-verified. What stays DIRECTION,
+//      never available, is THIRD-PARTY agent access to the knowledge layer —
+//      the guardrail /future is written inside.
 // The homepage keeps its own shorter, objection-shaped set in `faqs.ts`.
 import type { Faq } from './faqs';
 
@@ -26,7 +28,11 @@ export const faqCategories: FaqCategory[] = [
     items: [
       {
         q: 'What is FlowBuddy AI?',
-        a: 'FlowBuddy AI is an in-app, context-aware AI assistant for SaaS products. You show it your product once by recording a walkthrough, approve the workflows it learns, and paste one script tag into your app. Your users then get a help assistant that lives inside your product and answers only from what you approved.',
+        a: 'FlowBuddy AI is an application intelligence layer for SaaS products. You show it your product once by recording a walkthrough; it learns how your software works — the workflows, the concepts, the screens — and you approve what it may use. That one approved layer, embedded with a single script tag, then powers an in-app AI assistant, contextual guidance, interactive onboarding, and, in beta, AI agent execution.',
+      },
+      {
+        q: 'What is an application intelligence layer?',
+        a: 'An application intelligence layer is a layer that sits on top of a software product and understands how the product itself works: which workflows exist and how they are done, what the product’s concepts mean, and which screen a user is looking at. Instead of feeding documents to a chatbot, FlowBuddy AI builds this layer from a recorded walkthrough of the real product, keeps every piece of it founder-approved, and uses it to power help, guidance, onboarding, and AI agent execution inside the product.',
       },
       {
         q: 'What does FlowBuddy AI do for SaaS products?',
@@ -134,7 +140,7 @@ export const faqCategories: FaqCategory[] = [
       },
       {
         q: 'Can FlowBuddy AI help users complete tasks inside my product?',
-        a: 'Yes — by guiding them through it. The assistant highlights each next step in your interface and confirms it is done before moving on, so the user completes the real task in your product rather than reading about it. Having the assistant carry out steps on a user’s behalf is in development, and will always be something you switch on deliberately.',
+        a: 'Yes — by guiding them through it. The assistant highlights each next step in your interface and confirms it is done before moving on, so the user completes the real task in your product rather than reading about it. It can also carry out the steps itself — AI Agent Execution, now in beta: off by default, switched on deliberately per workspace, and every run starts with the user’s consent.',
       },
     ],
   },
@@ -143,8 +149,12 @@ export const faqCategories: FaqCategory[] = [
     title: 'AI agents and the future',
     items: [
       {
+        q: 'Can FlowBuddy AI perform actions inside my SaaS product?',
+        a: 'Yes — AI Agent Execution is in beta. When you enable it, the assistant can run an approved workflow itself: it shows the user what it is about to do, waits for their explicit consent, then fills fields and clicks through the steps while narrating each one. The user can stop the run at any time, sensitive values are always typed by the user directly into your product’s own fields, and the outcome is verified before the run reports done.',
+      },
+      {
         q: 'Can FlowBuddy AI work with AI agents?',
-        a: 'That is where FlowBuddy AI is heading. The knowledge base you approve for your in-app assistant is being built to serve other consumers too — a hosted help portal, and access for AI agents working on a user’s behalf. Agent access is in development and not yet available; the road ahead page lays out the sequence.',
+        a: 'In two ways. Inside your product, FlowBuddy AI’s own agent can carry out approved workflows on a user’s behalf — in beta today, off by default, and always with the user’s explicit consent. Beyond your product, the same approved knowledge layer is being built to serve outside consumers too — a hosted help portal, and access for third-party AI agents working on a user’s behalf. That third-party access is in development and not yet available; the road ahead page lays out the sequence.',
       },
       {
         q: 'Can FlowBuddy AI make my SaaS product easier for AI agents to understand and use?',

@@ -44,11 +44,12 @@ const baseJsonLd = [
     operatingSystem: 'Web',
     url: 'https://flowbuddyai.com',
     description:
-      'FlowBuddy is an in-app, context-aware AI assistant for SaaS products. Record a demo of your product once and get a custom AI assistant that answers questions, unblocks stuck users, and walks them through tasks — live in about 30 minutes, no coding required.',
+      'FlowBuddy is an application intelligence layer for SaaS products. Record a demo of your product once; FlowBuddy learns how it works and turns that into a founder-approved intelligence layer powering an in-app AI assistant, contextual guidance, interactive onboarding, and consented AI agent execution — live in about 30 minutes, no coding required.',
     featureList: [
-      'In-App AI Assistant — answers user questions inside the product, from approved workflows only',
+      'In-App AI Assistant — answers user questions inside the product, from approved knowledge only',
       'Contextual Guidance — reads the page the user is on and highlights their next step in the product UI',
-      'Interactive Walkthroughs — guides a user through a whole task, one step at a time, across pages',
+      'Interactive Onboarding — guides a user through a whole task, one step at a time, across pages',
+      'AI Agent Execution (beta) — carries out approved workflows with the user’s explicit consent; off by default, narrated, outcome-verified',
     ],
     offers: {
       '@type': 'Offer',
@@ -81,11 +82,12 @@ const baseJsonLd = [
     <meta property="og:image" content="https://flowbuddyai.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="FlowBuddy — in-app, context-aware AI assistant for your SaaS. Go live in 30 minutes." />
+    <meta property="og:image:alt" content="FlowBuddy — the Application Intelligence Layer for your SaaS. Record once; power your users and AI agents." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content="https://flowbuddyai.com/og.png" />
+    <meta name="twitter:image:alt" content="FlowBuddy — the Application Intelligence Layer for your SaaS. Record once; power your users and AI agents." />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -114,7 +116,8 @@ const baseJsonLd = [
     }
     <!-- "See it in action": opens the embedded copilot (clicks its launcher inside the
          open shadow root). Until the widget is embedded, falls back to the knowledge-base
-         section so the button is never dead. -->
+         section so the button is never dead — navigating home first on pages (the
+         capability pages) that don't carry the section. -->
     <script is:inline>
       document.addEventListener('click', (e) => {
         if (!(e.target instanceof Element)) return;
@@ -123,7 +126,11 @@ const baseJsonLd = [
           .getElementById('flowbuddy-copilot-root')
           ?.shadowRoot?.querySelector('.fb-launcher');
         if (launcher instanceof HTMLElement) launcher.click();
-        else document.getElementById('knowledge-base')?.scrollIntoView({ behavior: 'smooth' });
+        else {
+          const kb = document.getElementById('knowledge-base');
+          if (kb) kb.scrollIntoView({ behavior: 'smooth' });
+          else location.href = '/#knowledge-base';
+        }
       });
     </script>
   </body>

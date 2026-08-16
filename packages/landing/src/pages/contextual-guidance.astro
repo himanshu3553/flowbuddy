@@ -1,0 +1,323 @@
+---
+// Capability page — Contextual Guidance: the assistant reads where the user is
+// and points at the next step instead of describing it.
+import Base from '../layouts/Base.astro';
+import CapabilityHero from '../components/CapabilityHero.astro';
+import CapabilitySteps from '../components/CapabilitySteps.astro';
+import FeatureSplit from '../components/FeatureSplit.astro';
+import PoweredByLayer from '../components/PoweredByLayer.astro';
+import SignupCta from '../components/SignupCta.astro';
+import PageFaq from '../components/PageFaq.astro';
+import type { Faq } from '../data/faqs';
+
+const steps = [
+  {
+    title: 'It reads the context',
+    body: 'FlowBuddy knows which page your user is on and recognises the screen they’re looking at — so help starts from where they actually are, not from step one.',
+  },
+  {
+    title: 'It finds their place in the task',
+    body: 'It works out which step of an approved workflow the user has already reached, instead of replaying instructions they’ve completed.',
+  },
+  {
+    title: 'It highlights the next step',
+    body: 'No paragraph to decode. The exact button or field lights up in your interface, and your user keeps moving.',
+  },
+];
+
+const faqs: Faq[] = [
+  {
+    q: 'How does it know where my user is?',
+    a: 'From the recording you approved: FlowBuddy learned your product’s pages and what each screen shows. When a user asks for help, it matches their current page and screen against that knowledge — and the recognition runs in the user’s browser.',
+  },
+  {
+    q: 'Does it work when my URLs contain IDs?',
+    a: 'Yes. Routes are matched as patterns, not exact strings, so yoursaas.com/projects/8231/settings is recognised as the project-settings page whatever the ID is.',
+  },
+  {
+    q: 'Will the highlights break my layout?',
+    a: 'No. Guidance is drawn as an overlay on top of your product. It never moves, resizes, or restyles your own elements — it only points at them.',
+  },
+  {
+    q: 'What if the user is somewhere FlowBuddy doesn’t recognise?',
+    a: 'It falls back gracefully: the assistant still answers with clear written steps from your approved workflows, and tells the user where to go — it just won’t highlight until it can place them.',
+  },
+];
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flowbuddyai.com/' },
+    { '@type': 'ListItem', position: 2, name: 'Contextual Guidance', item: 'https://flowbuddyai.com/contextual-guidance' },
+  ],
+};
+
+---
+
+<Base
+  title="Contextual Guidance for your SaaS | FlowBuddy AI"
+  description="FlowBuddy reads which page your user is on and highlights their exact next step directly in your UI — context-aware guidance grounded only in workflows you approved. Live in 30 minutes."
+  path="/contextual-guidance"
+  jsonLd={[faqJsonLd, breadcrumbJsonLd]}
+>
+  <CapabilityHero
+    ctaId="hero"
+    sub="FlowBuddy knows which page your user is on and what they’re trying to do — so instead of describing the fix, it highlights the exact next step right in your interface."
+  >
+    <Fragment slot="headline">
+      Context-Aware<br />
+      <span class="hero-ai">
+        Guidance<svg viewBox="0 0 24 24" aria-hidden="true" class="hero-ai-spark">
+          <defs>
+            <linearGradient id="fb-sg-h1" x1="18%" y1="0%" x2="82%" y2="100%">
+              <stop offset="0" stop-color="#4a63e8"></stop>
+              <stop offset="1" stop-color="#3a50dd"></stop>
+            </linearGradient>
+          </defs>
+          <path
+            d="M10 3c.8 4.2 2.2 5.6 6.4 6.4-4.2.8-5.6 2.2-6.4 6.4-.8-4.2-2.2-5.6-6.4-6.4 4.2-.8 5.6-2.2 6.4-6.4Z"
+            fill="url(#fb-sg-h1)"></path>
+          <path
+            d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
+            fill="url(#fb-sg-h1)"></path>
+        </svg>
+      </span><br />in Your UI
+    </Fragment>
+
+    <!-- HTML recreation: the host app with the next step spotlit. The markup IS
+         the end state; the player below animates it on load and loops. -->
+    <div slot="demo" class="relative mx-auto w-full max-w-[560px] pb-8" aria-hidden="true" data-hero-demo>
+      <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
+        <!-- browser chrome -->
+        <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
+            >yoursaas.com/team</span
+          >
+        </div>
+        <div class="flex">
+          <!-- host sidebar -->
+          <div class="hidden w-[130px] shrink-0 space-y-1 border-r border-gray-100 bg-paper-2 p-3 sm:block">
+            <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+              Dashboard
+            </div>
+            <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+              Invoices
+            </div>
+            <div class="rounded-control bg-gray-100 px-2.5 py-1.5 text-[0.7rem] font-bold text-ink">
+              Team
+            </div>
+            <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
+              Settings
+            </div>
+          </div>
+          <!-- host content -->
+          <div class="min-h-[280px] flex-1 p-4">
+            <div class="flex items-center justify-between">
+              <div class="media-fill h-6 w-2/5 rounded-control"></div>
+              <button
+                data-anim="spot"
+                tabindex="-1"
+                class="rounded-control px-3 py-1.5 text-[0.7rem] font-bold text-white ring-2 ring-brand-400 ring-offset-2 transition-all duration-300"
+                style="background: linear-gradient(180deg, #4a63e8, #3a50dd)"
+                >Invite member</button
+              >
+            </div>
+            <div class="mt-4 space-y-2.5">
+              {
+                [1, 2, 3, 4].map(() => (
+                  <div class="flex items-center gap-3">
+                    <div class="media-fill size-7 rounded-pill" />
+                    <div class="media-fill h-3.5 w-2/5 rounded-control" />
+                    <div class="media-fill ml-auto h-3.5 w-1/5 rounded-control" />
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the assistant panel -->
+      <div
+        class="absolute -bottom-8 -right-2 w-[280px] rounded-card border border-gray-100 bg-white shadow-widget sm:-right-6"
+      >
+        <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+          <span
+            class="grid size-6 place-items-center rounded-[7px] text-[0.65rem] font-extrabold text-white"
+            style="background: linear-gradient(150deg, #4a63e8, #3a50dd)"
+            >F</span
+          >
+          <span class="text-[0.82rem] font-bold text-ink">Help</span>
+          <span class="ml-auto flex items-center gap-1.5 text-[0.62rem] font-semibold text-success-text">
+            <span class="size-1.5 rounded-full bg-success-dot"></span>Online
+          </span>
+        </div>
+        <div class="space-y-3 px-4 py-4">
+          <div
+            data-anim="q"
+            class="ml-auto w-fit max-w-[85%] rounded-tile bg-brand-500 px-3 py-2 text-[0.76rem] font-medium leading-snug text-white"
+          >
+            How do I add my teammate?
+          </div>
+          <div
+            data-anim="a"
+            class="w-fit max-w-[92%] rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.76rem] leading-relaxed text-gray-700"
+          >
+            <span data-anim="dots" class="hidden items-center gap-1 py-1">
+              <span class="fb-dot"></span><span class="fb-dot"></span><span class="fb-dot"></span>
+            </span>
+            You're already on Team — select
+            <span class="font-semibold text-ink">Invite member</span>. I've highlighted it for
+            you.
+          </div>
+        </div>
+      </div>
+    </div>
+  </CapabilityHero>
+
+  <CapabilitySteps
+    eyebrow="How it points"
+    heading="From “where is that?” to done, in one highlight"
+    steps={steps}
+  />
+
+  <FeatureSplit
+    eyebrow="Context-aware, for real"
+    heading="Built to know where your users are"
+    lead="Generic help describes an interface. FlowBuddy stands inside yours — it meets the user on the page they’re on, at the step they’ve reached."
+    bullets={[
+      'Knows the page your user is on — even when URLs carry record IDs',
+      'Recognises the screen they’re seeing, not just the address',
+      'Picks up mid-task instead of replaying from step one',
+      'Screen recognition runs in the user’s browser',
+      'Overlay-only: it points at your UI, never changes it',
+    ]}
+  >
+    <div class="rounded-dialog border border-gray-150 bg-white p-6 shadow-frame md:p-8" aria-hidden="true">
+      <p class="font-mono text-[0.62rem] font-bold uppercase tracking-widest text-brand-500">
+        How it places your user
+      </p>
+      <div class="mt-4 space-y-2.5">
+        {
+          [
+            ['The page they’re on', 'yoursaas.com/team'],
+            ['The screen they’re seeing', 'Invite teammate form'],
+            ['The step they’ve reached', '2 of 3 · Choose a role'],
+          ].map(([t, d]) => (
+            <div class="flex items-center gap-3 rounded-tile border border-gray-100 bg-white px-3.5 py-3 shadow-card">
+              <span class="grid size-6 shrink-0 place-items-center rounded-pill bg-brand-50 text-brand-500">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              <div>
+                <p class="text-[0.85rem] font-bold text-ink">{t}</p>
+                <p class="font-mono text-[0.68rem] text-gray-500">{d}</p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+      <p class="mt-4 text-[0.78rem] leading-relaxed text-gray-500">
+        Matched against what you recorded — in the user’s browser.
+      </p>
+    </div>
+  </FeatureSplit>
+
+  <PoweredByLayer current="guidance" />
+  <SignupCta />
+  <PageFaq heading="Questions about guidance" items={faqs} />
+</Base>
+
+<!-- Plays the demo on load and loops: typed question → dots → streamed answer →
+     button spotlight. Pre-paint init; any early return leaves the end state. -->
+<script is:inline>
+  (() => {
+    const demo = document.querySelector('[data-hero-demo]');
+    if (!demo || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const pick = (k) => demo.querySelector('[data-anim="' + k + '"]');
+    const q = pick('q');
+    const a = pick('a');
+    const dots = pick('dots');
+    const spot = pick('spot');
+    if (!q || !a || !dots || !spot) return;
+
+    const RING = ['ring-2', 'ring-brand-400', 'ring-offset-2'];
+    const qText = (q.textContent || '').trim();
+    const nodes = [];
+    const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (dots.contains(n) || !n.textContent) continue;
+      nodes.push([n, n.textContent]);
+    }
+
+    const lock = (el) => {
+      el.style.width = el.offsetWidth + 'px';
+      el.style.height = el.offsetHeight + 'px';
+    };
+    lock(q);
+    lock(a);
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const caret = document.createElement('span');
+    caret.className = 'fb-caret';
+
+    const reset = () => {
+      q.textContent = '';
+      q.style.opacity = '0';
+      nodes.forEach(([n]) => (n.textContent = ''));
+      a.style.visibility = 'hidden';
+      spot.classList.remove(...RING, 'fb-pop');
+    };
+    q.style.transition = 'opacity 200ms';
+    reset();
+
+    (async () => {
+      while (true) {
+        await sleep(500);
+        q.style.opacity = '1';
+        q.appendChild(caret);
+        for (const ch of qText) {
+          caret.before(ch);
+          await sleep(38);
+        }
+        await sleep(280);
+        caret.remove();
+
+        a.style.visibility = 'visible';
+        dots.style.display = 'inline-flex';
+        await sleep(750);
+        dots.style.display = 'none';
+
+        for (const [n, text] of nodes) {
+          for (let i = 0; i < text.length; i += 2) {
+            n.textContent = text.slice(0, i + 2);
+            await sleep(14);
+          }
+          n.textContent = text;
+        }
+
+        await sleep(350);
+        spot.classList.add(...RING, 'fb-pop');
+
+        await sleep(2600);
+        reset();
+      }
+    })();
+  })();
+</script>

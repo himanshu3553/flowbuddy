@@ -108,6 +108,12 @@ body {
    (light stop is brand-200 — a ramp step, not a new hue) + a twinkling spark. */
 .hero-ai {
   display: inline-block;
+  /* background-clip:text only paints glyphs where the box has background, and
+     the tight display line-height (1.07) makes the box shorter than the font's
+     ascent+descent — descenders (g, y) fell outside and rendered cut off.
+     Pad the box past them; the negative margins cancel the layout impact. */
+  padding: 0.1em 0 0.2em;
+  margin: -0.1em 0 -0.2em;
   background: linear-gradient(
     110deg,
     #4a63e8 0%,
@@ -133,6 +139,22 @@ body {
   vertical-align: 0.55em;
   animation: fb-twinkle 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
   animation-delay: -0.65s;
+}
+/* Homepage H1 variants: the gradient WITHOUT the shimmer sweep (the spark
+   keeps its twinkle), and a larger spark. Longhands only — the `background`
+   shorthand resets background-clip and turns the text into solid blocks. */
+.hero-ai-static {
+  background-image: linear-gradient(110deg, #4a63e8 0%, #3a50dd 100%);
+  background-size: 100% 100%;
+  background-position: 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: none;
+}
+.hero-ai-spark-lg {
+  width: 0.68em;
+  height: 0.68em;
+  vertical-align: 0.45em;
 }
 @keyframes fb-gradient-pan {
   0% {
@@ -330,6 +352,230 @@ body {
   }
   100% {
     transform: scale(1);
+  }
+}
+
+/* ---- Hero transformation pipeline ---------------------------------------
+   Nothing here dims anything until the hero's script adds [data-pipe-anim] —
+   the served markup is the finished diagram (every beat lit, all branches
+   carrying current), so a crawler, a JS failure and prefers-reduced-motion
+   all get the whole story. Continuous motion (dash flow, the core's float and
+   sheen) is CSS-only and gated behind prefers-reduced-motion. */
+.pipe-stage {
+  transition:
+    opacity 520ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 520ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-stage:not(.is-lit) {
+  opacity: 0.42;
+  filter: grayscale(0.6);
+}
+/* Connector zones (the capture stream and the fan) dim as a unit until their
+   beat arrives. */
+.pipe-arrowzone {
+  transition: opacity 420ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-arrowzone:not(.is-lit) {
+  opacity: 0.28;
+}
+/* Stage 3's product tiles light one by one as their branch reaches them. */
+.pipe-tile {
+  transition:
+    opacity 420ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 420ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    border-color 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-tile:not(.is-lit) {
+  opacity: 0.42;
+  filter: grayscale(0.6);
+}
+/* Each tile's connection port (where its branch lands). */
+.pipe-port {
+  background: var(--color-brand-500);
+  transition: background-color 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-tile:not(.is-lit) .pipe-port {
+  background: var(--color-gray-200);
+}
+/* The capture stream (recording → layer): dashed lines whose dashes travel. */
+.pipe-flowline {
+  stroke-dasharray: 4 10;
+}
+/* The fan branches: a solid base line plus a flowing dashed current on top. */
+.pipe-branch .pipe-branch-base {
+  stroke: var(--color-brand-200);
+  transition: stroke 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-branch:not(.is-lit) .pipe-branch-base {
+  stroke: var(--color-gray-150);
+}
+.pipe-branch .pipe-branch-flow {
+  stroke: var(--color-brand-400);
+  stroke-dasharray: 5 9;
+  opacity: 1;
+  transition: opacity 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+[data-pipe-anim] .pipe-branch:not(.is-lit) .pipe-branch-flow {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pipe-flowline,
+  .pipe-branch-flow {
+    animation: fb-flow 1.15s linear infinite;
+  }
+}
+@keyframes fb-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+/* The layer core floats gently and a sheen sweeps its gradient. */
+@media (prefers-reduced-motion: no-preference) {
+  .pipe-float {
+    animation: fb-float 7s ease-in-out infinite;
+  }
+}
+@keyframes fb-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.pipe-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.13) 50%, transparent 58%);
+  background-size: 230% 100%;
+  background-position: 130% 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pipe-sheen {
+    animation: fb-sheen 5.5s linear infinite;
+  }
+}
+@keyframes fb-sheen {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -130% 0;
+  }
+}
+/* Dot-grid ground behind the diagram, faded out radially at the edges. */
+.pipe-dotgrid {
+  background-image: radial-gradient(circle, var(--color-gray-200) 1px, transparent 1.5px);
+  background-size: 24px 24px;
+  -webkit-mask-image: radial-gradient(58% 72% at 50% 46%, #000 25%, transparent 98%);
+  mask-image: radial-gradient(58% 72% at 50% 46%, #000 25%, transparent 98%);
+}
+/* One-shot effects the script triggers. */
+.fb-ripple {
+  position: absolute;
+  border: 2px solid var(--color-brand-400);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+}
+.fb-ripple.is-on {
+  animation: fb-ripple 0.55s ease-out;
+}
+@keyframes fb-ripple {
+  from {
+    opacity: 0.85;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+.fb-fed {
+  animation: fb-fed 0.7s ease-out;
+}
+@keyframes fb-fed {
+  0% {
+    background-color: rgba(255, 255, 255, 0.38);
+  }
+  100% {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ---- "What is the layer" stack explainer --------------------------------
+   The SaaS stack drawn isometrically (pure affine rotate, no perspective).
+   The markup ships the settled stack; the section's script opts into the
+   rise-in reveal, so no-JS / reduced-motion / crawlers get the finished
+   visual. Beam pulsing is CSS-only and reduced-motion-gated. */
+.fb-slab {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 12.5rem;
+  height: 12.5rem;
+  margin-left: -6.25rem;
+  border-radius: 1.75rem;
+  border: 1px solid var(--color-gray-150);
+  transform: rotateX(56deg) rotateZ(-45deg);
+  box-shadow: -12px 12px 0 -5px rgba(20, 22, 31, 0.05);
+}
+@media (min-width: 640px) {
+  .fb-slab {
+    width: 16rem;
+    height: 16rem;
+    margin-left: -8rem;
+  }
+}
+/* Layer captions sit ON the slab plane, placed in screen coordinates on its
+   visible front band. rotateZ is POSITIVE here (the slab's is negative — the
+   diamond is symmetric so its shape can't tell) so the text runs gently
+   down-right along the front edge like the reference, not up the diagonal. */
+.fb-slab-label {
+  position: absolute;
+  transform: rotateX(56deg) rotateZ(45deg);
+}
+.fb-stack-item {
+  transition:
+    opacity 700ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    transform 700ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  transition-delay: var(--d, 0ms);
+}
+[data-stack-reveal]:not(.is-in) .fb-stack-item {
+  opacity: 0;
+  transform: translateY(28px);
+}
+.fb-beam {
+  position: absolute;
+  width: 2px;
+  background: linear-gradient(180deg, var(--color-brand-400), rgba(74, 99, 232, 0.15));
+}
+.fb-beam::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 999px;
+  background: var(--color-brand-400);
+  box-shadow: 0 0 8px 2px rgba(74, 99, 232, 0.55);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fb-beam {
+    animation: fb-beam 2.2s ease-in-out infinite;
+  }
+}
+@keyframes fb-beam {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
   }
 }
 

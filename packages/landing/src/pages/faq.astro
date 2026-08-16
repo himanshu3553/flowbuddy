@@ -14,13 +14,23 @@ const faqJsonLd = {
     acceptedAnswer: { '@type': 'Answer', text: f.a },
   })),
 };
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flowbuddyai.com/' },
+    { '@type': 'ListItem', position: 2, name: 'FAQ', item: 'https://flowbuddyai.com/faq' },
+  ],
+};
+
 ---
 
 <Base
-  title="FlowBuddy AI FAQ — how it works, setup, accuracy and privacy | FlowBuddy"
-  description="Answers to the most common questions about FlowBuddy AI: what it is, how it learns your SaaS product from one recording, how long setup takes, how it stays accurate, and how it handles your data."
+  title="FlowBuddy AI FAQ — the application intelligence layer, setup, accuracy and privacy"
+  description="Answers to the most common questions about FlowBuddy AI: what an application intelligence layer is, how it learns your SaaS from one recording, setup time, accuracy, data handling, and AI agent execution (beta)."
   path="/faq"
-  jsonLd={[faqJsonLd]}
+  jsonLd={[faqJsonLd, breadcrumbJsonLd]}
 >
   <section class="relative overflow-hidden">
     <div

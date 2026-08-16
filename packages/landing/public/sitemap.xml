@@ -2,14 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://flowbuddyai.com/</loc>
-    <lastmod>2026-08-09</lastmod>
+    <lastmod>2026-08-17</lastmod>
+  </url>
+  <url>
+    <loc>https://flowbuddyai.com/in-app-ai-assistant</loc>
+    <lastmod>2026-08-14</lastmod>
+  </url>
+  <url>
+    <loc>https://flowbuddyai.com/contextual-guidance</loc>
+    <lastmod>2026-08-14</lastmod>
+  </url>
+  <url>
+    <loc>https://flowbuddyai.com/interactive-onboarding</loc>
+    <lastmod>2026-08-14</lastmod>
+  </url>
+  <url>
+    <loc>https://flowbuddyai.com/ai-agent-execution</loc>
+    <lastmod>2026-08-14</lastmod>
   </url>
   <url>
     <loc>https://flowbuddyai.com/faq</loc>
-    <lastmod>2026-08-09</lastmod>
+    <lastmod>2026-08-13</lastmod>
   </url>
   <url>
     <loc>https://flowbuddyai.com/future</loc>
-    <lastmod>2026-08-02</lastmod>
+    <lastmod>2026-08-13</lastmod>
   </url>
 </urlset>

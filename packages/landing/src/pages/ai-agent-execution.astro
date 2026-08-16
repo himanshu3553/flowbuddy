@@ -1,0 +1,300 @@
+---
+// Capability page — AI Agent Execution. BETA on every claim (copy guardrail:
+// always sold with the trust framing — off by default, per-workspace, every
+// run consented, narrated, stoppable, outcome-verified).
+import Base from '../layouts/Base.astro';
+import CapabilityHero from '../components/CapabilityHero.astro';
+import CapabilitySteps from '../components/CapabilitySteps.astro';
+import FeatureSplit from '../components/FeatureSplit.astro';
+import PoweredByLayer from '../components/PoweredByLayer.astro';
+import SignupCta from '../components/SignupCta.astro';
+import PageFaq from '../components/PageFaq.astro';
+import type { Faq } from '../data/faqs';
+
+const steps = [
+  {
+    title: 'Your user approves the plan',
+    body: 'The assistant shows exactly what it’s about to do. Nothing runs until your user explicitly says go — every run, every time.',
+  },
+  {
+    title: 'It acts, and says so',
+    body: 'It fills fields and clicks through the approved steps, narrating each one as it goes. Your user watches it happen and can stop the run at any time.',
+  },
+  {
+    title: 'It proves it worked',
+    body: 'A run isn’t done when the clicks are done. The outcome is checked against what success looked like in your recording before the agent says done.',
+  },
+];
+
+const faqs: Faq[] = [
+  {
+    q: 'Is AI Agent Execution available today?',
+    a: 'Yes, in beta. It is off by default: you accept the acting terms in Studio and switch it on per workspace. Until you do, your assistant stays read-only — answering and guiding, never acting.',
+  },
+  {
+    q: 'How does consent work?',
+    a: 'Per run, not per session. The assistant shows the user what it is about to do; the run starts only when the user explicitly approves it, and the user can stop it at any moment. Only workflows you approved can run at all.',
+  },
+  {
+    q: 'What about passwords and sensitive fields?',
+    a: 'The agent never touches them. Sensitive values are always typed by the user directly into your product’s own fields — they never pass through FlowBuddy.',
+  },
+  {
+    q: 'How do I know it actually completed the task?',
+    a: 'The run verifies its outcome before reporting done: it checks the page for the evidence of success your recording established — and if your product shows an error instead, the run says so rather than claiming success.',
+  },
+];
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flowbuddyai.com/' },
+    { '@type': 'ListItem', position: 2, name: 'AI Agent Execution', item: 'https://flowbuddyai.com/ai-agent-execution' },
+  ],
+};
+
+---
+
+<Base
+  title="AI Agent Execution (Beta) — consented in-app agent runs | FlowBuddy AI"
+  description="With your user's consent, FlowBuddy's agent carries out approved workflows inside your product — narrated step by step, stoppable at any time, outcome-verified before it says done. In beta, off by default."
+  path="/ai-agent-execution"
+  jsonLd={[faqJsonLd, breadcrumbJsonLd]}
+>
+  <CapabilityHero
+    ctaId="hero"
+    eyebrow="AI Agent Execution"
+    badge="Beta"
+    sub="With your user’s consent, the assistant carries out approved workflows itself — filling fields, clicking through steps, and narrating as it goes. It verifies the outcome before it says done. Off by default; you switch it on per workspace."
+    caption="In beta · Off by default · Every run needs your user’s consent"
+  >
+    <Fragment slot="headline">
+      The AI Agent<br />That
+      <span class="hero-ai">
+        Does It<svg viewBox="0 0 24 24" aria-hidden="true" class="hero-ai-spark">
+          <defs>
+            <linearGradient id="fb-sg-h1" x1="18%" y1="0%" x2="82%" y2="100%">
+              <stop offset="0" stop-color="#4a63e8"></stop>
+              <stop offset="1" stop-color="#3a50dd"></stop>
+            </linearGradient>
+          </defs>
+          <path
+            d="M10 3c.8 4.2 2.2 5.6 6.4 6.4-4.2.8-5.6 2.2-6.4 6.4-.8-4.2-2.2-5.6-6.4-6.4 4.2-.8 5.6-2.2 6.4-6.4Z"
+            fill="url(#fb-sg-h1)"></path>
+          <path
+            d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
+            fill="url(#fb-sg-h1)"></path>
+        </svg>
+      </span><br />for Your Users
+    </Fragment>
+
+    <!-- HTML recreation: a consented agent run. The markup IS the finished,
+         verified end state; the player below animates it and loops. -->
+    <div slot="demo" class="relative mx-auto w-full max-w-[560px] pb-10" aria-hidden="true" data-hero-demo>
+      <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
+        <!-- browser chrome -->
+        <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
+            >yoursaas.com/team</span
+          >
+        </div>
+        <!-- host content: the invite form the agent is operating -->
+        <div class="min-h-[250px] p-5">
+          <p class="text-[0.85rem] font-bold text-ink">Invite teammate</p>
+          <div class="mt-3.5 max-w-[320px] space-y-3">
+            <div>
+              <p class="text-[0.64rem] font-semibold uppercase tracking-wide text-gray-400">Email</p>
+              <div
+                data-anim="ag-email"
+                class="mt-1 flex h-9 items-center rounded-control border border-gray-150 bg-white px-3 text-[0.76rem] font-medium text-ink"
+              >
+                alex@acme.com
+              </div>
+            </div>
+            <div class="media-fill h-9 rounded-control"></div>
+            <button
+              data-anim="ag-send"
+              tabindex="-1"
+              class="rounded-control px-3.5 py-2 text-[0.74rem] font-bold text-white ring-2 ring-brand-400 ring-offset-2 transition-all duration-300"
+              style="background: linear-gradient(180deg, #4a63e8, #3a50dd)">Send invite</button
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- the run card -->
+      <div
+        class="absolute -bottom-10 -right-2 w-[280px] rounded-card border border-gray-100 bg-white p-4 shadow-widget sm:-right-6"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-[0.58rem] font-bold uppercase tracking-widest text-brand-500">
+            AI Agent
+          </p>
+          <span data-anim="ag-prog" class="font-mono text-[0.6rem] font-semibold text-gray-500">3/3</span>
+        </div>
+        <p class="mt-1.5 text-[0.82rem] font-bold text-ink">Invite a teammate</p>
+        <div
+          class="mt-2.5 flex items-start gap-2 rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.74rem] leading-snug text-gray-700"
+        >
+          <svg
+            data-anim="ag-done"
+            class="mt-px shrink-0 text-success-dot"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="9.5"></circle>
+            <path d="m8.5 12.5 2.4 2.4 4.8-5.2"></path>
+          </svg>
+          <span data-anim="ag-status">Done — outcome verified.</span>
+        </div>
+        <button
+          data-anim="ag-run"
+          tabindex="-1"
+          class="mt-2.5 hidden w-full rounded-control px-3 py-2 text-[0.74rem] font-bold text-white shadow-primary"
+          style="background: linear-gradient(180deg, #4a63e8, #3a50dd)">Run it for me</button
+        >
+        <button
+          data-anim="ag-stop"
+          tabindex="-1"
+          class="mt-2.5 hidden w-full rounded-control border border-gray-150 bg-white px-3 py-2 text-[0.74rem] font-bold text-gray-600"
+          >Stop Auto Run</button
+        >
+      </div>
+    </div>
+  </CapabilityHero>
+
+  <CapabilitySteps
+    eyebrow="How a run works"
+    heading="Consent, then action, then proof"
+    steps={steps}
+  />
+
+  <FeatureSplit
+    eyebrow="Trust first"
+    heading="Guardrails first, autonomy second"
+    lead="Acting in your product is a privilege the user grants each time — never a default. The guardrails aren’t settings to remember; they’re how a run works."
+    bullets={[
+      'Off by default — you accept the acting terms and enable it per workspace',
+      'Only workflows you approved can ever run',
+      'Every run starts with your user’s explicit consent',
+      'Sensitive values are typed by the user into your own fields — never through FlowBuddy',
+      'Narrated live, stoppable at any time, outcome-verified before "done"',
+    ]}
+  >
+    <div class="rounded-dialog border border-gray-150 bg-white p-6 shadow-frame md:p-8" aria-hidden="true">
+      <p class="font-mono text-[0.62rem] font-bold uppercase tracking-widest text-brand-500">
+        Every run, without exception
+      </p>
+      <div class="mt-4 space-y-2.5">
+        {
+          [
+            ['Consented', 'the user approves the plan before anything moves'],
+            ['Narrated', 'the agent says what it’s doing, step by step'],
+            ['Stoppable', 'one press ends the run, instantly'],
+            ['Verified', 'the outcome is checked before it says done'],
+          ].map(([t, d]) => (
+            <div class="flex items-center gap-3 rounded-tile border border-gray-100 bg-white px-3.5 py-3 shadow-card">
+              <span class="grid size-6 shrink-0 place-items-center rounded-pill bg-brand-50 text-brand-500">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              <div>
+                <p class="text-[0.85rem] font-bold text-ink">{t}</p>
+                <p class="text-[0.76rem] leading-snug text-gray-500">{d}</p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </FeatureSplit>
+
+  <PoweredByLayer current="agent" />
+  <SignupCta />
+  <PageFaq heading="Questions about agent execution" items={faqs} />
+</Base>
+
+<!-- Plays the run on load and loops: consent → the agent types and clicks,
+     narrating → verified done. Pre-paint init; any early return leaves the
+     static end state untouched. -->
+<script is:inline>
+  (() => {
+    const demo = document.querySelector('[data-hero-demo]');
+    if (!demo || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const pick = (k) => demo.querySelector('[data-anim="' + k + '"]');
+    const email = pick('ag-email');
+    const send = pick('ag-send');
+    const prog = pick('ag-prog');
+    const status = pick('ag-status');
+    const done = pick('ag-done');
+    const run = pick('ag-run');
+    const stop = pick('ag-stop');
+    if (!email || !send || !prog || !status || !done || !run || !stop) return;
+
+    const RING = ['ring-2', 'ring-brand-400', 'ring-offset-2'];
+    const emailText = (email.textContent || '').trim();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const reset = () => {
+      email.textContent = '';
+      send.classList.remove(...RING, 'fb-pop');
+      prog.textContent = '0/3';
+      done.classList.add('hidden');
+      status.textContent = 'Ready — waiting for your user’s go-ahead.';
+      run.classList.remove('hidden', 'fb-pop');
+      stop.classList.add('hidden');
+    };
+    reset();
+
+    (async () => {
+      while (true) {
+        await sleep(700);
+        run.classList.add('fb-pop');
+        await sleep(520);
+        run.classList.add('hidden');
+        stop.classList.remove('hidden');
+        prog.textContent = '1/3';
+        status.textContent = 'Opening the Team page…';
+        await sleep(800);
+        prog.textContent = '2/3';
+        status.textContent = 'Typing the email address…';
+        for (const ch of emailText) {
+          email.textContent += ch;
+          await sleep(38);
+        }
+        await sleep(340);
+        prog.textContent = '3/3';
+        status.textContent = 'Clicking “Send invite”…';
+        send.classList.add(...RING, 'fb-pop');
+        await sleep(780);
+        stop.classList.add('hidden');
+        done.classList.remove('hidden');
+        status.textContent = 'Done — outcome verified.';
+
+        await sleep(3000);
+        reset();
+      }
+    })();
+  })();
+</script>

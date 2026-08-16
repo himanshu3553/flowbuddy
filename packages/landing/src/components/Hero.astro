@@ -1,8 +1,42 @@
 ---
-// Hero: the locked positioning-1 headline + an HTML recreation (design-system
-// rule: recreate the product in HTML on the tokens, never a fake photo) of the
-// widget answering in context — spotlight on the nav item it is pointing at.
+// Hero: the application-intelligence positioning — centered claim, then a
+// full-width HTML recreation (design-system rule: recreate the product in HTML
+// on the tokens, never a fake photo) of the flow in THREE beats (founder
+// decision 2026-08-14): record your product → the intelligence layer (the
+// workflow knowledge base) is built from it → one trunk fans out to the four
+// products it powers.
+//
+// Beat 1 shows a real workflow being performed — two typed inputs and two
+// clicks on one clean form — and beat 2 stacks THOSE captured actions into the
+// layer, one flying chip per action (founder amendment 2026-08-15). The layer
+// is the centre of gravity (glow, float, sheen) on a dot-grid ground; the
+// capture stream and every fan branch carry moving dashes. The FULL story
+// replays on a continuous loop (founder call 2026-08-15) — record, stack,
+// approve, fan out, hold, again.
+//
+// The markup below IS the lit end state (form filled, every action stacked),
+// so no-JS / reduced-motion get the complete diagram; continuous CSS motion is
+// reduced-motion-gated in global.css. The four product tiles are real links
+// (and therefore NOT aria-hidden).
 import AiButton from './AiButton.astro';
+import { capabilities } from '../data/capabilities';
+
+// Tile icons at chip scale, keyed like the registry.
+const tileIcons: Record<string, string> = {
+  assistant: 'M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z',
+  guidance: 'M5 3l6 17 2.6-6.9L20.5 10z',
+  walkthrough: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  agent: 'M13 2 3 14h7l-1 8 10-12h-7z',
+};
+
+// The recorded workflow: each action in the form maps 1:1 onto a stacked row
+// in the layer (the script pairs them by index).
+const actions = [
+  'Enter teammate’s name',
+  'Enter email address',
+  'Choose a role',
+  'Click “Send invite”',
+];
 ---
 
 <section class="relative overflow-hidden">
@@ -17,18 +51,15 @@ import AiButton from './AiButton.astro';
   <!-- On lg+ the hero fills the first viewport (minus the 62px header) and the
        caption is pinned to its bottom edge; below lg it flows naturally. -->
   <div
-    class="relative mx-auto flex max-w-[1140px] flex-col px-5 pb-8 pt-10 md:px-8 md:pt-14 lg:min-h-[calc(100vh-62px)]"
+    class="relative mx-auto flex max-w-[1140px] flex-col px-5 pb-8 pt-10 md:px-8 md:pt-12 lg:min-h-[calc(100vh-62px)]"
   >
-    <div class="my-auto grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
-      <div>
+    <div class="my-auto">
+      <div class="mx-auto max-w-[880px] text-center">
         <h1 class="display-hero">
-          In-App<br />Context-Aware<br />
-          <span class="hero-ai">
-            AI Assistant<svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              class="hero-ai-spark"
-            >
+          <span class="hero-ai hero-ai-static text-[1.06em]">Application</span>
+          <span class="hero-ai hero-ai-static text-[1.06em]">Intelligence</span>
+          <span class="hero-ai hero-ai-static text-[1.06em]"
+            >Layer<svg viewBox="0 0 24 24" aria-hidden="true" class="hero-ai-spark hero-ai-spark-lg">
               <defs>
                 <linearGradient id="fb-sg-h1" x1="18%" y1="0%" x2="82%" y2="100%">
                   <stop offset="0" stop-color="#4a63e8"></stop>
@@ -41,113 +72,303 @@ import AiButton from './AiButton.astro';
               <path
                 d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
                 fill="url(#fb-sg-h1)"></path>
-            </svg>
-          </span><br />for your SaaS
+            </svg></span
+          ><br /> <span class="text-[0.78em]">for your SaaS</span>
         </h1>
-        <p class="lead mt-6 max-w-xl">
-          Record your product walkthrough once with our chrome extension and FlowBuddy automatically learns about
-          your product to power an AI assistant for your users
+        <p class="lead mx-auto mt-6 max-w-2xl">
+          FlowBuddy learns how your software works and turns that knowledge into an intelligence
+          layer for your users and AI agents.
         </p>
-        <div class="mt-8 flex flex-wrap items-center gap-4">
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
           <a href="https://app.flowbuddyai.com/signup" class="btn-primary">Get started free</a>
           <AiButton id="hero" />
         </div>
       </div>
 
-      <!-- HTML recreation: a host SaaS page with the assistant answering in context.
-           Animated once on load (typed question → streamed answer → nav spotlight);
-           the markup below IS the end state, so no-JS / reduced-motion get it as-is. -->
-      <div class="relative mx-auto w-full max-w-[560px]" aria-hidden="true" data-hero-demo>
-        <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
-          <!-- browser chrome -->
-          <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
-            <span class="size-2.5 rounded-full bg-gray-200"></span>
-            <span class="size-2.5 rounded-full bg-gray-200"></span>
-            <span class="size-2.5 rounded-full bg-gray-200"></span>
-            <span
-              class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
-              >yoursaas.com/billing</span
-            >
-          </div>
-          <div class="flex">
-            <!-- host sidebar -->
-            <div class="hidden w-[130px] shrink-0 space-y-1 border-r border-gray-100 bg-paper-2 p-3 sm:block">
-              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
-                Dashboard
+      <!-- The flow, drawn in three beats: record → the layer is built → four products. -->
+      <div class="relative mt-12 lg:mt-16" data-hero-pipe>
+        <!-- ground: faded dot grid + an ambient glow centred on the layer -->
+        <div class="pipe-dotgrid pointer-events-none absolute -inset-x-6 -inset-y-8" aria-hidden="true"></div>
+        <div
+          class="pointer-events-none absolute left-1/2 top-[42%] h-[280px] w-[540px] max-w-full -translate-x-1/2 -translate-y-1/2 rounded-full blur-[80px]"
+          style="background: rgba(59, 80, 224, 0.12)"
+          aria-hidden="true"
+        >
+        </div>
+
+        <div
+          class="relative mx-auto grid max-w-[440px] items-stretch gap-2.5 md:max-w-none md:grid-cols-[1.04fr_52px_1.12fr_50px_1fr] md:gap-0"
+        >
+          <!-- Beat 1 · the recording: one clean form, two typed inputs, two clicks -->
+          <div class="pipe-stage is-lit flex flex-col" data-stage="1" aria-hidden="true">
+            <p class="mb-2.5 text-center font-mono text-[0.62rem] font-bold uppercase tracking-widest text-gray-500">
+              <span class="text-brand-500">01</span> · Record your product once
+            </p>
+            <div class="relative flex-1 rounded-card border border-gray-100 bg-white p-2.5 shadow-card">
+              <div class="flex h-full flex-col overflow-hidden rounded-tile border border-gray-150">
+                <div class="flex items-center gap-1.5 border-b border-gray-100 bg-paper-2 px-2.5 py-1.5">
+                  <span class="size-1.5 rounded-full bg-gray-200"></span>
+                  <span class="size-1.5 rounded-full bg-gray-200"></span>
+                  <span class="rounded-pill bg-white px-2 py-0.5 font-mono text-[0.55rem] text-gray-400"
+                    >yoursaas.com/team</span
+                  >
+                  <span
+                    class="ml-auto flex items-center gap-1 rounded-pill border border-brand-100 bg-brand-50 px-1.5 py-0.5 font-mono text-[0.5rem] font-bold uppercase tracking-wider text-brand-600"
+                  >
+                    <span class="size-1 rounded-full bg-brand-500 motion-safe:animate-pulse"></span>Rec
+                  </span>
+                </div>
+                <div class="flex-1 p-2.5">
+                  <p class="text-[0.74rem] font-bold text-ink">Invite teammate</p>
+                  <div class="mt-2 space-y-2">
+                    <div>
+                      <p class="text-[0.54rem] font-bold uppercase tracking-wider text-gray-400">Name</p>
+                      <div
+                        data-act="0"
+                        class="mt-0.5 flex h-8 items-center rounded-control border border-gray-150 bg-white px-2.5 text-[0.66rem] font-medium text-ink"
+                      >
+                        Zorna Dhyani
+                      </div>
+                    </div>
+                    <div>
+                      <p class="text-[0.54rem] font-bold uppercase tracking-wider text-gray-400">Email</p>
+                      <div
+                        data-act="1"
+                        class="mt-0.5 flex h-8 items-center rounded-control border border-gray-150 bg-white px-2.5 text-[0.66rem] font-medium text-ink"
+                      >
+                        zorba@flowbuddyai.com
+                      </div>
+                    </div>
+                    <div
+                      data-act="2"
+                      class="flex h-8 items-center justify-between rounded-control border border-gray-150 bg-white px-2.5 text-[0.66rem] font-semibold text-gray-600 transition-all duration-300"
+                    >
+                      Role: Admin
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m6 9 6 6 6-6"></path>
+                      </svg>
+                    </div>
+                    <button
+                      data-act="3"
+                      tabindex="-1"
+                      class="rounded-control px-3 py-1.5 text-[0.64rem] font-bold text-white ring-2 ring-brand-400 ring-offset-1 transition-all duration-300"
+                      style="background: linear-gradient(180deg, #4a63e8, #3a50dd)"
+                      >Send invite</button
+                    >
+                  </div>
+                </div>
               </div>
-              <div
-                data-anim="invoices"
-                class="relative rounded-control bg-brand-50 px-2.5 py-1.5 text-[0.7rem] font-bold text-brand-600 ring-2 ring-brand-400 ring-offset-1 transition-all duration-300"
+              <!-- the founder's cursor, mid-demo (the script repositions it per action) -->
+              <svg
+                data-anim="p-cursor"
+                class="absolute bottom-4 right-12 drop-shadow-sm"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
               >
-                Invoices
-              </div>
-              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
-                Team
-              </div>
-              <div class="rounded-control px-2.5 py-1.5 text-[0.7rem] font-semibold text-gray-500">
-                Settings
+                <path
+                  d="M5.5 3.2 19 11.5l-6.2 1.4-3.4 5.4z"
+                  fill="#14161f"
+                  stroke="#fff"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"></path>
+              </svg>
+              <span data-anim="p-ripple" class="fb-ripple" style="width: 26px; height: 26px"></span>
+            </div>
+            
+          </div>
+
+          <!-- capture stream (md+): dashes flowing from the recording into the layer -->
+          <div class="pipe-arrowzone is-lit hidden md:block md:pt-7" data-zone="capture" aria-hidden="true">
+            <div class="relative h-full">
+              <svg class="absolute inset-0 h-full w-full" viewBox="0 0 52 100" preserveAspectRatio="none" fill="none">
+                {
+                  [38, 50, 62].map((y, i) => (
+                    <path
+                      class="pipe-flowline"
+                      d={`M2,${y} H50`}
+                      stroke={i === 1 ? '#3b50e0' : '#c3ccfb'}
+                      stroke-width={i === 1 ? 2 : 1.5}
+                      stroke-linecap="round"
+                      vector-effect="non-scaling-stroke"
+                      style={`animation-delay: ${i * 0.18}s`}
+                    />
+                  ))
+                }
+              </svg>
+              <span class="absolute -right-0.5 top-1/2 -translate-y-1/2 text-brand-500">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m9 5 7 7-7 7"></path>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <!-- capture stream (stacked) -->
+          <div class="pipe-arrowzone is-lit md:hidden" data-zone="capture" aria-hidden="true">
+            <svg class="mx-auto h-9 w-9" viewBox="0 0 36 36" fill="none">
+              {
+                [11, 18, 25].map((x, i) => (
+                  <path
+                    class="pipe-flowline"
+                    d={`M${x},2 V34`}
+                    stroke={i === 1 ? '#3b50e0' : '#c3ccfb'}
+                    stroke-width={i === 1 ? 2 : 1.5}
+                    stroke-linecap="round"
+                    style={`animation-delay: ${i * 0.18}s`}
+                  />
+                ))
+              }
+            </svg>
+          </div>
+
+          <!-- Beat 2 · the layer: the recorded actions stack into one workflow -->
+          <div class="pipe-stage is-lit flex flex-col" data-stage="2" aria-hidden="true">
+            <p class="mb-2.5 text-center font-mono text-[0.62rem] font-bold uppercase tracking-widest text-gray-500">
+              <span class="text-brand-500">02</span> · The Application Intelligence Layer
+            </p>
+            <div class="pipe-float flex-1">
+              <div
+                class="relative flex h-full flex-col overflow-hidden rounded-card px-3.5 py-3.5"
+                style="background: linear-gradient(150deg, #4a63e8, #3a50dd); box-shadow: 0 2px 10px rgba(58, 80, 221, 0.3), 0 0 60px 6px rgba(58, 80, 221, 0.26)"
+              >
+                <span class="pipe-sheen"></span>
+                <div class="relative flex items-center gap-2.5">
+                  <span class="grid size-7 shrink-0 place-items-center rounded-[8px] bg-white/15 text-white">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="m12 2 9 4.9-9 4.9-9-4.9Z M3 11.9l9 4.9 9-4.9 M3 16.8l9 4.9 9-4.9"></path>
+                    </svg>
+                  </span>
+                  <div>
+                    <p class="text-[0.9rem] font-extrabold leading-tight text-white">
+                      Application Intelligence Layer
+                    </p>
+                    <p class="text-[0.68rem] font-semibold text-white/65">
+                      Your workflow knowledge base
+                    </p>
+                  </div>
+                </div>
+                <div data-anim="p-wf" class="relative mt-2.5 flex items-center justify-between">
+                  <p class="text-[0.74rem] font-extrabold text-white">Invite a teammate</p>
+                  <span class="rounded-pill bg-white/15 px-1.5 py-0.5 font-mono text-[0.5rem] font-bold uppercase tracking-wider text-white/80"
+                    >4 steps</span
+                  >
+                </div>
+                <div class="relative mt-1.5 space-y-1.5">
+                  {
+                    actions.map((t, i) => (
+                      <div
+                        data-anim={`p-kb${i + 1}`}
+                        class="flex items-center gap-1.5 rounded-control bg-white/12 px-2.5 py-1.5 text-[0.68rem] font-semibold text-white/95"
+                      >
+                        <span class="grid size-4 shrink-0 place-items-center rounded-pill bg-white/20 font-mono text-[0.52rem] font-bold">
+                          {i + 1}
+                        </span>
+                        {t}
+                      </div>
+                    ))
+                  }
+                  <div
+                    class="rounded-control border border-dashed border-white/30 px-2 py-1 text-center text-[0.6rem] font-semibold text-white/60"
+                  >
+                    + every workflow you record
+                  </div>
+                </div>
+                <div
+                  data-anim="p-approve"
+                  class="relative mt-2.5 w-fit rounded-pill bg-white px-2.5 py-1 font-mono text-[0.56rem] font-bold uppercase tracking-wider text-brand-600"
+                >
+                  ✓ Approved by you
+                </div>
               </div>
             </div>
-            <!-- host content (striped placeholders) -->
-            <div class="min-h-[290px] flex-1 space-y-3 p-4">
-              <div class="media-fill h-6 w-2/5 rounded-control"></div>
-              <div class="media-fill h-20 rounded-tile"></div>
-              <div class="media-fill h-9 rounded-control"></div>
-              <div class="media-fill h-9 w-4/5 rounded-control"></div>
+            
+          </div>
+
+          <!-- the fan-out: one trunk, four branches carrying current (md+) -->
+          <div class="pipe-arrowzone is-lit hidden self-stretch md:block md:pt-7" data-zone="fan" aria-hidden="true">
+            <div class="relative h-full">
+              <svg data-fan class="absolute inset-0 h-full w-full" viewBox="0 0 50 400" preserveAspectRatio="none" fill="none">
+                {
+                  [50, 150, 250, 350].map((y, i) => (
+                    <g class="pipe-branch is-lit" data-branch={i}>
+                      <path
+                        class="pipe-branch-base"
+                        d={`M2,200 C26,200 26,${y} 50,${y}`}
+                        stroke-width="1.5"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      <path
+                        class="pipe-branch-flow"
+                        d={`M2,200 C26,200 26,${y} 50,${y}`}
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </g>
+                  ))
+                }
+              </svg>
+              <span class="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rounded-pill bg-brand-400"></span>
+              <span data-anim="p-dot" class="absolute size-2 rounded-pill bg-brand-500 shadow-primary" style="opacity: 0"></span>
             </div>
+          </div>
+          <!-- fan (stacked): a single flowing connector -->
+          <div class="pipe-arrowzone is-lit md:hidden" data-zone="fan" aria-hidden="true">
+            <svg class="mx-auto h-9 w-9" viewBox="0 0 36 36" fill="none">
+              {
+                [11, 18, 25].map((x, i) => (
+                  <path
+                    class="pipe-flowline"
+                    d={`M${x},2 V34`}
+                    stroke={i === 1 ? '#3b50e0' : '#c3ccfb'}
+                    stroke-width={i === 1 ? 2 : 1.5}
+                    stroke-linecap="round"
+                    style={`animation-delay: ${i * 0.18}s`}
+                  />
+                ))
+              }
+            </svg>
+          </div>
+
+          <!-- Beat 3 · the four products it powers (real links) -->
+          <div class="pipe-stage is-lit flex flex-col" data-stage="3">
+            <p class="mb-2.5 text-center font-mono text-[0.62rem] font-bold uppercase tracking-widest text-gray-500" aria-hidden="true">
+              <span class="text-brand-500">03</span> · Multiple Use Cases
+            </p>
+            <div class="grid flex-1 grid-cols-2 gap-2 md:grid-cols-1 md:grid-rows-[repeat(4,minmax(0,1fr))] md:gap-1.5">
+              {
+                capabilities.map((c) => (
+                  <a
+                    href={c.slug}
+                    class="pipe-tile is-lit relative flex items-center gap-2 rounded-card border border-gray-100 bg-white p-2.5 shadow-card hover:border-brand-200"
+                  >
+                    <span class="pipe-port absolute -left-1 top-1/2 hidden size-2 -translate-y-1/2 rounded-pill md:block" aria-hidden="true" />
+                    <span class="grid size-6 shrink-0 place-items-center rounded-[7px] bg-brand-50 text-brand-500">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d={tileIcons[c.key]} />
+                      </svg>
+                    </span>
+                    <span class="min-w-0 text-[0.7rem] font-bold leading-snug text-ink">{c.title}</span>
+                    {c.beta && (
+                      <span class="ml-auto shrink-0 rounded-pill border border-brand-100 bg-brand-50 px-1.5 py-px font-mono text-[0.48rem] font-bold uppercase tracking-wider text-brand-600">
+                        Beta
+                      </span>
+                    )}
+                  </a>
+                ))
+              }
+            </div>
+            
           </div>
         </div>
 
-        <!-- the assistant panel -->
-        <div
-          class="absolute -bottom-6 -right-2 w-[280px] rounded-card border border-gray-100 bg-white shadow-widget sm:-right-6 sm:w-[300px]"
+        <!-- the captured-action chip that flies from the form into the layer -->
+        <span
+          data-anim="p-fly"
+          class="pointer-events-none absolute left-0 top-0 z-10 flex items-center gap-1 whitespace-nowrap rounded-pill border border-brand-100 bg-white px-2 py-1 font-mono text-[0.55rem] font-bold text-brand-600 shadow-widget"
+          style="opacity: 0"
+          aria-hidden="true">✓ Click “Send invite”</span
         >
-          <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
-            <span
-              class="grid size-6 place-items-center rounded-[7px] text-[0.65rem] font-extrabold text-white"
-              style="background: linear-gradient(150deg, #4a63e8, #3a50dd)"
-              >F</span
-            >
-            <span class="text-[0.82rem] font-bold text-ink">Help</span>
-            <span class="ml-auto flex items-center gap-1.5 text-[0.62rem] font-semibold text-success-text">
-              <span class="size-1.5 rounded-full bg-success-dot"></span>Online
-            </span>
-          </div>
-          <div class="space-y-3 px-4 py-4">
-            <div
-              data-anim="q"
-              class="ml-auto w-fit max-w-[85%] rounded-tile bg-brand-500 px-3 py-2 text-[0.76rem] font-medium leading-snug text-white"
-            >
-              How do I download an invoice?
-            </div>
-            <div
-              data-anim="a"
-              class="w-fit max-w-[92%] rounded-tile border border-gray-100 bg-paper px-3 py-2.5 text-[0.76rem] leading-relaxed text-gray-700"
-            >
-              <span data-anim="dots" class="hidden items-center gap-1 py-1">
-                <span class="fb-dot"></span><span class="fb-dot"></span><span class="fb-dot"></span>
-              </span>
-              You're close — invoices live one step away.
-              <span class="mt-1.5 block font-semibold text-ink"
-                >1. Open <span class="text-brand-600">Invoices</span> in the sidebar — I've
-                highlighted it for you.</span
-              >
-              <span class="block font-semibold text-ink"
-                >2. Choose an invoice and select Download PDF.</span
-              >
-              <span
-                data-anim="chip"
-                class="mt-2 inline-block rounded-pill border border-brand-100 bg-brand-50 px-2 py-0.5 font-mono text-[0.58rem] font-bold uppercase tracking-wide text-brand-600"
-                >From: Download an invoice</span
-              >
-            </div>
-            <button
-              data-anim="walk"
-              class="w-full rounded-control border border-brand-200 bg-brand-50 px-3 py-2 text-[0.74rem] font-bold text-brand-600"
-              tabindex="-1">Walk me through it</button
-            >
-          </div>
-        </div>
       </div>
     </div>
     <p class="eyebrow mt-10 text-center lg:mt-auto lg:pt-8">
@@ -156,110 +377,212 @@ import AiButton from './AiButton.astro';
   </div>
 </section>
 
-<!-- Plays the demo once on load: typed question → typing dots → streamed answer →
-     citation + walkthrough button → nav spotlight. Runs synchronously before first
-     paint (no flash); any early return leaves the static end state untouched. -->
+<!-- Plays the story on a continuous loop — the cursor performs the workflow
+     (type name, type email, choose a role, click send) and EACH action flies
+     into the layer, stacking as a numbered step of the captured workflow; the
+     layer is approved; the fan lights each product as its branch delivers
+     current; the finished diagram holds, then the whole story replays. Runs
+     synchronously before first paint (no flash); any early return leaves the
+     static lit end state untouched. -->
 <script is:inline>
   (() => {
-    const demo = document.querySelector('[data-hero-demo]');
-    if (!demo || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const pick = (k) => demo.querySelector('[data-anim="' + k + '"]');
-    const q = pick('q');
-    const a = pick('a');
-    const dots = pick('dots');
-    const chip = pick('chip');
-    const walk = pick('walk');
-    const inv = pick('invoices');
-    if (!q || !a || !dots || !chip || !walk || !inv) return;
+    const pipe = document.querySelector('[data-hero-pipe]');
+    if (!pipe || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const stages = Array.from(pipe.querySelectorAll('.pipe-stage'));
+    const zones = Array.from(pipe.querySelectorAll('.pipe-arrowzone'));
+    const branches = Array.from(pipe.querySelectorAll('.pipe-branch'));
+    const tiles = Array.from(pipe.querySelectorAll('.pipe-tile'));
+    const pick = (k) => pipe.querySelector('[data-anim="' + k + '"]');
+    const acts = [0, 1, 2, 3].map((i) => pipe.querySelector('[data-act="' + i + '"]'));
+    const cursor = pick('p-cursor');
+    const ripple = pick('p-ripple');
+    const fly = pick('p-fly');
+    const dot = pick('p-dot');
+    const wf = pick('p-wf');
+    const rows = ['p-kb1', 'p-kb2', 'p-kb3', 'p-kb4'].map(pick);
+    const approve = pick('p-approve');
+    if (
+      stages.length !== 3 ||
+      branches.length !== 4 ||
+      tiles.length !== 4 ||
+      acts.some((a) => !a) ||
+      !cursor || !ripple || !fly || !dot || !wf || !approve ||
+      rows.some((r) => !r)
+    )
+      return;
 
-    const qText = (q.textContent || '').trim();
-    const nodes = [];
-    const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const n = walker.currentNode;
-      if (chip.contains(n) || dots.contains(n) || !n.textContent) continue;
-      nodes.push([n, n.textContent]);
-    }
-
-    const spotOn = ['bg-brand-50', 'text-brand-600', 'font-bold', 'ring-2', 'ring-brand-400', 'ring-offset-1'];
-    const spotOff = ['text-gray-500', 'font-semibold'];
-
-    // Freeze both bubbles at their final rendered size BEFORE emptying them, so
-    // the panel stays fully open and nothing reflows while the text writes in.
-    const lock = (el) => {
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      el.style.width = w + 'px';
-      el.style.height = h + 'px';
-    };
-    lock(q);
-    lock(a);
-
-    q.textContent = '';
-    q.style.opacity = '0';
-    q.style.transition = 'opacity 200ms';
-    nodes.forEach(([n]) => (n.textContent = ''));
-    a.style.visibility = 'hidden';
-    chip.style.opacity = '0';
-    chip.style.transition = 'opacity 300ms';
-    walk.style.opacity = '0';
-    walk.style.transition = 'opacity 300ms';
-    inv.classList.remove(...spotOn);
-    inv.classList.add(...spotOff);
-
+    const card = acts[0].closest('.pipe-stage').querySelector('.rounded-card');
+    const RING = ['ring-2', 'ring-brand-400', 'ring-offset-1'];
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const caret = document.createElement('span');
-    caret.className = 'fb-caret';
 
-    // The bubbles stay size-locked for the whole session (the panel width is a
-    // fixed px class, so the frozen sizes never go stale) — the demo replays in
-    // a loop, resetting to the empty state between runs.
+    pipe.setAttribute('data-pipe-anim', '');
+
+    // The two typed inputs (their end-state text is the source of truth).
+    const typed = [acts[0], acts[1]].map((el) => [el, (el.textContent || '').trim()]);
+
+    for (const el of [wf, ...rows, approve]) el.style.transition = 'opacity 320ms';
+    // The cursor is repositioned per action from a top-left origin.
+    cursor.style.right = 'auto';
+    cursor.style.bottom = 'auto';
+    cursor.style.left = '0';
+    cursor.style.top = '0';
+    cursor.style.transition = 'transform 460ms cubic-bezier(0.2, 0.7, 0.3, 1)';
+    const cursorTo = async (el, settle = 120) => {
+      const c = card.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width * 0.72 - c.left;
+      const y = r.top + r.height * 0.6 - c.top;
+      cursor.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      await sleep(460 + settle);
+    };
+    // Reset to the pre-recording state — runs before first paint and between
+    // replays (the full story loops).
     const reset = () => {
-      q.textContent = '';
-      q.style.opacity = '0';
-      nodes.forEach(([n]) => (n.textContent = ''));
-      a.style.visibility = 'hidden';
-      chip.style.opacity = '0';
-      walk.style.opacity = '0';
-      inv.classList.remove(...spotOn, 'fb-pop');
-      inv.classList.add(...spotOff);
+      for (const s of stages.slice(1)) s.classList.remove('is-lit');
+      for (const z of zones) z.classList.remove('is-lit');
+      for (const b of branches) b.classList.remove('is-lit');
+      for (const t of tiles) t.classList.remove('is-lit', 'fb-pop');
+      acts[2].classList.remove('fb-pop');
+      acts[3].classList.remove(...RING, 'fb-pop');
+      for (const [el] of typed) el.textContent = '';
+      for (const el of [wf, ...rows, approve]) {
+        el.style.opacity = '0';
+        el.classList.remove('fb-pop', 'fb-fed');
+      }
+      cursor.style.transform = 'translate(30px, 40px)';
+    };
+    reset();
+
+    const pop = async (el, wait) => {
+      el.style.opacity = '1';
+      el.classList.add('fb-pop');
+      await sleep(wait);
+    };
+    const retrigger = (el, cls) => {
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    };
+    const clickAt = (el) => {
+      const c = card.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      ripple.style.left = r.left + r.width * 0.72 - c.left - 13 + 'px';
+      ripple.style.top = r.top + r.height * 0.6 - c.top - 13 + 'px';
+      retrigger(ripple, 'is-on');
+    };
+    const typeInto = async (el, text) => {
+      const caret = document.createElement('span');
+      caret.className = 'fb-caret';
+      el.appendChild(caret);
+      for (const ch of text) {
+        caret.before(ch);
+        await sleep(30);
+      }
+      caret.remove();
+    };
+
+    // A captured-action chip flies from the form element into its layer row.
+    const flyChip = (fromEl, toEl) => {
+      const w = pipe.getBoundingClientRect();
+      const f = fromEl.getBoundingClientRect();
+      const t = toEl.getBoundingClientRect();
+      const sx = f.left + f.width / 2 - w.left;
+      const sy = f.top + f.height / 2 - w.top;
+      const dx = t.left + t.width / 2 - w.left - sx;
+      const dy = t.top + t.height / 2 - w.top - sy;
+      fly.textContent = '✓ ' + (toEl.textContent || '').replace(/^\s*\d+\s*/, '').trim();
+      fly.style.left = sx + 'px';
+      fly.style.top = sy + 'px';
+      return fly.animate(
+        [
+          { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 },
+          { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.16 },
+          {
+            transform: `translate(calc(${dx * 0.55}px - 50%), calc(${dy}px - 50% - 30px)) scale(1)`,
+            opacity: 1,
+            offset: 0.62,
+          },
+          { transform: `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(0.5)`, opacity: 0 },
+        ],
+        { duration: 720, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
+      ).finished;
+    };
+
+    // A pulse of current travelling one fan branch (md+ only — resolves
+    // immediately when the fan is hidden).
+    const runDot = (i) =>
+      new Promise((resolve) => {
+        const path = branches[i].querySelector('.pipe-branch-flow');
+        const svg = path && path.ownerSVGElement;
+        const box = svg && svg.getBoundingClientRect();
+        if (!path || !box || !box.width || !box.height) return resolve();
+        const total = path.getTotalLength();
+        const t0 = performance.now();
+        const dur = 380;
+        dot.style.opacity = '1';
+        const step = (now) => {
+          const p = Math.min(1, (now - t0) / dur);
+          const pt = path.getPointAtLength(total * p);
+          dot.style.left = (pt.x / 50) * box.width - 4 + 'px';
+          dot.style.top = (pt.y / 400) * box.height - 4 + 'px';
+          if (p < 1) requestAnimationFrame(step);
+          else {
+            dot.style.opacity = '0';
+            resolve();
+          }
+        };
+        requestAnimationFrame(step);
+      });
+
+    const capZones = zones.filter((z) => z.dataset.zone === 'capture');
+    const fanZones = zones.filter((z) => z.dataset.zone === 'fan');
+
+    // One recorded action: perform it in the form, then its capture flies into
+    // the layer and stacks as the next step.
+    const record = async (i) => {
+      await cursorTo(acts[i]);
+      if (i < 2) {
+        clickAt(acts[i]);
+        await sleep(180);
+        await typeInto(acts[i], typed[i][1]);
+      } else {
+        clickAt(acts[i]);
+        retrigger(acts[i], 'fb-pop');
+        if (i === 3) acts[3].classList.add(...RING);
+        await sleep(260);
+      }
+      await flyChip(acts[i], rows[i]);
+      if (i === 0) await pop(wf, 60);
+      await pop(rows[i], 120);
     };
 
     (async () => {
       while (true) {
-        await sleep(500);
-        q.style.opacity = '1';
-        q.appendChild(caret);
-        for (const ch of qText) {
-          caret.before(ch);
-          await sleep(38);
-        }
+        // Beat 1 + 2 — the workflow is performed and stacks into the layer,
+        // action by action.
+        await sleep(700);
+        for (const z of capZones) z.classList.add('is-lit');
+        stages[1].classList.add('is-lit');
+        for (let i = 0; i < 4; i++) await record(i);
+        await pop(approve, 300);
         await sleep(280);
-        caret.remove();
 
-        a.style.visibility = 'visible';
-        dots.style.display = 'inline-flex';
-        await sleep(800);
-        dots.style.display = 'none';
-
-        for (const [n, text] of nodes) {
-          for (let i = 0; i < text.length; i += 2) {
-            n.textContent = text.slice(0, i + 2);
-            await sleep(14);
-          }
-          n.textContent = text;
+        // Beat 3 — the fan carries current to each product in turn.
+        for (const z of fanZones) z.classList.add('is-lit');
+        stages[2].classList.add('is-lit');
+        await sleep(200);
+        for (let i = 0; i < 4; i++) {
+          branches[i].classList.add('is-lit');
+          await runDot(i);
+          tiles[i].classList.add('is-lit');
+          retrigger(tiles[i], 'fb-pop');
+          await sleep(170);
         }
 
-        await sleep(180);
-        chip.style.opacity = '1';
-        walk.style.opacity = '1';
-        await sleep(380);
-        inv.classList.remove(...spotOff);
-        inv.classList.add(...spotOn, 'fb-pop');
-
-        // Hold the finished state, then reset for the next run.
-        await sleep(1500);
+        // Hold the finished diagram, then replay the whole story.
+        await sleep(3600);
         reset();
+        await sleep(650);
       }
     })();
   })();

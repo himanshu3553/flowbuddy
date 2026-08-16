@@ -51,4 +51,13 @@ Allow: /
 User-agent: Bytespider
 Allow: /
 
+User-agent: MistralAI-User
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
 Sitemap: https://flowbuddyai.com/sitemap.xml

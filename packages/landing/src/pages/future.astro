@@ -1,41 +1,68 @@
 ---
-// The version-2 positioning placeholder ("make your product AI-agent ready").
-// Copy guardrail (docs/build/interop.md): agent access is presented as
-// DIRECTION only — never as available — until Phase 6 ships.
+// The road-ahead page. The HOMEPAGE now owns the application-intelligence
+// positioning ("the layer exists, record once, power every surface"); this page
+// argues only where the layer goes next. Copy guardrail (docs/build/interop.md):
+// THIRD-PARTY agent access is presented as DIRECTION only — never as available —
+// until Phase 6 ships. FlowBuddy's own in-product agent execution is different:
+// it is live in beta, and is always written with the trust framing (off by
+// default, consented, narrated, stoppable, outcome-verified).
 import Base from '../layouts/Base.astro';
 
 const consumers = [
   {
     title: 'Your in-app AI assistant',
-    body: 'Answers, unblocks, and walks your users through tasks inside your product.',
+    body: 'Answers, contextual guidance, and interactive onboarding for your users, inside your product.',
     status: 'Live today',
-    live: true,
+    tone: 'live',
+  },
+  {
+    title: 'AI agent execution, in your product',
+    body: 'With a user’s consent, the assistant carries out approved workflows itself — narrated step by step, stoppable at any time, verified before it says done. Off by default.',
+    status: 'Beta',
+    tone: 'beta',
   },
   {
     title: 'A hosted help portal',
     body: 'The same approved workflows, published as a searchable help site for your product.',
     status: 'Coming',
-    live: false,
+    tone: 'soon',
   },
   {
-    title: 'AI-agent access',
+    title: 'Third-party AI-agent access',
     body: 'AI agents — assistants like Claude, browser agents, and whatever comes next — reading your approved knowledge to use your product correctly on a user’s behalf.',
     status: 'In development',
-    live: false,
+    tone: 'soon',
   },
   {
     title: 'Documents & SOPs',
     body: 'Your workflows exported as clean step-by-step documents for training and operations.',
     status: 'Planned',
-    live: false,
+    tone: 'soon',
   },
 ];
+
+const pillClass: Record<string, string> = {
+  live: 'border-success-border bg-success-bg text-success-text',
+  beta: 'border-brand-200 bg-brand-50 text-brand-600',
+  soon: 'border-gray-150 bg-paper-2 text-gray-500',
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flowbuddyai.com/' },
+    { '@type': 'ListItem', position: 2, name: 'The road ahead', item: 'https://flowbuddyai.com/future' },
+  ],
+};
+
 ---
 
 <Base
   title="The road ahead — make your product AI-agent ready | FlowBuddy"
-  description="FlowBuddy is building the AI interface layer for SaaS: record your product once, and one approved knowledge base serves your in-app assistant today — and AI agents tomorrow."
+  description="FlowBuddy's road ahead: one approved application intelligence layer serves your in-app assistant today — with AI agent execution in beta — and is being built to serve a hosted help portal and third-party AI agents next."
   path="/future"
+  jsonLd={[breadcrumbJsonLd]}
 >
   <section class="relative overflow-hidden">
     <div
@@ -49,8 +76,8 @@ const consumers = [
       <h1 class="display-hero">Make your product AI-agent ready</h1>
       <p class="lead mx-auto mt-6 max-w-2xl">
         Every product will soon be used by two kinds of users: people, and the AI agents working
-        for them. FlowBuddy is building the AI interface layer for SaaS — so the demo you record
-        once serves both.
+        for them. The application intelligence layer you build with FlowBuddy today is built to
+        serve both.
       </p>
       <div class="mx-auto mt-8 w-fit rounded-pill border border-warning-border bg-warning-bg px-4 py-1.5 font-mono text-[0.68rem] font-bold uppercase tracking-widest text-warning-text">
         In development
@@ -60,10 +87,10 @@ const consumers = [
 
   <section class="border-t border-gray-100 bg-paper">
     <div class="mx-auto max-w-[900px] px-5 py-12 md:px-8 md:py-16">
-      <h2 class="display-section text-center">One knowledge base, many consumers</h2>
+      <h2 class="display-section text-center">One intelligence layer, many consumers</h2>
       <p class="lead mx-auto mt-4 max-w-2xl text-center">
-        You record your product once and approve what it may say. That single, trusted knowledge
-        base is built to serve everything below.
+        You record your product once and approve what it may use. That single, trusted
+        application intelligence layer is built to serve everything below.
       </p>
       <div class="mt-12 grid gap-6 sm:grid-cols-2">
         {
@@ -72,11 +99,7 @@ const consumers = [
               <div class="flex items-center justify-between gap-3">
                 <h3 class="text-[1.02rem] font-bold tracking-tight text-ink">{c.title}</h3>
                 <span
-                  class={`shrink-0 rounded-pill border px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-wider ${
-                    c.live
-                      ? 'border-success-border bg-success-bg text-success-text'
-                      : 'border-gray-150 bg-paper-2 text-gray-500'
-                  }`}
+                  class={`shrink-0 rounded-pill border px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-wider ${pillClass[c.tone]}`}
                 >
                   {c.status}
                 </span>
@@ -88,16 +111,16 @@ const consumers = [
       </div>
       <p class="mx-auto mt-10 max-w-2xl text-center text-[0.9rem] leading-relaxed text-gray-500">
         Nothing here changes the rule your assistant already lives by: every consumer reads only
-        the workflows you approved — and nothing else.
+        the knowledge you approved — and nothing else.
       </p>
     </div>
   </section>
 
   <section>
     <div class="mx-auto max-w-[820px] px-5 py-12 text-center md:px-8 md:py-16">
-      <h2 class="display-section">Start with the assistant today</h2>
+      <h2 class="display-section">Start building the layer today</h2>
       <p class="lead mx-auto mt-4 max-w-xl">
-        The knowledge base you build for your in-app assistant now is the same one that makes your
+        The intelligence layer you build for your users now is the same one that makes your
         product AI-agent ready later. Record once — you're set up for both.
       </p>
       <div class="mt-8 flex flex-wrap items-center justify-center gap-4">

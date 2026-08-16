@@ -1,0 +1,273 @@
+---
+// Capability page — Interactive Onboarding: guided walkthroughs inside the
+// product, advancing automatically as the user completes each step.
+import Base from '../layouts/Base.astro';
+import CapabilityHero from '../components/CapabilityHero.astro';
+import CapabilitySteps from '../components/CapabilitySteps.astro';
+import FeatureSplit from '../components/FeatureSplit.astro';
+import PoweredByLayer from '../components/PoweredByLayer.astro';
+import SignupCta from '../components/SignupCta.astro';
+import PageFaq from '../components/PageFaq.astro';
+import type { Faq } from '../data/faqs';
+
+const steps = [
+  {
+    title: 'Record the task once',
+    body: 'You don’t build tours. Any workflow you’ve recorded and approved can run as a walkthrough — the steps come from how you actually did it.',
+  },
+  {
+    title: 'It guides, your user does',
+    body: 'The assistant highlights each step in your UI and explains it in plain words. Your user does the clicking and stays in control the whole way.',
+  },
+  {
+    title: 'It advances by itself',
+    body: 'It notices when a step is done and moves on — across pages, wherever the task leads. The user can stop at any point.',
+  },
+];
+
+const faqs: Faq[] = [
+  {
+    q: 'How is this different from a product tour?',
+    a: 'Product tours are assembled by hand, run on a fixed script, and fire for everyone whether they needed them or not. FlowBuddy walkthroughs are derived from a recording, start when a user actually asks for help with a task, and follow that user’s real progress.',
+  },
+  {
+    q: 'Do I have to build each walkthrough?',
+    a: 'No. Record a task once with the Chrome extension and approve the workflow FlowBuddy derives — that workflow is the walkthrough. There is no step-by-step tour builder to maintain.',
+  },
+  {
+    q: 'What happens when the task spans several pages?',
+    a: 'The walkthrough keeps up. It follows the user across navigations and continues from the right step on the new page, until the task is done.',
+  },
+  {
+    q: 'Does the user stay in control?',
+    a: 'Always. The assistant highlights and explains; the user clicks. It advances only when a step is actually completed, and the user can stop the walkthrough at any time.',
+  },
+];
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flowbuddyai.com/' },
+    { '@type': 'ListItem', position: 2, name: 'Interactive Onboarding', item: 'https://flowbuddyai.com/interactive-onboarding' },
+  ],
+};
+
+---
+
+<Base
+  title="Interactive Onboarding for your SaaS | FlowBuddy AI"
+  description="In-product interactive onboarding built from one recording: FlowBuddy guides whole tasks step by step in your UI and advances automatically as each step is completed. No tour builder."
+  path="/interactive-onboarding"
+  jsonLd={[faqJsonLd, breadcrumbJsonLd]}
+>
+  <CapabilityHero
+    ctaId="hero"
+    sub="New users learn your product by doing. FlowBuddy guides whole tasks one step at a time inside your UI, notices when each step is done, and advances automatically — across pages, wherever the task leads."
+  >
+    <Fragment slot="headline">
+      Interactive<br />
+      <span class="hero-ai">
+        Onboarding<svg viewBox="0 0 24 24" aria-hidden="true" class="hero-ai-spark">
+          <defs>
+            <linearGradient id="fb-sg-h1" x1="18%" y1="0%" x2="82%" y2="100%">
+              <stop offset="0" stop-color="#4a63e8"></stop>
+              <stop offset="1" stop-color="#3a50dd"></stop>
+            </linearGradient>
+          </defs>
+          <path
+            d="M10 3c.8 4.2 2.2 5.6 6.4 6.4-4.2.8-5.6 2.2-6.4 6.4-.8-4.2-2.2-5.6-6.4-6.4 4.2-.8 5.6-2.2 6.4-6.4Z"
+            fill="url(#fb-sg-h1)"></path>
+          <path
+            d="M18.8 13.5c.5 2.4 1.2 3.2 3.7 3.7-2.4.5-3.2 1.2-3.7 3.7-.5-2.4-1.2-3.2-3.7-3.7 2.4-.5 3.2-1.2 3.7-3.7Z"
+            fill="url(#fb-sg-h1)"></path>
+        </svg>
+      </span><br />Inside Your Product
+    </Fragment>
+
+    <!-- HTML recreation: the walkthrough advancing through a real task. The
+         markup IS the end state; the player below animates it and loops. -->
+    <div slot="demo" class="relative mx-auto w-full max-w-[560px] pb-10" aria-hidden="true" data-hero-demo>
+      <div class="overflow-hidden rounded-dialog border border-gray-150 bg-white shadow-frame">
+        <!-- browser chrome -->
+        <div class="flex items-center gap-2 border-b border-gray-100 bg-paper-2 px-4 py-2.5">
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="size-2.5 rounded-full bg-gray-200"></span>
+          <span class="ml-3 rounded-pill bg-white px-3 py-1 font-mono text-[0.62rem] text-gray-400"
+            >yoursaas.com/team/invite</span
+          >
+        </div>
+        <!-- host content: the form being walked through -->
+        <div class="min-h-[270px] p-5">
+          <p class="text-[0.85rem] font-bold text-ink">Invite teammate</p>
+          <div class="mt-3.5 max-w-[320px] space-y-3">
+            <div class="media-fill h-9 rounded-control"></div>
+            <div
+              data-anim="spot"
+              class="flex h-9 items-center justify-between rounded-control border border-gray-150 bg-white px-3 text-[0.74rem] font-semibold text-gray-600 ring-2 ring-brand-400 ring-offset-2 transition-all duration-300"
+            >
+              Role: Member
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </div>
+            <div class="media-fill h-9 w-2/5 rounded-control"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the walkthrough card -->
+      <div
+        class="absolute -bottom-10 -right-2 w-[270px] rounded-card border border-gray-100 bg-white p-4 shadow-widget sm:-right-5"
+      >
+        <p class="font-mono text-[0.58rem] font-bold uppercase tracking-widest text-brand-500">
+          Walkthrough
+        </p>
+        <div class="mt-1.5 flex items-center justify-between">
+          <p class="text-[0.8rem] font-bold text-ink">Add a team member</p>
+          <span data-anim="ptext" class="font-mono text-[0.6rem] font-semibold text-gray-500"
+            >Step 2 of 3</span
+          >
+        </div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-pill bg-gray-100">
+          <div
+            data-anim="bar"
+            class="h-full rounded-pill transition-[width] duration-500"
+            style="width: 66%; background: linear-gradient(90deg, #4a63e8, #3a50dd)"
+          >
+          </div>
+        </div>
+        <div class="mt-3 space-y-2">
+          <div class="cap-step" data-anim="step1">
+            <span class="cap-badge cap-badge-on">
+              <span data-anim="num" class="hidden">1</span>
+              <svg data-anim="check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
+            <span class="cap-step-title">Select Invite member</span>
+          </div>
+          <div class="cap-step cap-step-active" data-anim="step2">
+            <span data-anim="badge2" class="cap-badge cap-badge-on">2</span>
+            <span class="cap-step-title">Choose a role</span>
+          </div>
+          <div class="cap-step">
+            <span class="cap-badge cap-badge-off">3</span>
+            <span class="cap-step-title">Send the invite</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </CapabilityHero>
+
+  <CapabilitySteps
+    eyebrow="How it guides"
+    heading="Whole tasks, completed in your product"
+    steps={steps}
+  />
+
+  <FeatureSplit
+    eyebrow="No tour builder"
+    heading="Onboarding that ships with zero authoring"
+    lead="The walkthroughs are a by-product of showing FlowBuddy your product — not a second product you have to build and maintain."
+    bullets={[
+      'Derived from your recording — no step-by-step authoring',
+      'Starts from what the user asked, not a day-one script',
+      'Advances automatically as each step is completed',
+      'Continues across pages, wherever the task leads',
+      'The user does every click and can stop at any time',
+    ]}
+  >
+    <div class="rounded-dialog border border-gray-150 bg-white p-6 shadow-frame md:p-8" aria-hidden="true">
+      <div class="space-y-3">
+        <div class="rounded-tile border border-gray-150 bg-paper-2 p-4">
+          <p class="font-mono text-[0.6rem] font-bold uppercase tracking-widest text-gray-400">
+            A product tour
+          </p>
+          <p class="mt-2 text-[0.85rem] leading-relaxed text-gray-500">
+            Hand-built · one fixed script · fires for everyone on day one, needed or not
+          </p>
+        </div>
+        <div class="rounded-tile border border-brand-200 bg-brand-50 p-4 shadow-step">
+          <p class="font-mono text-[0.6rem] font-bold uppercase tracking-widest text-brand-500">
+            A FlowBuddy walkthrough
+          </p>
+          <p class="mt-2 text-[0.85rem] font-medium leading-relaxed text-gray-700">
+            Recorded once · starts when the user asks · follows their real progress, step by step
+          </p>
+        </div>
+      </div>
+    </div>
+  </FeatureSplit>
+
+  <PoweredByLayer current="walkthrough" />
+  <SignupCta />
+  <PageFaq heading="Questions about onboarding" items={faqs} />
+</Base>
+
+<!-- Plays the walkthrough on load and loops: step 1 completes → step 2 activates,
+     the bar advances, and the role field is spotlit. Pre-paint init; any early
+     return leaves the static end state untouched. -->
+<script is:inline>
+  (() => {
+    const demo = document.querySelector('[data-hero-demo]');
+    if (!demo || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const pick = (k) => demo.querySelector('[data-anim="' + k + '"]');
+    const spot = pick('spot');
+    const bar = pick('bar');
+    const ptext = pick('ptext');
+    const step1 = pick('step1');
+    const step2 = pick('step2');
+    const badge2 = pick('badge2');
+    const num = pick('num');
+    const check = pick('check');
+    if (!spot || !bar || !ptext || !step1 || !step2 || !badge2 || !num || !check) return;
+
+    const RING = ['ring-2', 'ring-brand-400', 'ring-offset-2'];
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const reset = () => {
+      spot.classList.remove(...RING, 'fb-pop');
+      bar.style.width = '33%';
+      ptext.textContent = 'Step 1 of 3';
+      step1.classList.add('cap-step-active');
+      step2.classList.remove('cap-step-active');
+      badge2.classList.remove('cap-badge-on');
+      badge2.classList.add('cap-badge-off');
+      num.classList.remove('hidden');
+      check.classList.add('hidden');
+    };
+    reset();
+
+    (async () => {
+      while (true) {
+        await sleep(1000);
+        step1.classList.remove('cap-step-active');
+        num.classList.add('hidden');
+        check.classList.remove('hidden');
+        await sleep(350);
+        step2.classList.add('cap-step-active');
+        badge2.classList.remove('cap-badge-off');
+        badge2.classList.add('cap-badge-on');
+        bar.style.width = '66%';
+        ptext.textContent = 'Step 2 of 3';
+        await sleep(400);
+        spot.classList.add(...RING, 'fb-pop');
+
+        await sleep(2800);
+        reset();
+      }
+    })();
+  })();
+</script>
