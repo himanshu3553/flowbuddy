@@ -426,14 +426,14 @@ const actions = [
     cursor.style.bottom = 'auto';
     cursor.style.left = '0';
     cursor.style.top = '0';
-    cursor.style.transition = 'transform 460ms cubic-bezier(0.2, 0.7, 0.3, 1)';
-    const cursorTo = async (el, settle = 120) => {
+    cursor.style.transition = 'transform 300ms cubic-bezier(0.2, 0.7, 0.3, 1)';
+    const cursorTo = async (el, settle = 60) => {
       const c = card.getBoundingClientRect();
       const r = el.getBoundingClientRect();
       const x = r.left + r.width * 0.72 - c.left;
       const y = r.top + r.height * 0.6 - c.top;
       cursor.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-      await sleep(460 + settle);
+      await sleep(300 + settle);
     };
     // Reset to the pre-recording state — runs before first paint and between
     // replays (the full story loops).
@@ -476,7 +476,7 @@ const actions = [
       el.appendChild(caret);
       for (const ch of text) {
         caret.before(ch);
-        await sleep(30);
+        await sleep(16);
       }
       caret.remove();
     };
@@ -504,7 +504,7 @@ const actions = [
           },
           { transform: `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(0.5)`, opacity: 0 },
         ],
-        { duration: 720, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
+        { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
       ).finished;
     };
 
@@ -518,7 +518,7 @@ const actions = [
         if (!path || !box || !box.width || !box.height) return resolve();
         const total = path.getTotalLength();
         const t0 = performance.now();
-        const dur = 380;
+        const dur = 220;
         dot.style.opacity = '1';
         const step = (now) => {
           const p = Math.min(1, (now - t0) / dur);
@@ -543,46 +543,46 @@ const actions = [
       await cursorTo(acts[i]);
       if (i < 2) {
         clickAt(acts[i]);
-        await sleep(180);
+        await sleep(90);
         await typeInto(acts[i], typed[i][1]);
       } else {
         clickAt(acts[i]);
         retrigger(acts[i], 'fb-pop');
         if (i === 3) acts[3].classList.add(...RING);
-        await sleep(260);
+        await sleep(130);
       }
       await flyChip(acts[i], rows[i]);
-      if (i === 0) await pop(wf, 60);
-      await pop(rows[i], 120);
+      if (i === 0) await pop(wf, 40);
+      await pop(rows[i], 70);
     };
 
     (async () => {
       while (true) {
         // Beat 1 + 2 — the workflow is performed and stacks into the layer,
         // action by action.
-        await sleep(700);
+        await sleep(350);
         for (const z of capZones) z.classList.add('is-lit');
         stages[1].classList.add('is-lit');
         for (let i = 0; i < 4; i++) await record(i);
-        await pop(approve, 300);
-        await sleep(280);
+        await pop(approve, 160);
+        await sleep(140);
 
         // Beat 3 — the fan carries current to each product in turn.
         for (const z of fanZones) z.classList.add('is-lit');
         stages[2].classList.add('is-lit');
-        await sleep(200);
+        await sleep(100);
         for (let i = 0; i < 4; i++) {
           branches[i].classList.add('is-lit');
           await runDot(i);
           tiles[i].classList.add('is-lit');
           retrigger(tiles[i], 'fb-pop');
-          await sleep(170);
+          await sleep(90);
         }
 
         // Hold the finished diagram, then replay the whole story.
-        await sleep(3600);
+        await sleep(1800);
         reset();
-        await sleep(650);
+        await sleep(400);
       }
     })();
   })();
