@@ -218,6 +218,19 @@ export async function setReasonIncludeValues(enabled: boolean): Promise<void> {
   revalidatePath('/dashboard/copilot');
 }
 
+/** Demo videos (roadmap §13) — the Studio-side feature flag: shows/hides the workflow page's
+ *  "Demo video" card and gates the generate action. Nothing end-user-facing. */
+export async function setDemoVideosEnabled(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { demoVideosEnabled: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+  revalidatePath('/dashboard/kb');
+}
+
 /** Rotate the public embeddable key (invalidates the old one immediately). */
 export async function regenerateCopilotKey(): Promise<void> {
   const ctx = await getCurrentWorkspace();

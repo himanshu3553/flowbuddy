@@ -1,12 +1,14 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import type { SynthesisJob } from '@flowbuddy/shared';
+import type { RenderVideoJob, SynthesisJob } from '@flowbuddy/shared';
 import { createLogger } from '@flowbuddy/logger';
 
 const log = createLogger('web:queue');
 
-// Must match SYNTHESIS_QUEUE in @flowbuddy/shared (jobs.ts). Inlined rather than value-imported because
-// Next's server-action bundler can't resolve shared's raw-TS `.js`-extension entry for a value.
+// Must match SYNTHESIS_QUEUE / RENDER_QUEUE in @flowbuddy/shared (jobs.ts). Inlined rather than
+// value-imported because Next's server-action bundler can't resolve shared's raw-TS `.js`-extension
+// entry for a value.
 const SYNTHESIS_QUEUE = 'synthesis';
+const RENDER_QUEUE = 'render';
 
 // Studio is a privileged server (it already talks to Postgres directly), so it can enqueue a
 // re-process job straight onto the same Redis/BullMQ queue the worker consumes — no extra API hop.
@@ -28,7 +30,7 @@ const connection: ConnectionOptions = {
 };
 
 // Reuse one Queue across hot-reloads / requests (Next.js keeps module state warm).
-const g = globalThis as unknown as { __flowbuddySynthesisQueue?: Queue };
+const g = globalThis as unknown as { __flowbuddySynthesisQueue?: Queue; __flowbuddyRenderQueue?: Queue };
 
 // Throttle connection-error logging so a Redis outage can't flood the logs (one line / 30s) — and,
 // critically, attach a handler AT ALL so BullMQ's emitted 'error' never becomes an unhandled
@@ -74,6 +76,33 @@ export async function enqueueSynthesis(job: SynthesisJob): Promise<void> {
     getQueue().add('synthesize', job),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('enqueueSynthesis timed out')), 5000),
+    ),
+  ]);
+}
+
+// Same lazy-singleton + mirrored defaultJobOptions story as the synthesis queue above.
+function getRenderQueue(): Queue {
+  if (g.__flowbuddyRenderQueue) return g.__flowbuddyRenderQueue;
+  const queue = new Queue(RENDER_QUEUE, {
+    connection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 500 },
+    },
+  });
+  queue.on('error', onQueueError);
+  g.__flowbuddyRenderQueue = queue;
+  return queue;
+}
+
+/** Enqueue a demo-video render. Same best-effort bound as enqueueSynthesis. */
+export async function enqueueRenderVideo(job: RenderVideoJob): Promise<void> {
+  await Promise.race([
+    getRenderQueue().add('render-video', job),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('enqueueRenderVideo timed out')), 5000),
     ),
   ]);
 }

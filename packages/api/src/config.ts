@@ -24,6 +24,9 @@ export const config = {
   // P1-M3 hybrid retrieval — '' lets @flowbuddy/synthesis apply its DEFAULT_EMBED_MODEL
   // (text-embedding-3-small); the model must match the vector(1536) column dims.
   embedModel: process.env.EMBED_MODEL || '',
+  // Demo-video voiceover (the render worker's TTS pass).
+  ttsModel: process.env.TTS_MODEL || 'gpt-4o-mini-tts',
+  ttsVoice: process.env.TTS_VOICE || 'alloy',
   r2: {
     endpoint: process.env.R2_ENDPOINT || 'http://localhost:9000',
     region: process.env.R2_REGION || 'auto',

@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
 import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
+import { DemoVideoCard } from '@/components/dashboard/demo-video-card';
 import { displayRoute } from '@flowbuddy/shared/route-pattern';
 import { planSummary, type ExecutionStep } from '@flowbuddy/synthesis/execution-plan';
 
@@ -117,6 +118,22 @@ export default async function KbWorkflowPage({
           where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
           select: { id: true, description: true },
         });
+
+  // Demo video (founder-facing derivation; vocabulary in schema.prisma `DemoVideo`), behind the
+  // workspace's `demoVideosEnabled` flag — off hides the card entirely (rows and rendered files
+  // survive the flag, so toggling it back restores them). The signed URL is longer-lived than the
+  // screenshots' default: a video is watched and downloaded, and a playback session outliving its
+  // URL fails mid-scrub.
+  const demoVideosOn = ctx.workspace.demoVideosEnabled;
+  const demoVideo =
+    workflow && demoVideosOn
+      ? await prisma.demoVideo.findUnique({
+          where: { workflowId: workflow.id },
+          select: { status: true, fileKey: true, durationMs: true, error: true },
+        })
+      : null;
+  const demoVideoUrl =
+    demoVideo?.status === 'ready' && demoVideo.fileKey ? await signedUrl(demoVideo.fileKey, 21600) : null;
 
   const stats =
     selected != null
@@ -371,6 +388,27 @@ export default async function KbWorkflowPage({
                     summary={runSummary}
                     checks={runChecks}
                     ready={ready}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {workflow && ready && demoVideosOn && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Demo video</CardTitle>
+                  <CardDescription className="text-xs">
+                    A polished walkthrough video generated from this workflow&apos;s recording.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <DemoVideoCard
+                    workflowId={workflow.id}
+                    workflowTitle={workflowTitle}
+                    status={demoVideo?.status ?? null}
+                    videoUrl={demoVideoUrl}
+                    durationMs={demoVideo?.durationMs ?? null}
+                    error={demoVideo?.error ?? null}
                   />
                 </CardContent>
               </Card>

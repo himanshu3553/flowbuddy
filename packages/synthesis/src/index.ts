@@ -103,6 +103,8 @@ export type { DistilledStep, DistilledStepLLM } from './distill';
 export { attachStepEvidence, extractStepEvidence, extractDisappearedMarkers } from './step-evidence';
 export type { StepEvidence } from './step-evidence';
 export { buildScreens } from './screen-runs';
+export { buildDemoVideo } from './video'; // demo-video derivation (render worker)
+export type { DemoVideoInput, DemoVideoResult } from './video';
 // Note: buildWorkflowKB + WorkflowKB/DistilledWorkflow/BuildWorkflowKBInput are declared+exported below (live copilot path).
 
 // ---------- Module 2 (LIVE copilot path): capture → distilled workflow KB ----------

@@ -13,3 +13,7 @@ out/
 spike/runs/
 # prisma generated client (regenerated on install/build)
 **/.prisma/
+
+# demo-video smoke harness output (packages/synthesis/scripts/render-smoke.mts)
+packages/synthesis/scripts/*.mp4
+packages/synthesis/scripts/*.png

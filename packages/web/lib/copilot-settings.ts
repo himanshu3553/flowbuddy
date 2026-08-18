@@ -21,6 +21,8 @@ export interface CopilotSettings {
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
   reasonIncludeValues: boolean;
+  // Demo videos (roadmap §13) — Studio-side feature flag for the workflow page's video card.
+  demoVideosEnabled: boolean;
   // Appearance — '' means "use the widget default" (see lib/copilot-appearance.ts).
   accent: string;
   title: string;
@@ -43,6 +45,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     reasonEnabled: true,
     reasonImageEnabled: true,
     reasonIncludeValues: true,
+    demoVideosEnabled: true,
     copilotAccent: true,
     copilotTitle: true,
     copilotGreeting: true,
@@ -69,6 +72,7 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     reasonEnabled: ws.reasonEnabled,
     reasonImageEnabled: ws.reasonImageEnabled,
     reasonIncludeValues: ws.reasonIncludeValues,
+    demoVideosEnabled: ws.demoVideosEnabled,
     accent: ws.copilotAccent ?? '',
     title: ws.copilotTitle ?? '',
     greeting: ws.copilotGreeting ?? '',

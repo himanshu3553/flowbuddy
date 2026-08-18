@@ -161,6 +161,10 @@ model Workspace {
   // where diagnosis quality lives); the founder still owns the toggle + the disclosure snippet.
   reasonImageEnabled    Boolean  @default(true)
   reasonIncludeValues   Boolean  @default(false)
+  // Demo videos (roadmap §13) — the Studio-side feature flag. OFF hides the workflow page's
+  // "Demo video" card and refuses the generate action; it gates nothing end-user-facing (the
+  // feature never serves end users). Default OFF while the feature proves itself.
+  demoVideosEnabled     Boolean  @default(false)
 
   owner            User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   tokens           ApiToken[]
@@ -175,6 +179,7 @@ model Workspace {
   executionPlans   ExecutionPlan[]
   executionRuns    ExecutionRun[]
   agentAcceptances AgentAcceptance[]
+  demoVideos       DemoVideo[]
 }
 
 model ApiToken {
@@ -275,10 +280,42 @@ model Workflow {
   items         KnowledgeItem[]
   approval      CopilotApproval?
   executionPlan ExecutionPlan?
+  demoVideo     DemoVideo?
 
   @@unique([sourceId, segmentIndex])
   @@index([workspaceId])
   @@index([taskId])
+}
+
+// A workflow's generated DEMO VIDEO — the polished, branded MP4 the render worker derives from the
+// workflow's distilled steps + stored frames + a TTS voiceover. One current video per workflow;
+// regenerating overwrites the row and the object. Founder-facing only (Studio generates, watches,
+// downloads) — nothing here is served to end users, so this deliberately does NOT read
+// CopilotApproval and is not one of its liveness readers.
+//
+// `status` vocabulary (stored strings, so this comment owns them, same rule as the mode vocabulary):
+//   queued      — render requested, job enqueued (or enqueue failed and a retry will re-request)
+//   processing  — the worker is rendering
+//   ready       — `fileKey` points at the finished MP4 under the recording's session prefix
+//                 (workspaces/<ws>/sessions/<sourceId>/video/…), so deleting the recording
+//                 deletes the video with it
+//   error       — the final attempt failed; `error` says why. Matches KnowledgeSource's value —
+//                 a string, not an enum, so a new state ships without a migration.
+model DemoVideo {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workflowId  String   @unique
+  status      String   @default("queued")
+  fileKey     String?
+  durationMs  Int?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow  Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model KnowledgeItem {

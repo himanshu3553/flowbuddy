@@ -1,9 +1,10 @@
 import { Worker } from 'bullmq';
-import { SYNTHESIS_QUEUE } from '@flowbuddy/shared';
+import { RENDER_QUEUE, SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
   attachOutcomeMarkers,
+  buildDemoVideo,
   buildWorkflowKB,
   compileExecutionPlan,
   distilledStepText,
@@ -22,9 +23,10 @@ import {
   type WorkflowFingerprint,
 } from '@flowbuddy/synthesis';
 import { createLogger } from '@flowbuddy/logger';
+import type { DistilledStep } from '@flowbuddy/synthesis';
 import { config } from './config';
 import { connection } from './queue';
-import { sessionArtifactReader } from './storage';
+import { putObject, sessionArtifactReader, sessionKey } from './storage';
 
 const log = createLogger('worker');
 
@@ -602,6 +604,94 @@ worker.on('error', (err) => {
   log.error({ err: err?.message || String(err) }, 'Redis connection error (jobs resume when it recovers)');
 });
 
+// ── Demo-video renders (RENDER_QUEUE) ────────────────────────────────────────────────────────────
+// The DemoVideo row is the durable request; the job only names it. So a job whose row is gone is
+// dropped silently (the founder deleted the workflow, or re-queued — a fresh job carries the rest),
+// and all real state transitions happen on the row, mirroring the recording pipeline above.
+const renderWorker = new Worker(
+  RENDER_QUEUE,
+  async (job) => {
+    const { workflowId } = job.data as { workflowId: string };
+    log.info({ workflowId, jobId: job.id }, 'rendering demo video');
+
+    const video = await prisma.demoVideo.findUnique({
+      where: { workflowId },
+      include: { workflow: { include: { source: true } } },
+    });
+    if (!video) {
+      log.warn({ workflowId }, 'demo video row not found — skipping');
+      return;
+    }
+    const workflow = video.workflow;
+    const manifest = workflow.source.manifest as unknown as SessionManifest | null;
+    if (!manifest) {
+      await prisma.demoVideo.update({
+        where: { id: video.id },
+        data: { status: 'error', error: 'Recording manifest missing' },
+      });
+      return;
+    }
+    await prisma.demoVideo.update({ where: { id: video.id }, data: { status: 'processing', error: null } });
+
+    try {
+      const items = await prisma.knowledgeItem.findMany({
+        where: { workflowId, kind: 'step' },
+        orderBy: { orderIndex: 'asc' },
+        select: { data: true },
+      });
+      const steps = items.map((i) => i.data as unknown as DistilledStep);
+      if (steps.length === 0) throw new Error('Workflow has no steps');
+
+      const { mp4, durationMs, degradedAudio } = await buildDemoVideo({
+        apiKey: config.openaiApiKey,
+        scriptModel: config.synthModel,
+        ttsModel: config.ttsModel,
+        ttsVoice: config.ttsVoice,
+        title: workflow.title || 'Product demo',
+        description: workflow.description,
+        steps,
+        manifest,
+        getArtifact: sessionArtifactReader(workflow.workspaceId, workflow.sourceId),
+        log,
+        onProgress: (f, total) => {
+          if (f % 300 === 0 || f === total) log.info({ workflowId, frames: `${f}/${total}` }, 'render progress');
+        },
+      });
+
+      // Under the recording's session prefix, so deleting the recording deletes the video too.
+      const fileKey = sessionKey(workflow.workspaceId, workflow.sourceId, `video/demo-${workflowId}.mp4`);
+      await putObject(fileKey, mp4, 'video/mp4');
+      await prisma.demoVideo.update({
+        where: { id: video.id },
+        data: { status: 'ready', fileKey, durationMs, error: degradedAudio ? 'Some narration fell back to silence' : null },
+      });
+      log.info({ workflowId, durationMs, bytes: mp4.length, degradedAudio }, 'demo video ready');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Same retry contract as synthesis: only the final attempt writes `error`.
+      const willRetry = job.attemptsMade + 1 < (job.opts.attempts ?? 1);
+      if (!willRetry) {
+        await prisma.demoVideo.update({ where: { id: video.id }, data: { status: 'error', error: msg } });
+      }
+      log.error({ workflowId, jobId: job.id, willRetry, err: msg }, willRetry ? 'render attempt failed (will retry)' : 'render failed');
+      throw e;
+    }
+  },
+  // Concurrency 1 for the same reason as synthesis above — and a render additionally spawns an
+  // ffmpeg subprocess whose memory sits OUTSIDE the node heap cap, on the shared 512 MB instance.
+  { connection, concurrency: 1 },
+);
+
+renderWorker.on('ready', () => log.info({ queue: RENDER_QUEUE }, 'listening on queue'));
+renderWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err: err?.message }, 'render job failed'));
+let lastRenderErrLog = 0;
+renderWorker.on('error', (err) => {
+  const now = Date.now();
+  if (now - lastRenderErrLog < 30_000) return;
+  lastRenderErrLog = now;
+  log.error({ err: err?.message || String(err) }, 'Redis connection error (render jobs resume when it recovers)');
+});
+
 // Graceful shutdown (§3.4): worker.close() waits for the in-flight job (BullMQ default), so a
 // deploy doesn't hard-kill mid-distillation when the job can finish in time. If it can't, the
 // unref'd failsafe exits before the host's SIGKILL — the job then recovers via retries (attempts:3)
@@ -611,8 +701,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     log.info({ signal }, 'signal received — closing (waiting for any in-flight job)');
     setTimeout(() => process.exit(0), 25_000).unref();
-    void worker
-      .close()
+    void Promise.all([worker.close(), renderWorker.close()])
       .then(() => prisma.$disconnect())
       .catch(() => {});
   });

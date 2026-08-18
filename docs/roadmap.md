@@ -407,3 +407,25 @@ upgrades that to real certification when Phase 3 exists. **Feeds:** Version 3's 
 the first consumer of this export seam. *(The copy rule that binds until this phase ships — no
 customer-facing surface may present third-party agent access as available — is the phase's own, and
 stays in its doc.)*
+
+---
+
+## 13. Demo videos (asset derivation)
+
+**✅ v1 built 2026-08-18** — a polished, narrated product-demo MP4 **derived** from a workflow's
+recorded steps (screenshots + click targets + the founder's narration transcript), never a screen
+recording: a grounded voiceover script + TTS, synthetic cursor travel with click ripples, camera
+zooms onto each step's target, brand intro/outro cards, and step captions. Generated per workflow
+from its page in the Studio (aside card: generate → watch inline → download → regenerate), rendered
+by the worker on its own queue, stored under the recording's session prefix so recording deletion
+cleans it up. Founder-facing only — nothing is served to end users, so it deliberately sits outside
+the approval/liveness readers. **Behind a per-workspace flag** (AI Assistant settings → Advanced →
+Demo videos, default OFF): off hides the card and refuses the generate action; rows and rendered
+files survive the toggle.
+
+**Not yet in v1:** scroll motion and transient UI (menus, spinners) — the recorder captures ~2
+frames per step, so everything between frames is synthetic; the recorder's own control bar is
+cropped out of the bottom of every frame, which also crops that strip of real UI (hiding the bar
+pre-capture is a future recorder release); brand/voice customization; multi-language; regeneration
+on re-recording. Direction if it earns adoption: replay-and-record against a live environment on
+the acting substrate for true motion.

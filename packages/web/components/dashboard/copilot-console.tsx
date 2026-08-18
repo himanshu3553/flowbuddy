@@ -32,6 +32,7 @@ export function CopilotConsole({
   reasonEnabled,
   reasonImageEnabled,
   reasonIncludeValues,
+  demoVideosEnabled,
   activity,
   detection,
   appearance: initialAppearance,
@@ -50,6 +51,7 @@ export function CopilotConsole({
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
   reasonIncludeValues: boolean;
+  demoVideosEnabled: boolean;
   activity: {
     total: number;
     window: number;
@@ -82,6 +84,7 @@ export function CopilotConsole({
         reasonEnabled={reasonEnabled}
         reasonImageEnabled={reasonImageEnabled}
         reasonIncludeValues={reasonIncludeValues}
+        demoVideosEnabled={demoVideosEnabled}
         activity={activity}
         detection={detection}
         appearance={appearance}

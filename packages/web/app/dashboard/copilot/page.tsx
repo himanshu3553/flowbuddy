@@ -33,6 +33,7 @@ export default async function CopilotSettingsPage() {
     reasonEnabled,
     reasonImageEnabled,
     reasonIncludeValues,
+    demoVideosEnabled,
     accent,
     title,
     greeting,
@@ -92,6 +93,7 @@ export default async function CopilotSettingsPage() {
           reasonEnabled={reasonEnabled}
           reasonImageEnabled={reasonImageEnabled}
           reasonIncludeValues={reasonIncludeValues}
+          demoVideosEnabled={demoVideosEnabled}
           activity={{
             total: metrics.total,
             window: metrics.window,

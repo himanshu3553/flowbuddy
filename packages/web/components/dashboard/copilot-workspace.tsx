@@ -16,6 +16,7 @@ import {
   setReasonEnabled,
   setReasonImageEnabled,
   setReasonIncludeValues,
+  setDemoVideosEnabled,
 } from '@/lib/copilot-settings-actions';
 import {
   ACCENT_PRESETS,
@@ -116,6 +117,7 @@ export function CopilotWorkspace({
   reasonEnabled = true,
   reasonImageEnabled = false,
   reasonIncludeValues = false,
+  demoVideosEnabled = false,
   activity,
   detection,
   appearance,
@@ -135,6 +137,8 @@ export function CopilotWorkspace({
   reasonEnabled?: boolean;
   reasonImageEnabled?: boolean;
   reasonIncludeValues?: boolean;
+  /** Demo videos (roadmap §13) — Studio-side flag for the workflow page's video card. */
+  demoVideosEnabled?: boolean;
   activity: {
     total: number;
     window: number;
@@ -160,6 +164,7 @@ export function CopilotWorkspace({
   const [reason, setReason] = useState(reasonEnabled);
   const [reasonImg, setReasonImg] = useState(reasonImageEnabled);
   const [reasonVals, setReasonVals] = useState(reasonIncludeValues);
+  const [demoVideos, setDemoVideos] = useState(demoVideosEnabled);
   const [showKey, setShowKey] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -320,6 +325,24 @@ export function CopilotWorkspace({
         );
       } catch {
         setReasonVals(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  // Demo videos (roadmap §13) — the Studio-side flag for the workflow page's video card.
+  function toggleDemoVideos(value: boolean) {
+    setDemoVideos(value); // optimistic
+    start(async () => {
+      try {
+        await setDemoVideosEnabled(value);
+        router.refresh();
+        toast.success(
+          value
+            ? 'Demo videos on — each workflow page now has a "Demo video" card.'
+            : 'Demo videos off — the card is hidden (already-rendered videos are kept).',
+        );
+      } catch {
+        setDemoVideos(!value);
         toast.error('Could not save the setting. Please try again.');
       }
     });
@@ -821,7 +844,8 @@ export function CopilotWorkspace({
                   What it may do on your page
                 </span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Sensing, highlighting, guided walkthroughs and diagnosis — permissions, not behaviour.
+                  Sensing, highlighting, guided walkthroughs and diagnosis — permissions, not
+                  behaviour. Plus Studio extras like demo videos.
                 </span>
               </span>
               <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-muted-foreground">
@@ -965,6 +989,36 @@ export function CopilotWorkspace({
                 </p>
               </div>
             )}
+          </section>
+
+          {/* Demo videos — the one Studio-side switch in this fold: it gates a card in YOUR
+              dashboard, never anything on a customer's page. Lives here anyway because this fold
+              is where founders expect optional capabilities to be granted. */}
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">Demo videos</h3>
+            <p className="text-xs text-muted-foreground">
+              Generate a polished, narrated walkthrough video from a workflow&rsquo;s
+              recording — AI voiceover, zooms and captions, derived from the steps
+              you already recorded. Only you see and download these; nothing changes
+              for your customers.
+            </p>
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Enable demo videos</p>
+                  <p className="text-xs text-muted-foreground">
+                    Adds a &ldquo;Demo video&rdquo; card to each workflow&rsquo;s page
+                    in the knowledge base.
+                  </p>
+                </div>
+                <Switch
+                  checked={demoVideos}
+                  onCheckedChange={toggleDemoVideos}
+                  disabled={pending}
+                  aria-label="Enable demo videos"
+                />
+              </div>
+            </div>
           </section>
 
             </div>
