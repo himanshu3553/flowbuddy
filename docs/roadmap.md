@@ -412,7 +412,8 @@ stays in its doc.)*
 
 ## 13. Demo videos (asset derivation)
 
-**✅ v1 built 2026-08-18** — a polished, narrated product-demo MP4 **derived** from a workflow's
+**✅ v1 built 2026-08-18, user-verified 2026-08-19 on a real recorded workflow (localhost, full
+script → TTS → render path)** — a polished, narrated product-demo MP4 **derived** from a workflow's
 recorded steps (screenshots + click targets + the founder's narration transcript), never a screen
 recording: a grounded voiceover script + TTS, synthetic cursor travel with click ripples, camera
 zooms onto each step's target, brand intro/outro cards, and step captions. Generated per workflow
