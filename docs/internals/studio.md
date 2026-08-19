@@ -84,8 +84,8 @@ Hardening (review §3.6 Cuts 2+3):
   in the previously-unused Auth.js `VerificationToken` table (`identifier = "<purpose>:<email>"`),
   single-use, purpose-checked; no schema change was needed.
 - **Email** ([`lib/email.ts`](../../packages/web/lib/email.ts)) — Resend REST API via fetch (no SDK);
-  keyless = sends are console-logged so dev flows stay walkable. Default `onboarding@resend.dev`
-  sender only delivers to the Resend account owner until a domain is verified (`EMAIL_FROM`).
+  keyless = sends are console-logged so dev flows stay walkable. The sender defaults to
+  `noreply@flowbuddyai.com` (the domain must stay verified in Resend); override with `EMAIL_FROM`.
 
 **Deliberately open:** signup itself has no invite gate (user decision 2026-07-06) — revisit at
 private beta.

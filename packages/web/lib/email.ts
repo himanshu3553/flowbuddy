@@ -6,9 +6,10 @@
  * depend on delivery soften — signup auto-verifies instead of requiring a click-through
  * (see `emailEnabled` consumers in auth.ts / actions.ts).
  *
- * Resend note: without a verified domain, the default `onboarding@resend.dev` sender only
- * delivers to the Resend account owner's own address — verify a domain + set EMAIL_FROM
- * before real users need these emails.
+ * Resend note: the default sender is on the flowbuddyai.com domain, which must stay verified in
+ * Resend — an unverified sender domain is rejected outright (Resend's own `onboarding@resend.dev`
+ * is the one unverified sender that sends, and it delivers only to the account owner's address).
+ * Override with EMAIL_FROM.
  */
 
 import { z } from 'zod';
@@ -45,7 +46,7 @@ export const normalizeEmail = (email: string): string => email.trim().toLowerCas
 export const emailField = z.string().email().transform(normalizeEmail);
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'FlowBuddy <onboarding@resend.dev>';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'FlowBuddy <noreply@flowbuddyai.com>';
 
 /** Whether real email delivery is configured — gates the verification requirement. */
 export const emailEnabled = Boolean(RESEND_API_KEY);

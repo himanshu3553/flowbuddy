@@ -215,7 +215,7 @@ the [suffix gotcha](#24-the-service-url-suffix-gotcha) — set your best guess n
 | `AUTH_URL` | `flowbuddy-dev-web` | the real `flowbuddy-dev-web` URL (§3.8) |
 | `FLOWBUDDY_API_URL` | `flowbuddy-dev-web` | the real `flowbuddy-dev-api` URL (§3.8) |
 | `FLOWBUDDY_WIDGET_URL` | `flowbuddy-dev-web` | the real `flowbuddy-dev-widget` URL + `/flowbuddy-copilot.js` |
-| `RESEND_API_KEY` | `flowbuddy-dev-web` | Resend key — **enables** email verification + password reset. ⚠️ Before first enable, backfill: `UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;` — pre-existing accounts can't sign in otherwise. Optional `EMAIL_FROM` needs a Resend-verified domain (default `onboarding@resend.dev` only delivers to the account owner). |
+| `RESEND_API_KEY` | `flowbuddy-dev-web` | Resend key — **enables** email verification + password reset. ⚠️ Before first enable, backfill: `UPDATE "User" SET "emailVerified" = now() WHERE "passwordHash" IS NOT NULL AND "emailVerified" IS NULL;` — pre-existing accounts can't sign in otherwise. Optional `EMAIL_FROM` overrides the sender (default `noreply@flowbuddyai.com`; the domain must be verified in Resend). |
 
 Auto-wired by the blueprint (do **not** set): `DATABASE_URL`, `REDIS_URL`, `PORT`, `R2_REGION`,
 `TRANSCRIBE_MODEL`, `SYNTH_MODEL`, `AUTH_TRUST_HOST`, `LOG_LEVEL` (`info` — tunable live, §2.5),
@@ -334,8 +334,8 @@ and the two static sites (widget bundles + the `packages/landing` page) built wi
 | `AUTH_URL` | `flowbuddy-web` | `https://app.flowbuddyai.com` |
 | `FLOWBUDDY_API_URL` | `flowbuddy-web` | `https://api.flowbuddyai.com` |
 | `FLOWBUDDY_WIDGET_URL` | `flowbuddy-web` | `https://widget.flowbuddyai.com/flowbuddy-copilot.js` |
-| `RESEND_API_KEY` | `flowbuddy-web` | **required in prod** — the default `onboarding@resend.dev` sender only delivers to the Resend account owner, so real signups would never get verification/reset emails |
-| `EMAIL_FROM` | `flowbuddy-web` | `no-reply@flowbuddyai.com` (after verifying `flowbuddyai.com` in Resend) |
+| `RESEND_API_KEY` | `flowbuddy-web` | **required in prod** — no key = email disabled and signups auto-verify, so real users would never get verification/reset emails |
+| `EMAIL_FROM` | `flowbuddy-web` | optional — the code default is `FlowBuddy <noreply@flowbuddyai.com>`; `flowbuddyai.com` must be verified in Resend |
 | `FLOWBUDDY_EXTENSION_URL` | `flowbuddy-web` | the Chrome Web Store listing URL |
 
 Because every URL secret is a custom domain, the suffix gotcha only matters for DNS CNAME targets —

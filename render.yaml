@@ -106,10 +106,10 @@ services:
       # PUBLIC URLs baked into the browser embed snippet (data-flowbuddy-api) + extension payload:
       - { key: FLOWBUDDY_API_URL, sync: false } # https://api.flowbuddyai.com
       - { key: FLOWBUDDY_WIDGET_URL, sync: false } # https://widget.flowbuddyai.com/flowbuddy-copilot.js
-      # Transactional email — REQUIRED in prod (default onboarding@resend.dev only delivers to the
-      # Resend account owner, so real signups would never get verification/reset emails).
+      # Transactional email — REQUIRED in prod (no key = email disabled and signups auto-verify,
+      # so real users would never get verification/reset emails).
       - { key: RESEND_API_KEY, sync: false }
-      - { key: EMAIL_FROM, sync: false } # no-reply@flowbuddyai.com (Resend-verified domain)
+      - { key: EMAIL_FROM, sync: false } # FlowBuddy <noreply@flowbuddyai.com> (Resend-verified domain; unset = the code default, which is the same address)
       # Chrome Web Store listing — set once the prod-baked extension build is live (v0.6.0+).
       - { key: FLOWBUDDY_EXTENSION_URL, sync: false }
 
