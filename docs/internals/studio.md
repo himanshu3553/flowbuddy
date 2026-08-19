@@ -153,6 +153,20 @@ enable summary simply counts them.
 Enabling writes the flag **and** the plan in one transaction, so *"enabled ⇒ a plan exists"* holds by
 construction; disabling deletes the plan. The card also carries that workflow's run summary.
 
+### 4.5b Editing a workflow's words ([`edit-actions.ts`](../../packages/web/lib/edit-actions.ts))
+
+The workflow page lets the founder rewrite the **title**, the **description**, and any step's
+**instruction/detail** — prose only, never the anchor fields that make a step cite a real captured
+event. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
+[knowledge-base.md](knowledge-base.md) §Identity); a title edit moves the row, the items' per-item
+copy and the approval snapshot together so no surface keeps the old name. A step edit **re-embeds
+before it writes** — text and vector move together or the save fails whole — and on an
+acting-enabled workflow recompiles and re-pins the plan through the same compile the enable action
+uses ([`plan-compile.ts`](../../packages/web/lib/plan-compile.ts) computes; each caller writes, so
+the one-transaction invariant above stays with the enable action). A recompile that turns ineligible
+parks acting `needs_review`, mirroring the worker. This is also Studio's **one OpenAI call** — the
+embed at save time; answers still all go through the api.
+
 ### 4.6 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 
 `getOrCreateCopilotKey(workspaceId)` returns the workspace's **public** embed key, minting one

@@ -101,8 +101,12 @@ services:
       - { key: AUTH_SECRET, sync: false } # fresh openssl rand -hex 32 — do NOT reuse dev's
       - { key: AUTH_URL, sync: false } # https://app.flowbuddyai.com
       - { key: AUTH_TRUST_HOST, value: true }
-      # No OpenAI config here: the Studio makes NO OpenAI calls — its tester embeds the REAL widget,
-      # so every answer goes through flowbuddy-api (which owns OPENAI_API_KEY/EMBED_MODEL).
+      # The Studio's ONE OpenAI use is re-indexing founder-edited step text at save time
+      # (lib/edit-actions.ts) — end-user answers still all go through flowbuddy-api (the tester
+      # embeds the REAL widget). EMBED_MODEL must resolve identically on every service
+      # (embeddings.ts) — same value as flowbuddy-api's.
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: EMBED_MODEL, value: text-embedding-3-small }
       # PUBLIC URLs baked into the browser embed snippet (data-flowbuddy-api) + extension payload:
       - { key: FLOWBUDDY_API_URL, sync: false } # https://api.flowbuddyai.com
       - { key: FLOWBUDDY_WIDGET_URL, sync: false } # https://widget.flowbuddyai.com/flowbuddy-copilot.js

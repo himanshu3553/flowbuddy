@@ -3,6 +3,7 @@ import { RENDER_QUEUE, SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
+  applyStepTextOverrides,
   attachOutcomeMarkers,
   buildDemoVideo,
   buildWorkflowKB,
@@ -18,6 +19,7 @@ import {
   pageEmbedText,
   pageSimilarity,
   PAGE_CONTENT_AGREE_THRESHOLD,
+  stepOverridesByKeyEvent,
   toVectorLiteral,
   type ExtractedPage,
   type WorkflowFingerprint,
@@ -326,9 +328,41 @@ const worker = new Worker(
       // decided by comparing content — never by position, which is what used to walk a founder's
       // approval onto a workflow nobody had reviewed.
       const existingFingerprints = await readWorkflowFingerprints(sessionId);
-      const existingWorkflowIds = (
-        await prisma.workflow.findMany({ where: { sourceId: sessionId }, select: { id: true } })
-      ).map((w) => w.id);
+      // Each stored workflow's founder-edit stamps ride along: a set stamp marks the field
+      // HUMAN-OWNED, and the reuse update below keeps the stored value instead of the fresh model
+      // output (schema.prisma `Workflow` owns the rule).
+      const existingWorkflows = await prisma.workflow.findMany({
+        where: { sourceId: sessionId },
+        select: { id: true, title: true, titleEditedAt: true, descriptionEditedAt: true },
+      });
+      const existingWorkflowIds = existingWorkflows.map((w) => w.id);
+      const editStampsById = new Map(existingWorkflows.map((w) => [w.id, w]));
+
+      // Founder STEP edits survive the rebuild the same way, re-attached by anchor — applied
+      // BEFORE embedding, so text, vectors, identity fingerprints and the plan refresh all see
+      // the founder's words (see step-overrides.ts for why a later patch would desync retrieval).
+      const editedRows = await prisma.knowledgeItem.findMany({
+        where: { sourceId: sessionId, kind: 'step', editedAt: { not: null } },
+        select: { data: true, editedAt: true, editedById: true },
+      });
+      const overrides = stepOverridesByKeyEvent(
+        editedRows.filter((r): r is (typeof r) & { editedAt: Date } => r.editedAt != null),
+      );
+      let editWarning: string | null = null;
+      if (overrides.size > 0) {
+        const applied = new Set<string>();
+        for (const wf of workflows) {
+          for (const key of applyStepTextOverrides(wf.steps, overrides)) applied.add(key);
+        }
+        const lost = overrides.size - applied.size;
+        log.info(
+          { sessionId, edits: overrides.size, applied: applied.size, lost },
+          'founder step edits re-applied to the rebuild',
+        );
+        if (lost > 0) {
+          editWarning = `${lost} edited step${lost === 1 ? '' : 's'} could not be carried through the rebuild (the step ${lost === 1 ? 'it' : 'they'} anchored to is no longer there) — review the workflow text.`;
+        }
+      }
 
       // Embed the incoming steps BEFORE writing them: the same vectors decide identity and serve
       // hybrid retrieval, so one call does both jobs instead of two.
@@ -380,15 +414,23 @@ const worker = new Worker(
             data: { segmentIndex: null },
           });
 
-          const kept: Array<{ workflowId: string; wf: (typeof workflows)[number] }> = [];
+          const kept: Array<{ workflowId: string; wf: (typeof workflows)[number]; title: string | null }> = [];
           for (const wf of workflows) {
             const existingId = matched.get(wf.segmentIndex);
             if (existingId) {
+              // A founder-edited title/description is not the model's to refresh — the stamp says
+              // whose the field is, and the item rows below must carry the SAME title the row keeps.
+              const stamps = editStampsById.get(existingId);
+              const title = stamps?.titleEditedAt ? (stamps.title ?? wf.title) : wf.title;
               await tx.workflow.update({
                 where: { id: existingId },
-                data: { segmentIndex: wf.segmentIndex, title: wf.title, description: wf.description },
+                data: {
+                  segmentIndex: wf.segmentIndex,
+                  ...(stamps?.titleEditedAt ? {} : { title: wf.title }),
+                  ...(stamps?.descriptionEditedAt ? {} : { description: wf.description }),
+                },
               });
-              kept.push({ workflowId: existingId, wf });
+              kept.push({ workflowId: existingId, wf, title });
             } else {
               // Nothing here matched it, so it is genuinely new — and born unapproved.
               const created = await tx.workflow.create({
@@ -401,7 +443,7 @@ const worker = new Worker(
                 },
                 select: { id: true },
               });
-              kept.push({ workflowId: created.id, wf });
+              kept.push({ workflowId: created.id, wf, title: wf.title });
             }
           }
 
@@ -422,18 +464,24 @@ const worker = new Worker(
 
           // Replace the recording's KB items idempotently with the freshly distilled steps.
           await tx.knowledgeItem.deleteMany({ where: { sourceId: sessionId } });
-          const rows = kept.flatMap(({ workflowId, wf }) =>
-            wf.steps.map((step, i) => ({
-              sourceId: sessionId,
-              workspaceId: rec.workspaceId,
-              workflowId,
-              kind: 'step',
-              orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
-              text: distilledStepText(step), // searchable: instruction + detail + narration
-              segmentIndex: wf.segmentIndex,
-              segmentTitle: wf.title,
-              data: step as object,
-            })),
+          const rows = kept.flatMap(({ workflowId, wf, title }) =>
+            wf.steps.map((step, i) => {
+              // A re-attached edit keeps its stamp, so the NEXT reprocess re-attaches it again.
+              const o = step.keyEventId ? overrides.get(step.keyEventId) : undefined;
+              return {
+                sourceId: sessionId,
+                workspaceId: rec.workspaceId,
+                workflowId,
+                kind: 'step',
+                orderIndex: i, // order WITHIN the workflow (retrieval sorts by segmentIndex, then orderIndex)
+                text: distilledStepText(step), // searchable: instruction + detail + narration
+                segmentIndex: wf.segmentIndex,
+                segmentTitle: title,
+                data: step as object,
+                editedAt: o?.editedAt ?? null,
+                editedById: o?.editedById ?? null,
+              };
+            }),
           );
           if (rows.length > 0) await tx.knowledgeItem.createMany({ data: rows });
 
@@ -553,7 +601,7 @@ const worker = new Worker(
       // A degraded-but-successful build (e.g. narration too long to transcribe, or an embedding
       // failure) lands `ready` with the notice in `error` — the Studio shows it as a notice, not
       // a failure.
-      const notice = [warning, embedWarning].filter(Boolean).join(' · ') || null;
+      const notice = [warning, embedWarning, editWarning].filter(Boolean).join(' · ') || null;
       await prisma.knowledgeSource.update({
         where: { id: sessionId },
         data: { status: 'ready', error: notice },

@@ -23,6 +23,7 @@ export function DemoVideoCard({
   videoUrl,
   durationMs,
   error,
+  stale = false,
 }: {
   workflowId: string;
   workflowTitle: string;
@@ -32,6 +33,9 @@ export function DemoVideoCard({
   videoUrl: string | null;
   durationMs: number | null;
   error: string | null;
+  /** The workflow's text was founder-edited AFTER this render — the MP4 still narrates the old
+   *  words (regenerating is deliberately manual, video-actions.ts). */
+  stale?: boolean;
 }) {
   const [busy, start] = useTransition();
   const router = useRouter();
@@ -96,6 +100,12 @@ export function DemoVideoCard({
   if (status === 'ready' && videoUrl) {
     return (
       <div className="space-y-2.5">
+        {stale && (
+          <p className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            This workflow’s text changed since the video was rendered — it still narrates the old
+            words. Regenerate to match.
+          </p>
+        )}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption -- the narration IS the content */}
         <video src={videoUrl} controls preload="metadata" className="w-full rounded-lg border bg-black" />
         <div className="flex items-center justify-between gap-2">

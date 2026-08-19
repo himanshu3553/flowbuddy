@@ -22,7 +22,9 @@ import {
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
+import { StepTextEditor } from '@/components/dashboard/step-text-editor';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
+import { WorkflowContentCard } from '@/components/dashboard/workflow-content-card';
 import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
 import { DemoVideoCard } from '@/components/dashboard/demo-video-card';
 import { displayRoute } from '@flowbuddy/shared/route-pattern';
@@ -116,7 +118,7 @@ export default async function KbWorkflowPage({
       ? null
       : await prisma.workflow.findFirst({
           where: { workspaceId: ctx.workspace.id, sourceId: source.id, segmentIndex: selected },
-          select: { id: true, description: true },
+          select: { id: true, description: true, titleEditedAt: true, descriptionEditedAt: true },
         });
 
   // Demo video (founder-facing derivation; vocabulary in schema.prisma `DemoVideo`), behind the
@@ -129,11 +131,21 @@ export default async function KbWorkflowPage({
     workflow && demoVideosOn
       ? await prisma.demoVideo.findUnique({
           where: { workflowId: workflow.id },
-          select: { status: true, fileKey: true, durationMs: true, error: true },
+          select: { status: true, fileKey: true, durationMs: true, error: true, updatedAt: true },
         })
       : null;
   const demoVideoUrl =
     demoVideo?.status === 'ready' && demoVideo.fileKey ? await signedUrl(demoVideo.fileKey, 21600) : null;
+  // Founder edits after the render leave the MP4 quietly stale (video-actions keeps the old file on
+  // purpose) — so compute staleness here and let the card SAY it next to its Regenerate button.
+  const lastEditMs = Math.max(
+    0,
+    ...[workflow?.titleEditedAt, workflow?.descriptionEditedAt, ...segmentItems.map((it) => it.editedAt)]
+      .filter((d): d is Date => d != null)
+      .map((d) => d.getTime()),
+  );
+  const demoVideoStale =
+    demoVideo?.status === 'ready' && lastEditMs > 0 && lastEditMs > demoVideo.updatedAt.getTime();
 
   const stats =
     selected != null
@@ -244,31 +256,12 @@ export default async function KbWorkflowPage({
             <WorkflowDuplicates overlaps={myOverlaps} />
 
             {workflow && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">What this workflow is</CardTitle>
-                  <CardDescription>
-                    Written from your narration — it explains the task and what’s optional. The
-                    copilot reads it alongside the steps, so it is part of what you approve.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {workflow.description ? (
-                    <p className="text-[13.5px] leading-relaxed text-secondary-foreground">
-                      {workflow.description}
-                    </p>
-                  ) : (
-                    /* Absence is a REAL state, not an empty slot: the narration said nothing beyond
-                       the clicks. Rendering nothing here would let a founder assume they had read
-                       everything the copilot will say, and hides the one thing that would fix it. */
-                    <p className="text-[13px] leading-relaxed text-muted-foreground">
-                      No description — your narration didn’t say anything about this task beyond the
-                      actions themselves, so the copilot answers from the steps alone. Re-recording
-                      while saying what the task is for, and what’s optional, is what produces one.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              <WorkflowContentCard
+                workflowId={workflow.id}
+                title={workflowTitle}
+                description={workflow.description}
+                ready={ready}
+              />
             )}
 
             <div>
@@ -319,12 +312,12 @@ export default async function KbWorkflowPage({
                             </span>
                           )}
                         </div>
-                        <p className="mt-2 text-sm font-medium">{it.instruction}</p>
-                        {it.detail && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {it.detail}
-                          </p>
-                        )}
+                        <StepTextEditor
+                          itemId={it.id}
+                          instruction={it.instruction}
+                          detail={it.detail}
+                          ready={ready}
+                        />
                         {it.narration && (
                           <p className="mt-2 border-l-2 border-brand-200 pl-2.5 text-xs italic leading-relaxed text-muted-foreground">
                             {it.narration}
@@ -409,6 +402,7 @@ export default async function KbWorkflowPage({
                     videoUrl={demoVideoUrl}
                     durationMs={demoVideo?.durationMs ?? null}
                     error={demoVideo?.error ?? null}
+                    stale={demoVideoStale}
                   />
                 </CardContent>
               </Card>

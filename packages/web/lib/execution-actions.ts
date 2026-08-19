@@ -2,19 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
-import type { SessionManifest } from '@flowbuddy/shared';
 import { displayRoute } from '@flowbuddy/shared/route-pattern';
-import {
-  attachOutcomeMarkers,
-  compileExecutionPlan,
-  hashPlan,
-  loadMarkerSnapshots,
-  markerSnapshotRefs,
-  planSummary,
-  type ExecutionStepSource,
-} from '@flowbuddy/synthesis/execution-plan';
+import { planSummary } from '@flowbuddy/synthesis/execution-plan';
 import { getCurrentWorkspace } from '@/lib/session';
-import { artifactReader } from '@/lib/storage';
+import { compileWorkflowPlan } from '@/lib/plan-compile';
 
 /**
  * P4-M1 — enable/disable ACTING for one workflow (the AI Agent's per-workflow gate).
@@ -85,40 +76,13 @@ export async function setWorkflowExecution(input: {
     throw new Error('Approve this workflow for the copilot first — the agent only runs approved workflows.');
   }
 
-  const [items, source] = await Promise.all([
-    prisma.knowledgeItem.findMany({
-      where: { workspaceId, workflowId: workflow.id, kind: 'step' },
-      orderBy: { orderIndex: 'asc' },
-      select: { data: true },
-    }),
-    prisma.knowledgeSource.findUnique({
-      where: { id: workflow.sourceId },
-      select: { manifest: true },
-    }),
-  ]);
-  const manifest = source?.manifest as unknown as SessionManifest | null;
-  if (!manifest?.events?.length) {
-    return { ok: false, issues: ['The recording’s raw capture is missing, so there is nothing to compile a run from.'] };
+  // The compile itself (stored steps + raw capture → plan, evidence-first with the legacy snapshot
+  // fallback) is shared with the step-edit recompile — plan-compile.ts computes, this action writes.
+  const compiled = await compileWorkflowPlan(workspaceId, workflow.id, workflow.sourceId);
+  if (!compiled.ok) {
+    return { ok: false, issues: compiled.issues };
   }
-
-  const srcSteps = items.map((i) => (i.data ?? {}) as ExecutionStepSource);
-  const compiled = compileExecutionPlan({ steps: srcSteps, events: manifest.events });
-  if (!compiled.eligible) {
-    return { ok: false, issues: compiled.issues.map((i) => i.message) };
-  }
-
-  // Steps whose KB rows carry stored evidence (P3-M2) compiled their `expect` already; the
-  // snapshot pass below is the LEGACY fallback for rows processed before the evidence layer —
-  // it diffs the last + destructive steps and `attachOutcomeMarkers` leaves evidence-built steps
-  // alone. Best-effort by design: an unreadable snapshot means the step compiles WITHOUT markers
-  // and verifies as before — enabling never gains a new way to fail.
-  const read = artifactReader(workspaceId, workflow.sourceId);
-  const snapshots = await loadMarkerSnapshots(
-    markerSnapshotRefs(compiled.steps, srcSteps, manifest.events),
-    read,
-  );
-  const finalSteps = attachOutcomeMarkers(compiled.steps, snapshots);
-  const finalHash = hashPlan(finalSteps, compiled.contract);
+  const { steps: finalSteps, contract, hash: finalHash } = compiled;
 
   await prisma.$transaction([
     prisma.executionPlan.upsert({
@@ -129,13 +93,13 @@ export async function setWorkflowExecution(input: {
         planHash: finalHash,
         stepCount: finalSteps.length,
         steps: finalSteps as object,
-        contract: compiled.contract as object,
+        contract: contract as object,
       },
       update: {
         planHash: finalHash,
         stepCount: finalSteps.length,
         steps: finalSteps as object,
-        contract: compiled.contract as object,
+        contract: contract as object,
       },
     }),
     prisma.copilotApproval.update({
@@ -154,16 +118,16 @@ export async function setWorkflowExecution(input: {
     ok: true,
     enabled: true,
     summary: planSummary(finalSteps),
-    ...(compiled.contract
+    ...(contract
       ? {
           checks: {
-            entry: displayRoute(compiled.contract.entry.route),
-            mustBeThere: compiled.contract.entry.start === 'on-screen',
+            entry: displayRoute(contract.entry.route),
+            mustBeThere: contract.entry.start === 'on-screen',
             markerSteps: finalSteps.filter((s) => s.expect?.appeared?.length).length,
             verifiableFinish: Boolean(
-              compiled.contract.outcome.route ||
-                compiled.contract.outcome.screen ||
-                compiled.contract.outcome.appeared?.length,
+              contract.outcome.route ||
+                contract.outcome.screen ||
+                contract.outcome.appeared?.length,
             ),
           },
         }

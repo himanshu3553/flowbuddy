@@ -365,6 +365,18 @@ Both kinds of no-match are meaningful, and both fail closed:
 | incoming unmatched | genuinely new | new identity, **born unapproved** |
 | existing unmatched | its content is gone | **detached** (`segmentIndex` → NULL), approval → `needs_review` |
 
+**Founder edits survive the rebuild — by stamp and by anchor.** A founder can rewrite a workflow's
+title, its description, and any step's instruction/detail in Studio; a rebuild must not revert their
+words to model output. Two mechanisms, matching the two shapes of the data: a **stamped field is
+human-owned** (`titleEditedAt` / `descriptionEditedAt` on the workflow row — the reuse update keeps
+the stored value and refreshes only the unstamped one), and a **step edit rides its anchor** — it is
+re-attached to the new step carrying the same `data.keyEventId`, *before* embedding, so the item
+text, its vector, the identity fingerprints and the plan refresh all see the founder's words rather
+than a patched copy. An edit whose anchor no longer keys any step is **lost by design** and counted
+into the recording's notice — re-homing it would be guessing. The write side of the same rule lives
+in Studio: an edit moves text, `data` and the vector together or not at all, and only prose is ever
+editable — never the anchor fields that make a step evidence.
+
 **A second question on the same pass — is it still eligible to RUN?** Only workflows the founder
 enabled acting for are touched. One whose new content recompiles clean gets its plan and consent-pin
 hash refreshed silently, and its appearance markers re-diffed from the new recording's snapshots. One

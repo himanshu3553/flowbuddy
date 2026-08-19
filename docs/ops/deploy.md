@@ -207,8 +207,8 @@ the [suffix gotcha](#24-the-service-url-suffix-gotcha) — set your best guess n
 | `R2_ACCESS_KEY_ID` | `flowbuddy-dev-r2` group | R2 token access key |
 | `R2_SECRET_ACCESS_KEY` | `flowbuddy-dev-r2` group | R2 token secret |
 | `R2_BUCKET` | `flowbuddy-dev-r2` group | `flowbuddy-artifacts-dev` |
-| `OPENAI_API_KEY` | **`flowbuddy-dev-api`** only | your `sk-…` (synthesis + the copilot answer engine; the Studio makes no OpenAI calls — its tester embeds the real widget → flowbuddy-dev-api) |
-| `EMBED_MODEL` | `flowbuddy-dev-api` (blueprint sets it) | `text-embedding-3-small` — P1-M3 hybrid retrieval. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy. |
+| `OPENAI_API_KEY` | `flowbuddy-dev-api` **and** `flowbuddy-dev-web` | your `sk-…` (api: synthesis + the copilot answer engine; web's one use: re-indexing founder-edited step text at save — the tester still answers via the api) |
+| `EMBED_MODEL` | `flowbuddy-dev-api` + `flowbuddy-dev-web` (blueprint sets both) | `text-embedding-3-small` — P1-M3 hybrid retrieval; must resolve identically on every service. ⚠️ Must be a **1536-dim** model (the `vector(1536)` column); the migration runs `CREATE EXTENSION vector` on deploy. |
 | `FLOWBUDDY_STUDIO_URL` | **`flowbuddy-dev-api`** | the real `flowbuddy-dev-web` URL (§3.8) — the Studio origin is exempt from workspace origin allowlists so the Copilot page's real-widget tester keeps working after a customer restricts origins. ⚠️ Unset = the tester 403s for allowlisted workspaces. |
 | `REASON_MODEL` | `flowbuddy-dev-api` (optional) | the P2-M5 diagnostic path's model (must be vision-capable); unset = falls back to `SYNTH_MODEL` |
 | `AUTH_SECRET` | `flowbuddy-dev-web` | output of §3.4 |
@@ -328,7 +328,7 @@ and the two static sites (widget bundles + the `packages/landing` page) built wi
 | Variable | Service | Prod value |
 |---|---|---|
 | `R2_*` | `flowbuddy-r2` group | the **prod** bucket `flowbuddy-artifacts` + its own Object R/W token — never share the dev bucket |
-| `OPENAI_API_KEY` | `flowbuddy-api` | your `sk-…` |
+| `OPENAI_API_KEY` | `flowbuddy-api` **and** `flowbuddy-web` | your `sk-…` (web's one use: re-indexing founder-edited step text at save — end-user answers still all go through the api) |
 | `FLOWBUDDY_STUDIO_URL` | `flowbuddy-api` | `https://app.flowbuddyai.com` (Studio origin allowlist-exemption for the real-widget tester) |
 | `AUTH_SECRET` | `flowbuddy-web` | fresh `openssl rand -hex 32` — do NOT reuse dev's |
 | `AUTH_URL` | `flowbuddy-web` | `https://app.flowbuddyai.com` |
@@ -467,7 +467,7 @@ custom domains make every underlying swap invisible to customers.
 | Presigned artifact `PUT` rejected by R2 (`400`/`403`) while it worked on MinIO | The signer emitted checksum params (the SDK default bakes an empty-body CRC32 into the URL) — R2 enforces them, MinIO ignores them | Keep the dedicated presigning client at `requestChecksumCalculation: 'WHEN_REQUIRED'` (§2.2); this class of bug is invisible locally |
 | `could not enqueue synthesis — recording is stored; re-process from Studio` | Redis unreachable or slow at the moment the recording finalized; the enqueue is a bounded 5s race by design ([`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.5) so the upload still succeeded | Fix/restart the Key Value instance, then Studio → the recording → **Re-process**. The recording itself is safe — do **not** ask the user to re-record |
 | Recordings pile up with a **Recording** badge and never process | Captures that were started and abandoned. Expected on a testing environment; they are swept after 12h idle on the next finalize ([`internals/ingestion-api.md`](../internals/ingestion-api.md) §4.6) | Nothing to do — or force it by finishing any recording in that workspace. Deleting the row by hand also works |
-| Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via the **api** `/v1/copilot/answer`. Cause is on the api: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real Studio URL) on the api; the web service needs **no** OpenAI key |
+| Copilot page real-widget tester returns nothing / errors | Since **Approach B** (2026-07-08) the tester embeds the real widget → it answers via the **api** `/v1/copilot/answer`. Cause is on the api: `OPENAI_API_KEY` unset, **or** a `403` because `FLOWBUDDY_STUDIO_URL` isn't set | Set `OPENAI_API_KEY` **and** `FLOWBUDDY_STUDIO_URL` (= the real Studio URL) on the api — the web service's own OpenAI key only affects saving step edits, never answers |
 | `503` on first request | Free web service **cold start** (~1 min after 15 min idle) | Wait ~1 min; it's not a crash (dev only — prod is always-on) |
 | Widget launcher doesn't appear | Page served via `file://`, or origin not in the allowlist (403) | Serve over HTTP; add the origin or empty the allowlist |
 | `Eviction policy is allkeys-lru … should be "noeviction"` | Free Key Value default eviction (BullMQ prefers `noeviction`) | The blueprints set `maxmemoryPolicy: noeviction`; on an instance created before that, flip it in the dashboard (Key Value → Settings → Maxmemory Policy) |

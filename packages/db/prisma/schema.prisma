@@ -273,6 +273,12 @@ model Workflow {
   // rather than a table: grouping is a set, needs no attributes of its own, and stays transitive
   // (group C with B and C simply takes B's taskId).
   taskId       String?
+  // Founder edits (Studio) — a set timestamp means the field is HUMAN-OWNED: the reprocess worker
+  // must keep the stored value instead of overwriting it with fresh model output. Null = model-owned,
+  // refreshed on every rebuild. Clearing a description in Studio also stamps it — deliberate absence
+  // is still the founder's word.
+  titleEditedAt       DateTime?
+  descriptionEditedAt DateTime?
   createdAt    DateTime @default(now())
 
   workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -334,6 +340,13 @@ model KnowledgeItem {
   data         Json // step: { instruction, detail, route, narration, screenshotFile, bbox } (distilled — 2026-06-27; legacy pre-distillation rows: { event, narration }) ; topic: { spanText, startMs, endMs }
   segmentIndex Int? // workflow this item belongs to (Path 2 — persisted segmentation, promoted toward Option C)
   segmentTitle String?
+  // Founder edit stamp — set when Studio rewrote this step's instruction/detail (edits update `text`,
+  // `data` AND the vector together; a text write without its re-embed silently desyncs retrieval).
+  // The worker carries the edit through a reprocess by re-attaching it to the new step with the same
+  // `data.keyEventId`; an edit whose anchor no longer keys a step is LOST, surfaced in the
+  // recording's notice.
+  editedAt   DateTime?
+  editedById String?
   // P1-M3 hybrid retrieval — text-embedding-3-small(1536) over `text`, written by the worker at KB
   // build via raw SQL (Prisma can't write Unsupported). Nullable: rows without a vector (embed-call
   // failure, pre-upgrade data) stay retrievable through keyword scoring.

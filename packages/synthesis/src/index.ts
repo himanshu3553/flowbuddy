@@ -60,6 +60,9 @@ export type {
 } from './overlap';
 export { embedTexts, toVectorLiteral, DEFAULT_EMBED_MODEL, EMBEDDING_DIMS } from './embeddings'; // P1-M3
 export type { EmbedOpts } from './embeddings';
+// Founder edits surviving a reprocess — the worker re-attaches stored step edits by anchor.
+export { applyStepTextOverrides, stepOverridesByKeyEvent } from './step-overrides';
+export type { EditedStepRow, StepTextOverride } from './step-overrides';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export {
   attachOutcomeMarkers,
