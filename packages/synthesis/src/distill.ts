@@ -25,6 +25,12 @@ export interface DistilledStepLLM {
   keyEventId: string; // the one event whose screen best represents the step
 }
 
+/** Which parts of a step a founder edited in Studio — persisted inside `KnowledgeItem.data` so the
+ *  override re-attachment knows what to carry through the NEXT reprocess. Never produced by
+ *  distillation; written onto the step by `applyStepOverrides`. (A row with `editedAt` set but no
+ *  field list is a text edit from before images were editable.) */
+export type EditedStepField = 'text' | 'image';
+
 /** What we persist (into `KnowledgeItem.data`). No raw-event log — one curated visual per step. */
 export interface DistilledStep {
   instruction: string;
@@ -47,6 +53,8 @@ export interface DistilledStep {
   // compiler refuses a step spanning several controls. Usually one id; several only for repeated
   // commits to the same control. Additive: pre-invariant rows lack it and compile as before.
   sourceEventIds?: string[];
+  // Founder-edit marker (see EditedStepField above). Additive: absent on untouched steps.
+  editedFields?: EditedStepField[];
 }
 
 const SYSTEM = `You convert ONE recorded product workflow into a short, clean, user-facing list of steps for an in-app help copilot.

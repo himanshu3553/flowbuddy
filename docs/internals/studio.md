@@ -155,9 +155,11 @@ construction; disabling deletes the plan. The card also carries that workflow's 
 
 ### 4.5b Editing a workflow's words ([`edit-actions.ts`](../../packages/web/lib/edit-actions.ts))
 
-The workflow page lets the founder rewrite the **title**, the **description**, and any step's
-**instruction/detail** — prose only, never the anchor fields that make a step cite a real captured
-event. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
+The workflow page lets the founder rewrite the **title**, the **description**, any step's
+**instruction/detail**, and swap a step's **image** for another frame the same recording captured
+(no uploads — the pick is re-validated against the manifest server-side, and the highlight box
+follows the picture: the picked frame's own target rect, or cleared for an "after" frame). The
+event citation that makes a step cite a real captured event is never editable. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
 [knowledge-base.md](knowledge-base.md) §Identity); a title edit moves the row, the items' per-item
 copy and the approval snapshot together so no surface keeps the old name. A step edit **re-embeds
 before it writes** — text and vector move together or the save fails whole — and on an

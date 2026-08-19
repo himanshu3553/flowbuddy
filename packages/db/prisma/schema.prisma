@@ -341,8 +341,10 @@ model KnowledgeItem {
   segmentIndex Int? // workflow this item belongs to (Path 2 — persisted segmentation, promoted toward Option C)
   segmentTitle String?
   // Founder edit stamp — set when Studio rewrote this step's instruction/detail (edits update `text`,
-  // `data` AND the vector together; a text write without its re-embed silently desyncs retrieval).
-  // The worker carries the edit through a reprocess by re-attaching it to the new step with the same
+  // `data` AND the vector together; a text write without its re-embed silently desyncs retrieval) or
+  // switched its frame to another of the recording's own captured frames. `data.editedFields`
+  // ('text' | 'image') says which; absent = a text edit from before images were editable. The worker
+  // carries the edit through a reprocess by re-attaching it to the new step with the same
   // `data.keyEventId`; an edit whose anchor no longer keys a step is LOST, surfaced in the
   // recording's notice.
   editedAt   DateTime?

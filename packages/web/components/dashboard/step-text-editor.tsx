@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { StepImagePicker } from '@/components/dashboard/step-image-picker';
 
 /**
  * Inline editor for ONE step's instruction + detail — the founder's prose, nothing else.
@@ -81,6 +82,9 @@ export function StepTextEditor({
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
             Cancel
           </Button>
+          <span className="ml-auto">
+            <StepImagePicker itemId={itemId} instruction={instruction} detail={detail} />
+          </span>
         </div>
       </div>
     );

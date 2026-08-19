@@ -3,7 +3,7 @@ import { RENDER_QUEUE, SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
-  applyStepTextOverrides,
+  applyStepOverrides,
   attachOutcomeMarkers,
   buildDemoVideo,
   buildWorkflowKB,
@@ -352,7 +352,7 @@ const worker = new Worker(
       if (overrides.size > 0) {
         const applied = new Set<string>();
         for (const wf of workflows) {
-          for (const key of applyStepTextOverrides(wf.steps, overrides)) applied.add(key);
+          for (const key of applyStepOverrides(wf.steps, overrides)) applied.add(key);
         }
         const lost = overrides.size - applied.size;
         log.info(

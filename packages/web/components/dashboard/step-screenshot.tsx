@@ -9,7 +9,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-type Bbox = { x: number; y: number; w: number; h: number };
+import { boxStyle, Highlight, type Bbox, type Viewport } from '@/components/dashboard/screenshot-highlight';
 
 interface StepScreenshotProps {
   url: string;
@@ -19,36 +19,7 @@ interface StepScreenshotProps {
   /** The clicked element's rect, in capture-time viewport pixels (may be absent for some steps). */
   bbox?: Bbox | null;
   /** The capture-time viewport, used to express the bbox as DPR-independent percentages. */
-  viewport?: { w: number; h: number } | null;
-}
-
-const clamp01 = (n: number) => Math.min(Math.max(n, 0), 1);
-
-/**
- * Map a viewport-pixel bbox to CSS percentages of the screenshot. The screenshot is the full viewport
- * (scaled by the device pixel ratio), so percentages relative to the viewport line up with the image
- * at any rendered size — no DPR math needed. Width/height are clamped so the box never spills past an
- * edge; returns null for an empty box. (Mirrors the parked `lib/highlight.ts` math — kept self-
- * contained here rather than importing parked Phase-2 code.)
- */
-function boxStyle(bbox: Bbox, vp: { w: number; h: number }): React.CSSProperties | null {
-  const x = clamp01(bbox.x / vp.w);
-  const y = clamp01(bbox.y / vp.h);
-  const w = Math.min(clamp01(bbox.w / vp.w), 1 - x);
-  const h = Math.min(clamp01(bbox.h / vp.h), 1 - y);
-  if (w <= 0 || h <= 0) return null;
-  return { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` };
-}
-
-/** Red "click here" highlight — a soft-glow rounded rectangle over the captured target element. */
-function Highlight({ style }: { style: React.CSSProperties }) {
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute rounded-[4px] border-2 border-[#dc2626] bg-[#dc2626]/5 shadow-[0_0_0_2px_rgba(220,38,38,0.20),0_2px_12px_rgba(220,38,38,0.40)]"
-      style={style}
-    />
-  );
+  viewport?: Viewport | null;
 }
 
 /**
