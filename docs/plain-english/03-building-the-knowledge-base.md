@@ -150,9 +150,10 @@ returns nothing, FlowBuddy falls back to the cleaned events rather than losing y
 
 ### Splitting one recording into several workflows
 
-Separately, FlowBuddy works out where one task ended and the next began. It looks mainly for
-**endings** — you got redirected, you landed back on a dashboard, a success message appeared, you
-signed out — with your narration and any markers you set as supporting evidence.
+Separately, FlowBuddy works out where one task ended and the next began. Any marker you set while
+recording — the "new workflow" button — is the final word: a workflow is never allowed to cross one.
+Between markers, it looks mainly for **endings** — you got redirected, you landed back on a
+dashboard, a success message appeared, you signed out — with your narration as supporting evidence.
 
 Each split gets a confidence score, so low-confidence boundaries can be flagged for you to check. And
 there's a guard that makes sure no captured event is ever silently dropped between workflows.

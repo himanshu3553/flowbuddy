@@ -141,24 +141,26 @@ clicks — but `cleanEvents` deliberately does **not** drop on it (too aggressiv
 
 ### Stage 4 — Segment ([`segment.ts`](../../packages/synthesis/src/segment.ts)) — LLM, one task = one workflow
 
-One recording often documents several tasks ("create an account", "log in", "create a project"). The
-segmenter splits the cleaned events into those distinct **workflows** in a **single event-aware LLM
-pass** (JSON-schema output; sampling is the model's default — see `architecture.md` §Provider API
-for why an explicit temperature is no longer possible, and what that costs). The model is told that
-boundaries come primarily from
+One recording often documents several tasks ("create an account", "log in", "create a project").
+**User markers** (the recorder's "new workflow" button) are **hard cut points, consumed before any
+model call**: the cleaned events are partitioned at each marker and each span gets its **own**
+event-aware LLM pass, so a workflow structurally cannot merge across a marker — the events on either
+side are never in the same prompt. (They used to be prompt lines under "supporting signals", which
+the model could — and under sampling drift, did — overrule.) Within a span, the segmenter splits the
+events into distinct **workflows** (JSON-schema output; sampling is the model's default — see
+`architecture.md` §Provider API for why an explicit temperature is no longer possible, and what that
+costs). The model is told that boundaries come primarily from
 **goal completion / terminal states** visible in the event stream:
 
 - a success confirmation/toast, landing on a newly created resource, a redirect/return to a
   dashboard/home, a **route reset**, a sign-out, or a long pause —
-- with **narration** ("now let's…", or an up-front enumeration of tasks) and **user markers** (the
-  recorder's "new workflow" hotkey) as *supporting* signals.
+- with **narration** ("now let's…", or an up-front enumeration of tasks) as the *supporting* signal.
 
 The prompt builds a **timeline** that surfaces, per event, its **timestamp**, its label, any **route
 transition** (`route.path -> postAction.route.path` — the terminal-state tell), and the aligned
-narration; plus the markers and the full transcript (so the model can tell "one task across many steps" from "several
-tasks"). The timestamp is what makes a marker usable at all: markers arrive as times on that same
-clock, so without it the model is told to split at 62000ms while reading a list with no clocks — and a
-long pause, a documented boundary signal, is equally invisible. It's biased to **split at the clearest
+narration; plus the full transcript (so the model can tell "one task across many steps" from "several
+tasks"). The timestamp is what keeps a **long pause** — a documented boundary signal — visible to the
+model at all. It's biased to **split at the clearest
 terminal state when uncertain**, because a human editor
 merges a false split in one click, whereas an un-split workflow buried inside another is far harder to
 recover.

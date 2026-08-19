@@ -34,9 +34,11 @@ export function eventLabel(ev: CapturedEvent): string {
   return `${ev.type} ${what} @ ${ev.route?.path ?? ''}`;
 }
 
-// Single-stage, event-aware segmenter. Boundaries are driven primarily by goal-completion /
-// terminal states (redirects, route resets, dashboards, sign-outs, confirmations) — visible in the
-// event routes — with narration + markers as supporting signals. See docs/build/kb-step-distillation.md.
+// Single-stage, event-aware segmenter, run once per marker-delimited span. User markers are HARD
+// cut points enforced by partitionByMarkers (structure, not prompt — see its header); within a
+// span, boundaries are driven primarily by goal-completion / terminal states (redirects, route
+// resets, dashboards, sign-outs, confirmations) visible in the event routes, with narration as the
+// supporting signal. See docs/build/kb-step-distillation.md.
 const SEGMENT_SYSTEM = `You segment ONE screen-recording session into the distinct workflows it documents.
 A WORKFLOW is one complete task a user would look up in a help center and follow
 start-to-finish to reach a goal (e.g. "Create an account", "Log in", "Create a
@@ -57,10 +59,7 @@ SUPPORTING signals:
   an account, log in, and create a project") or call out transitions ("now let's...",
   "next..."). Treat each distinct task the narration names as its own workflow. But do
   NOT require explicit narration to split — most demos narrate continuously and never
-  say "new workflow." Absence of a verbal marker is NOT evidence of a single workflow.
-- User-placed markers: explicit author boundaries, given as timestamps on the same
-  clock as the events' "@ Nms" times. Always start a new workflow at the first event
-  at or after each marker's time.
+  say "new workflow." Absence of a verbal cue is NOT evidence of a single workflow.
 
 ONE GOAL = ONE WORKFLOW:
 The phases of a single task — navigating to a page, filling a form, toggling an
@@ -74,14 +73,14 @@ harder to recover. Prefer a clean split at a terminal state over merging.
 
 PROCEDURE (follow in order):
 1. Scan the whole session and LIST every goal-completion / terminal state you observe,
-   in order, with the evidence for each (terminal-state type, narration cue, or marker).
+   in order, with the evidence for each (terminal-state type or narration cue).
 2. Map that list to workflows — one per distinct goal.
 3. Assign EVERY event id to exactly one workflow, preserving order. Drop nothing.
 
 OUTPUT per workflow:
 - title: the end goal ("Create an account"), never a phase ("Filling the form")
 - event_ids: ordered, exhaustive
-- boundary_evidence: what marked the start/end (terminal state, narration, or marker)
+- boundary_evidence: what marked the start/end (terminal state or narration)
 - confidence: high | medium | low — use low to flag a boundary the editor should check`;
 
 const SEGMENT_SCHEMA = {
@@ -111,9 +110,34 @@ const SEGMENT_SCHEMA = {
 } as const;
 
 /**
- * Split one recording's events into workflows in a single event-aware LLM pass (terminal-state
- * driven; narration + markers supporting). A carry-forward guard then guarantees EVERY event lands
- * in a workflow, so nothing is ever silently dropped. See docs/build/kb-step-distillation.md.
+ * Split a recording's cleaned events at the author's "new workflow" markers — the DETERMINISTIC
+ * half of segmentation. Each returned span is segmented by the model SEPARATELY, so a workflow
+ * structurally cannot span a marker no matter what the model does: the events on either side are
+ * never in the same prompt. (Markers used to be prompt lines under a "supporting signals" heading,
+ * which the model could — and under drift, did — overrule, silently merging across an explicit
+ * author boundary. Do not demote them back to prompt text.)
+ *
+ * A marker cuts at the first event with `t >= marker.t`, on the shared active-elapsed clock the
+ * recorder stamps on both. Markers before the first event, after the last, or landing on the same
+ * cut collapse harmlessly: empty spans are never produced, and zero markers yields one span — the
+ * exact pre-partition behaviour.
+ */
+export function partitionByMarkers(events: CapturedEvent[], markers: Marker[]): CapturedEvent[][] {
+  if (events.length === 0) return [];
+  const cuts = new Set<number>();
+  for (const m of markers) {
+    const idx = events.findIndex((e) => e.t >= m.t);
+    if (idx > 0) cuts.add(idx); // idx 0 or -1 → the span before/after would be empty; no cut
+  }
+  const starts = [0, ...[...cuts].sort((a, b) => a - b)];
+  return starts.map((s, i) => events.slice(s, starts[i + 1]));
+}
+
+/**
+ * Split one recording's events into workflows: a deterministic partition at the user's markers
+ * first, then one event-aware LLM pass PER SPAN (terminal-state driven; narration supporting). A
+ * carry-forward guard then guarantees EVERY event lands in a workflow, so nothing is ever silently
+ * dropped. See docs/build/kb-step-distillation.md.
  */
 export async function segment(
   openai: OpenAI,
@@ -124,12 +148,40 @@ export async function segment(
   overallNarration = '',
 ): Promise<Segment[]> {
   if (events.length === 0) return [];
+  const spans = partitionByMarkers(events, markers);
+  if (spans.length > 1) {
+    log.info(
+      { markers: markers.length, spans: spans.map((s) => s.length) },
+      `partitioned at user markers into ${spans.length} spans — segmenting each separately`,
+    );
+  }
+
+  const segments: Segment[] = [];
+  for (const span of spans) {
+    const spanSegments = await segmentSpan(openai, model, span, narration, overallNarration, {
+      isSpan: spans.length > 1,
+      titleBase: segments.length,
+    });
+    segments.push(...spanSegments);
+  }
+  return segments;
+}
+
+/** One LLM segmentation pass over one marker-delimited span (or the whole recording, unmarked). */
+async function segmentSpan(
+  openai: OpenAI,
+  model: string,
+  events: CapturedEvent[],
+  narration: Map<string, string>,
+  overallNarration: string,
+  opts: { isSpan: boolean; titleBase: number },
+): Promise<Segment[]> {
   const allIds = events.map((e) => e.id);
 
   // Timeline — surface routes AND route transitions (the terminal-state signal) + narration.
-  // Each line carries the event's timestamp, on the same clock as the markers: without it the model
-  // is told "split at the marker at 62000ms" while looking at a list with no clocks — it cannot
-  // place a marker between two events, and a long pause (a documented boundary signal) is invisible.
+  // Each line carries the event's timestamp: without it a long pause (a documented boundary signal)
+  // is invisible to the model. (User markers used to ride this same clock as prompt lines; they are
+  // now consumed structurally by partitionByMarkers, before any model call.)
   const timeline = events
     .map((ev) => {
       const n = narration.get(ev.id);
@@ -139,14 +191,17 @@ export async function segment(
     })
     .join('\n');
 
-  const markerLines = markers.length
-    ? markers.map((m) => `- marker @ ${m.t}ms${m.label ? `: ${m.label}` : ''}`).join('\n')
-    : '(none)';
-
   const overall = overallNarration.trim().slice(0, 6000);
   const overallBlock = overall ? `Overall narration:\n"""${overall}"""\n\n` : '';
 
-  const user = `${overallBlock}Events (in order):\n${timeline}\n\nUser markers:\n${markerLines}\n\nReturn the workflows.`;
+  // The model never learns about the other spans except through this note. Without it, an up-front
+  // narration that enumerates tasks living in OTHER spans reads as workflows it must somehow
+  // produce from THIS span's events.
+  const spanNote = opts.isSpan
+    ? `NOTE: these events are ONE author-delimited span of a longer recording — the author pressed "new workflow" at its edges, so the span's start and end are already correct boundaries. Segment only these events; the overall narration may mention tasks that live outside this span.\n\n`
+    : '';
+
+  const user = `${overallBlock}${spanNote}Events (in order):\n${timeline}\n\nReturn the workflows.`;
 
   const content = await structuredJsonCall({
     openai,
@@ -168,7 +223,7 @@ export async function segment(
 
   const known = new Set(allIds);
   const raw = (parsed.workflows ?? []).map((w, i) => ({
-    title: (w.title || '').trim() || `Workflow ${i + 1}`,
+    title: (w.title || '').trim() || `Workflow ${opts.titleBase + i + 1}`,
     eventIds: (w.event_ids || []).filter((id) => known.has(id)),
     evidence: w.boundary_evidence || '',
     confidence: w.confidence || 'medium',
