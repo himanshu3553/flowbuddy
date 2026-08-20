@@ -217,6 +217,22 @@ model KnowledgeSource {
   // founder in Studio; never served to end-users. Best-effort: null when there was no narration,
   // when it added nothing beyond the workflow titles, or when the call failed.
   description String?
+  // Founder-drawn workflow boundaries (the Reorganize surface): the full list of workflow-START
+  // EVENT IDS on the recording's cleaned timeline. Non-null SUPERSEDES the record-time markers and
+  // makes the rebuild EXHAUSTIVE — each span is exactly one workflow, the model only names it.
+  // `[]` is a real value (one single workflow); null = automatic segmentation (markers + model).
+  // Event ids, not timestamps: two events can share a millisecond, ids are exact. The raw manifest
+  // stays immutable — this column is the founder's judgment ABOUT it, and doubles as the training
+  // data for boundary learning later (workflow-editing arc, item 5).
+  boundaryOverrides Json?
+  // Founder-drawn step INCLUSION for this recording's workflows (delete + restore-from-capture):
+  // `{ removed: string[], added: [{ keyEventId, instruction, detail? }], updatedAt: ISO }`, all
+  // keyed by the anchor event id. `removed` re-drops a step on every rebuild; `added` re-inserts a
+  // step for a captured event the distiller pruned — its ANCHOR (screenshot, route, bbox, evidence)
+  // always resolves from the real event, only the instruction/detail are the founder's words. A
+  // free-typed step with no event is impossible BY THIS SHAPE — that is the trust boundary, not a
+  // UI choice. Null = no inclusion edits.
+  stepInclusions Json?
   error       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt // last touch (status flips included) — drives the "stalled processing" surface

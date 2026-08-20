@@ -215,6 +215,33 @@ function resolveScreenshot(ev: CapturedEvent, useResultFrame: boolean): string |
   return ev.screenshot?.file ?? null;
 }
 
+/**
+ * An anchored step built from a captured event + the FOUNDER's words (restore-from-capture: the
+ * distiller pruned this event, the founder wants it back as a step). The anchor half — route,
+ * frame, bbox, event ids — resolves from the real event exactly like distillation's own steps;
+ * ONLY the instruction/detail are human, which is what keeps "add a step" inside the trust
+ * boundary: a step with no event cannot be built at all. Marked `editedFields: ['text']` so the
+ * wording stays founder-owned through later rebuilds.
+ */
+export function stepFromEvent(
+  ev: CapturedEvent,
+  narration: Map<string, string>,
+  instruction: string,
+  detail?: string,
+): DistilledStep {
+  return {
+    instruction,
+    ...(detail ? { detail } : {}),
+    route: (ev.route?.path ?? '').trim(),
+    narration: stepNarration([ev.id], narration),
+    screenshotFile: resolveScreenshot(ev, false),
+    bbox: ev.target?.bbox,
+    keyEventId: ev.id,
+    sourceEventIds: [ev.id],
+    editedFields: ['text'],
+  };
+}
+
 function resolveStep(
   s: DistilledStepLLM,
   sourceIds: string[],

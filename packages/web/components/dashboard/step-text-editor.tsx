@@ -4,11 +4,19 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 
-import { updateStepText } from '@/lib/edit-actions';
+import { checkDescriptionMention, deleteStep, updateStepText } from '@/lib/edit-actions';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StepImagePicker } from '@/components/dashboard/step-image-picker';
 
 /**
@@ -34,8 +42,48 @@ export function StepTextEditor({
   const router = useRouter();
   const [busy, start] = useTransition();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mention, setMention] = useState<string | null>(null);
   const [ins, setIns] = useState('');
   const [det, setDet] = useState('');
+
+  function openDeleteConfirm() {
+    setMention(null);
+    setConfirmDelete(true);
+    // Best-effort: does the workflow's description still describe this step? Shown in the dialog
+    // when it does — deleting removes the click instruction, never the prose that teaches it.
+    start(async () => {
+      const res = await checkDescriptionMention({ itemId });
+      if (res.ok) setMention(res.mention);
+    });
+  }
+
+  function removeStep() {
+    start(async () => {
+      const res = await deleteStep({ itemId });
+      if (res.ok) {
+        toast.success('Step deleted');
+        if (res.actingParked) {
+          toast.error(
+            'Acting was parked for re-review — without this step the workflow no longer compiles to a runnable plan.',
+          );
+        }
+        setConfirmDelete(false);
+        setEditing(false);
+        // Hand the flagged description sentence to the description card (same page) via the URL,
+        // so it can highlight what still teaches the deleted step until the founder edits it.
+        if (mention && mention.length <= 300) {
+          const params = new URLSearchParams(window.location.search);
+          params.set('descMention', mention);
+          router.replace(`?${params.toString()}`);
+        }
+        router.refresh();
+      } else {
+        toast.error(res.error);
+        setConfirmDelete(false);
+      }
+    });
+  }
 
   function saveEdit() {
     start(async () => {
@@ -82,10 +130,54 @@ export function StepTextEditor({
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
             Cancel
           </Button>
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-2">
             <StepImagePicker itemId={itemId} instruction={instruction} detail={detail} />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-danger-text hover:text-danger-text"
+              disabled={busy}
+              onClick={openDeleteConfirm}
+            >
+              Delete step
+            </Button>
           </span>
         </div>
+        <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete this step?</DialogTitle>
+              <DialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    The copilot stops citing it immediately, and rebuilds of this recording keep it
+                    deleted. Nothing is lost for good — the captured action stays in the recording,
+                    and “Add a step from the recording” restores it any time.
+                  </p>
+                  <p>
+                    If the AI Agent may run this workflow, its plan is recompiled — a workflow that
+                    no longer compiles cleanly without this step parks acting for your review.
+                  </p>
+                  {mention && (
+                    <p className="rounded-control border border-brand-100 bg-brand-50 px-2.5 py-2 text-[12px] leading-relaxed text-secondary-foreground">
+                      The workflow description also mentions this: <span className="font-medium">“{mention}”</span>{' '}
+                      — deleting the step won’t remove that sentence, and the copilot reads both.
+                      Edit the description too if the concept should go entirely.
+                    </p>
+                  )}
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" disabled={busy} onClick={removeStep}>
+                {busy ? 'Deleting…' : 'Delete step'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

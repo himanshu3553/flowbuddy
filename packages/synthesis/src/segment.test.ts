@@ -4,7 +4,13 @@ import type { CapturedEvent } from '@flowbuddy/shared';
 vi.mock('./responses', () => ({ structuredJsonCall: vi.fn() }));
 
 import { structuredJsonCall } from './responses';
-import { eventLabel, partitionByMarkers, segment } from './segment';
+import {
+  eventLabel,
+  partitionByMarkers,
+  partitionByStartIds,
+  segment,
+  segmentWithBoundaries,
+} from './segment';
 
 const mockCall = vi.mocked(structuredJsonCall);
 
@@ -127,6 +133,116 @@ describe('partitionByMarkers', () => {
 
   it('no events → no spans', () => {
     expect(partitionByMarkers([], [{ t: 100 }])).toEqual([]);
+  });
+});
+
+// ── founder-drawn boundaries are EXHAUSTIVE ─────────────────────────────────────────────────────
+//
+// The Reorganize surface stores the full list of workflow-start event ids. Unlike markers (cut
+// points the model may still split within), these define the workflows completely: each span is
+// exactly one workflow and the model call survives only to name it. These tests pin the pure
+// partition and the collapse.
+
+describe('partitionByStartIds', () => {
+  const ids = (spans: CapturedEvent[][]) => spans.map((s) => s.map((e) => e.id));
+  const evs = [cev('e1', 100), cev('e2', 200), cev('e3', 300), cev('e4', 400)];
+
+  it('cuts at each start id', () => {
+    const { spans, unknownIds } = partitionByStartIds(evs, ['e3']);
+    expect(ids(spans)).toEqual([
+      ['e1', 'e2'],
+      ['e3', 'e4'],
+    ]);
+    expect(unknownIds).toEqual([]);
+  });
+
+  it('an empty list is ONE single workflow — a real founder choice, not an error', () => {
+    expect(ids(partitionByStartIds(evs, []).spans)).toEqual([['e1', 'e2', 'e3', 'e4']]);
+  });
+
+  it('a start id at the first event collapses harmlessly', () => {
+    expect(ids(partitionByStartIds(evs, ['e1', 'e3']).spans)).toEqual([
+      ['e1', 'e2'],
+      ['e3', 'e4'],
+    ]);
+  });
+
+  it('reports ids the timeline no longer contains instead of guessing', () => {
+    const { spans, unknownIds } = partitionByStartIds(evs, ['gone', 'e2']);
+    expect(ids(spans)).toEqual([['e1'], ['e2', 'e3', 'e4']]);
+    expect(unknownIds).toEqual(['gone']);
+  });
+
+  it('out-of-order start ids still cut in timeline order', () => {
+    expect(ids(partitionByStartIds(evs, ['e4', 'e2']).spans)).toEqual([['e1'], ['e2', 'e3'], ['e4']]);
+  });
+});
+
+describe('segmentWithBoundaries — each span is exactly one workflow', () => {
+  const wf = (title: string, eventIds: string[]) => ({
+    title,
+    event_ids: eventIds,
+    boundary_evidence: 'test',
+    confidence: 'high',
+  });
+  const answer = (...workflows: ReturnType<typeof wf>[]) => JSON.stringify({ workflows });
+  const evs = [cev('e1', 100), cev('e2', 200), cev('e3', 300), cev('e4', 400)];
+  const run = (boundaries: string[]) =>
+    segmentWithBoundaries({} as never, 'test-model', evs, boundaries, new Map(), 'overall');
+
+  beforeEach(() => {
+    mockCall.mockReset();
+  });
+
+  it('collapses whatever the model proposes inside a span — the call survives only to NAME it', () => {
+    mockCall
+      // Span 1's model tries to split it into two workflows; the founder said it is one.
+      .mockResolvedValueOnce(answer(wf('Task A', ['e1']), wf('Phase of A', ['e2'])))
+      .mockResolvedValueOnce(answer(wf('Task B', ['e3', 'e4'])));
+
+    return run(['e3']).then((out) => {
+      expect(out.segments).toEqual([
+        { title: 'Task A', eventIds: ['e1', 'e2'] },
+        { title: 'Task B', eventIds: ['e3', 'e4'] },
+      ]);
+    });
+  });
+
+  it('tells the model the span is EXACTLY ONE workflow and to title the WHOLE of it', async () => {
+    // The title is what the distiller prunes against — a merged span titled after only its first
+    // activity gets its second half silently pruned as off-goal (found live). The exhaustive note
+    // is the fix; pin its presence.
+    mockCall
+      .mockResolvedValueOnce(answer(wf('A', ['e1', 'e2'])))
+      .mockResolvedValueOnce(answer(wf('B', ['e3', 'e4'])));
+    await run(['e3']);
+    for (const call of mockCall.mock.calls) {
+      expect(call[0].user).toContain('EXACTLY ONE workflow');
+      expect(call[0].user).toContain('WHOLE span');
+    }
+  });
+
+  it('an empty model answer still yields the span, with a fallback title', async () => {
+    mockCall.mockResolvedValueOnce('{}').mockResolvedValueOnce(answer(wf('Task B', ['e3', 'e4'])));
+    const out = await run(['e3']);
+    expect(out.segments[0]).toEqual({ title: 'Recorded workflow', eventIds: ['e1', 'e2'] });
+    expect(out.segments[1]).toEqual({ title: 'Task B', eventIds: ['e3', 'e4'] });
+  });
+
+  it('surfaces unknown boundary ids for the recording notice', async () => {
+    mockCall.mockResolvedValueOnce(answer(wf('Only', ['e1', 'e2', 'e3', 'e4'])));
+    const out = await run(['gone']);
+    expect(out.unknownBoundaryIds).toEqual(['gone']);
+    expect(out.segments).toHaveLength(1);
+  });
+
+  it('every event lands in exactly one workflow, always', async () => {
+    mockCall
+      .mockResolvedValueOnce(answer(wf('A', ['e1'])))
+      .mockResolvedValueOnce(answer(wf('B', ['e3'])));
+    const out = await run(['e3']);
+    const all = out.segments.flatMap((s) => s.eventIds);
+    expect(all).toEqual(['e1', 'e2', 'e3', 'e4']);
   });
 });
 

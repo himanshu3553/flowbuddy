@@ -134,6 +134,65 @@ export function partitionByMarkers(events: CapturedEvent[], markers: Marker[]): 
 }
 
 /**
+ * Founder-drawn boundaries (Studio's Reorganize surface) — the fully deterministic partition.
+ * Unlike markers, this list is EXHAUSTIVE: every span between consecutive workflow-start ids is
+ * exactly one workflow. A start id the timeline no longer contains is reported, never guessed at —
+ * the caller surfaces it in the recording's notice. A cut at the first event collapses harmlessly
+ * (that span exists anyway), so `[]` means one single workflow.
+ */
+export function partitionByStartIds(
+  events: CapturedEvent[],
+  startIds: string[],
+): { spans: CapturedEvent[][]; unknownIds: string[] } {
+  if (events.length === 0) return { spans: [], unknownIds: [...startIds] };
+  const indexById = new Map(events.map((e, i) => [e.id, i]));
+  const cuts = new Set<number>();
+  const unknownIds: string[] = [];
+  for (const id of startIds) {
+    const i = indexById.get(id);
+    if (i == null) unknownIds.push(id);
+    else if (i > 0) cuts.add(i);
+  }
+  const starts = [0, ...[...cuts].sort((a, b) => a - b)];
+  return { spans: starts.map((s, i) => events.slice(s, starts[i + 1])), unknownIds };
+}
+
+/**
+ * Segment a recording whose workflow boundaries the FOUNDER drew (KnowledgeSource.boundaryOverrides).
+ * Each span IS one workflow by construction — the per-span model call survives only to NAME it, and
+ * any within-span split it proposes is collapsed (structure over prompt, the same rule that makes
+ * markers hard cut points). No carry-forward is needed: spans partition the events exhaustively.
+ */
+export async function segmentWithBoundaries(
+  openai: OpenAI,
+  model: string,
+  events: CapturedEvent[],
+  boundaryEventIds: string[],
+  narration: Map<string, string>,
+  overallNarration = '',
+): Promise<{ segments: Segment[]; unknownBoundaryIds: string[] }> {
+  if (events.length === 0) return { segments: [], unknownBoundaryIds: [] };
+  const { spans, unknownIds } = partitionByStartIds(events, boundaryEventIds);
+  log.info(
+    { boundaries: boundaryEventIds.length, spans: spans.map((s) => s.length), unknown: unknownIds.length },
+    `founder boundaries — ${spans.length} workflow(s), exhaustive`,
+  );
+  const segments: Segment[] = [];
+  for (const span of spans) {
+    const proposed = await segmentSpan(openai, model, span, narration, overallNarration, {
+      isSpan: spans.length > 1,
+      titleBase: segments.length,
+      exhaustive: true,
+    });
+    segments.push({
+      title: proposed[0]?.title ?? `Workflow ${segments.length + 1}`,
+      eventIds: span.map((e) => e.id),
+    });
+  }
+  return { segments, unknownBoundaryIds: unknownIds };
+}
+
+/**
  * Split one recording's events into workflows: a deterministic partition at the user's markers
  * first, then one event-aware LLM pass PER SPAN (terminal-state driven; narration supporting). A
  * carry-forward guard then guarantees EVERY event lands in a workflow, so nothing is ever silently
@@ -174,7 +233,7 @@ async function segmentSpan(
   events: CapturedEvent[],
   narration: Map<string, string>,
   overallNarration: string,
-  opts: { isSpan: boolean; titleBase: number },
+  opts: { isSpan: boolean; titleBase: number; exhaustive?: boolean },
 ): Promise<Segment[]> {
   const allIds = events.map((e) => e.id);
 
@@ -196,10 +255,15 @@ async function segmentSpan(
 
   // The model never learns about the other spans except through this note. Without it, an up-front
   // narration that enumerates tasks living in OTHER spans reads as workflows it must somehow
-  // produce from THIS span's events.
-  const spanNote = opts.isSpan
-    ? `NOTE: these events are ONE author-delimited span of a longer recording — the author pressed "new workflow" at its edges, so the span's start and end are already correct boundaries. Segment only these events; the overall narration may mention tasks that live outside this span.\n\n`
-    : '';
+  // produce from THIS span's events. The EXHAUSTIVE note goes further, and its title demand is
+  // load-bearing: the title is what the distiller prunes against ("drop actions that don't advance
+  // the goal"), so a merged span titled after only its FIRST activity gets its second half pruned
+  // as off-goal noise — the steps silently vanish (found live: a merged settings task kept 1 step).
+  const spanNote = opts.exhaustive
+    ? `NOTE: the author has marked these events as EXACTLY ONE workflow — return exactly ONE workflow containing EVERY event id. Title it by the overall goal of the WHOLE span: when it covers several activities, the title must name them together (e.g. "View projects and application settings"), never just the first. The overall narration may mention tasks that live outside this span.\n\n`
+    : opts.isSpan
+      ? `NOTE: these events are ONE author-delimited span of a longer recording — the author pressed "new workflow" at its edges, so the span's start and end are already correct boundaries. Segment only these events; the overall narration may mention tasks that live outside this span.\n\n`
+      : '';
 
   const user = `${overallBlock}${spanNote}Events (in order):\n${timeline}\n\nReturn the workflows.`;
 

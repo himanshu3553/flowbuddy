@@ -2,9 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
-import type { SessionManifest } from '@flowbuddy/shared';
-import { distilledStepText, type EditedStepField } from '@flowbuddy/synthesis/distill';
+import type { CapturedEvent, SessionManifest } from '@flowbuddy/shared';
+import { alignNarration } from '@flowbuddy/synthesis/align';
+import { cleanEvents } from '@flowbuddy/synthesis/clean';
+import { distilledStepText, stepFromEvent, type EditedStepField } from '@flowbuddy/synthesis/distill';
 import { embedTexts, toVectorLiteral } from '@flowbuddy/synthesis/embeddings';
+import { parseStepInclusions, type StepAddition } from '@flowbuddy/synthesis/step-inclusions';
+import type { Transcript } from '@flowbuddy/synthesis/transcribe';
 import { getCurrentWorkspace } from '@/lib/session';
 import { compileWorkflowPlan } from '@/lib/plan-compile';
 import { timelineEvents } from '@/lib/recordings';
@@ -45,6 +49,35 @@ function editedFieldsOf(data: Record<string, unknown>, editedAt: Date | null): E
   const raw = data.editedFields;
   if (Array.isArray(raw)) return raw.filter((f): f is EditedStepField => f === 'text' || f === 'image');
   return editedAt ? ['text'] : [];
+}
+
+/** Embed edited step text BEFORE any write — text and vector move together or not at all. The
+ *  error names WHOSE key failed: Studio's OPENAI_API_KEY is a separate env entry from the api's
+ *  (packages/web/.env locally, the web service's env on Render), and a drifted copy fails here
+ *  while recordings keep processing fine — which reads as an account problem otherwise. */
+async function embedEditedText(
+  text: string,
+): Promise<{ ok: true; vector: number[] } | { ok: false; error: string }> {
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  if (!apiKey) {
+    return { ok: false, error: 'Studio has no OPENAI_API_KEY, so the edited text cannot be re-indexed — nothing was changed.' };
+  }
+  try {
+    const [v] = await embedTexts([text], {
+      apiKey,
+      model: process.env.EMBED_MODEL || undefined,
+      timeoutMs: 15_000,
+      maxRetries: 1,
+    });
+    if (!v) throw new Error('no vector returned');
+    return { ok: true, vector: v };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      error: `Could not re-index the edited text — Studio's own OPENAI_API_KEY failed (${msg}). The api/worker uses a separate key entry, so check the web service's. Nothing was changed.`,
+    };
+  }
 }
 
 /** Recompile + re-pin an acting-enabled workflow's plan after a step edit; park acting for
@@ -184,37 +217,15 @@ export async function updateStepText(input: {
   });
 
   // Re-embed BEFORE writing (see the header): text and vector move together or not at all.
-  const apiKey = process.env.OPENAI_API_KEY || '';
-  if (!apiKey) {
-    return { ok: false, error: 'Studio has no OPENAI_API_KEY, so the edited text cannot be re-indexed — nothing was changed.' };
-  }
-  let vector: number[];
-  try {
-    const [v] = await embedTexts([text], {
-      apiKey,
-      model: process.env.EMBED_MODEL || undefined,
-      timeoutMs: 15_000,
-      maxRetries: 1,
-    });
-    if (!v) throw new Error('no vector returned');
-    vector = v;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // Name WHOSE key failed: Studio's OPENAI_API_KEY is a separate env entry from the api's
-    // (packages/web/.env locally, the web service's env on Render), and a drifted copy fails
-    // here while recordings keep processing fine — which reads as an account problem otherwise.
-    return {
-      ok: false,
-      error: `Could not re-index the edited text — Studio's own OPENAI_API_KEY failed (${msg}). The api/worker uses a separate key entry, so check the web service's. Nothing was changed.`,
-    };
-  }
+  const embedded = await embedEditedText(text);
+  if (!embedded.ok) return embedded;
 
   await prisma.$transaction(async (tx) => {
     await tx.knowledgeItem.update({
       where: { id: item.id },
       data: { text, data: data as object, editedAt: new Date(), editedById: ctx.userId },
     });
-    await tx.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(vector)}::vector WHERE id = ${item.id}`;
+    await tx.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(embedded.vector)}::vector WHERE id = ${item.id}`;
   });
 
   // Acting reads the step text too (a run narrates it) — recompile + re-pin, or park (see helper).
@@ -373,4 +384,375 @@ export async function updateStepImage(input: { itemId: string; screenshotFile: s
 
   revalidatePath(`/dashboard/kb/${item.sourceId}`);
   return { ok: true, ...(actingParked ? { actingParked: true } : {}) };
+}
+
+// ── Step inclusion: delete + restore-from-capture (workflow-editing arc) ────────────────────────
+//
+// The founder fully controls WHICH captured moments a workflow includes — and cannot introduce
+// anything the recording didn't witness. Deleting hard-deletes the row now (no removed-flag for
+// every reader to remember — the liveness lesson) and records the anchor on the RECORDING
+// (`KnowledgeSource.stepInclusions`) so every rebuild re-drops it; restoring inserts an anchored
+// step built from a pruned captured event (`stepFromEvent` — the founder types only the words) and
+// records it the same way so every rebuild re-inserts it.
+
+/** Read-modify-write for `stepInclusions` — deleting a step the founder previously RESTORED just
+ *  cancels the restoration; only a distiller-produced step needs a standing removal. */
+function withRemoval(raw: ReturnType<typeof parseStepInclusions>, keyEventId: string) {
+  const base = raw ?? { removed: [], added: [] };
+  const added = base.added.filter((a) => a.keyEventId !== keyEventId);
+  const wasAddition = added.length !== base.added.length;
+  const removed = wasAddition ? base.removed : [...new Set([...base.removed, keyEventId])];
+  return { removed, added, updatedAt: new Date().toISOString() };
+}
+
+function withAddition(raw: ReturnType<typeof parseStepInclusions>, addition: StepAddition) {
+  const base = raw ?? { removed: [], added: [] };
+  return {
+    removed: base.removed.filter((id) => id !== addition.keyEventId),
+    added: [...base.added.filter((a) => a.keyEventId !== addition.keyEventId), addition],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+type WorkflowSpan = {
+  sourceId: string;
+  manifest: SessionManifest;
+  cleaned: CapturedEvent[];
+  span: CapturedEvent[];
+  usedIds: Set<string>;
+  workflow: { id: string; segmentIndex: number; title: string | null };
+};
+
+/** The workflow's SPAN on the cleaned timeline — from its own start anchor to the next workflow's,
+ *  the same anchor rule the Reorganize surface uses, so "which events belong here" has exactly one
+ *  definition. Restorable candidates are span events that are not currently steps. */
+async function workflowSpan(
+  workspaceId: string,
+  workflowId: string,
+): Promise<({ ok: true } & WorkflowSpan) | { ok: false; error: string }> {
+  const workflow = await prisma.workflow.findFirst({
+    where: { id: workflowId, workspaceId },
+    select: { id: true, sourceId: true, segmentIndex: true, title: true },
+  });
+  if (!workflow || workflow.segmentIndex == null) return { ok: false, error: 'Workflow not found' };
+  const source = await prisma.knowledgeSource.findUnique({
+    where: { id: workflow.sourceId },
+    select: { manifest: true },
+  });
+  const manifest = source?.manifest as unknown as SessionManifest | null;
+  if (!manifest?.events?.length) {
+    return { ok: false, error: 'The recording’s raw capture is missing, so its steps cannot be edited.' };
+  }
+  const items = await prisma.knowledgeItem.findMany({
+    where: { sourceId: workflow.sourceId, kind: 'step' },
+    orderBy: [{ segmentIndex: 'asc' }, { orderIndex: 'asc' }],
+    select: { segmentIndex: true, workflowId: true, data: true },
+  });
+  const cleaned = cleanEvents(manifest.events);
+  const idx = new Map(cleaned.map((e, i) => [e.id, i]));
+  const anchorOf = (d: Record<string, unknown>): string | null => {
+    const src = Array.isArray(d.sourceEventIds) && typeof d.sourceEventIds[0] === 'string' ? d.sourceEventIds[0] : null;
+    return src ?? (typeof d.keyEventId === 'string' ? d.keyEventId : null);
+  };
+  const segs = [...new Set(items.map((it) => it.segmentIndex).filter((s): s is number => s != null))].sort(
+    (a, b) => a - b,
+  );
+  const startIdxOf = new Map<number, number>();
+  for (const seg of segs) {
+    const first = items.find((it) => it.segmentIndex === seg);
+    const anchor = first ? anchorOf((first.data ?? {}) as Record<string, unknown>) : null;
+    const i = anchor ? idx.get(anchor) : undefined;
+    if (i == null) return { ok: false, error: 'This recording predates step anchors — re-process it first.' };
+    startIdxOf.set(seg, i);
+  }
+  const pos = segs.indexOf(workflow.segmentIndex);
+  if (pos === -1) return { ok: false, error: 'Workflow not found' };
+  const start = pos === 0 ? 0 : startIdxOf.get(segs[pos]!)!;
+  const end = pos === segs.length - 1 ? cleaned.length : startIdxOf.get(segs[pos + 1]!)!;
+  const usedIds = new Set<string>();
+  for (const it of items) {
+    if (it.workflowId !== workflow.id) continue;
+    const d = (it.data ?? {}) as { sourceEventIds?: unknown; keyEventId?: unknown };
+    if (Array.isArray(d.sourceEventIds)) for (const s of d.sourceEventIds) if (typeof s === 'string') usedIds.add(s);
+    if (typeof d.keyEventId === 'string') usedIds.add(d.keyEventId);
+  }
+  return {
+    ok: true,
+    sourceId: workflow.sourceId,
+    manifest,
+    cleaned,
+    span: cleaned.slice(start, end),
+    usedIds,
+    workflow: { id: workflow.id, segmentIndex: workflow.segmentIndex, title: workflow.title },
+  };
+}
+
+export async function deleteStep(input: { itemId: string }): Promise<EditResult> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const item = await prisma.knowledgeItem.findFirst({
+    where: { id: input.itemId, workspaceId: ctx.workspace.id, kind: 'step' },
+    select: { id: true, data: true, workflowId: true, sourceId: true, orderIndex: true },
+  });
+  if (!item) return { ok: false, error: 'Step not found' };
+  const d = (item.data ?? {}) as { keyEventId?: unknown };
+  if (typeof d.keyEventId !== 'string' || !d.keyEventId) {
+    return {
+      ok: false,
+      error: 'This step predates edit anchors, so a deletion could not survive a rebuild — re-process the recording first.',
+    };
+  }
+  const key = d.keyEventId;
+
+  await prisma.$transaction(async (tx) => {
+    const source = await tx.knowledgeSource.findUnique({
+      where: { id: item.sourceId },
+      select: { stepInclusions: true },
+    });
+    await tx.knowledgeItem.delete({ where: { id: item.id } });
+    await tx.knowledgeItem.updateMany({
+      where: { workflowId: item.workflowId, orderIndex: { gt: item.orderIndex } },
+      data: { orderIndex: { decrement: 1 } },
+    });
+    await tx.knowledgeSource.update({
+      where: { id: item.sourceId },
+      data: { stepInclusions: withRemoval(parseStepInclusions(source?.stepInclusions), key) as object },
+    });
+  });
+
+  const actingParked = await recompileIfActing(ctx.workspace.id, item.workflowId, item.sourceId);
+  revalidatePath(`/dashboard/kb/${item.sourceId}`);
+  return { ok: true, ...(actingParked ? { actingParked: true } : {}) };
+}
+
+/** The captured moments of this workflow's span that are NOT currently steps — the distiller's
+ *  prunes plus any founder deletions, i.e. everything restorable. */
+export type AddableEvents =
+  | {
+      ok: true;
+      workflowTitle: string;
+      candidates: { eventId: string; label: string; route: string; url: string | null }[];
+    }
+  | { ok: false; error: string };
+
+export async function listAddableEvents(input: { workflowId: string }): Promise<AddableEvents> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const res = await workflowSpan(ctx.workspace.id, input.workflowId);
+  if (!res.ok) return res;
+  const labelByEventId = new Map(timelineEvents(res.manifest).map((e) => [e.id, e]));
+  const candidates = await Promise.all(
+    res.span
+      .filter((ev) => !res.usedIds.has(ev.id))
+      .map(async (ev) => {
+        const meta = labelByEventId.get(ev.id);
+        const file = ev.screenshot?.file ?? ev.postAction?.screenshot?.file ?? null;
+        return {
+          eventId: ev.id,
+          label: meta ? `${meta.type}${meta.label ? ` “${meta.label}”` : ''}` : String(ev.type),
+          route: ev.route?.path ?? '',
+          url: file ? await signedUrl(sessionObjectKey(ctx.workspace.id, res.sourceId, file)) : null,
+        };
+      }),
+  );
+  return { ok: true, workflowTitle: res.workflow.title ?? 'this workflow', candidates };
+}
+
+export async function addStepFromEvent(input: {
+  workflowId: string;
+  eventId: string;
+  instruction: string;
+  detail: string;
+}): Promise<EditResult> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const instruction = input.instruction.trim();
+  const detail = input.detail.trim();
+  if (!instruction) return { ok: false, error: 'A step needs an instruction.' };
+  if (instruction.length > INSTRUCTION_MAX || detail.length > DETAIL_MAX) {
+    return { ok: false, error: 'That edit is too long for a step — longer context belongs in the workflow description.' };
+  }
+  const res = await workflowSpan(ctx.workspace.id, input.workflowId);
+  if (!res.ok) return res;
+  const ev = res.span.find((e) => e.id === input.eventId);
+  if (!ev || res.usedIds.has(ev.id)) {
+    return { ok: false, error: 'That captured action is not restorable in this workflow — reload the page and try again.' };
+  }
+
+  const source = await prisma.knowledgeSource.findUnique({
+    where: { id: res.sourceId },
+    select: { transcript: true, stepInclusions: true },
+  });
+  const transcript = (source?.transcript as unknown as Transcript | null) ?? { text: '', segments: [] };
+  const step = stepFromEvent(ev, alignNarration(res.manifest.events, transcript), instruction, detail || undefined);
+  const text = distilledStepText(step);
+  const embedded = await embedEditedText(text);
+  if (!embedded.ok) return embedded;
+
+  // Timeline position among the workflow's existing steps (anchorless legacy rows sort first).
+  const items = await prisma.knowledgeItem.findMany({
+    where: { workspaceId: ctx.workspace.id, workflowId: res.workflow.id, kind: 'step' },
+    orderBy: { orderIndex: 'asc' },
+    select: { data: true, segmentTitle: true },
+  });
+  const evIdx = new Map(res.cleaned.map((e, i) => [e.id, i]));
+  const target = evIdx.get(ev.id)!;
+  let pos = 0;
+  for (const it of items) {
+    const di = (it.data ?? {}) as { keyEventId?: unknown };
+    const i = typeof di.keyEventId === 'string' ? evIdx.get(di.keyEventId) : undefined;
+    if (i == null || i < target) pos += 1;
+  }
+
+  const now = new Date();
+  const inclusions = withAddition(parseStepInclusions(source?.stepInclusions), {
+    keyEventId: ev.id,
+    instruction,
+    ...(detail ? { detail } : {}),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.knowledgeItem.updateMany({
+      where: { workflowId: res.workflow.id, orderIndex: { gte: pos } },
+      data: { orderIndex: { increment: 1 } },
+    });
+    const row = await tx.knowledgeItem.create({
+      data: {
+        sourceId: res.sourceId,
+        workspaceId: ctx.workspace.id,
+        workflowId: res.workflow.id,
+        kind: 'step',
+        orderIndex: pos,
+        text,
+        segmentIndex: res.workflow.segmentIndex,
+        segmentTitle: items[0]?.segmentTitle ?? res.workflow.title,
+        data: step as object,
+        editedAt: now,
+        editedById: ctx.userId,
+      },
+      select: { id: true },
+    });
+    await tx.$executeRaw`UPDATE "KnowledgeItem" SET embedding = ${toVectorLiteral(embedded.vector)}::vector WHERE id = ${row.id}`;
+    await tx.knowledgeSource.update({ where: { id: res.sourceId }, data: { stepInclusions: inclusions as object } });
+  });
+
+  const actingParked = await recompileIfActing(ctx.workspace.id, res.workflow.id, res.sourceId);
+  revalidatePath(`/dashboard/kb/${res.sourceId}`);
+  return { ok: true, ...(actingParked ? { actingParked: true } : {}) };
+}
+
+/** How similar a description sentence must be to a deleted step's text before the delete dialog
+ *  flags it (cosine over the same embeddings retrieval uses; the vectors arrive unit-normalized so
+ *  a dot product is the cosine). Loosely calibrated — a HINT, never a gate: too low occasionally
+ *  quotes an unrelated sentence, too high misses paraphrase, and paraphrase is the whole point —
+ *  the live case this exists for was step "Remember me" vs description "the option that remembers
+ *  you", zero string overlap. */
+const DESCRIPTION_MENTION_MIN = 0.45;
+
+/** Does the workflow's description still describe this step? Best-effort by design: any failure
+ *  (no key, timeout) reports "no mention" rather than blocking the delete dialog — the deletion
+ *  itself never depends on this. */
+export type DescriptionMention = { ok: true; mention: string | null } | { ok: false; error: string };
+
+const dot = (a: number[], b: number[]): number => {
+  let sum = 0;
+  for (let k = 0; k < a.length; k++) sum += a[k]! * b[k]!;
+  return sum;
+};
+
+/** Exact substrings of the sentence spanning 4–10 words each — the refinement candidates. Built
+ *  from offsets so every candidate is verbatim (the highlight relies on `includes`). */
+function wordWindows(sentence: string): string[] {
+  const words = [...sentence.matchAll(/\S+/g)];
+  const out = new Set<string>();
+  for (const size of [4, 6, 8, 10]) {
+    for (let i = 0; i + size <= words.length; i++) {
+      const from = words[i]!.index!;
+      const last = words[i + size - 1]!;
+      out.add(sentence.slice(from, last.index! + last[0].length));
+    }
+  }
+  return [...out];
+}
+
+export async function checkDescriptionMention(input: { itemId: string }): Promise<DescriptionMention> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const item = await prisma.knowledgeItem.findFirst({
+    where: { id: input.itemId, workspaceId: ctx.workspace.id, kind: 'step' },
+    select: { text: true, data: true, workflowId: true },
+  });
+  if (!item) return { ok: false, error: 'Step not found' };
+  const workflow = await prisma.workflow.findUnique({
+    where: { id: item.workflowId },
+    select: { description: true },
+  });
+  const description = workflow?.description?.trim();
+  if (!description) return { ok: true, mention: null };
+
+  // Compare against the step's INSTRUCTION (+detail), never the stored `text`: text folds in the
+  // narration, and narration spoken around a click is often about the surrounding moment ("…and
+  // then your account is created"), which drags the match onto the WRONG sentence — found live.
+  const d = (item.data ?? {}) as { instruction?: unknown; detail?: unknown };
+  const instruction = typeof d.instruction === 'string' ? d.instruction.trim() : '';
+  const stepText = instruction
+    ? `${instruction}${typeof d.detail === 'string' && d.detail.trim() ? ` — ${d.detail.trim()}` : ''}`
+    : item.text;
+
+  const sentences = description
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 15);
+  if (sentences.length === 0) return { ok: true, mention: null };
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  if (!apiKey) return { ok: true, mention: null };
+  try {
+    const opts = { apiKey, model: process.env.EMBED_MODEL || undefined, timeoutMs: 10_000, maxRetries: 0 };
+    const vectors = await embedTexts([stepText, ...sentences], opts);
+    const stepVec = vectors[0];
+    if (!stepVec) return { ok: true, mention: null };
+    let bestSentence: string | null = null;
+    let bestSim = -1;
+    for (let i = 0; i < sentences.length; i++) {
+      const v = vectors[i + 1];
+      if (!v) continue;
+      const sim = dot(stepVec, v);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestSentence = sentences[i]!;
+      }
+    }
+    if (!bestSentence || bestSim < DESCRIPTION_MENTION_MIN) return { ok: true, mention: null };
+
+    // Refine to the tightest span INSIDE the winning sentence: a clause's signal dilutes across a
+    // long sentence ("…and agreeing to the applicable legal terms" inside a whole-task opener), so
+    // sliding word-windows are scored against the same step vector and the best window wins — but
+    // only when it matches at least as well as the full sentence. Best-effort: any failure keeps
+    // the sentence.
+    let mention = bestSentence;
+    if (bestSentence.split(/\s+/).length > 12) {
+      try {
+        const windows = wordWindows(bestSentence).slice(0, 150);
+        if (windows.length > 1) {
+          const wVecs = await embedTexts(windows, opts);
+          let wBest = -1;
+          let wText: string | null = null;
+          for (let i = 0; i < windows.length; i++) {
+            const v = wVecs[i];
+            if (!v) continue;
+            const sim = dot(stepVec, v);
+            if (sim > wBest) {
+              wBest = sim;
+              wText = windows[i]!;
+            }
+          }
+          if (wText && wBest >= bestSim) mention = wText;
+        }
+      } catch {
+        /* keep the sentence */
+      }
+    }
+    return { ok: true, mention };
+  } catch {
+    return { ok: true, mention: null };
+  }
 }

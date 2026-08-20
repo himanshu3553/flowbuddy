@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 import type { SessionManifest, CapturedEvent } from '@flowbuddy/shared';
 import { transcribe, type Transcript, type TranscriptGap } from './transcribe';
 import { alignNarration, transcriptWindow } from './align';
-import { segment } from './segment';
+import { segment, segmentWithBoundaries, type Segment } from './segment';
+import { applyStepInclusions, type StepInclusions } from './step-inclusions';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
@@ -63,6 +64,8 @@ export type { EmbedOpts } from './embeddings';
 // Founder edits surviving a reprocess — the worker re-attaches stored step edits by anchor.
 export { applyStepOverrides, stepOverridesByKeyEvent } from './step-overrides';
 export type { EditedStepRow, StepOverride } from './step-overrides';
+export { applyStepInclusions, parseStepInclusions } from './step-inclusions';
+export type { StepAddition, StepInclusions } from './step-inclusions';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export {
   attachOutcomeMarkers,
@@ -121,6 +124,13 @@ export interface BuildWorkflowKBInput {
   apiKey: string;
   transcribeModel: string;
   synthModel: string;
+  /** Founder-drawn workflow boundaries (`KnowledgeSource.boundaryOverrides`): workflow-start event
+   *  ids on the CLEANED timeline. Present = exhaustive segmentation, markers superseded; `[]` is
+   *  one single workflow; undefined = automatic (markers + model). */
+  boundaryEventIds?: string[];
+  /** Founder step inclusion (`KnowledgeSource.stepInclusions`): deleted steps stay deleted and
+   *  restored steps stay restored across every rebuild (see step-inclusions.ts). */
+  stepInclusions?: StepInclusions;
 }
 
 /** One workflow: a positional index (the approval key), a goal title, and its clean distilled steps. */
@@ -217,15 +227,35 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     return { transcript, workflows: [], warning, recordingDescription: null, pages: [] };
   }
 
-  // 3. Segment the cleaned events into coherent workflows (one task = one workflow).
-  const segments = await segment(
-    openai,
-    input.synthModel,
-    cleaned,
-    input.manifest.markers ?? [],
-    narration,
-    transcript.text,
-  );
+  // 3. Segment the cleaned events into coherent workflows (one task = one workflow). Founder-drawn
+  // boundaries, when present, replace automatic segmentation entirely (markers included) — the
+  // founder's later judgment supersedes both the record-time marks and the model.
+  let segments: Segment[];
+  let boundaryWarning: string | null = null;
+  if (input.boundaryEventIds) {
+    const out = await segmentWithBoundaries(
+      openai,
+      input.synthModel,
+      cleaned,
+      input.boundaryEventIds,
+      narration,
+      transcript.text,
+    );
+    segments = out.segments;
+    if (out.unknownBoundaryIds.length > 0) {
+      const n = out.unknownBoundaryIds.length;
+      boundaryWarning = `${n} saved workflow boundar${n === 1 ? 'y' : 'ies'} no longer matched this recording's events and ${n === 1 ? 'was' : 'were'} skipped — review the workflow split.`;
+    }
+  } else {
+    segments = await segment(
+      openai,
+      input.synthModel,
+      cleaned,
+      input.manifest.markers ?? [],
+      narration,
+      transcript.text,
+    );
+  }
   // Observability: what the segmenter decided (counts must add up — the guard re-adds any omitted event).
   const assigned = segments.reduce((n, s) => n + s.eventIds.length, 0);
   log.info(
@@ -247,7 +277,12 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       .map((id) => cleanedById.get(id))
       .filter((e): e is CapturedEvent => Boolean(e));
     if (segEvents.length === 0) continue;
-    const steps = await distillSteps(openai, input.synthModel, seg.title, segEvents, narration, transcript.text);
+    let steps = await distillSteps(openai, input.synthModel, seg.title, segEvents, narration, transcript.text);
+    // Founder step inclusion — deletions re-dropped, restorations re-inserted at their timeline
+    // position, BEFORE the description is written so it covers the final step list.
+    if (input.stepInclusions) {
+      steps = applyStepInclusions(steps, segEvents, narration, input.stepInclusions).steps;
+    }
     if (steps.length === 0) {
       // distillSteps has a 0-step fallback, so this is unexpected — surface it rather than silently drop.
       log.warn(
@@ -350,5 +385,24 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     log.info({ component: 'describe-recording' }, 'no recording description produced');
   }
 
-  return { transcript, workflows, warning, recordingDescription, pages };
+  // A restored step whose captured event left the cleaned timeline entirely has nowhere to land —
+  // report it rather than guess (the boundary rule, applied to inclusions).
+  let inclusionWarning: string | null = null;
+  if (input.stepInclusions && input.stepInclusions.added.length > 0) {
+    const presentKeys = new Set(
+      workflows.flatMap((w) => w.steps.map((s) => s.keyEventId)).filter(Boolean),
+    );
+    const lost = input.stepInclusions.added.filter((a) => !presentKeys.has(a.keyEventId)).length;
+    if (lost > 0) {
+      inclusionWarning = `${lost} restored step${lost === 1 ? '' : 's'} could not be carried through the rebuild (the captured event is no longer on the timeline) — review the workflow steps.`;
+    }
+  }
+
+  return {
+    transcript,
+    workflows,
+    warning: [warning, boundaryWarning, inclusionWarning].filter(Boolean).join(' · ') || null,
+    recordingDescription,
+    pages,
+  };
 }

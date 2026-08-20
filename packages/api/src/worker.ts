@@ -19,6 +19,7 @@ import {
   pageEmbedText,
   pageSimilarity,
   PAGE_CONTENT_AGREE_THRESHOLD,
+  parseStepInclusions,
   stepOverridesByKeyEvent,
   toVectorLiteral,
   type ExtractedPage,
@@ -308,12 +309,22 @@ const worker = new Worker(
       // ── Module 2 (LIVE copilot path): capture → distilled workflow KB ──
       // transcribe → align → clean (B) → segment → distill (A). Persists clean steps grouped by
       // workflow (segmentIndex/segmentTitle); raw events are NOT stored. See docs/build/kb-step-distillation.md.
+      // Founder-drawn boundaries (the Reorganize surface) ride every rebuild of this recording —
+      // non-null replaces automatic segmentation entirely. Shape-checked here because Json trusts
+      // nothing: only an array of strings counts.
+      const storedBoundaries = Array.isArray(rec.boundaryOverrides)
+        ? rec.boundaryOverrides.filter((x): x is string => typeof x === 'string')
+        : undefined;
+      // Founder step inclusion (delete + restore-from-capture) rides the same way.
+      const inclusions = parseStepInclusions(rec.stepInclusions);
       const { transcript, workflows, warning, recordingDescription, pages } = await buildWorkflowKB({
         manifest,
         getArtifact,
         apiKey: config.openaiApiKey,
         transcribeModel: config.transcribeModel,
         synthModel: config.synthModel,
+        ...(storedBoundaries ? { boundaryEventIds: storedBoundaries } : {}),
+        ...(inclusions ? { stepInclusions: inclusions } : {}),
       });
 
       // `description` is overwritten (null included) like the per-workflow descriptions: on a

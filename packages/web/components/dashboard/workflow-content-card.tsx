@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 
 import { updateWorkflowDescription, updateWorkflowTitle, type EditResult } from '@/lib/edit-actions';
@@ -39,9 +39,23 @@ export function WorkflowContentCard({
   ready: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [busy, start] = useTransition();
   const [editing, setEditing] = useState<'none' | 'title' | 'description'>('none');
   const [draft, setDraft] = useState('');
+
+  // A step deletion may flag a description sentence that still teaches the deleted step
+  // (step-text-editor puts it in the URL). Highlight it until the founder edits — the system
+  // never rewrites founder-approvable prose on a heuristic; it points, the founder decides.
+  const mentionParam = searchParams.get('descMention');
+  const mention = description && mentionParam && description.includes(mentionParam) ? mentionParam : null;
+
+  function clearMention() {
+    if (!mentionParam) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('descMention');
+    router.replace(params.size > 0 ? `?${params.toString()}` : window.location.pathname);
+  }
 
   function save(action: () => Promise<EditResult>, done: string) {
     start(async () => {
@@ -49,6 +63,7 @@ export function WorkflowContentCard({
       if (res.ok) {
         toast.success(done);
         setEditing('none');
+        clearMention();
         router.refresh();
       } else {
         toast.error(res.error);
@@ -159,7 +174,21 @@ export function WorkflowContentCard({
               </div>
             </div>
           ) : description ? (
-            <p className="mt-1 text-[13.5px] leading-relaxed text-secondary-foreground">{description}</p>
+            mention ? (
+              <>
+                <p className="mt-1 text-[13.5px] leading-relaxed text-secondary-foreground">
+                  {description.slice(0, description.indexOf(mention))}
+                  <mark className="rounded bg-brand-100 px-0.5 text-secondary-foreground">{mention}</mark>
+                  {description.slice(description.indexOf(mention) + mention.length)}
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  The highlighted sentence may still describe the step you just deleted — edit the
+                  description to remove it, or leave it if the concept should stay.
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-[13.5px] leading-relaxed text-secondary-foreground">{description}</p>
+            )
           ) : (
             /* Absence is a REAL state, not an empty slot: the narration said nothing beyond the
                clicks. Rendering nothing here would let a founder assume they had read everything

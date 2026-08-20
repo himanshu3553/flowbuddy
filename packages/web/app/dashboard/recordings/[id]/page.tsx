@@ -126,6 +126,11 @@ export default async function RecordingDetailPage({
         subtitle={`${source.kind} · ${meta.eventCount} actions · ${formatDuration(meta.durationMs)}`}
         actions={
           <div className="flex items-center gap-2">
+            {(source.status === 'ready' || source.status === 'done') && candidates.length > 0 && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/dashboard/kb/${source.id}/reorganize`}>Reorganize</Link>
+              </Button>
+            )}
             <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
             <RecordingManageMenu
               id={source.id}

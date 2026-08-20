@@ -158,8 +158,12 @@ construction; disabling deletes the plan. The card also carries that workflow's 
 The workflow page lets the founder rewrite the **title**, the **description**, any step's
 **instruction/detail**, and swap a step's **image** for another frame the same recording captured
 (no uploads — the pick is re-validated against the manifest server-side, and the highlight box
-follows the picture: the picked frame's own target rect, or cleared for an "after" frame). The
-event citation that makes a step cite a real captured event is never editable. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
+follows the picture: the picked frame's own target rect, or cleared for an "after" frame). It also
+lets them **delete a step** (hard-deleted now, re-dropped on every rebuild — no removed-flag for
+every reader to remember) and **restore a pruned captured action as a step** ("Add a step from the
+recording": the anchor, screenshot and evidence come from the real event, the founder types only
+the words — a step with no captured event cannot be created, here or anywhere). The event citation
+that makes a step cite a real captured event is never editable. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
 [knowledge-base.md](knowledge-base.md) §Identity); a title edit moves the row, the items' per-item
 copy and the approval snapshot together so no surface keeps the old name. A step edit **re-embeds
 before it writes** — text and vector move together or the save fails whole — and on an
@@ -168,6 +172,19 @@ uses ([`plan-compile.ts`](../../packages/web/lib/plan-compile.ts) computes; each
 the one-transaction invariant above stays with the enable action). A recompile that turns ineligible
 parks acting `needs_review`, mirroring the worker. This is also Studio's **one OpenAI call** — the
 embed at save time; answers still all go through the api.
+
+### 4.5c Reorganizing a recording's workflows ([`reorganize-workflows.tsx`](../../packages/web/components/dashboard/reorganize-workflows.tsx))
+
+The workflow page links to **Reorganize**: every step of the recording in timeline order, sectioned
+by workflow, with exactly two moves — *Split here* between two steps, *Merge with previous* on a
+boundary. Boundaries land only **between steps** on purpose: a step is one control interaction, so
+a cut inside one is meaningless. *Rebuild* saves the **complete** boundary list onto the recording
+(the save re-validates every id against a server-side re-run of the same deterministic event
+cleaning the pipeline uses — never the client's word) and re-runs synthesis, which treats the list
+as exhaustive ([knowledge-base.md](knowledge-base.md) §Stage 4). Never row surgery: identity
+re-matching decides which approvals survive, exactly as on any rebuild — the confirm dialog says so
+in the founder's words. *Reset to automatic* clears the boundaries and rebuilds with markers + the
+model.
 
 ### 4.6 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 

@@ -20,9 +20,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
 import { StepTextEditor } from '@/components/dashboard/step-text-editor';
+import { AddStepFromRecording } from '@/components/dashboard/add-step-from-recording';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
 import { WorkflowContentCard } from '@/components/dashboard/workflow-content-card';
 import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
@@ -138,8 +140,16 @@ export default async function KbWorkflowPage({
     demoVideo?.status === 'ready' && demoVideo.fileKey ? await signedUrl(demoVideo.fileKey, 21600) : null;
   // Founder edits after the render leave the MP4 quietly stale (video-actions keeps the old file on
   // purpose) — so compute staleness here and let the card SAY it next to its Regenerate button.
+  // Step inclusion edits (delete/restore) also age the video; their timestamp lives on the
+  // recording because the deleted row no longer exists to carry a stamp.
+  const inclusionsTouchedMs = (() => {
+    const raw = source.stepInclusions as { updatedAt?: unknown } | null;
+    const t = raw && typeof raw.updatedAt === 'string' ? Date.parse(raw.updatedAt) : NaN;
+    return Number.isFinite(t) ? t : 0;
+  })();
   const lastEditMs = Math.max(
     0,
+    inclusionsTouchedMs,
     ...[workflow?.titleEditedAt, workflow?.descriptionEditedAt, ...segmentItems.map((it) => it.editedAt)]
       .filter((d): d is Date => d != null)
       .map((d) => d.getTime()),
@@ -240,7 +250,16 @@ export default async function KbWorkflowPage({
       <PageHeader
         title={workflowTitle}
         subtitle={`${items.length} step${items.length === 1 ? '' : 's'} · from “${recordingName}”`}
-        actions={<StatusBadge status={source.status} />}
+        actions={
+          <span className="flex items-center gap-2">
+            {ready && segments.length > 0 && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/dashboard/kb/${source.id}/reorganize`}>Reorganize</Link>
+              </Button>
+            )}
+            <StatusBadge status={source.status} />
+          </span>
+        }
       />
       <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-8">
         <Link
@@ -339,6 +358,8 @@ export default async function KbWorkflowPage({
                 </CardContent>
               </Card>
             )}
+
+            {workflow && ready && <AddStepFromRecording workflowId={workflow.id} />}
           </div>
 
           <aside className="min-w-0 space-y-5 lg:sticky lg:top-20 lg:self-start">

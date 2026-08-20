@@ -146,7 +146,13 @@ One recording often documents several tasks ("create an account", "log in", "cre
 model call**: the cleaned events are partitioned at each marker and each span gets its **own**
 event-aware LLM pass, so a workflow structurally cannot merge across a marker — the events on either
 side are never in the same prompt. (They used to be prompt lines under "supporting signals", which
-the model could — and under sampling drift, did — overrule.) Within a span, the segmenter splits the
+the model could — and under sampling drift, did — overrule.) **Founder-drawn boundaries override everything**: the Reorganize surface stores the complete list
+of workflow-start event ids on the recording (`KnowledgeSource.boundaryOverrides` — the column
+comment owns the value semantics). When present, segmentation is **exhaustive** — events are
+partitioned at exactly those ids, each span IS one workflow, the per-span model call survives only
+to *name* it, and record-time markers are superseded (the founder's later judgment wins). A stored
+id the cleaned timeline no longer contains is skipped and surfaced in the recording's notice.
+Otherwise — automatic segmentation: within a span, the segmenter splits the
 events into distinct **workflows** (JSON-schema output; sampling is the model's default — see
 `architecture.md` §Provider API for why an explicit temperature is no longer possible, and what that
 costs). The model is told that boundaries come primarily from
@@ -369,7 +375,12 @@ Both kinds of no-match are meaningful, and both fail closed:
 title, its description, any step's instruction/detail, and which of the recording's own captured
 frames a step shows (never an upload — the pick is validated against the manifest, and the highlight
 box follows the picture: the picked action frame's own target rect, or cleared for an "after"
-frame); a rebuild must not revert any of it to model output. Two mechanisms, matching the two shapes of the data: a **stamped field is
+frame); a rebuild must not revert any of it to model output. The founder also controls which
+captured moments are steps AT ALL: a deleted step stays deleted and a restored step — built from a
+pruned captured event with the founder's own instruction, its anchor/screenshot/evidence resolved
+from the real event — stays restored, both recorded by anchor on the recording
+(`KnowledgeSource.stepInclusions`); a restoration whose event left the cleaned timeline is reported
+in the recording's notice, never guessed at. Two mechanisms, matching the two shapes of the data: a **stamped field is
 human-owned** (`titleEditedAt` / `descriptionEditedAt` on the workflow row — the reuse update keeps
 the stored value and refreshes only the unstamped one), and a **step edit rides its anchor** — it is
 re-attached to the new step carrying the same `data.keyEventId`, *before* embedding, so the item
