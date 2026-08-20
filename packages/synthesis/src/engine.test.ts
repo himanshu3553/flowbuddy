@@ -479,8 +479,8 @@ describe('formatItems — what the agent can aim a tool at', () => {
     expect(formatItems([item({ segmentIndex: 0 })])).toContain('key=src9:0');
   });
 
-  it('still carries narration, and says so plainly when there is nothing to show', () => {
-    expect(formatItems([item({ narration: 'say hi' })])).toContain('\n   narration: "say hi"');
+  it('renders the item text alone — raw narration retired, its value ships inside text via detail', () => {
+    expect(formatItems([item({})])).not.toContain('narration:');
     expect(formatItems([])).toBe('- (none)');
   });
 

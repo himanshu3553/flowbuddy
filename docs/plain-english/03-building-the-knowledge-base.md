@@ -129,7 +129,11 @@ different clicks, and some sentences landed on the wrong action entirely.
 4. Click "Sign in" — you land on the dashboard
 ```
 
-Four clean steps, each with the right narration, each with one good screenshot.
+Four clean steps, each with one good screenshot. Your narration isn't attached to steps raw —
+because you talk continuously, the same spoken sentence used to glue itself onto three neighbouring
+steps. Instead, anything valuable you said becomes part of the right step's own description, in
+clean words ("your full name works here too"), and the big-picture things you said become the
+workflow's description.
 
 ### How it gets there
 
@@ -160,8 +164,9 @@ there's a guard that makes sure no captured event is ever silently dropped betwe
 
 ### What gets kept, and what doesn't
 
-**Kept:** the clean instruction, any extra detail, the URL, your narration for that step, one good
-screenshot, and the location of the element on screen.
+**Kept:** the clean instruction, any extra detail (which absorbs what you said about that step),
+the URL, one good screenshot, and the location of the element on screen. Your raw spoken words stay
+with the recording — replayable on its page — rather than inside the knowledge itself.
 
 **Not kept as knowledge:** the raw event log. It stays in the original upload record so a recording
 can be reprocessed later, but it is never shown to anyone and is never used as a source. The

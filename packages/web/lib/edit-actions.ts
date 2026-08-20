@@ -3,12 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import type { CapturedEvent, SessionManifest } from '@flowbuddy/shared';
-import { alignNarration } from '@flowbuddy/synthesis/align';
 import { cleanEvents } from '@flowbuddy/synthesis/clean';
 import { distilledStepText, stepFromEvent, type EditedStepField } from '@flowbuddy/synthesis/distill';
 import { embedTexts, toVectorLiteral } from '@flowbuddy/synthesis/embeddings';
 import { parseStepInclusions, type StepAddition } from '@flowbuddy/synthesis/step-inclusions';
-import type { Transcript } from '@flowbuddy/synthesis/transcribe';
 import { getCurrentWorkspace } from '@/lib/session';
 import { compileWorkflowPlan } from '@/lib/plan-compile';
 import { timelineEvents } from '@/lib/recordings';
@@ -207,12 +205,12 @@ export async function updateStepText(input: {
   else delete data.detail;
   data.editedFields = [...new Set([...editedFieldsOf(data, item.editedAt), 'text'])];
 
-  const narration = typeof data.narration === 'string' ? data.narration : null;
+  // Narration is retired from step text (2026-08-21) — an edit on a LEGACY row therefore also
+  // cleanses its stored text of the old narration smear, with the matching re-embed right below.
   const text = distilledStepText({
     instruction,
     ...(detail ? { detail } : {}),
     route: typeof data.route === 'string' ? data.route : '',
-    narration,
     screenshotFile: null,
   });
 
@@ -581,10 +579,9 @@ export async function addStepFromEvent(input: {
 
   const source = await prisma.knowledgeSource.findUnique({
     where: { id: res.sourceId },
-    select: { transcript: true, stepInclusions: true },
+    select: { stepInclusions: true },
   });
-  const transcript = (source?.transcript as unknown as Transcript | null) ?? { text: '', segments: [] };
-  const step = stepFromEvent(ev, alignNarration(res.manifest.events, transcript), instruction, detail || undefined);
+  const step = stepFromEvent(ev, instruction, detail || undefined);
   const text = distilledStepText(step);
   const embedded = await embedEditedText(text);
   if (!embedded.ok) return embedded;

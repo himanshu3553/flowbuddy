@@ -57,7 +57,14 @@ they sit.
 
 The shape persisted into each `KnowledgeItem.data` is a
 [`DistilledStep`](../../packages/synthesis/src/distill.ts):
-`{ instruction, detail?, route, narration, screenshotFile, bbox, keyEventId? }` (`keyEventId`
+`{ instruction, detail?, route, screenshotFile, bbox, keyEventId? }` — **raw narration retired
+2026-08-21**: it was the one field neither curated nor founder-editable, and the alignment window
+smeared one spoken sentence across neighbouring steps (a deleted step kept being taught by its
+neighbours). Its value now arrives curated — per-step context lands in `detail` under the
+distiller's ATTRIBUTION rule, plan-level choices in the workflow description, and the demo-video
+talk-track re-derives narration from the transcript at render time. Legacy rows keep `narration`
+in `data` and their stored `text` until their recording is rebuilt; retrieval no longer serves it
+either way. (`keyEventId`
 persisted since 2026-07-08 — Sense locator recovery). **Raw events are not persisted as
 items** — they remain only inside `KnowledgeSource.manifest`.
 

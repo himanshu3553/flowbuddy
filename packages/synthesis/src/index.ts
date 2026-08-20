@@ -90,7 +90,7 @@ export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step dis
 // `scripts/segmentation-drift.ts` is the reason these are public.
 export { alignNarration } from './align';
 export { segment } from './segment';
-export { distillSteps, distilledStepText } from './distill'; // KB step distillation A
+export { distillSteps, distilledStepText, stepNarration } from './distill'; // KB step distillation A
 export { describeWorkflow } from './describe'; // P3-M1 — the workflow's PLAN in prose
 export { describeRecording } from './describe'; // AIL slice 1 — what the RECORDING covers
 // AIL slice 2 — product knowledge pages: extraction, quote-anchoring, identity matching.
@@ -281,7 +281,7 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
     // Founder step inclusion — deletions re-dropped, restorations re-inserted at their timeline
     // position, BEFORE the description is written so it covers the final step list.
     if (input.stepInclusions) {
-      steps = applyStepInclusions(steps, segEvents, narration, input.stepInclusions).steps;
+      steps = applyStepInclusions(steps, segEvents, input.stepInclusions).steps;
     }
     if (steps.length === 0) {
       // distillSteps has a 0-step fallback, so this is unexpected — surface it rather than silently drop.

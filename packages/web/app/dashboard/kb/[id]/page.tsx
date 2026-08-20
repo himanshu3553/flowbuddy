@@ -39,7 +39,6 @@ type StepData = {
   instruction?: string;
   detail?: string;
   route?: string;
-  narration?: string | null;
   screenshotFile?: string | null;
   bbox?: { x: number; y: number; w: number; h: number } | null; // clicked element rect (viewport px)
 };
@@ -95,7 +94,6 @@ export default async function KbWorkflowPage({
         orderIndex: it.orderIndex,
         instruction: d.instruction ?? it.text, // distilled instruction; fall back to searchable text
         detail: d.detail ?? '',
-        narration: d.narration ?? null,
         route: d.route ?? '',
         bbox: d.bbox ?? null,
         screenshotUrl: d.screenshotFile
@@ -288,8 +286,8 @@ export default async function KbWorkflowPage({
                 Workflow steps
               </h2>
               <p className="text-sm text-muted-foreground">
-                The clean, grounded steps the copilot grounds on — screenshot,
-                instruction, route and narration.
+                The clean, grounded steps the copilot grounds on — screenshot, instruction and
+                detail, each anchored to a captured action.
               </p>
             </div>
 
@@ -337,11 +335,9 @@ export default async function KbWorkflowPage({
                           detail={it.detail}
                           ready={ready}
                         />
-                        {it.narration && (
-                          <p className="mt-2 border-l-2 border-brand-200 pl-2.5 text-xs italic leading-relaxed text-muted-foreground">
-                            {it.narration}
-                          </p>
-                        )}
+                        {/* Raw narration display retired with the field (2026-08-21) — a step is
+                            title + description + image; what you SAID lives on the recording page's
+                            player, in context. */}
                       </div>
                       {it.screenshotUrl && (
                         <StepScreenshot

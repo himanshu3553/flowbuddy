@@ -59,7 +59,6 @@ export function parseStepInclusions(raw: unknown): StepInclusions | null {
 export function applyStepInclusions(
   steps: DistilledStep[],
   segEvents: CapturedEvent[],
-  narration: Map<string, string>,
   inclusions: StepInclusions,
 ): { steps: DistilledStep[]; appliedAdditions: Set<string> } {
   const removed = new Set(inclusions.removed);
@@ -72,7 +71,7 @@ export function applyStepInclusions(
   for (const a of inclusions.added) {
     const evIdx = eventIndex.get(a.keyEventId);
     if (evIdx == null || present.has(a.keyEventId) || removed.has(a.keyEventId)) continue;
-    const step = stepFromEvent(segEvents[evIdx]!, narration, a.instruction, a.detail);
+    const step = stepFromEvent(segEvents[evIdx]!, a.instruction, a.detail);
     const pos = out.findIndex((s) => {
       const i = s.keyEventId ? eventIndex.get(s.keyEventId) : undefined;
       return i != null && i > evIdx;

@@ -36,7 +36,13 @@ export interface DistilledStep {
   instruction: string;
   detail?: string;
   route: string;
-  narration: string | null; // spoken "why" for this step (derived from its source events)
+  // RETIRED 2026-08-21 (workflow-editing arc): raw narration no longer ships in steps — it was the
+  // one field neither curated nor founder-editable, and the time-window smear attached one spoken
+  // sentence to several steps (a deleted step kept being taught by its neighbours). Its VALUE now
+  // arrives curated: per-step context in `detail` (the ATTRIBUTION rule above), plan-level choices
+  // in the workflow description, and the video talk-track re-derives from the transcript at render.
+  // Optional so legacy rows still type; nothing writes it and retrieval no longer serves it.
+  narration?: string | null;
   screenshotFile: string | null; // resolved from keyEventId + frame rule C
   bbox?: Bbox; // keyEvent's element rect — powers the deferred highlight
   // P2 Sense — the manifest event this step's screen came from, so the sense plan (and later the
@@ -64,7 +70,9 @@ You get the workflow's title, its captured interaction events in order (each wit
 Produce the MINIMAL sequence of steps a user would actually follow to accomplish the task:
 - DROP orienting/stray actions that don't advance the goal — e.g. clicking around the landing page, the logo, or a chat widget while explaining. The narration reveals intent ("this is the landing page" = not a step).
 - ONE STEP PER CONTROL. Every step is built from exactly ONE control the user acts on — the low-level noise you might merge (focus-clicks before typing, the duplicate submit right after its button) was already removed before you saw this timeline. NEVER combine two different controls into one step: "Enter your email address and password" hides a whole field from anyone following along — write two steps. The only multi-event step allowed is repeated commits to the SAME control (the recorder re-typing one field): keep ONE step, keyEventId = the last commit.
-- Write each instruction imperatively and concretely ("Click 'Sign In'", "Enter your email"). Put any helpful context in "detail" (else "").
+- Write each instruction imperatively and concretely ("Click 'Sign In'", "Enter your email").
+- "detail" is everything the reader needs about THIS control that the instruction cannot say: a choice or shortcut the narration mentions for THIS field ("your full name works here too"), a requirement, the expected outcome when this is the committing action, or a constraint visible on the page. Leave it "" when the step is self-evident — never pad.
+- ATTRIBUTION (critical for "detail"): narration often spans several actions in one spoken sentence. Attribute each clause only to the step whose control it describes — never to a neighbouring step — or drop it. The narration is your SOURCE, not something the reader will see: anything valuable in it must be written into "detail", in clean words.
 - Preserve order.
 
 Reading an element's description:
@@ -191,8 +199,10 @@ export function valueHint(ev: CapturedEvent): string {
   return ` | entered: ${contentShape(ev, value)}`;
 }
 
-/** Join the unique narration spoken across a step's source events (the smear self-corrects once merged). */
-function stepNarration(sourceIds: string[], narration: Map<string, string>): string | null {
+/** Join the unique narration spoken across a step's source events. No longer persisted on steps
+ *  (see `DistilledStep.narration`) — exported for the ONE remaining consumer, the demo-video
+ *  render, which re-derives the founder's spoken context from the transcript at render time. */
+export function stepNarration(sourceIds: string[], narration: Map<string, string>): string | null {
   const seen = new Set<string>();
   const parts: string[] = [];
   for (const id of sourceIds) {
@@ -223,17 +233,11 @@ function resolveScreenshot(ev: CapturedEvent, useResultFrame: boolean): string |
  * boundary: a step with no event cannot be built at all. Marked `editedFields: ['text']` so the
  * wording stays founder-owned through later rebuilds.
  */
-export function stepFromEvent(
-  ev: CapturedEvent,
-  narration: Map<string, string>,
-  instruction: string,
-  detail?: string,
-): DistilledStep {
+export function stepFromEvent(ev: CapturedEvent, instruction: string, detail?: string): DistilledStep {
   return {
     instruction,
     ...(detail ? { detail } : {}),
     route: (ev.route?.path ?? '').trim(),
-    narration: stepNarration([ev.id], narration),
     screenshotFile: resolveScreenshot(ev, false),
     bbox: ev.target?.bbox,
     keyEventId: ev.id,
@@ -258,7 +262,6 @@ function resolveStep(
     // retrieval's route boost, the walkthrough and displayRoute. The model still emits `route`
     // (strict schema); it is advisory only.
     route: (keyEvent.route?.path ?? '').trim(),
-    narration: stepNarration(sourceIds, narration),
     screenshotFile: resolveScreenshot(keyEvent, false),
     bbox: keyEvent.target?.bbox,
     keyEventId: keyEvent.id,
@@ -267,12 +270,10 @@ function resolveStep(
 }
 
 /** Never lose a workflow: 1 step per cleaned event, grounded directly in capture. */
-function fallbackStep(ev: CapturedEvent, narration: Map<string, string>): DistilledStep {
-  const n = narration.get(ev.id) ?? null;
+function fallbackStep(ev: CapturedEvent): DistilledStep {
   return {
     instruction: redactText(eventLabel(ev)),
     route: ev.route?.path ?? '',
-    narration: n ? redactText(n) : null,
     screenshotFile: resolveScreenshot(ev, false),
     bbox: ev.target?.bbox,
     keyEventId: ev.id,
@@ -328,7 +329,7 @@ export function enforceStepGranularity(
       const key = controlKey(ev);
       if (ownedControls.has(key)) continue;
       ownedControls.add(key);
-      out.push({ step: fallbackStep(ev, narration), keyEvent: ev });
+      out.push({ step: fallbackStep(ev), keyEvent: ev });
     }
   }
   return out;
@@ -336,7 +337,10 @@ export function enforceStepGranularity(
 
 /** Searchable text for a distilled step (instruction + detail + narration). Used by the worker for `KnowledgeItem.text`. */
 export function distilledStepText(step: DistilledStep): string {
-  return [step.instruction, step.detail, step.narration].filter(Boolean).join(' — ');
+  // Narration retired from the searchable text: its value is distilled into `detail` under the
+  // ATTRIBUTION rule, so the founder's vocabulary still embeds — in curated, correctly-attributed
+  // words. (Legacy rows keep narration in their stored text until their recording is rebuilt.)
+  return [step.instruction, step.detail].filter(Boolean).join(' — ');
 }
 
 /**
@@ -408,7 +412,7 @@ export async function distillSteps(
 
   // Fallback — never lose a workflow.
   const final =
-    granular.length > 0 ? granular : events.map((ev) => ({ step: fallbackStep(ev, narration), keyEvent: ev }));
+    granular.length > 0 ? granular : events.map((ev) => ({ step: fallbackStep(ev), keyEvent: ev }));
 
   // Frame rule C: the last/outcome step shows the result frame of its key event.
   const last = final[final.length - 1];

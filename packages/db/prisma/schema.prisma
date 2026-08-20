@@ -352,8 +352,8 @@ model KnowledgeItem {
   workflowId  String
   kind         String // step | topic
   orderIndex   Int
-  text         String // searchable content — keyword scoring AND the embedding input (already folds in narration via distilledStepText)
-  data         Json // step: { instruction, detail, route, narration, screenshotFile, bbox } (distilled — 2026-06-27; legacy pre-distillation rows: { event, narration }) ; topic: { spanText, startMs, endMs }
+  text         String // searchable content — keyword scoring AND the embedding input (instruction + detail via distilledStepText; raw narration retired 2026-08-21 — its value arrives inside detail, legacy rows keep narration-bearing text until rebuilt)
+  data         Json // step: { instruction, detail, route, screenshotFile, bbox, keyEventId, sourceEventIds, evidence, editedFields } (distilled — 2026-06-27; narration retired 2026-08-21, legacy rows still carry it; legacy pre-distillation rows: { event, narration }) ; topic: { spanText, startMs, endMs }
   segmentIndex Int? // workflow this item belongs to (Path 2 — persisted segmentation, promoted toward Option C)
   segmentTitle String?
   // Founder edit stamp — set when Studio rewrote this step's instruction/detail (edits update `text`,

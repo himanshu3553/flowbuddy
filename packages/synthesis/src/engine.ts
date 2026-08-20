@@ -127,8 +127,10 @@ export function formatItems(items: CopilotKBItem[]): string {
     // could be aimed at. Emitting `key=src:null` would hand the model a key that cannot resolve.
     if (i.segmentIndex !== null) tags.push(`key=${i.sourceId}:${i.segmentIndex}`);
     const wf = tags.length > 0 ? ` [${tags.join(' · ')}]` : '';
-    const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
-    return `- id=${i.id}${wf}: ${i.text}${narr}`;
+    // Raw narration retired 2026-08-21 (see DistilledStep.narration): its value now arrives inside
+    // `text` via the distiller's detail field — curated and attributed to the right step, instead
+    // of a spoken sentence smeared across neighbours.
+    return `- id=${i.id}${wf}: ${i.text}`;
   };
 
   return (

@@ -38,7 +38,6 @@ export interface CopilotKBItem {
   segmentIndex: number | null;
   segmentTitle: string | null;
   text: string;
-  narration?: string | null;
 }
 
 export interface CopilotTurn {

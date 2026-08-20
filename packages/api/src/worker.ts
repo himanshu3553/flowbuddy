@@ -3,6 +3,7 @@ import { RENDER_QUEUE, SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
+  alignNarration,
   applyStepOverrides,
   attachOutcomeMarkers,
   buildDemoVideo,
@@ -20,13 +21,14 @@ import {
   pageSimilarity,
   PAGE_CONTENT_AGREE_THRESHOLD,
   parseStepInclusions,
+  stepNarration,
   stepOverridesByKeyEvent,
   toVectorLiteral,
   type ExtractedPage,
   type WorkflowFingerprint,
 } from '@flowbuddy/synthesis';
 import { createLogger } from '@flowbuddy/logger';
-import type { DistilledStep } from '@flowbuddy/synthesis';
+import type { DistilledStep, Transcript } from '@flowbuddy/synthesis';
 import { config } from './config';
 import { connection } from './queue';
 import { putObject, sessionArtifactReader, sessionKey } from './storage';
@@ -698,8 +700,18 @@ const renderWorker = new Worker(
         orderBy: { orderIndex: 'asc' },
         select: { data: true },
       });
-      const steps = items.map((i) => i.data as unknown as DistilledStep);
-      if (steps.length === 0) throw new Error('Workflow has no steps');
+      const stored = items.map((i) => i.data as unknown as DistilledStep);
+      if (stored.length === 0) throw new Error('Workflow has no steps');
+      // Raw narration no longer ships in steps (retired 2026-08-21) — re-derive the founder's
+      // spoken context from the transcript AT RENDER, so the talk-track keeps its human source
+      // without the KB carrying the smear.
+      const videoTranscript =
+        (workflow.source.transcript as unknown as Transcript | null) ?? { text: '', segments: [] };
+      const narrationMap = alignNarration(manifest.events, videoTranscript);
+      const steps = stored.map((s) => ({
+        ...s,
+        narration: stepNarration(s.sourceEventIds ?? (s.keyEventId ? [s.keyEventId] : []), narrationMap),
+      }));
 
       const { mp4, durationMs, degradedAudio } = await buildDemoVideo({
         apiKey: config.openaiApiKey,

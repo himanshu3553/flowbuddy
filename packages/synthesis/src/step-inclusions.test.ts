@@ -55,22 +55,18 @@ describe('parseStepInclusions', () => {
 
 describe('applyStepInclusions', () => {
   it('drops removed steps by anchor and leaves the rest', () => {
-    const { steps } = applyStepInclusions(
-      [step('e1', 'One'), step('e2', 'Two')],
-      events,
-      new Map(),
-      { removed: ['e2'], added: [] },
-    );
+    const { steps } = applyStepInclusions([step('e1', 'One'), step('e2', 'Two')], events, {
+      removed: ['e2'],
+      added: [],
+    });
     expect(steps.map((s) => s.keyEventId)).toEqual(['e1']);
   });
 
   it('re-inserts an addition at its timeline position with the event anchor and the founder words', () => {
-    const { steps, appliedAdditions } = applyStepInclusions(
-      [step('e1', 'One'), step('e4', 'Four')],
-      events,
-      new Map(),
-      { removed: [], added: [{ keyEventId: 'e2', instruction: 'Founder wording', detail: 'why' }] },
-    );
+    const { steps, appliedAdditions } = applyStepInclusions([step('e1', 'One'), step('e4', 'Four')], events, {
+      removed: [],
+      added: [{ keyEventId: 'e2', instruction: 'Founder wording', detail: 'why' }],
+    });
     expect(steps.map((s) => s.keyEventId)).toEqual(['e1', 'e2', 'e4']);
     const added = steps[1]!;
     expect(added).toMatchObject({
@@ -85,7 +81,7 @@ describe('applyStepInclusions', () => {
   });
 
   it('an addition after every existing step lands at the end', () => {
-    const { steps } = applyStepInclusions([step('e1', 'One')], events, new Map(), {
+    const { steps } = applyStepInclusions([step('e1', 'One')], events, {
       removed: [],
       added: [{ keyEventId: 'e4', instruction: 'Last' }],
     });
@@ -93,7 +89,7 @@ describe('applyStepInclusions', () => {
   });
 
   it('skips an addition whose event already became a step — the distiller kept it this time', () => {
-    const { steps, appliedAdditions } = applyStepInclusions([step('e2', 'Kept')], events, new Map(), {
+    const { steps, appliedAdditions } = applyStepInclusions([step('e2', 'Kept')], events, {
       removed: [],
       added: [{ keyEventId: 'e2', instruction: 'Founder wording' }],
     });
@@ -103,7 +99,7 @@ describe('applyStepInclusions', () => {
   });
 
   it('an addition outside this segment is not applied here — its own segment will take it', () => {
-    const { appliedAdditions } = applyStepInclusions([step('e1', 'One')], events.slice(0, 2), new Map(), {
+    const { appliedAdditions } = applyStepInclusions([step('e1', 'One')], events.slice(0, 2), {
       removed: [],
       added: [{ keyEventId: 'e4', instruction: 'Elsewhere' }],
     });
@@ -111,7 +107,7 @@ describe('applyStepInclusions', () => {
   });
 
   it('removed wins over added for the same anchor', () => {
-    const { steps } = applyStepInclusions([], events, new Map(), {
+    const { steps } = applyStepInclusions([], events, {
       removed: ['e2'],
       added: [{ keyEventId: 'e2', instruction: 'Contradiction' }],
     });
@@ -120,7 +116,7 @@ describe('applyStepInclusions', () => {
 
   it('steps without an anchor are never removed', () => {
     const anchorless: DistilledStep = { instruction: 'Old', route: '/', narration: null, screenshotFile: null };
-    const { steps } = applyStepInclusions([anchorless], events, new Map(), { removed: ['e1'], added: [] });
+    const { steps } = applyStepInclusions([anchorless], events, { removed: ['e1'], added: [] });
     expect(steps).toHaveLength(1);
   });
 });

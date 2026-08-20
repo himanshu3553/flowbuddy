@@ -297,7 +297,7 @@ function toCopilotItem(
     segmentIndex: i.segmentIndex,
     segmentTitle: i.segmentTitle,
     text: i.text,
-    narration: ((i.data as { narration?: string | null } | null) ?? {}).narration ?? null,
+    // Legacy rows still carry data.narration — deliberately NOT served (retired 2026-08-21).
     ...(related && related.length > 0 ? { related } : {}),
   };
 }

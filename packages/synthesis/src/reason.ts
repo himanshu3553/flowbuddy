@@ -304,8 +304,9 @@ export async function diagnoseFromKB(input: ReasonInput): Promise<CopilotAnswer>
       ? stepItems
           .map((i) => {
             const wf = i.segmentTitle ? ` [workflow: ${i.segmentTitle}]` : '';
-            const narr = i.narration ? `\n   narration: "${i.narration}"` : '';
-            return `- id=${i.id}${wf}: ${i.text}${narr}`;
+            // Raw narration retired 2026-08-21 (see DistilledStep.narration) — its value arrives
+            // inside `text` via the distiller's detail field, attributed to the right step.
+            return `- id=${i.id}${wf}: ${i.text}`;
           })
           .join('\n')
       : '- (none retrieved)';
