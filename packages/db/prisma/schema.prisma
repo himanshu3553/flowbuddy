@@ -233,6 +233,13 @@ model KnowledgeSource {
   // free-typed step with no event is impossible BY THIS SHAPE — that is the trust boundary, not a
   // UI choice. Null = no inclusion edits.
   stepInclusions Json?
+  // Boundary LESSONS this recording taught (workflow-editing arc, item 5) — derived by the
+  // Reorganize save from the founder's drawn boundaries, cleared by Reset, deleted with the row.
+  // Shape: [{ kind: 'start'|'not-start', type, route (id-scrubbed pattern), control, at }] — see
+  // synthesis/boundary-learning.ts, which owns derivation, aggregation (newest-wins per signature)
+  // and matching. Applied to OTHER recordings of the workspace as hard cut points, exactly like a
+  // founder-pressed marker; a recording's own boundaryOverrides always supersede.
+  boundarySignatures Json?
   error       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt // last touch (status flips included) — drives the "stalled processing" surface

@@ -4,6 +4,7 @@ import { transcribe, type Transcript, type TranscriptGap } from './transcribe';
 import { alignNarration, transcriptWindow } from './align';
 import { segment, segmentWithBoundaries, type Segment } from './segment';
 import { applyStepInclusions, type StepInclusions } from './step-inclusions';
+import { matchLearnedBoundaries, type BoundarySignature } from './boundary-learning';
 import { redactTranscript } from './redact';
 import { cleanEvents } from './clean';
 import { distillSteps, type DistilledStep } from './distill';
@@ -66,6 +67,14 @@ export { applyStepOverrides, stepOverridesByKeyEvent } from './step-overrides';
 export type { EditedStepRow, StepOverride } from './step-overrides';
 export { applyStepInclusions, parseStepInclusions } from './step-inclusions';
 export type { StepAddition, StepInclusions } from './step-inclusions';
+// Item 5 — boundary learning: founder corrections become hard cuts on future recordings.
+export {
+  activeBoundaryLessons,
+  deriveBoundarySignatures,
+  matchLearnedBoundaries,
+  parseBoundarySignatures,
+} from './boundary-learning';
+export type { BoundarySignature } from './boundary-learning';
 export { redactText } from './redact'; // P1-M12 Cut 1 — PII scrub for KB text
 export {
   attachOutcomeMarkers,
@@ -89,7 +98,7 @@ export { cleanEvents, isLikelyInteractiveTarget } from './clean'; // KB step dis
 // in memory over a stored recording without re-transcribing or writing anything —
 // `scripts/segmentation-drift.ts` is the reason these are public.
 export { alignNarration } from './align';
-export { segment } from './segment';
+export { markerCutEventIds, segment } from './segment';
 export { distillSteps, distilledStepText, stepNarration } from './distill'; // KB step distillation A
 export { describeWorkflow } from './describe'; // P3-M1 — the workflow's PLAN in prose
 export { describeRecording } from './describe'; // AIL slice 1 — what the RECORDING covers
@@ -131,6 +140,10 @@ export interface BuildWorkflowKBInput {
   /** Founder step inclusion (`KnowledgeSource.stepInclusions`): deleted steps stay deleted and
    *  restored steps stay restored across every rebuild (see step-inclusions.ts). */
   stepInclusions?: StepInclusions;
+  /** Item 5 — the workspace's ACTIVE boundary lessons (aggregated from OTHER recordings'
+   *  `boundarySignatures` by the caller): matching events become hard cut points exactly like
+   *  markers. Ignored when `boundaryEventIds` is present — the founder's own boundaries win. */
+  learnedBoundaries?: BoundarySignature[];
 }
 
 /** One workflow: a positional index (the approval key), a goal title, and its clean distilled steps. */
@@ -247,6 +260,17 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       boundaryWarning = `${n} saved workflow boundar${n === 1 ? 'y' : 'ies'} no longer matched this recording's events and ${n === 1 ? 'was' : 'were'} skipped — review the workflow split.`;
     }
   } else {
+    // Item 5 — earlier founder corrections apply as hard cuts (boundary-learning.ts): the same
+    // contract as a pressed marker, and the model still segments freely within spans.
+    const learnedCutIds = input.learnedBoundaries?.length
+      ? matchLearnedBoundaries(cleaned, input.learnedBoundaries)
+      : [];
+    if (learnedCutIds.length > 0) {
+      log.info(
+        { component: 'segment', learnedCuts: learnedCutIds.length, lessons: input.learnedBoundaries?.length },
+        'learned boundaries applied as hard cuts',
+      );
+    }
     segments = await segment(
       openai,
       input.synthModel,
@@ -254,6 +278,7 @@ export async function buildWorkflowKB(input: BuildWorkflowKBInput): Promise<Work
       input.manifest.markers ?? [],
       narration,
       transcript.text,
+      learnedCutIds,
     );
   }
   // Observability: what the segmenter decided (counts must add up — the guard re-adds any omitted event).

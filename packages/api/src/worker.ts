@@ -3,15 +3,19 @@ import { RENDER_QUEUE, SYNTHESIS_QUEUE } from '@flowbuddy/shared';
 import type { SessionManifest } from '@flowbuddy/shared';
 import { prisma } from '@flowbuddy/db';
 import {
+  activeBoundaryLessons,
   alignNarration,
   applyStepOverrides,
   attachOutcomeMarkers,
   buildDemoVideo,
   buildWorkflowKB,
+  cleanEvents,
   compileExecutionPlan,
+  deriveBoundarySignatures,
   distilledStepText,
   hashPlan,
   loadMarkerSnapshots,
+  markerCutEventIds,
   markerSnapshotRefs,
   embedTexts,
   matchPageIdentities,
@@ -20,6 +24,7 @@ import {
   pageEmbedText,
   pageSimilarity,
   PAGE_CONTENT_AGREE_THRESHOLD,
+  parseBoundarySignatures,
   parseStepInclusions,
   stepNarration,
   stepOverridesByKeyEvent,
@@ -319,6 +324,19 @@ const worker = new Worker(
         : undefined;
       // Founder step inclusion (delete + restore-from-capture) rides the same way.
       const inclusions = parseStepInclusions(rec.stepInclusions);
+      // Item 5 — boundary lessons from the workspace's OTHER recordings apply as hard cuts.
+      // Skipped when this recording has its own drawn boundaries: the founder's word wins.
+      let learnedBoundaries: ReturnType<typeof activeBoundaryLessons> | undefined;
+      if (!storedBoundaries) {
+        const lessonRows = await prisma.knowledgeSource.findMany({
+          where: { workspaceId: rec.workspaceId, id: { not: sessionId } },
+          select: { boundarySignatures: true },
+        });
+        const active = activeBoundaryLessons(
+          lessonRows.flatMap((r) => parseBoundarySignatures(r.boundarySignatures)),
+        );
+        if (active.length > 0) learnedBoundaries = active;
+      }
       const { transcript, workflows, warning, recordingDescription, pages } = await buildWorkflowKB({
         manifest,
         getArtifact,
@@ -327,6 +345,7 @@ const worker = new Worker(
         synthModel: config.synthModel,
         ...(storedBoundaries ? { boundaryEventIds: storedBoundaries } : {}),
         ...(inclusions ? { stepInclusions: inclusions } : {}),
+        ...(learnedBoundaries ? { learnedBoundaries } : {}),
       });
 
       // `description` is overwritten (null included) like the per-workflow descriptions: on a
@@ -608,6 +627,29 @@ const worker = new Worker(
               'workflow no longer eligible to run after reprocess — acting parked for re-review',
             );
           }
+        }
+      }
+
+      // Item 5 — a pressed Mark TEACHES like a drawn boundary: derive lessons from this
+      // recording's marker cuts. STARTS ONLY — markers are not exhaustive (a founder may Mark one
+      // boundary and skip others), so unmarked moments must never generate the not-start negatives
+      // an exhaustive Reorganize save may. And only on the FIRST successful processing
+      // (`boundarySignatures` still null): a reprocess must not re-stamp `at` and revive a lesson
+      // the founder has since contradicted elsewhere. A later Reorganize save replaces these with
+      // the drawn set — the founder's newer, fuller word.
+      if (!storedBoundaries && rec.boundarySignatures == null && (manifest.markers?.length ?? 0) > 0) {
+        const cleanedForLessons = cleanEvents(manifest.events);
+        const markerStarts = markerCutEventIds(cleanedForLessons, manifest.markers ?? []);
+        const taught =
+          markerStarts.length > 0
+            ? deriveBoundarySignatures(cleanedForLessons, markerStarts, [], new Date().toISOString())
+            : [];
+        if (taught.length > 0) {
+          await prisma.knowledgeSource.update({
+            where: { id: sessionId },
+            data: { boundarySignatures: taught as unknown as object },
+          });
+          log.info({ sessionId, lessons: taught.length }, 'marker boundaries taught as workspace lessons');
         }
       }
 

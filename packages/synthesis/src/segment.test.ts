@@ -6,6 +6,7 @@ vi.mock('./responses', () => ({ structuredJsonCall: vi.fn() }));
 import { structuredJsonCall } from './responses';
 import {
   eventLabel,
+  markerCutEventIds,
   partitionByMarkers,
   partitionByStartIds,
   segment,
@@ -133,6 +134,13 @@ describe('partitionByMarkers', () => {
 
   it('no events → no spans', () => {
     expect(partitionByMarkers([], [{ t: 100 }])).toEqual([]);
+  });
+
+  it('markerCutEventIds names the events where markers cut, in timeline order — the lessons a pressed Mark teaches', () => {
+    const evs = [cev('e1', 100), cev('e2', 200), cev('e3', 300), cev('e4', 400)];
+    expect(markerCutEventIds(evs, [{ t: 350 }, { t: 150 }])).toEqual(['e2', 'e4']);
+    expect(markerCutEventIds(evs, [])).toEqual([]);
+    expect(markerCutEventIds(evs, [{ t: 50 }])).toEqual([]); // a cut at the first event is no cut
   });
 });
 
@@ -331,6 +339,28 @@ describe('segment — one model pass per marker-delimited span', () => {
 
     const out = await run([{ t: 250 }]);
     expect(out.map((s) => s.title)).toEqual(['Workflow 1', 'Workflow 2']);
+  });
+
+  it('a LEARNED cut partitions exactly like a marker (item 5 — hard-cut contract shared)', async () => {
+    mockCall
+      .mockResolvedValueOnce(answer(wf('Task A', ['e1', 'e2'])))
+      .mockResolvedValueOnce(answer(wf('Task B', ['e3', 'e4'])));
+    const out = await segment({} as never, 'test-model', events, [], new Map(), 'overall', ['e3']);
+    expect(mockCall).toHaveBeenCalledTimes(2);
+    expect(out).toEqual([
+      { title: 'Task A', eventIds: ['e1', 'e2'] },
+      { title: 'Task B', eventIds: ['e3', 'e4'] },
+    ]);
+  });
+
+  it('markers and learned cuts UNION into one partition', async () => {
+    mockCall
+      .mockResolvedValueOnce(answer(wf('A', ['e1'])))
+      .mockResolvedValueOnce(answer(wf('B', ['e2', 'e3'])))
+      .mockResolvedValueOnce(answer(wf('C', ['e4'])));
+    const out = await segment({} as never, 'test-model', events, [{ t: 150 }], new Map(), '', ['e4']);
+    expect(mockCall).toHaveBeenCalledTimes(3);
+    expect(out.map((s) => s.eventIds)).toEqual([['e1'], ['e2', 'e3'], ['e4']]);
   });
 
   it('without markers: one call over all events, and no span note', async () => {

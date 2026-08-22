@@ -184,7 +184,9 @@ cleaning the pipeline uses — never the client's word) and re-runs synthesis, w
 as exhaustive ([knowledge-base.md](knowledge-base.md) §Stage 4). Never row surgery: identity
 re-matching decides which approvals survive, exactly as on any rebuild — the confirm dialog says so
 in the founder's words. *Reset to automatic* clears the boundaries and rebuilds with markers + the
-model.
+model. Every save also **teaches**: it derives boundary signatures that future recordings of the
+workspace are cut by automatically ([knowledge-base.md](knowledge-base.md) §Stage 4 — item 5,
+boundary learning); Reset withdraws this recording's lessons along with its boundaries.
 
 ### 4.6 Embed configuration ([`copilot-settings.ts`](../../packages/web/lib/copilot-settings.ts))
 

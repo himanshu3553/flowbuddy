@@ -153,7 +153,19 @@ One recording often documents several tasks ("create an account", "log in", "cre
 model call**: the cleaned events are partitioned at each marker and each span gets its **own**
 event-aware LLM pass, so a workflow structurally cannot merge across a marker — the events on either
 side are never in the same prompt. (They used to be prompt lines under "supporting signals", which
-the model could — and under sampling drift, did — overrule.) **Founder-drawn boundaries override everything**: the Reorganize surface stores the complete list
+the model could — and under sampling drift, did — overrule.) **Founder corrections also TEACH (item 5 — boundary learning)**: every Reorganize save derives
+signatures of its boundary moments (`KnowledgeSource.boundarySignatures`, mechanics in
+`boundary-learning.ts`), and **so does a pressed Mark** — the worker derives lessons from a
+recording's marker cuts on its first successful processing (starts ONLY: markers are not
+exhaustive, so unmarked moments never generate negatives; and never re-derived on reprocess, so a
+revived timestamp can't out-vote a founder's later contradiction). On any OTHER recording of the
+workspace a matching event becomes a hard cut point exactly like a pressed marker — the model
+still segments within spans. A later exhaustive save that contradicts a lesson retires it
+(targeted not-start, newest wins). Precision-first: unlabeled controls, unknown routes and
+self-ambiguous signatures teach nothing; matching requires the exact screen through the one shared
+route matcher.
+
+**Founder-drawn boundaries override everything**: the Reorganize surface stores the complete list
 of workflow-start event ids on the recording (`KnowledgeSource.boundaryOverrides` — the column
 comment owns the value semantics). When present, segmentation is **exhaustive** — events are
 partitioned at exactly those ids, each span IS one workflow, the per-span model call survives only

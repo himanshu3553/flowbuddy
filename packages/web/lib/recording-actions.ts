@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import type { SessionManifest } from '@flowbuddy/shared';
+import {
+  activeBoundaryLessons,
+  deriveBoundarySignatures,
+  parseBoundarySignatures,
+} from '@flowbuddy/synthesis/boundary-learning';
 import { cleanEvents } from '@flowbuddy/synthesis/clean';
 import { createLogger } from '@flowbuddy/logger';
 import { getCurrentWorkspace } from '@/lib/session';
@@ -71,15 +76,27 @@ export async function saveWorkflowBoundaries(input: {
   if (input.boundaryEventIds.length > 200) {
     return { ok: false, error: 'Too many boundaries — a recording cannot hold that many workflows.' };
   }
-  const cleanedIds = new Set(cleanEvents(manifest.events).map((e) => e.id));
+  const cleaned = cleanEvents(manifest.events);
+  const cleanedIds = new Set(cleaned.map((e) => e.id));
   const boundaries = [...new Set(input.boundaryEventIds)];
   const unknown = boundaries.filter((id) => !cleanedIds.has(id));
   if (unknown.length > 0) {
     return { ok: false, error: 'Some boundaries no longer match this recording — reload the page and try again.' };
   }
+  // Item 5 — what this save TEACHES the workspace (boundary-learning.ts): start signatures for
+  // the drawn boundaries, plus a targeted not-start wherever an event contradicts an active
+  // lesson. Derived here because only the save knows the founder's intent; cleared by Reset.
+  const others = await prisma.knowledgeSource.findMany({
+    where: { workspaceId: ctx.workspace.id, id: { not: rec.id } },
+    select: { boundarySignatures: true },
+  });
+  const activeLessons = activeBoundaryLessons(
+    others.flatMap((r) => parseBoundarySignatures(r.boundarySignatures)),
+  );
+  const signatures = deriveBoundarySignatures(cleaned, boundaries, activeLessons, new Date().toISOString());
   await prisma.knowledgeSource.update({
     where: { id: rec.id },
-    data: { boundaryOverrides: boundaries },
+    data: { boundaryOverrides: boundaries, boundarySignatures: signatures as unknown as object },
   });
   await reprocessRecording(rec.id);
   revalidatePath(`/dashboard/kb/${rec.id}`);
@@ -96,8 +113,8 @@ export async function resetWorkflowBoundaries(sourceId: string): Promise<{ ok: t
   });
   if (!rec) return { ok: false, error: 'Recording not found' };
   // Json? can't take a bare null through Prisma's typed update — raw SQL clears it (the worker's
-  // pendingProvenance precedent).
-  await prisma.$executeRaw`UPDATE "RecSession" SET "boundaryOverrides" = NULL WHERE id = ${rec.id}`;
+  // pendingProvenance precedent). The lessons this recording taught go with its boundaries.
+  await prisma.$executeRaw`UPDATE "RecSession" SET "boundaryOverrides" = NULL, "boundarySignatures" = NULL WHERE id = ${rec.id}`;
   await reprocessRecording(rec.id);
   revalidatePath(`/dashboard/kb/${rec.id}`);
   return { ok: true };

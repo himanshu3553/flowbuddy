@@ -124,11 +124,25 @@ const SEGMENT_SCHEMA = {
  */
 export function partitionByMarkers(events: CapturedEvent[], markers: Marker[]): CapturedEvent[][] {
   if (events.length === 0) return [];
+  return partitionAtIndices(events, markerCutIndices(events, markers));
+}
+
+/** The events where the author's record-time markers cut — item 5 derives boundary LESSONS from
+ *  these, so a pressed Mark teaches future recordings exactly like a drawn boundary. */
+export function markerCutEventIds(events: CapturedEvent[], markers: Marker[]): string[] {
+  return [...markerCutIndices(events, markers)].sort((a, b) => a - b).map((i) => events[i]!.id);
+}
+
+function markerCutIndices(events: CapturedEvent[], markers: Marker[]): Set<number> {
   const cuts = new Set<number>();
   for (const m of markers) {
     const idx = events.findIndex((e) => e.t >= m.t);
     if (idx > 0) cuts.add(idx); // idx 0 or -1 → the span before/after would be empty; no cut
   }
+  return cuts;
+}
+
+function partitionAtIndices(events: CapturedEvent[], cuts: Set<number>): CapturedEvent[][] {
   const starts = [0, ...[...cuts].sort((a, b) => a - b)];
   return starts.map((s, i) => events.slice(s, starts[i + 1]));
 }
@@ -205,13 +219,25 @@ export async function segment(
   markers: Marker[],
   narration: Map<string, string>,
   overallNarration = '',
+  /** LEARNED boundary cut ids (item 5 — boundary-learning.ts): events where an earlier founder
+   *  correction taught "a task starts here". Unioned with marker cuts — the same hard-cut
+   *  contract: structural, and the model still segments freely WITHIN spans. */
+  hardCutIds: string[] = [],
 ): Promise<Segment[]> {
   if (events.length === 0) return [];
-  const spans = partitionByMarkers(events, markers);
+  const cuts = markerCutIndices(events, markers);
+  if (hardCutIds.length > 0) {
+    const indexById = new Map(events.map((e, i) => [e.id, i]));
+    for (const id of hardCutIds) {
+      const i = indexById.get(id);
+      if (i != null && i > 0) cuts.add(i);
+    }
+  }
+  const spans = partitionAtIndices(events, cuts);
   if (spans.length > 1) {
     log.info(
-      { markers: markers.length, spans: spans.map((s) => s.length) },
-      `partitioned at user markers into ${spans.length} spans — segmenting each separately`,
+      { markers: markers.length, learnedCuts: hardCutIds.length, spans: spans.map((s) => s.length) },
+      `partitioned into ${spans.length} spans (markers + learned boundaries) — segmenting each separately`,
     );
   }
 
