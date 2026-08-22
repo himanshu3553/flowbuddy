@@ -40,6 +40,7 @@ A doc does not move when it ships, and `roadmap.md` is the only thing that track
 |---|---|
 | [`product.md`](product/product.md) | The product case: problem, persona, locked decisions, what's moat and what's commodity. |
 | [`architecture.md`](product/architecture.md) | The three-module model — capture, knowledge base, article creation — and the decisions behind it. |
+| [`features.md`](product/features.md) | Every feature by category — the knowledge base, the copilot and its two modes, embedding, Studio, analytics, the trust guarantees. What’s built is the roadmap’s. |
 | [`landing-page.md`](product/landing-page.md) | Marketing page positioning and structure. |
 | [`competitive-claude-chrome.md`](product/competitive-claude-chrome.md) | Competitive reference on Claude for Chrome, and how we compare. |
 
