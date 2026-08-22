@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 
-import { updateWorkflowDescription, updateWorkflowTitle, type EditResult } from '@/lib/edit-actions';
+import { resetWorkflowField, updateWorkflowDescription, updateWorkflowTitle, type EditResult } from '@/lib/edit-actions';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,12 +31,17 @@ export function WorkflowContentCard({
   title,
   description,
   ready,
+  titleEdited = false,
+  descriptionEdited = false,
 }: {
   workflowId: string;
   title: string;
   description: string | null;
   /** False while the recording is still building — the rows are about to be rebuilt under the edit. */
   ready: boolean;
+  /** Whether each field is founder-owned (stamped) — enables "Forget my edit". */
+  titleEdited?: boolean;
+  descriptionEdited?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -123,6 +128,20 @@ export function WorkflowContentCard({
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing('none')}>
                   Cancel
                 </Button>
+                {titleEdited && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-muted-foreground"
+                    disabled={busy}
+                    title="Clears your ownership of this field; the next re-process regenerates it"
+                    onClick={() =>
+                      save(() => resetWorkflowField({ workflowId, field: 'title' }), 'Your title edit will be forgotten at the next re-process')
+                    }
+                  >
+                    Forget my edit
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -171,6 +190,23 @@ export function WorkflowContentCard({
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing('none')}>
                   Cancel
                 </Button>
+                {descriptionEdited && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-muted-foreground"
+                    disabled={busy}
+                    title="Clears your ownership of this field; the next re-process regenerates it"
+                    onClick={() =>
+                      save(
+                        () => resetWorkflowField({ workflowId, field: 'description' }),
+                        'Your description edit will be forgotten at the next re-process',
+                      )
+                    }
+                  >
+                    Forget my edit
+                  </Button>
+                )}
               </div>
             </div>
           ) : description ? (

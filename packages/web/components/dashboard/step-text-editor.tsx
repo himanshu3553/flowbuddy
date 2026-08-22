@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 
-import { checkDescriptionMention, deleteStep, updateStepText } from '@/lib/edit-actions';
+import { checkDescriptionMention, deleteStep, resetStepText, updateStepText } from '@/lib/edit-actions';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,12 +32,15 @@ export function StepTextEditor({
   instruction,
   detail,
   ready,
+  textEdited = false,
 }: {
   itemId: string;
   instruction: string;
   detail: string;
   /** False while the recording is still building — the rows are about to be rebuilt under the edit. */
   ready: boolean;
+  /** Whether the wording is founder-owned — enables "Forget my edit" (re-distilled at next re-process). */
+  textEdited?: boolean;
 }) {
   const router = useRouter();
   const [busy, start] = useTransition();
@@ -130,6 +133,29 @@ export function StepTextEditor({
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
             Cancel
           </Button>
+          {textEdited && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground"
+              disabled={busy}
+              title="Clears your ownership of this wording; the next re-process re-distills it"
+              onClick={() =>
+                start(async () => {
+                  const res = await resetStepText({ itemId });
+                  if (res.ok) {
+                    toast.success('Your wording edit will be forgotten at the next re-process');
+                    setEditing(false);
+                    router.refresh();
+                  } else {
+                    toast.error(res.error);
+                  }
+                })
+              }
+            >
+              Forget my edit
+            </Button>
+          )}
           <span className="ml-auto flex items-center gap-2">
             <StepImagePicker itemId={itemId} instruction={instruction} detail={detail} />
             <Button

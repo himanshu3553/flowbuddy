@@ -54,7 +54,9 @@ function controlSignature(ev: CapturedEvent): string | null {
   return `${(t.tag || '').toLowerCase()}:${label}`;
 }
 
-function signatureOf(ev: CapturedEvent): Pick<BoundarySignature, 'type' | 'route' | 'control'> | null {
+/** The transferable identity of a captured MOMENT — type + screen + control label. Exported for its
+ *  second consumer (edit carry-over on Replace: edit-carryover.ts); null = nothing transferable. */
+export function momentSignature(ev: CapturedEvent): Pick<BoundarySignature, 'type' | 'route' | 'control'> | null {
   const path = ev.route?.path ?? '';
   if (!path) return null;
   const control = controlSignature(ev);
@@ -90,13 +92,13 @@ export function deriveBoundarySignatures(
   const ambiguous = new Set<string>();
 
   for (const ev of events) {
-    const s = signatureOf(ev);
+    const s = momentSignature(ev);
     if (!s) continue;
     if (startSet.has(ev.id)) startSigs.set(sigKey(s), { kind: 'start', ...s, at });
   }
   for (const ev of events) {
     if (startSet.has(ev.id)) continue;
-    const s = signatureOf(ev);
+    const s = momentSignature(ev);
     if (!s) continue;
     if (startSigs.has(sigKey(s))) ambiguous.add(sigKey(s));
   }
@@ -108,7 +110,7 @@ export function deriveBoundarySignatures(
   const seenNegative = new Set<string>();
   for (const ev of events) {
     if (startSet.has(ev.id)) continue;
-    const s = signatureOf(ev);
+    const s = momentSignature(ev);
     if (!s || seenNegative.has(sigKey(s))) continue;
     const contradicts = activeWorkspaceLessons.some(
       (l) =>
@@ -145,7 +147,7 @@ export function matchLearnedBoundaries(
   if (activeLessons.length === 0) return [];
   const out: string[] = [];
   for (const ev of events) {
-    const s = signatureOf(ev);
+    const s = momentSignature(ev);
     if (!s) continue;
     const hit = activeLessons.some(
       (l) => l.type === s.type && l.control === s.control && routeMatchStrength(l.route, s.route) === 2,

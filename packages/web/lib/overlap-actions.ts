@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
+import { updateStepText, updateWorkflowDescription, updateWorkflowTitle } from '@/lib/edit-actions';
 
 /**
  * P3-M0 — resolving a duplicate-workflow warning. Two outcomes, both founder-chosen:
@@ -45,7 +46,15 @@ export async function supersedeWorkflow(input: {
   retiredWorkflowId: string;
   replacementWorkflowId: string;
   replacementTitle?: string | null;
-}): Promise<void> {
+  /** Reviewed edit carry-over (edit-actions `planEditCarryover`): applied AFTER the supersede
+   *  through the same save machinery as a hand edit — re-embed-or-fail per step, ownership stamps,
+   *  rebuild survival. Never inferred: the founder ticked each one. */
+  carry?: {
+    steps: { newItemId: string; instruction: string; detail: string }[];
+    title?: string;
+    description?: string;
+  };
+}): Promise<{ carried: number; failed: number }> {
   const ctx = await getCurrentWorkspace();
   if (!ctx) throw new Error('Not authenticated');
   const workspaceId = ctx.workspace.id;
@@ -78,6 +87,45 @@ export async function supersedeWorkflow(input: {
   });
 
   revalidate(sourceIds);
+
+  // Carry-over: every item is re-validated to belong to the REPLACEMENT workflow (the plan was
+  // computed for this pair, but the founder's ticks are client input). Failures are counted, not
+  // thrown — the supersede itself already happened and must not read as undone.
+  let carried = 0;
+  let failed = 0;
+  if (input.carry) {
+    const owned = new Set(
+      (
+        await prisma.knowledgeItem.findMany({
+          where: { workflowId: replacementWorkflowId, workspaceId, kind: 'step' },
+          select: { id: true },
+        })
+      ).map((i) => i.id),
+    );
+    for (const step of input.carry.steps) {
+      if (!owned.has(step.newItemId)) {
+        failed += 1;
+        continue;
+      }
+      const res = await updateStepText({ itemId: step.newItemId, instruction: step.instruction, detail: step.detail });
+      if (res.ok) carried += 1;
+      else failed += 1;
+    }
+    if (input.carry.title) {
+      const res = await updateWorkflowTitle({ workflowId: replacementWorkflowId, title: input.carry.title });
+      if (res.ok) carried += 1;
+      else failed += 1;
+    }
+    if (input.carry.description) {
+      const res = await updateWorkflowDescription({
+        workflowId: replacementWorkflowId,
+        description: input.carry.description,
+      });
+      if (res.ok) carried += 1;
+      else failed += 1;
+    }
+  }
+  return { carried, failed };
 }
 
 /**

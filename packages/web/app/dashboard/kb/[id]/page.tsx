@@ -38,6 +38,7 @@ export const dynamic = 'force-dynamic';
 type StepData = {
   instruction?: string;
   detail?: string;
+  editedFields?: string[];
   route?: string;
   screenshotFile?: string | null;
   bbox?: { x: number; y: number; w: number; h: number } | null; // clicked element rect (viewport px)
@@ -94,6 +95,8 @@ export default async function KbWorkflowPage({
         orderIndex: it.orderIndex,
         instruction: d.instruction ?? it.text, // distilled instruction; fall back to searchable text
         detail: d.detail ?? '',
+        // Founder-owned wording: an explicit 'text' marker, or a legacy stamp with no field list.
+        textEdited: Array.isArray(d.editedFields) ? d.editedFields.includes('text') : it.editedAt != null,
         route: d.route ?? '',
         bbox: d.bbox ?? null,
         screenshotUrl: d.screenshotFile
@@ -278,6 +281,8 @@ export default async function KbWorkflowPage({
                 title={workflowTitle}
                 description={workflow.description}
                 ready={ready}
+                titleEdited={workflow.titleEditedAt != null}
+                descriptionEdited={workflow.descriptionEditedAt != null}
               />
             )}
 
@@ -334,6 +339,7 @@ export default async function KbWorkflowPage({
                           instruction={it.instruction}
                           detail={it.detail}
                           ready={ready}
+                          textEdited={it.textEdited}
                         />
                         {/* Raw narration display retired with the field (2026-08-21) — a step is
                             title + description + image; what you SAID lives on the recording page's

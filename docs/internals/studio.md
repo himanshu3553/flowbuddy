@@ -163,7 +163,7 @@ lets them **delete a step** (hard-deleted now, re-dropped on every rebuild — n
 every reader to remember) and **restore a pruned captured action as a step** ("Add a step from the
 recording": the anchor, screenshot and evidence come from the real event, the founder types only
 the words — a step with no captured event cannot be created, here or anywhere). The event citation
-that makes a step cite a real captured event is never editable. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
+that makes a step cite a real captured event is never editable. Every owned field offers **Forget my edit** (clears the ownership stamp; the next re-process regenerates it — the model's original text is gone), and when a duplicate is resolved with **Replace the old one**, the old workflow's text edits that match a step on the new one by moment signature (`synthesis/edit-carryover.ts`, label + screen, unambiguous pairs only) are offered as a reviewable, untickable list and applied through the same save machinery — never silently, and never images. Every edit stamps its field human-owned so a reprocess keeps it (the rebuild side is
 [knowledge-base.md](knowledge-base.md) §Identity); a title edit moves the row, the items' per-item
 copy and the approval snapshot together so no surface keeps the old name. A step edit **re-embeds
 before it writes** — text and vector move together or the save fails whole — and on an

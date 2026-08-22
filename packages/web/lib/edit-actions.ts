@@ -5,6 +5,7 @@ import { prisma } from '@flowbuddy/db';
 import type { CapturedEvent, SessionManifest } from '@flowbuddy/shared';
 import { cleanEvents } from '@flowbuddy/synthesis/clean';
 import { distilledStepText, stepFromEvent, type EditedStepField } from '@flowbuddy/synthesis/distill';
+import { matchStepsByMoment } from '@flowbuddy/synthesis/edit-carryover';
 import { embedTexts, toVectorLiteral } from '@flowbuddy/synthesis/embeddings';
 import { parseStepInclusions, type StepAddition } from '@flowbuddy/synthesis/step-inclusions';
 import { getCurrentWorkspace } from '@/lib/session';
@@ -752,4 +753,148 @@ export async function checkDescriptionMention(input: { itemId: string }): Promis
   } catch {
     return { ok: true, mention: null };
   }
+}
+
+// ── Edit carry-over on Replace + Reset to generated (arc follow-ups) ───────────────────────────
+//
+// Edits are scoped to the recording they were made on — a recording is a frozen snapshot of the
+// product. When the founder re-records a task and REPLACES the old workflow, the old edits can be
+// OFFERED for the new telling where the moment still exists (edit-carryover.ts pairs steps by
+// moment signature), reviewed, never applied silently: the product may have changed exactly that
+// step. Applied through the same save machinery as a hand edit, so every carried edit gets the
+// re-embed-or-fail, the ownership stamp and the rebuild survival. Images never carry.
+
+export type CarryoverPlan =
+  | {
+      ok: true;
+      steps: {
+        oldItemId: string;
+        /** null = no unambiguous same-moment step on the new workflow — shown, never applied. */
+        newItemId: string | null;
+        /** Position of that step in the new workflow (for the compare dialog's live preview). */
+        newStepIndex: number | null;
+        instruction: string;
+        detail: string;
+        newInstruction: string | null;
+      }[];
+      title: { value: string; newValue: string | null } | null;
+      description: { value: string; newValue: string | null } | null;
+    }
+  | { ok: false; error: string };
+
+export async function planEditCarryover(input: {
+  fromWorkflowId: string;
+  toWorkflowId: string;
+}): Promise<CarryoverPlan> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const [from, to] = await Promise.all(
+    [input.fromWorkflowId, input.toWorkflowId].map((id) =>
+      prisma.workflow.findFirst({
+        where: { id, workspaceId: ctx.workspace.id },
+        select: { id: true, sourceId: true, title: true, description: true, titleEditedAt: true, descriptionEditedAt: true },
+      }),
+    ),
+  );
+  if (!from || !to) return { ok: false, error: 'Workflow not found' };
+
+  const [fromSource, toSource, oldItems, newItems] = await Promise.all([
+    prisma.knowledgeSource.findUnique({ where: { id: from.sourceId }, select: { manifest: true } }),
+    prisma.knowledgeSource.findUnique({ where: { id: to.sourceId }, select: { manifest: true } }),
+    prisma.knowledgeItem.findMany({
+      where: { workflowId: from.id, kind: 'step', editedAt: { not: null } },
+      orderBy: { orderIndex: 'asc' },
+      select: { id: true, data: true, editedAt: true },
+    }),
+    prisma.knowledgeItem.findMany({
+      where: { workflowId: to.id, kind: 'step' },
+      orderBy: { orderIndex: 'asc' },
+      select: { id: true, data: true },
+    }),
+  ]);
+  const oldEvents = (fromSource?.manifest as unknown as SessionManifest | null)?.events ?? [];
+  const newEvents = (toSource?.manifest as unknown as SessionManifest | null)?.events ?? [];
+  const keyOf = (data: unknown) => {
+    const d = (data ?? {}) as { keyEventId?: unknown };
+    return typeof d.keyEventId === 'string' ? d.keyEventId : null;
+  };
+  // Only TEXT edits carry (an image pick belongs to its recording's frames).
+  const textEdited = oldItems.filter((it) =>
+    editedFieldsOf((it.data ?? {}) as Record<string, unknown>, it.editedAt).includes('text'),
+  );
+  const pairs = matchStepsByMoment(
+    textEdited.map((it) => ({ itemId: it.id, keyEventId: keyOf(it.data) })),
+    oldEvents,
+    newItems.map((it) => ({ itemId: it.id, keyEventId: keyOf(it.data) })),
+    newEvents,
+  );
+  const newById = new Map(newItems.map((it) => [it.id, it]));
+  const newIndexById = new Map(newItems.map((it, i) => [it.id, i]));
+  const steps = textEdited.map((it) => {
+    const d = (it.data ?? {}) as { instruction?: unknown; detail?: unknown };
+    const newItemId = pairs.get(it.id) ?? null;
+    const nd = newItemId ? ((newById.get(newItemId)?.data ?? {}) as { instruction?: unknown }) : null;
+    return {
+      oldItemId: it.id,
+      newItemId,
+      newStepIndex: newItemId ? (newIndexById.get(newItemId) ?? null) : null,
+      instruction: typeof d.instruction === 'string' ? d.instruction : '',
+      detail: typeof d.detail === 'string' ? d.detail : '',
+      newInstruction: nd && typeof nd.instruction === 'string' ? nd.instruction : null,
+    };
+  });
+  return {
+    ok: true,
+    steps,
+    title: from.titleEditedAt && from.title ? { value: from.title, newValue: to.title } : null,
+    description:
+      from.descriptionEditedAt && from.description ? { value: from.description, newValue: to.description } : null,
+  };
+}
+
+/** "Forget my edit" on a title/description: clears the ownership stamp so the NEXT re-process
+ *  refreshes the field from the model. The original model text is gone (it was overwritten), so
+ *  "now" is not possible without a rebuild — the UI says so. */
+export async function resetWorkflowField(input: {
+  workflowId: string;
+  field: 'title' | 'description';
+}): Promise<EditResult> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const workflow = await prisma.workflow.findFirst({
+    where: { id: input.workflowId, workspaceId: ctx.workspace.id },
+    select: { id: true, sourceId: true },
+  });
+  if (!workflow) return { ok: false, error: 'Workflow not found' };
+  await prisma.workflow.update({
+    where: { id: workflow.id },
+    data: input.field === 'title' ? { titleEditedAt: null } : { descriptionEditedAt: null },
+  });
+  revalidatePath(`/dashboard/kb/${workflow.sourceId}`);
+  return { ok: true };
+}
+
+/** "Forget my edit" on a step's wording: drops the `text` ownership marker (an image pick on the
+ *  same step stays owned), so the next re-process re-distills the wording. */
+export async function resetStepText(input: { itemId: string }): Promise<EditResult> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: 'Not authenticated' };
+  const item = await prisma.knowledgeItem.findFirst({
+    where: { id: input.itemId, workspaceId: ctx.workspace.id, kind: 'step' },
+    select: { id: true, data: true, sourceId: true, editedAt: true },
+  });
+  if (!item) return { ok: false, error: 'Step not found' };
+  const data = { ...(item.data as Record<string, unknown>) };
+  const remaining = editedFieldsOf(data, item.editedAt).filter((f) => f !== 'text');
+  if (remaining.length > 0) data.editedFields = remaining;
+  else delete data.editedFields;
+  await prisma.knowledgeItem.update({
+    where: { id: item.id },
+    data: {
+      data: data as object,
+      ...(remaining.length === 0 ? { editedAt: null, editedById: null } : {}),
+    },
+  });
+  revalidatePath(`/dashboard/kb/${item.sourceId}`);
+  return { ok: true };
 }
