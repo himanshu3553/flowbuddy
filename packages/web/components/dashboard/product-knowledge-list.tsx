@@ -7,6 +7,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   setProductPageApproval,
+  setProductPageApprovalsBulk,
   acceptProductPageUpdate,
   dismissProductPageUpdate,
 } from '@/lib/product-page-actions';
@@ -15,6 +16,14 @@ import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 /**
  * AIL slice 2 — the review-and-approve surface for PRODUCT PAGES (what the product IS), beside the
@@ -32,8 +41,13 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
-  const [, start] = useTransition();
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [pending, start] = useTransition();
   const router = useRouter();
+
+  // What "Approve All" covers: pages never approved. A parked update on a live page is ALSO
+  // pending, but it needs Accept/Dismiss with both tellings in view — not a bulk switch.
+  const draftPages = useMemo(() => pages.filter((p) => !p.live && !p.everApproved), [pages]);
 
   /**
    * Two of these deliberately OVERLAP, and the counts therefore do not sum to `all`.
@@ -93,6 +107,27 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
     });
   };
 
+  /** Confirmed from the review sheet, never straight off the banner — the same rule as workflows:
+   *  every page is model prose the copilot will read out, so approving all of them unseen is the
+   *  failure the sheet exists to prevent. */
+  function approveAll() {
+    const rows = draftPages;
+    if (rows.length === 0) return;
+    setBusyId('all');
+    start(async () => {
+      try {
+        const n = await setProductPageApprovalsBulk({ pageIds: rows.map((p) => p.id) });
+        toast.success(`${n} page${n === 1 ? '' : 's'} live for the copilot`);
+        setConfirmAll(false);
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to approve all');
+      } finally {
+        setBusyId(null);
+      }
+    });
+  }
+
   const statusOf = (p: ProductPageView) =>
     p.live
       ? { label: 'Live', cls: 'border-brand-100 bg-brand-50 text-primary' }
@@ -101,14 +136,61 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
         : { label: 'Pending approval', cls: 'border bg-secondary text-secondary-foreground' };
 
   return (
-    <section className="space-y-2.5">
-      {/* No heading: the selected tab already says "Product knowledge", and repeating it directly
-          beneath reads as a stutter. The description stays — it is the part that explains where
-          these pages come from, which is not obvious from a tab label. */}
-      <p className="text-sm text-muted-foreground">
-        What your product <em>is</em> — pages derived from your narration. Approved pages let the
-        copilot orient, explain and compare; workflows keep owning the how-to.
-      </p>
+    <section className="space-y-3.5">
+      {draftPages.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-tile border border-warning-border bg-warning-bg2 px-4 py-3.5">
+          <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-warning-dot" />
+          <p className="flex-1 text-[13px] leading-relaxed text-warning-text">
+            <b className="font-semibold text-[#4a3e1e]">
+              {draftPages.length} page{draftPages.length === 1 ? '' : 's'} awaiting approval.
+            </b>{' '}
+            Review and Approve each one to make live
+          </p>
+          <Button size="sm" onClick={() => setConfirmAll(true)} disabled={pending} className="shrink-0">
+            Approve All
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={confirmAll} onOpenChange={(o) => !pending && setConfirmAll(o)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Approve {draftPages.length} page{draftPages.length === 1 ? '' : 's'}?
+            </DialogTitle>
+            <DialogDescription>
+              This puts them live for the copilot. Each one is written by the model from your
+              narration, so it is worth reading before it speaks for you.
+            </DialogDescription>
+          </DialogHeader>
+          {/* Full text, never truncated — the trust rule (AI-5) applies to a bulk approval too. */}
+          <ul className="max-h-[45vh] space-y-3 overflow-y-auto pr-1">
+            {draftPages.map((p) => (
+              <li key={p.id} className="rounded-list border bg-card px-3.5 py-3">
+                <p className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  <span className="rounded-pill border bg-secondary px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
+                    {p.type}
+                  </span>
+                  {p.title}
+                </p>
+                <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-secondary-foreground">
+                  {p.content}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAll(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={approveAll} disabled={pending}>
+              {busyId === 'all'
+                ? 'Approving…'
+                : `Approve ${draftPages.length} page${draftPages.length === 1 ? '' : 's'}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Same filter row and search as the workflow list — one KB, one way to find things in it. */}
       <div className="flex flex-wrap items-end justify-between gap-3 border-b">
@@ -148,7 +230,7 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
           {visible.map((p) => {
             const st = statusOf(p);
             const open = openId === p.id;
-            const busy = busyId === p.id;
+            const busy = busyId === p.id || busyId === 'all';
             return (
               <li key={p.id} className="rounded-list border bg-card">
                 <div className="flex items-center gap-3 px-[15px] py-[13px]">
@@ -220,33 +302,6 @@ export function ProductKnowledgeList({ pages }: { pages: ProductPageView[] }) {
                 {open && (
                   <div className="space-y-3 border-t px-[15px] py-3.5">
                     <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{p.content}</p>
-                    {p.provenance.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
-                          From your narration
-                        </p>
-                        {p.provenance.map((e, i) => (
-                          <p key={i} className="text-xs leading-relaxed text-muted-foreground">
-                            “{e.quote}” <span className="text-faint">— {e.recordingTitle}</span>
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    {p.relatedWorkflows.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">
-                          Points to
-                        </span>
-                        {p.relatedWorkflows.map((t) => (
-                          <span
-                            key={t}
-                            className="rounded-pill border bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground"
-                          >
-                            → {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
 
                     {p.pendingContent && (
                       <div className="rounded-card border border-warning-border bg-warning-bg px-3.5 py-3">

@@ -467,7 +467,13 @@ presupposes approval, so retiring a workflow stops it acting through the same si
 stops it answering. **A reader that forgets the filter silently serves retired content**, and the
 by-key fetch is the worst of them: it bypasses ranking entirely, so a retired workflow could be
 pulled whole. Any new reader of `CopilotApproval` must decide, explicitly, whether it wants live-only
-(almost always yes) or every approval ever granted (Studio's "Not answering" view).
+(almost always yes) or every approval ever granted (Studio's "Replaced" view).
+
+One more value rides on that row: **`approvedById` null means no human ever approved it.** "Keep the
+old one" in the duplicate dialog creates the newer workflow's approval already retired, with no
+approver, so it leaves Pending without ever being live — and Restore reads the mark: a row with no
+approver is *deleted* (back to Pending), never re-activated. Any new path that creates an approval
+row without an approver inherits that Restore behaviour.
 
 That repetition is exactly why liveness is **one column**. Two *liveness* flags would be two chances
 for a reader to check only the first — which is also why the acting flag was made a second question

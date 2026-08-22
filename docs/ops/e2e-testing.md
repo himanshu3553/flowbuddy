@@ -292,8 +292,10 @@ recording whose embeddings failed simply produces no warnings.
    chip appears on the tile of **both** workflows — including one that is still unapproved.
 2. Click the chip (or **Compare** on the warning card) → a modal shows both step lists side by side,
    labelled *Already approved* and *Newer recording*.
-3. **Replace the old one** → toast; the retired workflow greys out, reads *Replaced by "…"*, moves
-   under **Not answering**, and stops counting toward "awaiting approval".
+3. Select the **Newer recording** column → **Save** → toast; the retired workflow greys out, reads
+   *Replaced by "…"*, moves under **Replaced**, and stops counting toward "awaiting approval".
+   (Selecting **Already approved** instead retires the newer one the same way; its Restore sends it
+   back to Pending, not to Live.)
    **The duplicate warning and BOTH tiles' chips must disappear** — on the spot and after a reload.
    A resolved duplicate that keeps warning is the regression this leg exists for: a retired workflow
    has to leave both sides of the comparison, and dropping it only from the live side leaves it
@@ -595,7 +597,7 @@ Use a recording with **at least two approved workflows**, one of them cited by t
 
 1. Studio → the recording → **Re-process**. Wait for `ready`.
 2. **Approvals survive where the content didn't change.** The workflows are still Approved · Live,
-   and the copilot still answers and cites them. Nothing appears under **Not answering**.
+   and the copilot still answers and cites them. Nothing appears under **Replaced**.
 3. **Identity survived, not just the row.** The workflow's citation history is intact — its detail
    page still shows its *Cited by copilot* count and 👍/👎 tally, rather than resetting to `—`.
    (Analytics group on the identity, so a reset means a new identity was minted for old content.)
@@ -607,7 +609,7 @@ Force a mismatch — record the same task again but **materially differently** (
 of steps, or change where it ends), then re-process the ORIGINAL recording so re-segmentation moves
 things.
 
-5. A workflow whose content no longer matches is **detached**: it appears under **Not answering** as
+5. A workflow whose content no longer matches is **detached**: it appears under **Replaced** as
    **Needs re-review**, with the plain-English line about the recording having changed.
 6. **The copilot stops citing it** — ask a question it used to answer and confirm it is no longer the
    source. This is the actual guarantee; the badge is only how you see it.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, Pencil } from 'lucide-react';
+import { ChevronDown, Copy, Pencil } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
-import { supersedeWorkflow, dismissOverlap, groupAsOneTask } from '@/lib/overlap-actions';
+import { supersedeWorkflow, keepExistingWorkflow, dismissOverlap, groupAsOneTask } from '@/lib/overlap-actions';
 import { planEditCarryover, type CarryoverPlan } from '@/lib/edit-actions';
 
 /**
@@ -72,11 +72,38 @@ function Carried({ onEdit }: { onEdit?: () => void }) {
   );
 }
 
+/** The side label — "Already approved" / "Newer recording" — identical on the card and in the dialog. */
+function SideLabel({ label, tone }: { label: string; tone: 'incumbent' | 'challenger' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        tone === 'incumbent'
+          ? 'border border-brand-100 bg-brand-50 text-primary'
+          : 'border border-warning-border bg-warning-bg text-warning-text',
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SideLine({ label, tone, title }: { label: string; tone: 'incumbent' | 'challenger'; title: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <SideLabel label={label} tone={tone} />
+      <span className="truncate text-[13.5px] font-semibold text-ink">{title}</span>
+    </span>
+  );
+}
+
 function StepColumn({
   side,
   label,
   tone,
   preview,
+  selected,
+  onSelect,
 }: {
   side: OverlapSideView;
   label: string;
@@ -84,63 +111,89 @@ function StepColumn({
   /** Edit carry-over preview: the founder's wording shown IN PLACE of the new workflow's, so the
    *  compare dialog reflects what Replace will produce before anything is written. */
   preview?: { steps: Map<number, string>; title?: string; description?: string; onEdit?: () => void };
+  /** The column is one of the four resolutions ("keep THIS one") — the radio sits on the evidence. */
+  selected: boolean;
+  onSelect: () => void;
 }) {
+  // `contents` so the header and the list are direct grid children of the two-column container:
+  // the header row takes the taller of the two, and both step lists start on the same line. The two
+  // cells are styled as ONE card (top half / bottom half) so the selection ring reads as "this
+  // column", and the step list scrolls inside its own half so nothing is clipped.
+  const shell = cn(
+    'min-w-0 cursor-pointer border transition-colors',
+    selected ? 'border-primary bg-brand-50/40' : 'border-border bg-card hover:bg-muted/40',
+  );
   return (
-    <div className="min-w-0 flex-1">
-      <p
-        className={cn(
-          'mb-1 inline-flex rounded-md px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
-          tone === 'incumbent'
-            ? 'border border-brand-100 bg-brand-50 text-primary'
-            : 'border border-warning-border bg-warning-bg text-warning-text',
-        )}
-      >
-        {label}
-      </p>
-      <p className="text-[13.5px] font-semibold text-ink">
-        {preview?.title ?? titleOf(side)}
-        {preview?.title && <Carried onEdit={preview.onEdit} />}
-      </p>
-      <p className="mb-2 font-mono text-[10px] text-faint">{side.stepCount} steps</p>
-      {/* Two workflows can have near-identical step lists and still be different tasks — the plan is
-          often the only place that shows. It is also part of what approving them approves. */}
-      {(preview?.description ?? side.description) && (
-        <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
-          {preview?.description ?? side.description}
-          {preview?.description && <Carried onEdit={preview.onEdit} />}
+    <div className="contents">
+      <div className={cn(shell, 'mt-3 rounded-t-tile border-b-0 px-3.5 pt-3 first:mt-0 sm:mt-0')} onClick={onSelect}>
+        <p className="mb-2 flex items-center justify-between gap-2">
+          <SideLabel label={label} tone={tone} />
+          {/* A button rather than a visible radio — the card is the radio; this is its state. */}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            className={cn(
+              'rounded-md px-2.5 py-1 text-[11px] font-bold tracking-wide transition-colors',
+              selected
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-brand-50 text-primary hover:bg-brand-100',
+            )}
+          >
+            {selected ? 'SELECTED' : 'Select'}
+          </button>
         </p>
-      )}
-      <ol
-        className={cn(
-          'space-y-1.5 rounded-tile border px-3 py-2.5',
-          tone === 'incumbent' ? 'border-brand-100 bg-brand-50/50' : 'border-warning-border bg-warning-bg/60',
+        <p className="text-[13.5px] font-semibold text-ink">
+          {preview?.title ?? titleOf(side)}
+          {preview?.title && <Carried onEdit={preview.onEdit} />}
+        </p>
+        <p className="mb-1.5 font-mono text-[10px] text-faint">{side.stepCount} steps</p>
+        {/* Two workflows can have near-identical step lists and still be different tasks — the plan is
+            often the only place that shows. Clamped: it is context for the step lists, not the thing
+            being compared, and at full length it pushed the steps off-screen. */}
+        {(preview?.description ?? side.description) && (
+          <p className="mb-2 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground" title={preview?.description ?? side.description ?? undefined}>
+            {preview?.description ?? side.description}
+            {preview?.description && <Carried onEdit={preview.onEdit} />}
+          </p>
         )}
-      >
-        {side.steps.length === 0 ? (
-          <li className="text-[12px] text-muted-foreground">No steps recorded.</li>
-        ) : (
-          side.steps.map((s, i) => {
-            const carried = preview?.steps.get(i);
-            return (
-              <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-secondary-foreground">
-                <span className="mt-px shrink-0 font-mono text-[10px] text-faint">{i + 1}</span>
-                <span className="min-w-0">
-                  {carried ?? s}
-                  {carried !== undefined && <Carried onEdit={preview?.onEdit} />}
-                </span>
-              </li>
-            );
-          })
-        )}
-      </ol>
+      </div>
+      <div className={cn(shell, 'rounded-b-tile border-t-0 px-3.5 pb-3')} onClick={onSelect}>
+        <ol
+          className={cn(
+            'max-h-[34vh] space-y-1.5 overflow-y-auto rounded-tile border px-3 py-2.5',
+            tone === 'incumbent' ? 'border-brand-100 bg-brand-50/50' : 'border-warning-border bg-warning-bg/60',
+          )}
+        >
+          {side.steps.length === 0 ? (
+            <li className="text-[12px] text-muted-foreground">No steps recorded.</li>
+          ) : (
+            side.steps.map((s, i) => {
+              const carried = preview?.steps.get(i);
+              return (
+                <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-secondary-foreground">
+                  <span className="mt-px shrink-0 font-mono text-[10px] text-faint">{i + 1}</span>
+                  <span className="min-w-0">
+                    {carried ?? s}
+                    {carried !== undefined && <Carried onEdit={preview?.onEdit} />}
+                  </span>
+                </li>
+              );
+            })
+          )}
+        </ol>
+      </div>
     </div>
   );
 }
 
-/**
- * The two resolutions, shared by every surface that offers them. One implementation so the card, the
- * modal and the list-tile chip can never drift into offering different outcomes for the same pair.
- */
+/** What the founder may decide about a pair. The first two name a winner; the last two keep both. */
+export type Resolution = 'keepOld' | 'keepNew' | 'group' | 'dismiss';
+
 /** What Replace will carry over — confirmed in the chooser, previewed in the compare dialog,
  *  applied by the supersede. */
 type CarrySelection = {
@@ -152,6 +205,10 @@ type CarrySelection = {
 const isCarryable = (plan: CarryoverPlan): plan is Extract<CarryoverPlan, { ok: true }> =>
   plan.ok && (plan.steps.some((st) => st.newItemId) || plan.title !== null || plan.description !== null);
 
+/**
+ * The four resolutions, offered in ONE place — the comparison dialog — so the founder always has
+ * both step lists in front of them when they decide.
+ */
 function useResolveOverlap(
   overlap: OverlapView,
   onDone: () => void,
@@ -211,40 +268,33 @@ function useResolveOverlap(
     });
   }
 
-  const actions = (
-    <>
-      <Button size="sm" disabled={pending} onClick={replaceNow}>
-        Replace the old one
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() =>
-          run(async () => {
-            await groupAsOneTask({ aWorkflowId: incumbent.workflowId, bWorkflowId: challenger.workflowId });
-            return 'Grouped — the copilot will answer with whichever route fits';
-          })
-        }
-      >
-        Two routes, same goal
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={() =>
-          run(async () => {
-            await dismissOverlap({ aWorkflowId: incumbent.workflowId, bWorkflowId: challenger.workflowId });
-            return 'Dismissed — this pair won’t be raised again';
-          })
-        }
-      >
-        Not duplicates
-      </Button>
-    </>
-  );
-  return { actions, replaceNow };
+  function resolve(choice: Resolution) {
+    switch (choice) {
+      case 'keepNew':
+        replaceNow();
+        return;
+      case 'keepOld':
+        run(async () => {
+          await keepExistingWorkflow({ keptWorkflowId: incumbent.workflowId, discardedWorkflowId: challenger.workflowId });
+          return `Kept “${titleOf(incumbent)}” — “${titleOf(challenger)}” moved to Not answering`;
+        });
+        return;
+      case 'group':
+        run(async () => {
+          await groupAsOneTask({ aWorkflowId: incumbent.workflowId, bWorkflowId: challenger.workflowId });
+          return 'Grouped — the copilot will answer with whichever route fits';
+        });
+        return;
+      case 'dismiss':
+        run(async () => {
+          await dismissOverlap({ aWorkflowId: incumbent.workflowId, bWorkflowId: challenger.workflowId });
+          return 'Dismissed — this pair won’t be raised again';
+        });
+        return;
+    }
+  }
+
+  return { resolve, pending };
 }
 
 /** The side-by-side comparison. The one decision surface, opened from anywhere a duplicate appears. */
@@ -252,14 +302,10 @@ export function CompareDialog({
   overlap,
   open,
   onOpenChange,
-  replaceOnOpen = false,
 }: {
   overlap: OverlapView;
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  /** A surface without its own review step (the card) hands its Replace click here: the dialog
-   *  opens and immediately runs the Replace flow, so the chooser appears on top of the comparison. */
-  replaceOnOpen?: boolean;
 }) {
   const { incumbent, challenger } = overlap;
 
@@ -270,8 +316,11 @@ export function CompareDialog({
   const [selection, setSelection] = useState<CarrySelection | undefined>(undefined);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [draftTicked, setDraftTicked] = useState<Set<string>>(new Set());
+  // Nothing pre-selected: the dialog exists to get a founder's decision, and a pre-ticked radio is a
+  // decision they did not make.
+  const [choice, setChoice] = useState<Resolution | null>(null);
 
-  const { actions, replaceNow } = useResolveOverlap(overlap, () => onOpenChange(false), {
+  const { resolve, pending } = useResolveOverlap(overlap, () => onOpenChange(false), {
     ...(selection ? { selection } : {}),
     onCarryNeeded: (p) => {
       setPlan(p);
@@ -286,19 +335,13 @@ export function CompareDialog({
     },
   });
 
-  const [handedOff, setHandedOff] = useState(false);
+  // A closed dialog forgets its carry selection — reopening must start from the chooser again.
   useEffect(() => {
-    if (open && replaceOnOpen && !handedOff) {
-      setHandedOff(true);
-      replaceNow();
-    }
     if (!open) {
-      setHandedOff(false);
       setSelection(undefined);
+      setChoice(null);
     }
-    // replaceNow is recreated each render; the flags are the real dependencies.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, replaceOnOpen]);
+  }, [open]);
 
   const preview =
     selection && plan
@@ -358,39 +401,77 @@ export function CompareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      {/* No description by design — the two columns ARE the explanation; `aria-describedby`
+          cleared so Radix does not warn about the missing one. */}
+      <DialogContent className="max-w-4xl" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>Are these the same workflow?</DialogTitle>
-          <DialogDescription>
-            {Math.round(overlap.similarity * 100)}% similar overall, and they finish in the same
-            place. FlowBuddy can tell they overlap — only you know whether your product changed.
-          </DialogDescription>
+          <DialogTitle>Duplicate workflows</DialogTitle>
         </DialogHeader>
 
-        <div className="-mx-1 max-h-[60vh] overflow-y-auto px-1">
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <StepColumn side={incumbent} label="Already approved" tone="incumbent" />
-            <StepColumn side={challenger} label="Newer recording" tone="challenger" preview={preview} />
+        <div>
+          <div className="grid gap-x-4 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-[auto_auto]">
+            <StepColumn
+              side={incumbent}
+              label="Already approved"
+              tone="incumbent"
+              selected={choice === 'keepOld'}
+              onSelect={() => setChoice('keepOld')}
+            />
+            <StepColumn
+              side={challenger}
+              label="Newer recording"
+              tone="challenger"
+              preview={preview}
+              selected={choice === 'keepNew'}
+              onSelect={() => setChoice('keepNew')}
+            />
           </div>
         </div>
 
-        <DialogFooter className="items-center gap-2 sm:justify-between">
-          <span className="text-[11px] leading-relaxed text-muted-foreground">
-            Replacing never deletes anything. <b className="font-semibold">Two routes</b> makes the
-            copilot answer from one of them; <b className="font-semibold">Not duplicates</b> changes
-            nothing.
-          </span>
-          <span className="flex shrink-0 flex-wrap gap-2">{actions}</span>
+        {/* The two "keep both" outcomes — OUTSIDE the scrolling step lists, so every resolution is on
+            screen at once; a sixteen-step column must never hide half the decision. */}
+        <div className="space-y-1.5">
+            {(
+              [
+                ['group', 'Both are right — two routes to the same goal'],
+                ['dismiss', 'These aren’t duplicates'],
+              ] as const
+            ).map(([key, primary]) => (
+              <label
+                key={key}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors',
+                  choice === key ? 'border-primary bg-brand-50/40' : 'hover:bg-muted/50',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="duplicate-resolution"
+                  className="accent-[hsl(var(--primary))]"
+                  checked={choice === key}
+                  onChange={() => setChoice(key)}
+                />
+                <span className="text-[13px] font-medium text-ink">{primary}</span>
+              </label>
+            ))}
+        </div>
+
+        <DialogFooter className="items-center gap-2">
+          <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={pending || choice === null} onClick={() => choice && resolve(choice)}>
+            {pending ? 'Saving…' : 'Save'}
+          </Button>
         </DialogFooter>
 
         <Dialog open={chooserOpen} onOpenChange={setChooserOpen}>
           <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>Carry your edits to the new workflow?</DialogTitle>
+              <DialogTitle>Carry your edits to the new workflow</DialogTitle>
               <DialogDescription>
-                These edits on “{titleOf(incumbent)}” match steps on “{titleOf(challenger)}”. Untick
-                anything your product changed. Image choices never carry — frames belong to their
-                recording.
+                You previously edited this step. Would you like to carry those changes over to the new
+                workflow?
               </DialogDescription>
             </DialogHeader>
             {plan && (
@@ -414,14 +495,18 @@ export function CompareDialog({
               </div>
             )}
             <DialogFooter className="items-center gap-3">
-              <button
-                type="button"
-                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-                onClick={() => setChooserOpen(false)}
+              {/* "No" is an answer, not a cancel: an EMPTY selection is recorded, so the next Save
+                  replaces without carrying instead of asking the same question again. */}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelection({ steps: [] });
+                  setChooserOpen(false);
+                }}
               >
-                Cancel
-              </button>
-              <Button onClick={confirmChooser}>Replace</Button>
+                No
+              </Button>
+              <Button onClick={confirmChooser}>Yes</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -467,88 +552,86 @@ export function DuplicateChip({
 }
 
 /**
- * One duplicate, with its evidence and its two resolutions. Rendered both in the Knowledge Base
- * list and on a single workflow's page — a founder who lands on a workflow directly must be able to
- * see and settle the duplicate there, without first knowing to go back to the list.
+ * One duplicate, with its evidence and one way in. Rendered both in the Knowledge Base list and on
+ * a single workflow's page — a founder who lands on a workflow directly must be able to see and
+ * settle the duplicate there, without first knowing to go back to the list.
+ *
+ * The card deliberately offers NO resolution of its own: the three outcomes live only in the
+ * comparison, where both step lists are on screen. Several cards each carrying a Replace / Two
+ * routes / Not duplicates row read as a wall of near-identical buttons, and the one that matters
+ * (Replace) was a single click away from a decision the founder had not looked at yet.
  */
-export function DuplicateCard({ overlap }: { overlap: OverlapView }) {
+export function DuplicateCard({ overlap, index }: { overlap: OverlapView; index?: number }) {
   const [open, setOpen] = useState(false);
-  const [replaceOnOpen, setReplaceOnOpen] = useState(false);
-  // No review step on the card itself: when the old workflow carries edits worth carrying, Replace
-  // opens the comparison with the chooser on top (consent first, preview second, then the final
-  // Replace there) instead of replacing blind.
-  const { actions } = useResolveOverlap(overlap, () => setOpen(false), {
-    onCarryNeeded: () => {
-      setReplaceOnOpen(true);
-      setOpen(true);
-    },
-  });
   const { incumbent, challenger } = overlap;
 
   return (
     <div className="rounded-list border border-warning-border bg-card px-[15px] py-[13px]">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border border-warning-border bg-warning-bg text-warning-dot">
-          <Copy className="h-3.5 w-3.5" />
+        {/* Numbered inside a list, so "the second one" is something a founder can say out loud;
+            on a workflow's own page there is no list to count, so the icon stays. */}
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border border-warning-border bg-warning-bg font-mono text-[11px] font-bold text-warning-text">
+          {index !== undefined ? index + 1 : <Copy className="h-3.5 w-3.5 text-warning-dot" />}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold text-ink">
-            “{titleOf(challenger)}” looks like “{titleOf(incumbent)}”
-          </span>
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-faint">
-            {Math.round(overlap.similarity * 100)}% similar · {challenger.stepCount} steps vs{' '}
-            {incumbent.stepCount}
-          </span>
+        {/* The same two labels the comparison uses, so the card and the dialog name the sides the
+            same way — approved on top, the newer one under it. */}
+        <span className="min-w-0 flex-1 space-y-1.5">
+          <SideLine label="Already approved" tone="incumbent" title={titleOf(incumbent)} />
+          <SideLine label="Newer recording" tone="challenger" title={titleOf(challenger)} />
         </span>
-        <Button variant="soft" size="sm" onClick={() => setOpen(true)} className="shrink-0">
-          Compare
-        </Button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-        {actions}
-        <span className="text-[11px] text-muted-foreground">
-          Replacing never deletes anything. <b className="font-semibold">Two routes</b> makes the
-          copilot answer from one of them; <b className="font-semibold">Not duplicates</b> changes
-          nothing and just stops the warning.
+        <span className="flex shrink-0 flex-col items-center gap-1">
+          <Button variant="soft" size="sm" onClick={() => setOpen(true)}>
+            Compare workflows
+          </Button>
+          <span className="font-mono text-[10px] text-faint">
+            {Math.round(overlap.similarity * 100)}% similar
+          </span>
         </span>
       </div>
 
-      <CompareDialog
-        overlap={overlap}
-        open={open}
-        onOpenChange={(v) => {
-          setOpen(v);
-          if (!v) setReplaceOnOpen(false);
-        }}
-        replaceOnOpen={replaceOnOpen}
-      />
+      <CompareDialog overlap={overlap} open={open} onOpenChange={setOpen} />
     </div>
   );
 }
 
+/**
+ * The Knowledge Base list's duplicates, in one box. Collapsed by default to the first pair so a
+ * list with several near-identical pairs does not open on a stack of warnings; the header's count
+ * says how many more are folded away, and the chevron unfolds them.
+ */
 export function DuplicateWorkflows({ overlaps }: { overlaps: OverlapView[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (overlaps.length === 0) return null;
+  const shown = expanded ? overlaps : overlaps.slice(0, 1);
+  const hidden = overlaps.length - shown.length;
 
   return (
-    <section className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-3 rounded-tile border border-warning-border bg-warning-bg2 px-4 py-3.5">
+    <section className="rounded-card border border-warning-border bg-warning-bg2 p-3">
+      <div className="mb-2.5 flex items-center gap-2 px-1">
         <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-warning-dot" />
-        <p className="flex-1 text-[13px] leading-relaxed text-warning-text">
-          <b className="font-semibold text-[#4a3e1e]">
-            {overlaps.length} possible duplicate{overlaps.length === 1 ? '' : 's'}.
-          </b>{' '}
-          When two workflows cover the same task, the copilot has to answer from both — so it splits
-          its attention between two versions of one thing.
-        </p>
+        <span className="text-[12.5px] font-semibold text-[#4a3e1e]">Duplicate workflows</span>
       </div>
       <ul className="space-y-2.5">
-        {overlaps.map((o) => (
+        {shown.map((o, i) => (
           <li key={keyOf(o)}>
-            <DuplicateCard overlap={o} />
+            <DuplicateCard overlap={o} index={i} />
           </li>
         ))}
       </ul>
+      {overlaps.length > 1 && (
+        <div className="mt-2 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Show fewer duplicates' : `Show all ${overlaps.length} duplicates`}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-warning-text transition-colors hover:bg-warning-bg"
+          >
+            {hidden > 0 ? `${hidden} more` : 'Show less'}
+            <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }

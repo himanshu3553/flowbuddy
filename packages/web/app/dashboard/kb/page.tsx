@@ -82,10 +82,7 @@ export default async function KnowledgeBasePage({
 
   return (
     <>
-      <PageHeader
-        title="Knowledge Base"
-        subtitle="Approve what your copilot may use — the workflows it follows, and what your product is."
-      />
+      <PageHeader title="Knowledge Base" />
       <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
         {workflows.length === 0 && productPages.length === 0 ? (
           <div className="rounded-card border bg-card p-10 text-center shadow-card">

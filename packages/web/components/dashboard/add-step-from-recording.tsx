@@ -73,9 +73,9 @@ export function AddStepFromRecording({ workflowId }: { workflowId: string }) {
           <DialogHeader>
             <DialogTitle>Restore a captured action as a step</DialogTitle>
             <DialogDescription>
-              These are moments this recording captured in this workflow that aren’t steps today.
-              Pick one and write its instruction — the screenshot and evidence come from the
-              recording itself.
+              This recording captured actions that are not currently part of the workflow. Select
+              one to restore as a step, then add its instruction. The screenshot and evidence will
+              be taken from the original recording.
             </DialogDescription>
           </DialogHeader>
           {data == null ? (

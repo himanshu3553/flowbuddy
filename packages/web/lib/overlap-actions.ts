@@ -6,8 +6,9 @@ import { getCurrentWorkspace } from '@/lib/session';
 import { updateStepText, updateWorkflowDescription, updateWorkflowTitle } from '@/lib/edit-actions';
 
 /**
- * P3-M0 — resolving a duplicate-workflow warning. Two outcomes, both founder-chosen:
- * "this replaces the old one" (supersede) and "both are real" (a memo so the pair stops being raised).
+ * P3-M0 — resolving a duplicate-workflow warning. Four outcomes, all founder-chosen: "the new one
+ * replaces the old" (supersede) · "keep the old, the new one was a mistake" (the reverse) · "two
+ * routes to one goal" (group) · "not duplicates at all" (a memo so the pair stops being raised).
  *
  * NOTHING here deletes. A superseded workflow keeps its recording, its steps and its analytics
  * history; it simply stops being current. That is what makes a wrong call one click to reverse, and
@@ -129,6 +130,54 @@ export async function supersedeWorkflow(input: {
 }
 
 /**
+ * "Keep the one I already approved." The mirror of `supersedeWorkflow`: the approved workflow is
+ * untouched and the NEWER recording is recorded as superseded by it — so it leaves Pending, leaves
+ * the duplicate detector (a retired workflow is a resolved duplicate), and sits under "Not
+ * answering" with a Restore, like every other resolution.
+ *
+ * The newer one usually has NO approval row yet, so one is created already-inactive with
+ * `approvedById: null` — the mark that no human ever approved it. `undoSupersede` reads that mark:
+ * restoring such a row DELETES it (back to Pending) rather than clearing `inactiveReason`, which
+ * would quietly approve a workflow nobody reviewed.
+ */
+export async function keepExistingWorkflow(input: {
+  keptWorkflowId: string;
+  discardedWorkflowId: string;
+}): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const workspaceId = ctx.workspace.id;
+  const { keptWorkflowId, discardedWorkflowId } = input;
+  if (keptWorkflowId === discardedWorkflowId) throw new Error('A workflow cannot replace itself');
+  const sourceIds = await assertOwned(workspaceId, [keptWorkflowId, discardedWorkflowId]);
+
+  const kept = await prisma.copilotApproval.findFirst({
+    where: { workspaceId, workflowId: keptWorkflowId, inactiveReason: null },
+    select: { id: true },
+  });
+  if (!kept) throw new Error('The workflow to keep is not live — approve it first');
+
+  const discarded = await prisma.workflow.findFirst({
+    where: { id: discardedWorkflowId, workspaceId },
+    select: { title: true },
+  });
+  const retired = { inactiveReason: 'superseded', inactiveAt: new Date(), supersededById: kept.id };
+  await prisma.copilotApproval.upsert({
+    where: { workflowId: discardedWorkflowId },
+    create: {
+      workspaceId,
+      workflowId: discardedWorkflowId,
+      segmentTitle: discarded?.title ?? null,
+      approvedById: null,
+      ...retired,
+    },
+    update: retired,
+  });
+
+  revalidate(sourceIds);
+}
+
+/**
  * Bring a retired workflow back — whether it was replaced, or suspended because a reprocess could
  * not confirm its content. One action for both: from the founder's side the decision is identical
  * ("I've looked, this should answer again"), and the reason it stopped is already on screen.
@@ -139,10 +188,20 @@ export async function undoSupersede(input: { workflowId: string }): Promise<void
   const workspaceId = ctx.workspace.id;
   const sourceIds = await assertOwned(workspaceId, [input.workflowId]);
 
-  await prisma.copilotApproval.updateMany({
+  // A row nobody approved (see `keepExistingWorkflow`) goes back to Pending, never to live.
+  const row = await prisma.copilotApproval.findFirst({
     where: { workspaceId, workflowId: input.workflowId },
-    data: { inactiveReason: null, inactiveAt: null, supersededById: null },
+    select: { id: true, approvedById: true },
   });
+  if (!row) return;
+  if (row.approvedById == null) {
+    await prisma.copilotApproval.delete({ where: { id: row.id } });
+  } else {
+    await prisma.copilotApproval.update({
+      where: { id: row.id },
+      data: { inactiveReason: null, inactiveAt: null, supersededById: null },
+    });
+  }
 
   revalidate(sourceIds);
 }

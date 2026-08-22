@@ -6,16 +6,11 @@ import { Pencil } from 'lucide-react';
 
 import { resetWorkflowField, updateWorkflowDescription, updateWorkflowTitle, type EditResult } from '@/lib/edit-actions';
 import { toast } from '@/components/ui/toast';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 
 /**
  * "What this workflow is" — the workflow's title + description, now founder-editable.
@@ -33,6 +28,7 @@ export function WorkflowContentCard({
   ready,
   titleEdited = false,
   descriptionEdited = false,
+  reorganizeHref = null,
 }: {
   workflowId: string;
   title: string;
@@ -42,6 +38,8 @@ export function WorkflowContentCard({
   /** Whether each field is founder-owned (stamped) — enables "Forget my edit". */
   titleEdited?: boolean;
   descriptionEdited?: boolean;
+  /** Where "Reorganize" goes — null hides it (the recording is still building, or has no segments). */
+  reorganizeHref?: string | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -95,14 +93,7 @@ export function WorkflowContentCard({
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">What this workflow is</CardTitle>
-        <CardDescription>
-          Written from your narration — it explains the task and what’s optional. The copilot reads
-          it alongside the steps, so it is part of what you approve. You can rewrite both.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Title
@@ -148,6 +139,11 @@ export function WorkflowContentCard({
             <div className="mt-0.5 flex items-center gap-1">
               <span className="text-sm font-medium">{title}</span>
               {pencil('title', title, 'Edit the workflow title')}
+              {reorganizeHref && (
+                <Button size="sm" variant="outline" asChild className="ml-auto">
+                  <Link href={reorganizeHref}>Reorganize</Link>
+                </Button>
+              )}
             </div>
           )}
         </div>

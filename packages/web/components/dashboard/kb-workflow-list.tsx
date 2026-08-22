@@ -7,7 +7,6 @@ import { Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { setCopilotApproval, setCopilotApprovalsBulk } from '@/lib/copilot-actions';
-import { undoSupersede } from '@/lib/overlap-actions';
 import { toast } from '@/components/ui/toast';
 import { DuplicateChip, type OverlapView } from '@/components/dashboard/duplicate-workflows';
 import { Input } from '@/components/ui/input';
@@ -22,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/dashboard/status-badge';
+import { ClampedText } from '@/components/dashboard/clamped-text';
 
 export interface WorkflowRow {
   /** P3-M1 — the durable identity every mutation keys on. */
@@ -55,7 +55,6 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -66,7 +65,8 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
 
   const counts = useMemo(
     () => ({
-      all: workflows.length,
+      // "All" is everything still in play — a replaced workflow lives only under its own tab.
+      all: workflows.filter((w) => !w.inactiveReason).length,
       approved: workflows.filter((w) => w.copilotApproved).length,
       // A replaced workflow is RESOLVED, not outstanding — it must never inflate the "awaiting
       // approval" nag, or the founder is chased to re-approve something they deliberately retired.
@@ -76,7 +76,10 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     [workflows, pendingRows],
   );
 
+  // Server order kept on purpose: grouped by recording, in the order the steps were recorded — a
+  // founder reads the list the way they made it, not re-shuffled by approval state.
   const visible = workflows.filter((w) => {
+    if (filter === 'all' && w.inactiveReason) return false;
     if (filter === 'approved' && !w.copilotApproved) return false;
     if (filter === 'pending' && (w.copilotApproved || w.inactiveReason)) return false;
     if (filter === 'replaced' && !w.inactiveReason) return false;
@@ -106,26 +109,6 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
         router.refresh();
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to update approval';
-        setError(msg);
-        toast.error(msg);
-      } finally {
-        setBusyKey(null);
-      }
-    });
-  }
-
-  /** P3-M0/M1 — put a retired workflow back in service (replaced, or suspended after a reprocess).
-   *  Nothing was ever deleted, so this always works. */
-  function restore(w: WorkflowRow) {
-    setError(null);
-    setBusyKey(keyOf(w));
-    start(async () => {
-      try {
-        await undoSupersede({ workflowId: w.workflowId });
-        toast.success(`“${w.segmentTitle}” restored`);
-        router.refresh();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Failed to restore';
         setError(msg);
         toast.error(msg);
       } finally {
@@ -168,7 +151,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
     { key: 'approved', label: 'Approved', n: counts.approved },
     { key: 'pending', label: 'Pending', n: counts.pending },
     ...(counts.replaced > 0
-      ? [{ key: 'replaced' as Filter, label: 'Not answering', n: counts.replaced }]
+      ? [{ key: 'replaced' as Filter, label: 'Replaced', n: counts.replaced }]
       : []),
   ];
 
@@ -182,8 +165,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
               {counts.pending} workflow{counts.pending === 1 ? '' : 's'} awaiting
               approval.
             </b>{' '}
-            Approving puts them live in the copilot — one click each, no article
-            to write.
+            Review and Approve each one to make live
           </p>
           <Button
             size="sm"
@@ -191,7 +173,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
             disabled={pending}
             className="shrink-0"
           >
-            Review &amp; approve all
+            Approve All
           </Button>
         </div>
       )}
@@ -203,9 +185,9 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
               Approve {pendingRows.length} workflow{pendingRows.length === 1 ? '' : 's'}?
             </DialogTitle>
             <DialogDescription>
-              This puts them live in the copilot for your customers. Each one answers from its steps
-              and from the description below — written by the model from your narration, so it is
-              worth reading before it speaks for you.
+              This makes the workflow live in Copilot for your customers. It will answer using its
+              steps and the description below, generated from your narration. Review it before
+              publishing.
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-[45vh] space-y-3 overflow-y-auto pr-1">
@@ -213,7 +195,7 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
               <li key={keyOf(w)} className="rounded-list border bg-card px-3.5 py-3">
                 <p className="text-[13px] font-semibold text-ink">{w.segmentTitle}</p>
                 <p className="mt-0.5 font-mono text-[10px] text-faint">
-                  {w.itemCount} steps · from “{w.sourceTitle}”
+                  {w.itemCount} steps from “{w.sourceTitle}” recording
                 </p>
                 <p
                   className={cn(
@@ -274,8 +256,9 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
         </div>
       ) : (
         <ul className="space-y-2.5">
-          {visible.map((w) => {
+          {visible.map((w, i) => {
             const busy = busyKey === keyOf(w) || busyKey === 'all';
+            const href = `/dashboard/kb/${w.sourceId}?wf=${w.segmentIndex}`;
             const tile = w.inactiveReason
               ? 'bg-muted border-border text-muted-foreground'
               : w.copilotApproved
@@ -284,9 +267,15 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
             return (
               <li
                 key={keyOf(w)}
+                // The whole card opens the workflow. Anything interactive inside it — the recording
+                // link, the switch, Restore, Show more, a duplicate chip — keeps its own job, so the
+                // card only navigates when the click landed on nothing else.
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('a, button, input, [role="switch"]')) return;
+                  router.push(href);
+                }}
                 className={cn(
-                  'flex items-center gap-3.5 rounded-list border bg-card px-[15px] py-[13px]',
-                  !w.copilotApproved && !w.inactiveReason && 'border-brand-200 shadow-step',
+                  'flex cursor-pointer items-center gap-3.5 rounded-list border bg-card px-[15px] py-[13px] transition-colors hover:border-brand-200',
                   w.inactiveReason && 'opacity-70',
                 )}
               >
@@ -296,52 +285,39 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
                     tile,
                   )}
                 >
-                  WF
+                  {i + 1}
                 </span>
                 <span className="min-w-0 flex-1">
                   <Link
-                    href={`/dashboard/kb/${w.sourceId}?wf=${w.segmentIndex}`}
+                    href={href}
                     className="block truncate text-[13.5px] font-semibold text-ink hover:text-primary hover:underline"
                   >
                     {w.segmentTitle}
                   </Link>
                   <span className="mt-0.5 block truncate font-mono text-[10px] text-faint">
-                    {w.itemCount} steps · from “{w.sourceTitle}”
+                    {w.itemCount} steps from “
+                    <Link
+                      href={`/dashboard/recordings/${w.sourceId}`}
+                      className="hover:text-primary hover:underline"
+                    >
+                      {w.sourceTitle}
+                    </Link>
+                    ” recording
                     {w.inactiveReason === 'superseded' && w.supersededByTitle
                       ? ` · replaced by “${w.supersededByTitle}”`
                       : ''}
                   </span>
-                  {/* The PLAN, on the row that carries the switch. Shown only while a decision is
-                      outstanding: this is where approving-unseen can happen, and once approved the
-                      workflow's own page carries it in full. Clamped so a dense list stays scannable,
-                      expandable because two lines is enough to judge relevance and not enough to
-                      approve on. */}
-                  {!w.copilotApproved && !w.inactiveReason && (
+                  {/* The PLAN, on the row that carries the switch — in every state, so the list
+                      reads the same whether a workflow is live, pending or retired. Clamped so a
+                      dense list stays scannable, expandable because two lines is enough to judge
+                      relevance and not enough to approve on. */}
+                  {(
                     <span className="mt-1.5 block">
                       {w.description ? (
-                        <>
-                          <span
-                            className={cn(
-                              'block text-[11.5px] leading-relaxed text-secondary-foreground',
-                              !expanded.has(keyOf(w)) && 'line-clamp-2',
-                            )}
-                          >
-                            {w.description}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpanded((prev) => {
-                                const next = new Set(prev);
-                                if (!next.delete(keyOf(w))) next.add(keyOf(w));
-                                return next;
-                              })
-                            }
-                            className="mt-0.5 text-[11px] font-medium text-primary hover:underline"
-                          >
-                            {expanded.has(keyOf(w)) ? 'Show less' : 'Show more'}
-                          </button>
-                        </>
+                        <ClampedText
+                          text={w.description}
+                          className="text-[11.5px] leading-relaxed text-secondary-foreground"
+                        />
                       ) : (
                         /* Absence is a real state, not an empty slot — blank would read as "nothing
                            more to see" when it actually means the narration carried no plan. */
@@ -374,36 +350,30 @@ export function KbWorkflowList({ workflows }: { workflows: WorkflowRow[] }) {
                     ))}
                 </span>
                 {w.inactiveReason ? (
-                  <>
-                    <StatusBadge tone={w.inactiveReason === 'needs_review' ? 'pending' : 'neutral'}>
-                      {w.inactiveReason === 'needs_review' ? 'Needs re-review' : 'Replaced'}
-                    </StatusBadge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => restore(w)}
-                      className="shrink-0"
-                    >
-                      {w.inactiveReason === 'needs_review' ? 'Looks right' : 'Restore'}
-                    </Button>
-                  </>
+                  /* The badge only — restoring is a decision worth the workflow's own page, where
+                     the reason and the steps are in front of the founder. */
+                  <StatusBadge tone={w.inactiveReason === 'needs_review' ? 'pending' : 'neutral'}>
+                    {w.inactiveReason === 'needs_review' ? 'Needs re-review' : 'Replaced'}
+                  </StatusBadge>
                 ) : (
                   <>
-                    <StatusBadge tone={w.copilotApproved ? 'live' : 'pending'}>
-                      {w.copilotApproved ? 'Approved · Live' : 'Pending'}
-                    </StatusBadge>
-                    <span className="flex shrink-0 items-center gap-2.5">
-                      <span className="hidden text-[11px] text-muted-foreground md:inline">
-                        In copilot
-                      </span>
-                      <Switch
-                        checked={w.copilotApproved}
-                        disabled={busy}
-                        onCheckedChange={(v) => toggle(w, v)}
-                        aria-label={`Approve ${w.segmentTitle} for the copilot`}
-                      />
+                    {/* The same pill the product-knowledge rows carry — one KB, one status language. */}
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-pill px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide',
+                        w.copilotApproved
+                          ? 'border border-brand-100 bg-brand-50 text-primary'
+                          : 'border bg-secondary text-secondary-foreground',
+                      )}
+                    >
+                      {w.copilotApproved ? 'Live' : 'Pending approval'}
                     </span>
+                    <Switch
+                      checked={w.copilotApproved}
+                      disabled={busy}
+                      onCheckedChange={(v) => toggle(w, v)}
+                      aria-label={`Approve ${w.segmentTitle} for the copilot`}
+                    />
                   </>
                 )}
               </li>

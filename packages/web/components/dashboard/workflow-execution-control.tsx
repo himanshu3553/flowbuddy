@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { setWorkflowExecution } from '@/lib/execution-actions';
 import { toast } from '@/components/ui/toast';
 import { Switch } from '@/components/ui/switch';
-import { StatusBadge } from '@/components/dashboard/status-badge';
 
 /**
  * P4-M1 — the per-workflow ACTING switch ("may the AI Agent run this for your users?").
@@ -26,6 +25,8 @@ export function WorkflowExecutionControl({
   summary,
   checks,
   ready,
+  title,
+  description,
 }: {
   workflowId: string;
   segmentTitle: string;
@@ -38,24 +39,52 @@ export function WorkflowExecutionControl({
   /** P3-M2 — what the agent will CHECK (from the stored contract); null on pre-contract plans. */
   checks: { entry: string; mustBeThere: boolean; markerSteps: number; verifiableFinish: boolean } | null;
   ready: boolean;
+  /** The card's title — rendered HERE, beside the switch, because the switch and the validation
+   *  issues it can raise share state and must stay in one component. */
+  title: string;
+  description: string;
 }) {
   const [busy, start] = useTransition();
   const [issues, setIssues] = useState<string[]>([]);
   const router = useRouter();
   const enabled = executeState === 'enabled';
 
+  const canToggle = ready && approved;
+  const header = (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold leading-none tracking-tight">{title}</h3>
+        {canToggle && (
+          <Switch
+            checked={enabled}
+            disabled={busy}
+            onCheckedChange={toggle}
+            aria-label={`Allow the AI Agent to run ${segmentTitle} for your users`}
+          />
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">{description}</p>
+    </div>
+  );
+
   if (!ready) {
     return (
-      <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-        Still building — nothing to run yet.
+      <div className="space-y-3">
+        {header}
+        <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
+          Still building — nothing to run yet.
+        </div>
       </div>
     );
   }
 
   if (!approved) {
     return (
-      <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-        Approve this workflow for the copilot first — the agent only runs approved workflows.
+      <div className="space-y-3">
+        {header}
+        <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
+          Approve this workflow for Copilot first. The AI Agent can only run approved workflows
+        </div>
       </div>
     );
   }
@@ -89,20 +118,7 @@ export function WorkflowExecutionControl({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <StatusBadge tone={enabled ? 'live' : executeState === 'needs_review' ? 'pending' : 'neutral'}>
-          {enabled ? 'Runnable' : executeState === 'needs_review' ? 'Needs re-review' : 'Not runnable'}
-        </StatusBadge>
-        <span className="flex shrink-0 items-center gap-2.5">
-          <span className="text-[11px] text-muted-foreground">Agent may run it</span>
-          <Switch
-            checked={enabled}
-            disabled={busy}
-            onCheckedChange={toggle}
-            aria-label={`Allow the AI Agent to run ${segmentTitle} for your users`}
-          />
-        </span>
-      </div>
+      {header}
 
       {enabled && summary && (
         <p className="text-[11px] text-muted-foreground">
@@ -139,12 +155,6 @@ export function WorkflowExecutionControl({
           ))}
         </ul>
       )}
-
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {enabled
-          ? 'In AI Agent mode, FlowBuddy can complete these steps for a user — visibly, with their consent, asking them for every input. Runs appear in Analytics → Agent runs.'
-          : 'Off means the agent can never run this workflow — it stays answer-and-guide only. Turn it on to make it runnable in AI Agent mode.'}
-      </p>
     </div>
   );
 }

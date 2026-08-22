@@ -78,7 +78,7 @@ Part 1 of the product. Record your product once with the Chrome extension; FlowB
 ### Duplicates and re-recordings
 
 - **Duplicate detection.** Two signals — overall similarity and where each workflow ends — over vectors the knowledge base already holds, so it costs no model call. Flagged on both workflows' tiles and pages.
-- **Compare and decide.** Step lists side by side, then: Replace (supersede the older telling — reversible via Restore) · Two routes, same goal (group them; one is picked per question) · Not duplicates.
+- **Compare and decide.** Step lists side by side, each selectable, then one Save: keep the approved one (the newer recording is retired, never approved) · keep the newer one (supersedes the older telling, optionally carrying the founder's edits) · Two routes, same goal (group them; one is picked per question) · Not duplicates. Every outcome is reversible via Restore on the workflow's page.
 - **Durable workflow identity.** A workflow is a row, not a position. A reprocess re-matches by content: new content is born unapproved, lost content is parked for review.
 
 ### Approval — the trust gate
@@ -88,7 +88,7 @@ Part 1 of the product. Record your product once with the Chrome extension; FlowB
 - **Needs review**, after a reprocess that cannot confirm the content is still what you approved.
 - **Product knowledge approved page by page.** Full text and provenance quotes shown; a re-recording that changes an approved page parks a pending update to accept or dismiss.
 - **Answering and running are separate switches.** Approving lets the assistant answer from a workflow; a second switch lets the agent run it. The same model is where a help portal's and outside agents' approvals would live ([§8](#8-the-road-ahead)).
-- **"Not answering" view.** Every approval ever granted, including retired and parked ones.
+- **"Replaced" view.** Every approval ever granted that is not live — retired and parked ones — kept out of the main list.
 
 ### Derived assets
 
@@ -233,7 +233,7 @@ The builder console — the only place a human drives the system: connect the re
 
 - **Home.** An onboarding checklist — install the recorder → record your product → approve workflows → embed the copilot — with "How FlowBuddy works" and "How to record" guides. Once live: copilot health, pending approvals, and "record this next".
 - **Recordings.** Every capture with its status, thumbnails and the derived description; a detail page with replay, transcript, notices (a degraded build, a lost edit), rename, delete, reprocess and Reorganize.
-- **Knowledge Base.** Workflows as the assistant sees them — title, description, steps with screenshots and a highlight lightbox — with the approve toggle, the AI Agent card (run switch, eligibility, run summary), duplicate warnings, the Product knowledge section with its "Points to" links and pending updates, the "Not answering" view and the demo video card.
+- **Knowledge Base.** Workflows as the assistant sees them — title, description, steps with screenshots and a highlight lightbox — with the approve toggle, the AI Agent card (run switch, eligibility, run summary), duplicate warnings folded into one box, the Product knowledge section with its pending updates and its own Approve All, the "Replaced" view, and Video/SOP and Analytics tabs on each workflow.
 - **Copilot.** Everything in [§4](#4-going-live), with the live preview.
 - **Analytics.** [§6](#6-analytics-and-the-feedback-loop).
 - **Settings.** Account and workspace details, recorder connection.

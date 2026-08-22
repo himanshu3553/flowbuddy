@@ -128,18 +128,11 @@ export function DemoVideoCard({
     );
   }
 
+  // Nothing generated yet: the card's own description already says what the video is, so this
+  // state is just the one action.
   return (
-    <div className="space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <StatusBadge tone="neutral">Not generated</StatusBadge>
-        <Button size="sm" variant="soft" disabled={busy} onClick={() => generate('first')}>
-          Generate video
-        </Button>
-      </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        A polished, narrated product demo built from this workflow&apos;s recorded steps — AI
-        voiceover, zooms and captions, no screen recording needed.
-      </p>
-    </div>
+    <Button size="sm" variant="soft" disabled={busy} onClick={() => generate('first')}>
+      Generate video
+    </Button>
   );
 }

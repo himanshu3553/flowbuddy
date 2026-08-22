@@ -28,6 +28,7 @@ export function WorkflowApprovalControl({
   approved,
   inactiveReason,
   ready,
+  slot = 'body',
 }: {
   workflowId: string;
   segmentTitle: string;
@@ -37,6 +38,10 @@ export function WorkflowApprovalControl({
   inactiveReason: string | null;
   /** False while the recording is still building — there is nothing settled to approve yet. */
   ready: boolean;
+  /** The card renders this control twice: `header` is just the switch beside the card title (live
+   *  or pending only); `body` is everything that needs room — the retired states and the building
+   *  note. Each renders nothing when the state belongs to the other slot. */
+  slot?: 'header' | 'body';
 }) {
   const [busy, start] = useTransition();
   const router = useRouter();
@@ -54,6 +59,7 @@ export function WorkflowApprovalControl({
   }
 
   if (!ready) {
+    if (slot === 'header') return null;
     return (
       <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
         Still building — there is nothing to approve yet.
@@ -64,6 +70,7 @@ export function WorkflowApprovalControl({
   // Retired: nothing was ever deleted, so putting it back always works. The verb differs because the
   // two reasons are different questions — "did I mean to replace this?" vs "is this still right?".
   if (inactiveReason) {
+    if (slot === 'header') return null;
     return (
       <div className="space-y-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -94,35 +101,19 @@ export function WorkflowApprovalControl({
     );
   }
 
+  if (slot === 'body') return null;
   return (
-    <div className="space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <StatusBadge tone={approved ? 'live' : 'pending'}>
-          {approved ? 'Approved · Live' : 'Pending'}
-        </StatusBadge>
-        <span className="flex shrink-0 items-center gap-2.5">
-          <span className="text-[11px] text-muted-foreground">In copilot</span>
-          <Switch
-            checked={approved}
-            disabled={busy}
-            onCheckedChange={(next) =>
-              run(
-                () => setCopilotApproval({ workflowId, segmentTitle, approved: next }),
-                next
-                  ? `“${segmentTitle}” is live in the copilot`
-                  : `“${segmentTitle}” removed from the copilot`,
-                'Failed to update approval',
-              )
-            }
-            aria-label={`Approve ${segmentTitle} for the copilot`}
-          />
-        </span>
-      </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {approved
-          ? 'Your customers can be answered from this workflow — its steps and the description above.'
-          : 'The copilot will not cite this workflow until you approve it. Read the description above first — the copilot answers from it too.'}
-      </p>
-    </div>
+    <Switch
+      checked={approved}
+      disabled={busy}
+      onCheckedChange={(next) =>
+        run(
+          () => setCopilotApproval({ workflowId, segmentTitle, approved: next }),
+          next ? `“${segmentTitle}” is live in the copilot` : `“${segmentTitle}” removed from the copilot`,
+          'Failed to update approval',
+        )
+      }
+      aria-label={`Approve ${segmentTitle} for the copilot`}
+    />
   );
 }

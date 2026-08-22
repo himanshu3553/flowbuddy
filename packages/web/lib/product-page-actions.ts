@@ -43,6 +43,28 @@ export async function setProductPageApproval(input: {
 }
 
 /**
+ * Approve several never-approved pages in one go — the KB page's "Approve All", confirmed from a
+ * review sheet that shows every page's full text first. Scoped to the workspace AND to pages that
+ * have never been approved: a parked update or a retired page is a per-page decision with its own
+ * surface, and must never be swept live by a bulk click.
+ */
+export async function setProductPageApprovalsBulk(input: { pageIds: string[] }): Promise<number> {
+  const ctx = await requireWorkspace();
+  if (input.pageIds.length === 0) return 0;
+  const { count } = await prisma.productPage.updateMany({
+    where: { id: { in: input.pageIds }, workspaceId: ctx.workspace.id, approvedAt: null },
+    data: {
+      approvedAt: new Date(),
+      approvedById: ctx.userId,
+      inactiveReason: null,
+      inactiveAt: null,
+    },
+  });
+  revalidatePath('/dashboard/kb');
+  return count;
+}
+
+/**
  * Accept a parked re-derivation: the pending text becomes the page, its embedding comes with it
  * (so identity matching stays in step with the content — see the schema comment), and the page is
  * (re-)approved in the same act: the founder has just read exactly what will serve.

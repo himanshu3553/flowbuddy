@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { CheckCircle2, ChevronLeft, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ChevronLeft, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { signedUrl, sessionObjectKey } from '@/lib/storage';
@@ -20,9 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { StatusBadge } from '@/components/dashboard/status-badge';
 import { StepScreenshot } from '@/components/dashboard/step-screenshot';
+import { StepLightbox } from '@/components/dashboard/step-lightbox';
+import { WorkflowTabs } from '@/components/dashboard/workflow-tabs';
 import { StepTextEditor } from '@/components/dashboard/step-text-editor';
 import { AddStepFromRecording } from '@/components/dashboard/add-step-from-recording';
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
@@ -49,10 +49,10 @@ export default async function KbWorkflowPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ wf?: string }>;
+  searchParams: Promise<{ wf?: string; tab?: string }>;
 }) {
   const { id } = await params;
-  const { wf } = await searchParams;
+  const { wf, tab: rawTab } = await searchParams;
   const ctx = await getCurrentWorkspace();
   if (!ctx) redirect('/signin');
 
@@ -109,7 +109,6 @@ export default async function KbWorkflowPage({
   const workflowTitle =
     segmentItems.find((it) => it.segmentTitle)?.segmentTitle ??
     (selected == null ? 'Ungrouped steps' : `Workflow ${selected + 1}`);
-  const recordingName = source.title || source.appBaseUrl || 'Recording';
   const ready = source.status === 'ready' || source.status === 'done';
 
   // P3-M1 — the workflow's PLAN. Shown BEFORE the steps and before the copilot is allowed to use it:
@@ -130,6 +129,14 @@ export default async function KbWorkflowPage({
   // screenshots' default: a video is watched and downloaded, and a playback session outliving its
   // URL fails mid-scrub.
   const demoVideosOn = ctx.workspace.demoVideosEnabled;
+  // The page's sections. The video tab only exists where the feature is on; an unknown or
+  // unavailable `?tab=` falls back to the details.
+  const tabs = [
+    { key: 'details', label: 'Workflow Details' },
+    ...(demoVideosOn ? [{ key: 'video', label: 'Video/SOP' }] : []),
+    { key: 'analytics', label: 'Analytics' },
+  ];
+  const tab = tabs.some((t) => t.key === rawTab) ? (rawTab as string) : 'details';
   const demoVideo =
     workflow && demoVideosOn
       ? await prisma.demoVideo.findUnique({
@@ -207,7 +214,6 @@ export default async function KbWorkflowPage({
           ),
         }
       : null;
-  const shotCount = items.filter((it) => it.screenshotUrl).length;
 
   // P3-M0 — duplicates involving THIS workflow. A founder who navigates straight here (from a
   // citation, a search, a link) must be able to see and settle the duplicate without first knowing
@@ -249,29 +255,73 @@ export default async function KbWorkflowPage({
   return (
     <>
       <PageHeader
-        title={workflowTitle}
-        subtitle={`${items.length} step${items.length === 1 ? '' : 's'} · from “${recordingName}”`}
-        actions={
-          <span className="flex items-center gap-2">
-            {ready && segments.length > 0 && (
-              <Button size="sm" variant="outline" asChild>
-                <Link href={`/dashboard/kb/${source.id}/reorganize`}>Reorganize</Link>
-              </Button>
-            )}
-            <StatusBadge status={source.status} />
-          </span>
+        title={
+          <Link
+            href="/dashboard/kb"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Knowledge Base
+          </Link>
         }
       />
       <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-8">
-        <Link
-          href="/dashboard/kb"
-          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-          Knowledge Base
-        </Link>
+        <WorkflowTabs tabs={tabs} active={tab} basePath={`/dashboard/kb/${source.id}`} wf={selected} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {tab === 'video' ? (
+          <div className="min-w-0 space-y-5">
+            {workflow && ready && demoVideosOn ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Demo video</CardTitle>
+                  <CardDescription className="text-xs">
+                    A polished workflow video generated from the recorded steps with voiceover, zooms
+                    and captions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <DemoVideoCard
+                    workflowId={workflow.id}
+                    workflowTitle={workflowTitle}
+                    status={demoVideo?.status ?? null}
+                    videoUrl={demoVideoUrl}
+                    durationMs={demoVideo?.durationMs ?? null}
+                    error={demoVideo?.error ?? null}
+                    stale={demoVideoStale}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  Knowledge Base is still building — the video can be generated once it is ready.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          ) : tab === 'analytics' ? (
+          <div className="min-w-0 space-y-5">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Workflow Analytics</CardTitle>
+                <CardDescription className="text-xs">
+                  See how often this workflow has been used to answer end-user questions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid w-fit min-w-[280px] max-w-sm grid-cols-[auto_1fr] gap-x-8 gap-y-2.5 rounded-tile border border-brand-100 bg-brand-50 px-4 py-3.5 text-xs">
+                  {statRows.map((row) => (
+                    <div key={row.label} className="contents">
+                      <dt className="font-medium text-brand-600">{row.label}</dt>
+                      <dd className="text-right font-mono font-semibold text-brand-700">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+          ) : (
           <div className="min-w-0 space-y-5">
             <WorkflowDuplicates overlaps={myOverlaps} />
 
@@ -283,17 +333,18 @@ export default async function KbWorkflowPage({
                 ready={ready}
                 titleEdited={workflow.titleEditedAt != null}
                 descriptionEdited={workflow.descriptionEditedAt != null}
+                reorganizeHref={ready && segments.length > 0 ? `/dashboard/kb/${source.id}/reorganize` : null}
               />
             )}
 
-            <div>
+            <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold tracking-tight">
-                Workflow steps
+                Workflow steps{' '}
+                <span className="font-normal text-muted-foreground">
+                  ({items.length} {items.length === 1 ? 'Step' : 'Steps'})
+                </span>
               </h2>
-              <p className="text-sm text-muted-foreground">
-                The clean, grounded steps the copilot grounds on — screenshot, instruction and
-                detail, each anchored to a captured action.
-              </p>
+              {workflow && ready && <AddStepFromRecording workflowId={workflow.id} />}
             </div>
 
             {items.length === 0 ? (
@@ -306,27 +357,26 @@ export default async function KbWorkflowPage({
               </Card>
             ) : (
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-bold text-primary">
-                      WF
-                    </span>
-                    {workflowTitle}
-                    <span className="font-normal text-muted-foreground">
-                      · {items.length} steps
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-0 divide-y">
-                  {items.map((it) => (
+                <StepLightbox
+                  viewport={viewport}
+                  steps={items.map((it) => ({
+                    number: it.orderIndex + 1,
+                    instruction: it.instruction,
+                    detail: it.detail,
+                    url: it.screenshotUrl ?? null,
+                    bbox: it.bbox ?? null,
+                  }))}
+                >
+                <CardContent className="space-y-0 divide-y pt-6">
+                  {items.map((it, index) => (
                     <div
                       key={it.id}
                       className="grid grid-cols-1 gap-4 py-4 first:pt-0 sm:grid-cols-[minmax(0,1fr)_180px]"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary text-[11px] font-bold text-primary">
-                            {it.orderIndex + 1}
+                          <span className="inline-flex h-6 shrink-0 items-center rounded-full border-2 border-primary px-2.5 text-[11px] font-bold text-primary">
+                            Step {it.orderIndex + 1}
                           </span>
                           {it.route && (
                             <span className="truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
@@ -349,8 +399,7 @@ export default async function KbWorkflowPage({
                         <StepScreenshot
                           url={it.screenshotUrl}
                           alt={`Step ${it.orderIndex + 1}`}
-                          stepNumber={it.orderIndex + 1}
-                          instruction={it.instruction}
+                          index={index}
                           bbox={it.bbox}
                           viewport={viewport}
                         />
@@ -358,45 +407,55 @@ export default async function KbWorkflowPage({
                     </div>
                   ))}
                 </CardContent>
+                </StepLightbox>
               </Card>
             )}
-
-            {workflow && ready && <AddStepFromRecording workflowId={workflow.id} />}
           </div>
+          )}
 
           <aside className="min-w-0 space-y-5 lg:sticky lg:top-20 lg:self-start">
             {workflow && (
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Copilot approval</CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-sm">Copilot approval</CardTitle>
+                    <WorkflowApprovalControl
+                      slot="header"
+                      workflowId={workflow.id}
+                      segmentTitle={workflowTitle}
+                      approved={approved}
+                      inactiveReason={approval?.inactiveReason ?? null}
+                      ready={ready}
+                    />
+                  </div>
                   <CardDescription className="text-xs">
-                    Approving puts this workflow — its steps and its description — in front of your
-                    customers.
+                    Approving this workflow makes its description and steps available to your
+                    customers in Copilot
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <WorkflowApprovalControl
-                    workflowId={workflow.id}
-                    segmentTitle={workflowTitle}
-                    approved={approved}
-                    inactiveReason={approval?.inactiveReason ?? null}
-                    ready={ready}
-                  />
-                </CardContent>
+                {/* Only the retired / still-building states need the body; live and pending are the
+                    switch in the header and nothing else. */}
+                {(!ready || approval?.inactiveReason) && (
+                  <CardContent>
+                    <WorkflowApprovalControl
+                      slot="body"
+                      workflowId={workflow.id}
+                      segmentTitle={workflowTitle}
+                      approved={approved}
+                      inactiveReason={approval?.inactiveReason ?? null}
+                      ready={ready}
+                    />
+                  </CardContent>
+                )}
               </Card>
             )}
 
             {workflow && (
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">AI Agent</CardTitle>
-                  <CardDescription className="text-xs">
-                    Whether FlowBuddy may complete this workflow for a user — step by step, visibly,
-                    with their consent.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <WorkflowExecutionControl
+                    title="AI Agent"
+                    description="Allow FlowBuddy to complete this workflow for users, step by step and visibly, with their consent."
                     workflowId={workflow.id}
                     segmentTitle={workflowTitle}
                     approved={approved}
@@ -409,77 +468,6 @@ export default async function KbWorkflowPage({
               </Card>
             )}
 
-            {workflow && ready && demoVideosOn && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Demo video</CardTitle>
-                  <CardDescription className="text-xs">
-                    A polished walkthrough video generated from this workflow&apos;s recording.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DemoVideoCard
-                    workflowId={workflow.id}
-                    workflowTitle={workflowTitle}
-                    status={demoVideo?.status ?? null}
-                    videoUrl={demoVideoUrl}
-                    durationMs={demoVideo?.durationMs ?? null}
-                    error={demoVideo?.error ?? null}
-                    stale={demoVideoStale}
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Used by the copilot</CardTitle>
-                <CardDescription className="text-xs">
-                  How often this workflow has answered an end-user question.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                <div className="inline-flex items-center gap-1.5 rounded-pill border border-brand-100 bg-brand-50 px-2.5 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span className="truncate font-mono text-[10.5px] text-primary">
-                    Source: {workflowTitle}
-                  </span>
-                </div>
-                {statRows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className="font-mono font-semibold text-ink">
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-                {/* Only derivable facts here — no invented health signals (selector checks don't
-                    exist yet, R13), and "citable" is only true once the trust gate approved it. */}
-                {ready && approved ? (
-                  <div className="flex items-center gap-2 rounded-control border border-success-border bg-success-bg px-2.5 py-2 text-[11px] text-success-text2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success-dot" />
-                    Approved for the copilot · {items.length} step{items.length === 1 ? '' : 's'} ·{' '}
-                    {shotCount === items.length
-                      ? 'screenshots on every step'
-                      : `screenshots on ${shotCount} of ${items.length} steps`}
-                    .
-                  </div>
-                ) : ready ? (
-                  /* Says what is true, not where to go: the switch is on this page now, so an
-                     instruction to approve elsewhere would send the founder away from it. */
-                  <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-                    Not citable yet — the copilot only answers from approved workflows.
-                  </div>
-                ) : (
-                  <div className="rounded-control border border-dashed bg-[color:var(--paper-2)] px-2.5 py-2 text-[11px] text-muted-foreground">
-                    Still building — not yet citable.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </aside>
         </div>
       </div>

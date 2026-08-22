@@ -13,7 +13,8 @@ export function PageHeader({
   actions,
   className,
 }: {
-  title: string;
+  /** Usually a string; a detail page may pass a back link instead, so the bar reads as a crumb. */
+  title: React.ReactNode;
   subtitle?: string;
   actions?: React.ReactNode;
   className?: string;
