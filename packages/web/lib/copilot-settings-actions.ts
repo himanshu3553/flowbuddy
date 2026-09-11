@@ -12,6 +12,7 @@ import {
   parseCopilotMode,
 } from '@flowbuddy/shared/copilot-mode';
 import { getCurrentWorkspace } from '@/lib/session';
+import { ONBOARDING_MAX_SHOWS_CAP } from '@/lib/onboarding';
 
 export interface SaveOriginsResult {
   /** What was actually saved — normalized to exact `scheme://host[:port]` Origin-header form. */
@@ -180,6 +181,34 @@ export async function setCopilotWalkthrough(enabled: boolean): Promise<void> {
     data: { copilotWalkthrough: enabled },
   });
   revalidatePath('/dashboard/copilot');
+}
+
+/** User onboarding — the workspace master switch: may flagged workflows auto-start their
+ *  walkthrough for a new user landing on their first page? OFF by default; the widget also
+ *  requires Sense and the guided walkthrough to be on. */
+export async function setOnboardingEnabled(enabled: boolean): Promise<void> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { onboardingEnabled: enabled },
+  });
+  revalidatePath('/dashboard/copilot');
+}
+
+/** The founder's budget for "usually once": how many times each onboarding walkthrough may
+ *  auto-start for one user before it stops offering itself. Clamped to 1..ONBOARDING_MAX_SHOWS_CAP;
+ *  returns what was actually saved so the control can reflect the clamp. */
+export async function setOnboardingMaxShows(value: number): Promise<number> {
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) throw new Error('Not authenticated');
+  const n = Number.isFinite(value) ? Math.min(ONBOARDING_MAX_SHOWS_CAP, Math.max(1, Math.round(value))) : 1;
+  await prisma.workspace.update({
+    where: { id: ctx.workspace.id },
+    data: { onboardingMaxShows: n },
+  });
+  revalidatePath('/dashboard/copilot');
+  return n;
 }
 
 /** P2-M5 Reason — diagnostic answers (ask-time structured page-state capture, values masked). */

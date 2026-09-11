@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@flowbuddy/db';
 import { getCurrentWorkspace } from '@/lib/session';
 import { getOrCreateCopilotKey } from '@/lib/copilot-settings';
+import { getOnboardingOverview } from '@/lib/onboarding-overview';
 import { getCopilotMetrics } from '@/lib/copilot-metrics';
 import { getEmbedStatus } from '@/lib/embed-status';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -30,6 +31,8 @@ export default async function CopilotSettingsPage() {
     senseEnabled,
     showMe,
     walkthrough,
+    onboardingEnabled,
+    onboardingMaxShows,
     reasonEnabled,
     reasonImageEnabled,
     reasonIncludeValues,
@@ -42,6 +45,7 @@ export default async function CopilotSettingsPage() {
     launcherText,
   } = await getOrCreateCopilotKey(ctx.workspace.id);
   const wsId = ctx.workspace.id;
+  const onboardingWorkflows = await getOnboardingOverview(wsId);
   // Use the SAME shared metrics source as Home + Analytics so the answer-quality numbers match
   // across all three surfaces (7-day window); `total` is the all-time count for the lifetime stat
   // and the first-question gate. (`recent` is this tab's own latest-activity list.)
@@ -90,6 +94,9 @@ export default async function CopilotSettingsPage() {
           senseEnabled={senseEnabled}
           showMe={showMe}
           walkthrough={walkthrough}
+          onboardingEnabled={onboardingEnabled}
+          onboardingMaxShows={onboardingMaxShows}
+          onboardingWorkflows={onboardingWorkflows}
           reasonEnabled={reasonEnabled}
           reasonImageEnabled={reasonImageEnabled}
           reasonIncludeValues={reasonIncludeValues}

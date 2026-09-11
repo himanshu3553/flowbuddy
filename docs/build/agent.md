@@ -339,6 +339,8 @@ Every mode so far is **purely reactive**: the assistant never speaks until spoke
 
 **If it is picked up, the shape is probably:** founder-controlled and off by default · triggered by *evidence*, never by inference (a genuinely blocked state, not "seems slow") · at most once per session · dismissible permanently by the end-user · and a nudge rather than a panel — the launcher gets a quiet badge, not an auto-opening chat. Note this is orthogonal to the modes: it is a question of *who starts the conversation*, and it could apply to `1 Copilot` as easily as to the agent modes.
 
+*(One pushed surface has since shipped — user onboarding, §A8.1 — and it deliberately took the other trigger: "user is new", decided from a route the founder recorded, never "user is stuck", decided from the page. This note stays parked for the stuck case.)*
+
 
 ---
 ---
@@ -791,6 +793,44 @@ start.
 
 > Goal → plan → consent → narration → chaining. The tier ladder this phase was built around is gone
 > (D9): Tell, Guide and Do are tools the agent calls, not tiers it routes to.
+
+### A8.1 The pushed trigger — First-Time User Onboarding (built 2026-09-11)
+
+**Two features, one engine.** The walkthrough above is **pulled**: a positional answer offers
+"Walk me through it" and the user clicks. **User onboarding** is the same walkthrough **pushed**: a
+new user lands on the page a founder-flagged workflow begins on, the widget recognises the page,
+and the card starts by itself. The offer pill answers *"show me how to do this"*; onboarding
+answers *"what should I do first?"*. Same card, same engine, same cross-page resume — only who
+starts it differs. Status: [`roadmap.md`](../roadmap.md) §5.
+
+**Decisions.**
+
+- **Configured per workflow, not as a curated list.** A "User onboarding" switch on the workflow's
+  own page, beside approval and the acting switch — rejected: an ordered "getting started" list on
+  the Copilot page. Each flagged workflow fires on its own start page, so there is nothing to order,
+  and the founder flags a workflow where they can read every step it will guide. The flag rides the
+  approval row like the acting flag, so liveness comes free: a workflow may answer without
+  onboarding, never the reverse. The Copilot page carries the workspace master switch (**off by
+  default** — an auto-appearing surface on someone else's product is opt-in), the founder's show
+  budget, and an overview of every flagged workflow with the reason any of them is silent.
+- **The trigger is "user is new", never "user is stuck".** Onboarding reads nothing off the page to
+  decide when to speak: the flagged workflows' first-step routes ship DOWN as patterns in the config
+  the widget already fetches, and are compared on the user's machine with the one route matcher —
+  the posture Sense was allowed to exist under. Being stuck stays the parked idea above.
+- **"Usually once" is a budget the founder sets, per browser.** Each flagged workflow may auto-start
+  up to N times (default 1); finishing it, or the card's "Don't show this again", ends it sooner. A
+  refresh mid-walkthrough RESUMES the same session and is not a new show. v1 has no end-user
+  identity — "new" means this browser has no record — so a user on a second device is new again;
+  a host-supplied id and server-side progress wait for the first customer who needs them.
+- **The card appears where it belongs, or not yet.** Nobody asked for it, so an onboarding-started
+  card is held invisible until its first placement — the dock-then-jump the pulled card is allowed
+  (the user just clicked; "looking for this step" is feedback) reads as a glitch here. Closing it
+  never opens the chat, on any page.
+- **One auto-start per page visit; strongest route match wins; ties go to the workflow flagged
+  first.** It yields to any walkthrough or run already on the page, and nothing re-evaluates when
+  that one ends — chaining "what next?" straight after "what first?" is a deliberate non-decision.
+- **Parked with the user:** activation analytics (started / completed / dropped per onboarding
+  workflow — the number that says whether the feature earns its place), targeting by plan or role.
 
 ## G2. The gap this phase closes (as measured in the code)
 

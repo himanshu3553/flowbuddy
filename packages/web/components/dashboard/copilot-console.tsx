@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { OnboardingOverviewRow } from '@/lib/onboarding-overview';
 
 import { CopilotWorkspace } from '@/components/dashboard/copilot-workspace';
 import type { CopilotMode } from '@flowbuddy/shared/copilot-mode';
@@ -29,6 +30,9 @@ export function CopilotConsole({
   senseEnabled,
   showMe,
   walkthrough,
+  onboardingEnabled,
+  onboardingMaxShows,
+  onboardingWorkflows,
   reasonEnabled,
   reasonImageEnabled,
   reasonIncludeValues,
@@ -48,6 +52,9 @@ export function CopilotConsole({
   senseEnabled: boolean;
   showMe: boolean;
   walkthrough: boolean;
+  onboardingEnabled: boolean;
+  onboardingMaxShows: number;
+  onboardingWorkflows: OnboardingOverviewRow[];
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
   reasonIncludeValues: boolean;
@@ -81,6 +88,9 @@ export function CopilotConsole({
         senseEnabled={senseEnabled}
         showMe={showMe}
         walkthrough={walkthrough}
+        onboardingEnabled={onboardingEnabled}
+        onboardingMaxShows={onboardingMaxShows}
+        onboardingWorkflows={onboardingWorkflows}
         reasonEnabled={reasonEnabled}
         reasonImageEnabled={reasonImageEnabled}
         reasonIncludeValues={reasonIncludeValues}

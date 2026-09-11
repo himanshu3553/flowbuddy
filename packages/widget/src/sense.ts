@@ -514,6 +514,42 @@ export async function ensureShard(
 }
 
 /**
+ * ONE workflow by key, served whole — the onboarding trigger's fetch. It runs only AFTER the page
+ * matched a flagged workflow's first route (the config already shipped the patterns), so a page
+ * with nothing to onboard still fetches nothing. Same disabled latch as the shard: a workspace
+ * that turned Sense off gets no second ask. Null on absence (404 = not live, not flagged, gone),
+ * failure, or timeout — the trigger simply does not fire.
+ */
+export async function fetchWorkflowByKey(
+  apiBase: string,
+  key: string,
+  workflowKey: string,
+  timeoutMs: number,
+): Promise<SenseWorkflow | null> {
+  if (serverDisabled) return null;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${apiBase}/v1/copilot/sense-plan?workflow=${encodeURIComponent(workflowKey)}`, {
+      headers: { 'X-FlowBuddy-Key': key },
+      signal: ctl.signal,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { enabled?: boolean; workflow?: SenseWorkflow };
+    if (data.enabled === false) {
+      serverDisabled = true;
+      return null;
+    }
+    return data.workflow && Array.isArray(data.workflow.steps) ? data.workflow : null;
+  } catch (e) {
+    log.debug('sense-plan by-key fetch failed', e);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * The ask-time probe: shard (usually already cached from panel open) → probe → hypotheses.
  * Returns null when Sense has nothing to say (disabled, fetch failed, or nothing this page can be
  * placed against) — the caller then simply omits the sense context, and the copilot behaves exactly

@@ -242,6 +242,76 @@ export function __resetSensePlanCache(): void {
 }
 
 /**
+ * ONE workflow by key (`sourceId:segmentIndex`), served WHOLE from the same compiled plan the
+ * route shard reads — so it carries exactly what the shard would have carried had the user been
+ * standing on one of its pages. The onboarding trigger needs it: a flagged workflow starts on its
+ * FIRST step's page, which may not be the page the shard for the current route would include.
+ * Null = not live (the plan compiles only live approvals) or no such key — the caller turns that
+ * into absence (404), never an explanation.
+ */
+export async function getSenseWorkflow(workspaceId: string, key: string): Promise<SensePlanWorkflow | null> {
+  const plan = await getPlan(workspaceId);
+  return plan.workflows.find((wf) => `${wf.sourceId}:${wf.segmentIndex}` === key) ?? null;
+}
+
+/** What the widget needs to recognise an onboarding workflow's first page, shipped DOWN in the
+ *  config response: the key to fetch it by, its title, and the first step's route as a PATTERN
+ *  (ids elided — the founder's own record ids never leave the server in this list). */
+export interface OnboardingWorkflowWire {
+  key: string;
+  title: string;
+  route: string;
+}
+
+/**
+ * The onboarding list — a LIVE-ONLY approval reader (`inactiveReason: null`) that also asks the
+ * onboarding question (`onboardingEnabled: true`), the same two-question shape as the acting
+ * readers. Enumerated with the other readers in docs/internals/knowledge-base.md §6.
+ *
+ * READS THE DATABASE ONLY — never the compiled plan. This rides the widget's config call, which
+ * the widget abandons after 1.5 s because it was designed as one indexed read; a cold plan compile
+ * (manifests loaded, screens built) here made a user's FIRST visit time out and fall back to
+ * defaults while the refresh a moment later hit the warm cache — an onboarding that only ever
+ * fired on the second try. Three indexed reads is all it needs.
+ *
+ * Fail-closed at serve time, from the live steps: a detached workflow (`segmentIndex` null) or one
+ * whose first step carries no route is left out — the Studio toggle refuses both, but a reprocess
+ * can produce either after the flag was set, and a workflow the widget cannot place must not ship.
+ * Ordered by when the founder flagged each, so a page two workflows begin on has a stable winner.
+ */
+export async function getOnboardingWorkflows(workspaceId: string): Promise<OnboardingWorkflowWire[]> {
+  const flagged = await prisma.copilotApproval.findMany({
+    where: { workspaceId, inactiveReason: null, onboardingEnabled: true },
+    select: {
+      onboardingEnabledAt: true,
+      workflow: { select: { id: true, sourceId: true, segmentIndex: true, title: true } },
+    },
+    orderBy: { onboardingEnabledAt: 'asc' },
+  });
+  const live = flagged.filter((f) => f.workflow.segmentIndex != null);
+  if (live.length === 0) return [];
+  const firstSteps = await prisma.knowledgeItem.findMany({
+    where: { workspaceId, kind: 'step', workflowId: { in: live.map((f) => f.workflow.id) } },
+    select: { workflowId: true, orderIndex: true, segmentTitle: true, data: true },
+    orderBy: { orderIndex: 'asc' },
+  });
+  const firstByWorkflow = new Map<string, (typeof firstSteps)[number]>();
+  for (const it of firstSteps) if (!firstByWorkflow.has(it.workflowId)) firstByWorkflow.set(it.workflowId, it);
+  const out: OnboardingWorkflowWire[] = [];
+  for (const f of live) {
+    const first = firstByWorkflow.get(f.workflow.id);
+    const route = ((first?.data as StepData | null)?.route ?? '').trim();
+    if (!first || !route) continue;
+    out.push({
+      key: `${f.workflow.sourceId}:${f.workflow.segmentIndex}`,
+      title: f.workflow.title || first.segmentTitle || 'Untitled workflow',
+      route: routePattern(route),
+    });
+  }
+  return out;
+}
+
+/**
  * The ROUTE SHARD: every approved workflow with a step on/near `route` — each served WHOLE
  * (workflow-atomic), capped top-N by route specificity (exact > prefix, then more matching steps).
  *

@@ -105,6 +105,10 @@ interface WalkSession {
   detected?: number[];
   auto: number;
   manual: number;
+  /** Who started it. 'onboarding' = the pushed trigger (nobody asked): the card carries the
+   *  user's opt-out ("Don't show this again"), and closing it must not open the chat. Persisted so
+   *  the control survives the navigations the walkthrough itself causes. */
+  origin?: 'onboarding';
 }
 
 interface WalkCfg {
@@ -115,6 +119,12 @@ interface WalkCfg {
 interface WalkHooks {
   onExit?: () => void; // user closed the walkthrough — index.ts reopens the chat panel
   onExplain?: () => void; // blocked/invalid escalation — index.ts opens chat + asks the diagnostic question
+  /** Every ending, however the walkthrough began — the onboarding record keeps "done" from it,
+   *  so a task finished through the offer pill counts as onboarded too. */
+  onEnd?: (outcome: 'completed' | 'aborted', workflowKey: string) => void;
+  /** "Don't show this again" on an onboarding-started card — the user's permanent opt-out for
+   *  this workflow. Fires BEFORE the abort ends the session. */
+  onDismiss?: (workflowKey: string) => void;
 }
 
 // ── Module state (one walkthrough at a time, per page view) ────────────────────────────────────
@@ -125,6 +135,10 @@ let hooksRef: WalkHooks = {};
 let currentEl: Element | null = null;
 let stalled = false;
 let resolving = false; // showStep's retry ladder is in flight — the state tick must not re-enter
+// An onboarding-started card is HELD until its first placement: nobody asked for it, so it must
+// not flash at the dock while the element resolves and then jump to the entry point. Cleared by
+// the first anchor or deliberate dock; a pulled walkthrough (the user just clicked) shows at once.
+let pendingReveal = false;
 let cleanups: Array<() => void> = [];
 let card: {
   el: HTMLDivElement;
@@ -278,8 +292,10 @@ function buildCard(): void {
     return e;
   };
   const el = mk('div', 'fb-tour-card');
+  if (pendingReveal) el.classList.add('fb-tour-pending');
   const exit = mk('button', 'fb-tour-exit', '✕');
-  exit.setAttribute('aria-label', 'Exit walkthrough');
+  // On an onboarding-started card ✕ is "Not now": it spends this show and nothing more.
+  exit.setAttribute('aria-label', session?.origin === 'onboarding' ? 'Not now' : 'Exit walkthrough');
   const title = mk('div', 'fb-tour-title');
   const instr = mk('div', 'fb-tour-instr');
   const status = mk('div', 'fb-tour-status');
@@ -292,6 +308,10 @@ function buildCard(): void {
   retry.style.display = 'none';
   extra.appendChild(explain);
   extra.appendChild(retry);
+  // User onboarding — the opt-out, only where nobody asked for the card. A pulled walkthrough (the
+  // offer pill) has nothing to opt out of; the button is not merely hidden there, it never binds.
+  const dismiss = mk('button', 'fb-tour-dismiss', "Don't show this again");
+  dismiss.style.display = session?.origin === 'onboarding' ? '' : 'none';
   const foot = mk('div', 'fb-tour-foot');
   const progress = mk('span', 'fb-tour-progress');
   const back = mk('button', 'fb-tour-arrow', '←');
@@ -307,9 +327,15 @@ function buildCard(): void {
   el.appendChild(status);
   el.appendChild(extra);
   el.appendChild(foot);
+  el.appendChild(dismiss);
   rootRef.appendChild(el);
 
   exit.addEventListener('click', () => end('aborted'));
+  dismiss.addEventListener('click', () => {
+    if (!session) return;
+    hooksRef.onDismiss?.(`${session.sourceId}:${session.segmentIndex}`);
+    end('aborted');
+  });
   explain.addEventListener('click', () => hooksRef.onExplain?.());
   back.addEventListener('click', () => {
     if (!session) return;
@@ -322,6 +348,16 @@ function buildCard(): void {
   retry.addEventListener('click', () => void showStep());
   next.addEventListener('click', () => advanceNext());
   card = { el, progress, title, instr, status, explain, back, retry, next };
+}
+/** First placement of a held card: show it where it belongs, with its entrance played there. */
+function reveal(): void {
+  if (!pendingReveal) return;
+  pendingReveal = false;
+  if (!card) return;
+  card.el.classList.remove('fb-tour-pending');
+  card.el.style.animation = 'none';
+  void card.el.offsetWidth; // restart the entrance now that the card is visible
+  card.el.style.animation = '';
 }
 function removeCard(): void {
   anchorCleanup?.();
@@ -373,6 +409,7 @@ function anchorCard(target: Element): void {
     beacon.style.top = `${p.beacon.y}px`;
   };
   reposition();
+  reveal();
   window.addEventListener('scroll', reposition, true);
   window.addEventListener('resize', reposition);
   repositionRef = reposition;
@@ -394,6 +431,7 @@ function dockCard(): void {
   card.el.style.left = '';
   card.el.style.right = '';
   card.el.style.bottom = '';
+  reveal(); // a deliberate dock is a placement too
 }
 
 // ── Observers (attached only while a walkthrough is active) ────────────────────────────────────
@@ -812,6 +850,10 @@ async function showStep(): Promise<void> {
 
 function end(outcome: 'completed' | 'aborted'): void {
   if (!session) return;
+  const workflowKey = `${session.sourceId}:${session.segmentIndex}`;
+  // An onboarding-started card was never opened from the chat, so closing it must not open the
+  // chat — on ANY page, including one it was resumed on with the ordinary hooks.
+  const pushed = session.origin === 'onboarding';
   emit(outcome);
   detachObservers();
   inputCleanup?.();
@@ -820,10 +862,12 @@ function end(outcome: 'completed' | 'aborted'): void {
   session = null;
   currentEl = null;
   stalled = false;
+  pendingReveal = false;
   // No parting card on completion (founder decision 2026-08-12): the last step's Done press — or
   // its detected final click — IS the ending; a banner would only restate what the user just did.
   removeCard();
-  if (outcome === 'aborted') hooksRef.onExit?.();
+  if (outcome === 'aborted' && !pushed) hooksRef.onExit?.();
+  hooksRef.onEnd?.(outcome, workflowKey);
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────────────────────────
@@ -849,6 +893,7 @@ export function startWalkthrough(
   startStep: number,
   queryId: string | undefined,
   hooks: WalkHooks = {},
+  origin?: 'onboarding',
 ): void {
   if (session) end('aborted'); // one walkthrough at a time
   rootRef = root;
@@ -864,7 +909,9 @@ export function startWalkthrough(
     startStep,
     auto: 0,
     manual: 0,
+    ...(origin ? { origin } : {}),
   };
+  pendingReveal = origin === 'onboarding';
   persist();
   emit('started');
   attachObservers();

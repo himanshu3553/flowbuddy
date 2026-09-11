@@ -13,6 +13,8 @@ import {
   setSenseEnabled,
   setCopilotShowMe,
   setCopilotWalkthrough,
+  setOnboardingEnabled,
+  setOnboardingMaxShows,
   setReasonEnabled,
   setReasonImageEnabled,
   setReasonIncludeValues,
@@ -32,7 +34,10 @@ import {
   COPILOT_MODES,
   type CopilotMode,
 } from '@flowbuddy/shared/copilot-mode';
+import Link from 'next/link';
 import type { EmbedStatus } from '@/lib/embed-status';
+import type { OnboardingOverviewRow } from '@/lib/onboarding-overview';
+import { ONBOARDING_MAX_SHOWS_CAP } from '@/lib/onboarding';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
@@ -114,6 +119,9 @@ export function CopilotWorkspace({
   senseEnabled = true,
   showMe = false,
   walkthrough = false,
+  onboardingEnabled = false,
+  onboardingMaxShows = 1,
+  onboardingWorkflows = [],
   reasonEnabled = true,
   reasonImageEnabled = false,
   reasonIncludeValues = false,
@@ -134,6 +142,11 @@ export function CopilotWorkspace({
   senseEnabled?: boolean;
   showMe?: boolean;
   walkthrough?: boolean;
+  /** User onboarding — the walkthrough's pushed trigger + the per-user show budget. */
+  onboardingEnabled?: boolean;
+  onboardingMaxShows?: number;
+  /** The flagged workflows and whether each will fire — the founder's view of the first session. */
+  onboardingWorkflows?: OnboardingOverviewRow[];
   reasonEnabled?: boolean;
   reasonImageEnabled?: boolean;
   reasonIncludeValues?: boolean;
@@ -160,6 +173,9 @@ export function CopilotWorkspace({
   const [showMeOn, setShowMeOn] = useState(showMe);
   // P4-M0 — the guided-walkthrough offer (needs Sense, like "show me").
   const [walkOn, setWalkOn] = useState(walkthrough);
+  // User onboarding — master switch + the "usually once" budget (needs Sense + walkthrough).
+  const [onboardOn, setOnboardOn] = useState(onboardingEnabled);
+  const [maxShows, setMaxShows] = useState(onboardingMaxShows);
   // P2-M5 Reason — the founder toggle ladder (diagnostic answers · page image · typed values).
   const [reason, setReason] = useState(reasonEnabled);
   const [reasonImg, setReasonImg] = useState(reasonImageEnabled);
@@ -277,6 +293,38 @@ export function CopilotWorkspace({
         );
       } catch {
         setWalkOn(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  // User onboarding — the master switch, and the per-user show budget (saved on blur/Enter).
+  function toggleOnboarding(value: boolean) {
+    setOnboardOn(value); // optimistic
+    start(async () => {
+      try {
+        await setOnboardingEnabled(value);
+        router.refresh();
+        toast.success(
+          value
+            ? 'User onboarding on — flagged workflows start by themselves for new users.'
+            : 'User onboarding off.',
+        );
+      } catch {
+        setOnboardOn(!value);
+        toast.error('Could not save the setting. Please try again.');
+      }
+    });
+  }
+  function saveMaxShows(raw: number) {
+    if (!Number.isFinite(raw) || raw === onboardingMaxShows) return;
+    start(async () => {
+      try {
+        const saved = await setOnboardingMaxShows(raw);
+        setMaxShows(saved);
+        router.refresh();
+        toast.success(`Each onboarding walkthrough shows up to ${saved} time${saved === 1 ? '' : 's'} per user.`);
+      } catch {
+        setMaxShows(onboardingMaxShows);
         toast.error('Could not save the setting. Please try again.');
       }
     });
@@ -910,6 +958,97 @@ export function CopilotWorkspace({
                   aria-label="Guided walkthrough"
                 />
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-card border bg-card p-5 shadow-card">
+            <h3 className="text-[13.5px] font-bold text-ink">User onboarding</h3>
+            <p className="text-xs text-muted-foreground">
+              A guided walkthrough that starts by itself: when a new user lands on the page a
+              flagged workflow begins on, FlowBuddy guides them through it without being asked.
+              Flag workflows one at a time from their Knowledge Base page.
+            </p>
+            <div className="mt-3 divide-y">
+              <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
+                <div>
+                  <p className="text-sm font-medium">Enable user onboarding</p>
+                  <p className="text-xs text-muted-foreground">
+                    Needs Sense and the guided walkthrough. Off by default — nothing appears on
+                    your product uninvited until you turn this on.
+                  </p>
+                </div>
+                <Switch
+                  checked={onboardOn}
+                  onCheckedChange={toggleOnboarding}
+                  disabled={pending || !sense || !walkOn}
+                  aria-label="Enable user onboarding"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium">Show each walkthrough up to</p>
+                  <p className="text-xs text-muted-foreground">
+                    Times per user before it stops offering itself. Finishing or dismissing it
+                    ends it sooner. 1 to {ONBOARDING_MAX_SHOWS_CAP}.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={ONBOARDING_MAX_SHOWS_CAP}
+                    step={1}
+                    value={maxShows}
+                    disabled={pending || !onboardOn}
+                    onChange={(e) => setMaxShows(Number(e.target.value))}
+                    onBlur={(e) => saveMaxShows(Number(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    }}
+                    className="h-8 w-16 text-center"
+                    aria-label="Times each onboarding walkthrough may show per user"
+                  />
+                  <span className="text-xs text-muted-foreground">{maxShows === 1 ? 'time' : 'times'}</span>
+                </div>
+              </div>
+            </div>
+            {/* The overview — what a new user's first session looks like, and which flagged
+                workflows are silent and why. Rows link to the workflow page where the flag lives. */}
+            <div className="mt-4 border-t pt-4">
+              <p className="text-xs font-semibold text-ink">Walkthroughs that start by themselves</p>
+              {onboardingWorkflows.length === 0 ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  None yet. Open a workflow in the{' '}
+                  <Link href="/dashboard/kb" className="font-medium text-primary hover:underline">
+                    Knowledge Base
+                  </Link>{' '}
+                  and turn on <span className="font-medium">User onboarding</span> from its page.
+                </p>
+              ) : (
+                <ul className="mt-2 divide-y rounded-control border">
+                  {onboardingWorkflows.map((row) => (
+                    <li key={row.workflowId} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <Link href={row.href} className="block truncate text-sm font-medium text-ink hover:underline">
+                          {row.title}
+                        </Link>
+                        <p className="text-[11px] text-muted-foreground">
+                          {row.status === 'fires' && row.page && (
+                            <>Starts when a new user lands on <span className="font-mono">{row.page}</span></>
+                          )}
+                          {row.status === 'no_page' && 'Won’t start — the first step has no recorded page'}
+                          {row.status === 'retired' && 'Won’t start — no longer approved for Copilot'}
+                          {row.status === 'needs_review' && 'Won’t start — re-processed and waiting for your review'}
+                          {row.status === 'detached' && 'Won’t start — its content was not found after a re-process'}
+                        </p>
+                      </div>
+                      <StatusBadge tone={row.status === 'fires' ? (onboardOn ? 'live' : 'pending') : 'danger'}>
+                        {row.status === 'fires' ? (onboardOn ? 'Live' : 'Paused') : 'Silent'}
+                      </StatusBadge>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
 

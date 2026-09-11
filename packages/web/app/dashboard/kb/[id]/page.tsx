@@ -28,6 +28,7 @@ import { AddStepFromRecording } from '@/components/dashboard/add-step-from-recor
 import { WorkflowApprovalControl } from '@/components/dashboard/workflow-approval-control';
 import { WorkflowContentCard } from '@/components/dashboard/workflow-content-card';
 import { WorkflowExecutionControl } from '@/components/dashboard/workflow-execution-control';
+import { WorkflowOnboardingControl } from '@/components/dashboard/workflow-onboarding-control';
 import { DemoVideoCard } from '@/components/dashboard/demo-video-card';
 import { SopCard } from '@/components/dashboard/sop-card';
 import { displayRoute } from '@flowbuddy/shared/route-pattern';
@@ -219,7 +220,7 @@ export default async function KbWorkflowPage({
       ? null
       : await prisma.copilotApproval.findFirst({
           where: { workspaceId: ctx.workspace.id, workflowId: workflow.id },
-          select: { inactiveReason: true, executeState: true },
+          select: { inactiveReason: true, executeState: true, onboardingEnabled: true },
         });
   const approved = approval != null && approval.inactiveReason == null;
 
@@ -521,6 +522,24 @@ export default async function KbWorkflowPage({
                     executeState={approval?.executeState ?? null}
                     summary={runSummary}
                     checks={runChecks}
+                    ready={ready}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {workflow && (
+              <Card>
+                <CardContent className="pt-6">
+                  <WorkflowOnboardingControl
+                    title="User onboarding"
+                    description="Start this walkthrough by itself the first time a new user lands on the page it begins on."
+                    workflowId={workflow.id}
+                    segmentTitle={workflowTitle}
+                    approved={approved}
+                    enabled={approval?.onboardingEnabled ?? false}
+                    firstRoute={items[0]?.route ? displayRoute(items[0].route) : ''}
+                    workspaceEnabled={ctx.workspace.onboardingEnabled}
                     ready={ready}
                   />
                 </CardContent>

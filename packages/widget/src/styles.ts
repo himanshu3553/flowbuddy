@@ -220,6 +220,8 @@ export const CSS = `
   animation: fb-tour-in .18s ease;
 }
 .fb-tour-card:not(.fb-tour-anchored) { right: var(--fb-right); left: var(--fb-left); bottom: 86px; }
+/* Held until first placement (onboarding-started cards only) — see pendingReveal in walkthrough.ts. */
+.fb-tour-card.fb-tour-pending { visibility: hidden; animation: none; }
 @keyframes fb-tour-in { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }
 .fb-tour-exit {
   position: absolute; top: 8px; right: 10px; background: transparent; border: none;
@@ -251,6 +253,14 @@ export const CSS = `
 .fb-tour-btn:disabled, .fb-tour-arrow:disabled { opacity: .4; cursor: default; }
 .fb-tour-btn { border-radius: 999px; padding: 5px 11px; font-size: 11.5px; }
 .fb-tour-foot { display: flex; align-items: center; gap: 8px; }
+/* The onboarding opt-out: quiet text, never a filled button — it must read as the user's own
+   choice, not as the card's next action. */
+.fb-tour-dismiss {
+  align-self: flex-start; border: none; background: transparent; cursor: pointer; padding: 0;
+  font-family: var(--fb-font); font-size: 11px; text-decoration: underline; text-underline-offset: 2px;
+  color: color-mix(in srgb, var(--fb-accent-fg) 70%, transparent);
+}
+.fb-tour-dismiss:hover { color: var(--fb-accent-fg); }
 .fb-tour-progress {
   margin-right: auto; font-size: 12px; font-weight: 600; opacity: .92;
   font-variant-numeric: tabular-nums;

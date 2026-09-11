@@ -48,7 +48,7 @@ import {
 import { modeCanAct } from '@flowbuddy/shared/copilot-mode';
 import { displayRoute } from '@flowbuddy/shared/route-pattern';
 import { resolveCopilotKey, checkRateLimit, recordWidgetSeen, type ReasonFlags } from './copilot-auth';
-import { getSenseShard } from './sense-plan';
+import { getOnboardingWorkflows, getSenseShard, getSenseWorkflow } from './sense-plan';
 
 // Use the shared structured logger so HTTP request logs share the app's level, JSON/pretty shape,
 // and secret redaction. `app.log` / `req.log` are children of it (Fastify adds the reqId + req/res
@@ -1575,7 +1575,15 @@ app.get('/v1/copilot/sense-plan', async (req, reply) => {
   reply.header('cache-control', 'no-store'); // the widget caches per route in-memory; the server caches the compile
   if (!ws?.senseEnabled) return { enabled: false, version: '', workflows: [] };
 
-  const q = req.query as { route?: unknown };
+  const q = req.query as { route?: unknown; workflow?: unknown };
+  // By KEY (`?workflow=sourceId:segmentIndex`): one live workflow served whole, for the onboarding
+  // trigger, which starts a walkthrough on a page the route shard may not cover. Same compiled
+  // plan, same live-only rule; a key that is not live is the same 404 as one that never existed.
+  if (typeof q.workflow === 'string') {
+    const wf = await getSenseWorkflow(gate.workspaceId, q.workflow.slice(0, 256));
+    if (!wf) return reply.code(404).send({ error: 'not found' });
+    return { enabled: true, workflow: wf };
+  }
   const route = typeof q.route === 'string' ? q.route.slice(0, 512) : '';
   const shard = await getSenseShard(gate.workspaceId, route);
   return { enabled: true, version: shard.version, workflows: shard.workflows };
@@ -1935,6 +1943,8 @@ app.get('/v1/copilot/config', async (req, reply) => {
       senseEnabled: true,
       copilotShowMe: true,
       copilotWalkthrough: true,
+      onboardingEnabled: true,
+      onboardingMaxShows: true,
       copilotMode: true,
       reasonEnabled: true,
       reasonImageEnabled: true,
@@ -1942,6 +1952,15 @@ app.get('/v1/copilot/config', async (req, reply) => {
     },
   });
   if (!ws) return reply.code(404).send({ error: 'workspace not found' });
+
+  // User onboarding — the walkthrough's PUSHED trigger. The list ships only when every switch it
+  // depends on is on (master + walkthrough + Sense): a list the widget could never act on is
+  // payload for nothing, and keeping the gate here means a page holding the key cannot learn which
+  // workflows a founder flagged while the feature is off.
+  const onboarding =
+    ws.onboardingEnabled && ws.copilotWalkthrough && ws.senseEnabled
+      ? { enabled: true, maxShows: ws.onboardingMaxShows, workflows: await getOnboardingWorkflows(gate.workspaceId) }
+      : { enabled: false };
 
   reply.header('cache-control', 'no-store');
   return {
@@ -1956,6 +1975,7 @@ app.get('/v1/copilot/config', async (req, reply) => {
     showMe: ws.copilotShowMe,
     // P4-M0 — gates the "Walk me through it" offer (the widget also requires sense to be on).
     walkthrough: ws.copilotWalkthrough,
+    onboarding,
     // P2-M5 Reason — `reason` gates the diagnostic capture; the image tier and value unmasking
     // are separate founder opt-ins (the server re-enforces all three on /answer regardless).
     reason: ws.reasonEnabled,

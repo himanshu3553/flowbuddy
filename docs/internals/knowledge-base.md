@@ -446,23 +446,28 @@ one function.** This is the list, and it is deliberately a LIST rather than a nu
 stale silently, and it also hides its own scope. These are the readers on the copilot's answer and
 act path:
 
-| Reader | Also requires the acting flag? |
-|---|:---:|
-| Retrieval (the ranking seam) | — |
-| The sense plan | — |
-| Sense-hypothesis validation | — |
-| Continuity (topic-memory) keys | — |
-| The agent's by-key `get_workflow` | — |
-| Walkthrough start | — |
-| The runnable-offer set | ✅ |
-| Execution-plan serving | ✅ |
-| Run start (the consent moment) | ✅ |
+| Reader | Also requires the acting flag? | Also requires the onboarding flag? |
+|---|:---:|:---:|
+| Retrieval (the ranking seam) | — | — |
+| The sense plan | — | — |
+| Sense-hypothesis validation | — | — |
+| Continuity (topic-memory) keys | — | — |
+| The agent's by-key `get_workflow` | — | — |
+| Walkthrough start | — | — |
+| The sense plan's by-key form (one workflow whole, for the onboarding trigger) | — | — |
+| The onboarding list in the widget config | — | ✅ |
+| The runnable-offer set | ✅ | — |
+| Execution-plan serving | ✅ | — |
+| Run start (the consent moment) | ✅ | — |
 
 Studio's own approval reads and the product-page gate are further live-only readers that this list
 does not cover, because they are not on that path — which is exactly the scope a bare integer hides.
 
 **The three acting readers ask a second question on top of liveness** — the acting flag — so a
-workflow may ANSWER without being RUNNABLE, never the reverse. That asymmetry is deliberate: acting
+workflow may ANSWER without being RUNNABLE, never the reverse. The onboarding list asks its own
+second question the same way (a boolean rather than a state, because there is no eligibility to
+park): a workflow may answer without onboarding, never the reverse, and the one precondition it
+adds — a first step with a route — is re-derived from the live steps at serve time, never stored. That asymmetry is deliberate: acting
 presupposes approval, so retiring a workflow stops it acting through the same single column that
 stops it answering. **A reader that forgets the filter silently serves retired content**, and the
 by-key fetch is the worst of them: it bypasses ranking entirely, so a retired workflow could be

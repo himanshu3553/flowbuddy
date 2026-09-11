@@ -17,6 +17,10 @@ export interface CopilotSettings {
   showMe: boolean;
   // P4-M0 — the guided-walkthrough offer on positional answers (needs Sense).
   walkthrough: boolean;
+  // User onboarding — the walkthrough's PUSHED trigger (needs Sense + walkthrough) and the
+  // per-user show budget. Off by default; see the schema comment for the model.
+  onboardingEnabled: boolean;
+  onboardingMaxShows: number;
   // P2-M5 Reason — diagnostic answers (structure, masked) + the image tier + value unmasking.
   reasonEnabled: boolean;
   reasonImageEnabled: boolean;
@@ -42,6 +46,8 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     senseEnabled: true,
     copilotShowMe: true,
     copilotWalkthrough: true,
+    onboardingEnabled: true,
+    onboardingMaxShows: true,
     reasonEnabled: true,
     reasonImageEnabled: true,
     reasonIncludeValues: true,
@@ -69,6 +75,8 @@ export async function getOrCreateCopilotKey(workspaceId: string): Promise<Copilo
     senseEnabled: ws.senseEnabled,
     showMe: ws.copilotShowMe,
     walkthrough: ws.copilotWalkthrough,
+    onboardingEnabled: ws.onboardingEnabled,
+    onboardingMaxShows: ws.onboardingMaxShows,
     reasonEnabled: ws.reasonEnabled,
     reasonImageEnabled: ws.reasonImageEnabled,
     reasonIncludeValues: ws.reasonIncludeValues,

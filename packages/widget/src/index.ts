@@ -36,6 +36,7 @@ import { ensureShard, probeForAsk, spotlight, clearSpotlight, type SenseProbeRes
 // P4-M0 Guided walkthrough — "Walk me through it" on positional answers (zero-acting; the user
 // does everything, the widget highlights + observes). Resumes across full-page navigations.
 import { walkthroughOffer, startWalkthrough, resumeWalkthrough, walkthroughActive, walkthroughPending } from './walkthrough.js';
+import { dismissOnboarding, installOnboarding, noteWalkthroughEnd, type OnboardingWire } from './onboarding.js';
 import {
   agentRunActive,
   agentRunPending,
@@ -403,6 +404,7 @@ function render(): void {
             // restores the panel in the state the user last left it in.
             onExit: () => { open = true; render(); persistChat(); },
             onExplain: explainBlocker, // blocked/invalid → the Reason diagnostic path, in chat
+            onEnd: (outcome, k) => noteWalkthroughEnd(cfg.key, outcome, k), // a finished task is onboarded too
           },
         );
         render();
@@ -448,6 +450,8 @@ function render(): void {
 
 // P2 Sense — the probe result backing the LAST question (its resolved elements power show-me).
 let lastProbe: SenseProbeResult | null = null;
+// User onboarding — what /v1/copilot/config said; undefined = off (never fires).
+let onboardingWire: OnboardingWire | undefined;
 const senseActive = () => Boolean(cfg.key) && !cfg.preview && cfg.sense;
 // P2-M5 Reason — active on real embeds when the founder's toggle is on (structure-only by default).
 const reasonActive = () => Boolean(cfg.key) && !cfg.preview && cfg.reason;
@@ -1060,6 +1064,7 @@ interface ServerConfig {
   walkthrough?: boolean; // P4-M0 guided walkthrough — Studio-controlled
   mode?: string; // operating mode — 'copilot' | 'agent' (unknown values fail closed to 'copilot')
   reason?: boolean; reasonImage?: boolean; reasonValues?: boolean; // P2-M5 Reason — Studio-controlled
+  onboarding?: OnboardingWire; // user onboarding — the walkthrough's pushed trigger (Studio-controlled)
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -1102,6 +1107,9 @@ function applyServerConfig(s: ServerConfig): void {
   if (s.sense === false) cfg.sense = false;
   cfg.showMe = s.showMe === true;
   cfg.walkthrough = s.walkthrough === true; // P4-M0 — workspace policy too (explicit true only)
+  // User onboarding — the flagged workflows' first routes, shipped as patterns; enabled only when
+  // the server says so (it already folds in the walkthrough + Sense switches).
+  onboardingWire = s.onboarding && s.onboarding.enabled === true ? s.onboarding : undefined;
   // Operating mode — anything unrecognised stays 'copilot', the read-only floor. That covers a
   // pre-retirement 'chatbot' row without a special case. The widget never widens its own capability
   // from a config value; the server is the authority and re-checks every call.
@@ -1147,7 +1155,15 @@ async function boot(): Promise<void> {
     void resumeWalkthrough(root, runCfg(), {
       onExit: onOverlayExit,
       onExplain: explainBlocker,
+      onEnd: (outcome, k) => noteWalkthroughEnd(cfg.key, outcome, k),
+      onDismiss: (k) => dismissOnboarding(cfg.key, k), // only an onboarding-started card shows the control
     });
+  }
+  // User onboarding — the pushed trigger, armed LAST so a resuming run or walkthrough owns the page
+  // first (it checks both before it fires). Storage-gated like the resumes: a page that matches no
+  // flagged workflow, or a browser that has already been onboarded, fetches nothing.
+  if (cfg.walkthrough && senseActive()) {
+    installOnboarding(root, runCfg(), onboardingWire, { onExplain: explainBlocker });
   }
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void boot());
